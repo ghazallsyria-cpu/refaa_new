@@ -7,14 +7,38 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, RotateCcw
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, RotateCcw, Database
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
-const createMarkup = (htmlString: string) => {
-  return { __html: htmlString };
+const renderHTMLWithMath = (html: string) => {
+  if (!html) return { __html: '' };
+  let parsed = html;
+  if (typeof window !== 'undefined') {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(parsed, 'text/html');
+      const images = doc.querySelectorAll('img');
+      images.forEach((img) => {
+        if (img.src && img.src.startsWith('http')) img.setAttribute('crossorigin', 'anonymous');
+      });
+      parsed = doc.body.innerHTML;
+    } catch (e) {}
+  }
+  const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
+    try {
+      let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
+      return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
+    } catch (e) { return match; }
+  };
+  parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
+  parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
+  return { __html: parsed };
 };
 
 export default function ArenaMonitorDashboard() {
@@ -28,18 +52,15 @@ export default function ArenaMonitorDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // حالة فلتر الفصول
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
   const [availableClasses, setAvailableClasses] = useState<{id: string, name: string, count: number}[]>([]);
 
-  // Modal States
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [gradingModalOpen, setGradingModalOpen] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [feedbackText, setFeedbackText] = useState('');
   
-  // Grading States
   const [studentAnswers, setStudentAnswers] = useState<any[]>([]);
   const [assignmentQuestions, setAssignmentQuestions] = useState<any[]>([]);
   const [savingFeedback, setSavingFeedback] = useState(false);
@@ -124,7 +145,6 @@ export default function ArenaMonitorDashboard() {
 
       let targetStudents: any[] = [];
       if (sectionIds.length > 0) {
-        // 🚀 التأكد التام من استخراج اسم الفصل بشكل صحيح
         const { data: stData } = await supabase.from('students').select('id, user_id, section_id, sections(id, name, classes(name))').in('section_id', sectionIds);
         targetStudents = stData || [];
       }
@@ -155,7 +175,6 @@ export default function ArenaMonitorDashboard() {
         let percentage = progress ? (progress.is_completed ? 100 : Math.round((progress.current_index / assignment.total_questions) * 100)) : 0;
         if (isNaN(percentage)) percentage = 0;
 
-        // 🚀 معالجة استخراج الفصول بدقة
         let secName = 'فصل غير محدد';
         let secId = 'unknown';
         
@@ -195,7 +214,6 @@ export default function ArenaMonitorDashboard() {
 
       const uniqueStudents = Array.from(new Map(studentsToDisplay.map(item => [item.student_id, item])).values());
       
-      // الفرز الأبجدي (الفصل ثم اسم الطالب)
       uniqueStudents.sort((a, b) => {
         const secCompare = a.section_name.localeCompare(b.section_name, 'ar');
         if (secCompare !== 0) return secCompare; 
@@ -210,21 +228,17 @@ export default function ArenaMonitorDashboard() {
     } catch (err) { console.error(err); } finally { setRefreshing(false); }
   };
 
-  // 🚀 مسح إجابات طالب وإعادة فتح الواجب له
   const handleResetStudentProgress = async (studentId: string, studentName: string) => {
     if (!confirm(`هل أنت متأكد من مسح تسليم الطالب (${studentName}) وإعادة فتح الواجب له ليعيد المحاولة من الصفر؟\n(سيتم حذف درجاته وإجاباته السابقة)`)) return;
     
     setRefreshing(true);
     try {
-      // حذف من student_progress_v2
       await supabase.from('student_progress_v2').delete().eq('student_id', studentId).eq('assignment_id', selectedAssignment.id);
-      // حذف من grades
       await supabase.from('grades').delete().eq('student_id', studentId).eq('exam_type', 'assignment').eq('title', selectedAssignment.title);
-      // حذف من student_answers_v2 (إن وجدت)
       await supabase.from('student_answers_v2').delete().eq('student_id', studentId).eq('assignment_id', selectedAssignment.id);
 
       alert('تم إعادة فتح الواجب للطالب بنجاح.');
-      fetchProgress(selectedAssignment); // إعادة جلب البيانات
+      fetchProgress(selectedAssignment); 
     } catch(err) {
       alert('حدث خطأ أثناء محاولة إرجاع الواجب للطالب.');
     } finally {
@@ -597,7 +611,6 @@ export default function ArenaMonitorDashboard() {
 
                           <td className="p-4 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              {/* 🚀 زر إعادة الفتح وحذف التسليم */}
                               {student.has_started && (
                                 <button 
                                   onClick={() => handleResetStudentProgress(student.student_id, student.student_name)}
@@ -639,7 +652,6 @@ export default function ArenaMonitorDashboard() {
         )}
       </div>
 
-      {/* مودال إرسال الملاحظات (لوضع التدريب) */}
       <AnimatePresence>
         {feedbackModalOpen && selectedStudent && !isOfficialMode && (
           <>
@@ -672,7 +684,6 @@ export default function ArenaMonitorDashboard() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 مودال نظام التصحيح والتقييم (لوضع الواجبات الرسمية) */}
       <AnimatePresence>
         {gradingModalOpen && selectedStudent && isOfficialMode && (
           <>
@@ -708,18 +719,18 @@ export default function ArenaMonitorDashboard() {
                       <div className="flex-1 space-y-5 min-w-0">
                         <div className="border-b border-slate-100 pb-4">
                           <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg mb-3 inline-block">السؤال المقالي {idx + 1}</span>
-                          <div className="font-bold text-slate-800 prose prose-sm max-w-none break-words" dangerouslySetInnerHTML={createMarkup(q.content_html)} />
+                          <div className="font-bold text-slate-800 prose prose-sm max-w-none break-words" dangerouslySetInnerHTML={renderHTMLWithMath(q.content_html)} />
                         </div>
                         <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm relative">
                           <div className="absolute top-0 right-6 -mt-3 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">إجابة الطالب</div>
-                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={createMarkup(studentText)} />
+                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={renderHTMLWithMath(studentText)} />
                         </div>
                       </div>
                       
                       <div className="xl:w-96 shrink-0 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 flex flex-col h-full shadow-inner">
                         <div className="mb-6 flex-1 min-h-[200px]">
                            <p className="text-xs font-black text-indigo-500 mb-3 flex items-center gap-1.5"><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
-                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100 break-words" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
+                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100 break-words" dangerouslySetInnerHTML={renderHTMLWithMath(q.model_answer_html)} />
                         </div>
                         
                         <div className="mt-auto border-t border-indigo-200 pt-5">
