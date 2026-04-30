@@ -161,6 +161,7 @@ export default function PracticeArena() {
   useEffect(() => {
     if (loading || isFinished || !user || isPreviewMode) return; 
     const localSaveKey = `arena_save_${user.id}_${id}`;
+    // 🚀 حفظ الإجابات المقالية في الكاش لضمان عدم ضياعها
     const saveData = { currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds), essayAnswers };
     localStorage.setItem(localSaveKey, JSON.stringify(saveData));
   }, [currentIndex, score, streak, failedQuestionIds, essayAnswers, loading, isFinished, isPreviewMode]);
@@ -178,16 +179,14 @@ export default function PracticeArena() {
       // إذا كان الواجب انتهى وهو رسمي، نقوم بإرسال الإجابات المقالية
       if (finished && isOfficial && Object.keys(essayAnswers).length > 0) {
         
-        // 🚀 البحث عن attempt_id أو إنشاء محاولة وهمية لربط الإجابات بها
         let attemptId = null;
         const { data: existingAttempt } = await supabase.from('exam_attempts').select('id').eq('student_id', user.id).eq('exam_id', id).maybeSingle();
         
         if (existingAttempt) {
             attemptId = existingAttempt.id;
         } else {
-            // إنشاء سجل محاولة وهمي (Dummy) لربط الـ Foreign Key
             const { data: newAttempt } = await supabase.from('exam_attempts').insert({
-                exam_id: '00000000-0000-0000-0000-000000000000', // استخدام معرف ثابت أو حذف القيد لاحقاً
+                exam_id: '00000000-0000-0000-0000-000000000000', 
                 student_id: user.id,
                 status: 'completed'
             }).select('id').maybeSingle();
@@ -227,6 +226,7 @@ export default function PracticeArena() {
         triggerConfetti();
     }
     
+    // حفظ التقدم النهائي
     if (mode === 'normal' && !isPreviewMode) saveProgressToDB(currentIndex, finalScore, true);
   };
 
