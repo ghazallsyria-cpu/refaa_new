@@ -208,19 +208,19 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE ULTIMATE ALGORITHM (Anti-Pattern + Swapping Engine)
+  // 🧠 THE ULTIMATE ALGORITHM (With Custom VIP Rules & Verbose Logging)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]);
-    addLog("🚀 بدء التوليد الذكي (توزيع عشوائي ديناميكي + تعبئة الفراغات بالإزاحة)...");
+    addLog("🚀 بدء التوليد الذكي (توزيع عشوائي + تعبئة + استثناءات خاصة)...");
     
     let finalSchedule: any[] = [];
+    let failedDetailsLog: string[] = []; // 🚀 سجل الأخطاء التفصيلي
     const teacherDailyLoad: Record<string, Record<number, number>> = {};
     
-    // 1. تحديد المعلمين المشتركين لضبط أوقاتهم
     const teacherStages = new Map<string, Set<string>>();
     rawTeacherAssignments.forEach(ts => {
       const sec = sections.find(s => s.id === ts.section_id);
@@ -232,8 +232,6 @@ export default function AutoScheduleGenerator() {
     
     const sharedTeachers = new Set<string>();
     teacherStages.forEach((stages, tId) => { if (stages.size > 1) sharedTeachers.add(tId); });
-
-    addLog(`🔍 تم التعرف على ${sharedTeachers.size} معلمين مشتركين بين المرحلتين.`);
 
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -257,7 +255,6 @@ export default function AutoScheduleGenerator() {
     let failedPlacements = 0;
     await new Promise(r => setTimeout(r, 800));
 
-    // 🚀 دالة مساعدة لإضافة الحصة للجدول النهائي
     const commitPlacement = (section, assignment, day, period) => {
       finalSchedule.push({
         section_id: section.id, section_name: section.full_name,
@@ -269,7 +266,6 @@ export default function AutoScheduleGenerator() {
       teacherDailyLoad[assignment.teacher_id][day]++; 
     };
 
-    // 🚀 دالة مساعدة لفحص التعارض
     const canPlace = (teacherId, sectionId, day, period) => {
       const isSectionBusy = finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number);
       if (isSectionBusy) return false;
@@ -287,28 +283,45 @@ export default function AutoScheduleGenerator() {
 
       if (allowedDaysForTeacher.length === 0) {
         failedPlacements += assignment.weekly_quota;
+        failedDetailsLog.push(`المعلم ${assignment.teacher_name} - لا يوجد لديه أيام مسموحة في الإعدادات!`);
         continue;
       }
 
       let remainingLessons = assignment.weekly_quota;
-      const maxPerDay = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length); 
+      
+      // 🚀 قاعدة الـ VIP المخصصة للأستاذ إيهاب
+      const isEhab = assignment.teacher_name.includes('ايهاب') || assignment.teacher_name.includes('إيهاب');
+      const isEhabPhysics = isEhab && section.stage === 'high' && (assignment.subject_name.includes('فيزياء') || assignment.subject_name.includes('فيزيا'));
+
+      let maxPerDay = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length); 
+      if (isEhabPhysics) maxPerDay = Math.ceil(assignment.weekly_quota / 2); // لأنه سيُحشر في يومين فقط
 
       for (let i = 0; i < remainingLessons; i++) {
+        
         let preferredDays = shuffleArray([...allowedDaysForTeacher]);
         preferredDays.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
+        
+        // 🚀 فرض أيام معينة لقاعدة الأستاذ إيهاب (الأحد 1 والإثنين 2)
+        if (isEhabPhysics) {
+           preferredDays = preferredDays.filter(d => d === 1 || d === 2);
+        }
 
         let isPlaced = false;
 
-        // 🟢 المحاولة 1: التسكين المثالي (منع تكرار المادة + كسر الأنماط العشوائي)
+        // 🟢 المحاولة 1: التسكين الأساسي
         for (const day of preferredDays) {
           const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
           if (subjectCountToday >= maxPerDay) continue;
 
-          const availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number));
+          let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number));
+          
+          // 🚀 فرض الحصص الأولى لقاعدة الأستاذ إيهاب فيزياء ثانوي
+          if (isEhabPhysics) {
+             availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
+          }
           
           let orderedPeriods = [];
-          if (sharedTeachers.has(assignment.teacher_id)) {
-            // كسر الجمود للمشتركين: خلط سلة الصباح وسلة المساء بدلاً من الترتيب الثابت
+          if (sharedTeachers.has(assignment.teacher_id) && !isEhabPhysics) {
             if (section.stage === 'high') {
               const morning = shuffleArray(availablePeriods.filter(p => p.period_number <= 3));
               const afternoon = shuffleArray(availablePeriods.filter(p => p.period_number > 3));
@@ -319,7 +332,6 @@ export default function AutoScheduleGenerator() {
               orderedPeriods = [...afternoon, ...morning];
             }
           } else {
-            // كسر الجمود لغير المشتركين: خلط كامل لضمان عدم ثبات العربي في الحصة الأخيرة مثلاً
             orderedPeriods = shuffleArray(availablePeriods);
           }
           
@@ -333,8 +345,8 @@ export default function AutoScheduleGenerator() {
           if (isPlaced) break;
         }
 
-        // 🟡 المحاولة 2: التغاضي عن قيد (عدم تكرار المادة) لسد الفراغات
-        if (!isPlaced) {
+        // 🟡 المحاولة 2: إنقاذ الفراغات بالتغاضي عن تباعد المواد (لغير قوانين الـ VIP)
+        if (!isPlaced && !isEhabPhysics) {
            for (const day of shuffleArray([...allowedDaysForTeacher])) {
              const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number)));
              for (const period of fallbackPeriods) {
@@ -348,42 +360,31 @@ export default function AutoScheduleGenerator() {
            }
         }
 
-        // 🔴 المحاولة 3 (الإزاحة الذكية Swapping): 
-        // نبحث عن حصة مشغولة بمعلم آخر في نفس الفصل، ونطلب من هذا المعلم أن ينتقل لفراغ آخر، لنأخذ مكانه!
-        if (!isPlaced) {
+        // 🔴 المحاولة 3 (الإزاحة الذكية Swapping - لغير الـ VIP لكي لا نفسد الترتيب الصارم)
+        if (!isPlaced && !isEhabPhysics) {
           for (const day of shuffleArray([...allowedDaysForTeacher])) {
             if (isPlaced) break;
             const dayPeriods = periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number));
             
             for (const period of shuffleArray(dayPeriods)) {
-              // هل المعلم الحالي مشغول في مكان آخر في هذه الدقيقة؟ إذا نعم لا يمكننا الإزاحة هنا.
               const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
               if (teacherYBusy) continue;
 
-              // من هو المعلم الذي يجلس في هذه الحصة الآن؟
               const blockingSlotIndex = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
               
               if (blockingSlotIndex !== -1) {
                 const blockingSlot = finalSchedule[blockingSlotIndex];
-                
-                // هل يمكننا نقل المعلم الزاحم (Z) إلى حصة أخرى في نفس اليوم لهذا الفصل؟
                 for (const altPeriod of shuffleArray(dayPeriods)) {
                   if (altPeriod.period_number === period.period_number) continue;
-                  
-                  // هل الفصل فارغ في الحصة البديلة؟
                   const secFreeAtAlt = !finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === altPeriod.period_number);
                   if (!secFreeAtAlt) continue;
-
-                  // هل المعلم الزاحم (Z) فارغ في الحصة البديلة؟
                   const teacherZBusyAtAlt = finalSchedule.some(s => s.teacher_id === blockingSlot.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
                   
                   if (secFreeAtAlt && !teacherZBusyAtAlt) {
-                    // نجحت الإزاحة! ننقل المعلم Z
                     finalSchedule[blockingSlotIndex].period_number = altPeriod.period_number;
                     finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
                     finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
 
-                    // ونضع المعلم الحالي (Y) في المكان الذي فرغ للتو
                     commitPlacement(section, assignment, day, period);
                     isPlaced = true;
                     break;
@@ -395,13 +396,23 @@ export default function AutoScheduleGenerator() {
           }
         }
         
-        if (!isPlaced) failedPlacements++;
+        if (!isPlaced) {
+          failedPlacements++;
+          // 🚀 توثيق الخطأ بدقة لمعرفة من المعلم المزدحم
+          failedDetailsLog.push(`${assignment.subject_name} (${section.full_name}) | المعلم: ${assignment.teacher_name}`);
+        }
       }
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد! تم تفعيل الانتشار العشوائي للمواد وتعبئة الفراغات بشكل استثنائي عبر محرك الإزاحة الذكي.`);
-    if (failedPlacements > 0) addLog(`⚠️ تحذير: ${failedPlacements} حصة فشلت في التسكين بالرغم من الإزاحة! يرجى مراجعة أنصبة بعض المعلمين المزدحمة جداً.`);
+    addLog(`✅ اكتمل التوليد! تم تفعيل استثناءات الـ VIP وقواعد الإزاحة العشوائية.`);
+    
+    if (failedPlacements > 0) {
+      addLog(`⚠️ تحذير: ${failedPlacements} حصة فشلت في التسكين. يرجى المراجعة! تفاصيل المواد التي فشلت:`);
+      // إزالة التكرار من السجل لعدم الإزعاج
+      const uniqueFails = [...new Set(failedDetailsLog)];
+      uniqueFails.forEach(f => addLog(`❌ تعذر تسكين: ${f}`));
+    }
 
     finalSchedule.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
     setGeneratedSchedules(finalSchedule);
@@ -552,21 +563,14 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] md:text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> خوارزمية السلوك العشوائي وتعبئة الفراغات
+              <ShieldAlert className="w-4 h-4" /> خوارزمية التشخيص الذكي وكسر الأنماط
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
-              <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الآلي الشامل
+              <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              تم إضافة (الانتشار العشوائي) لضمان عدم ثبات المواد في حصص محددة، وتفعيل (الإزاحة الذكية) لملء الفراغات ومنع أي نقص في حصص الفصول!
+              تم إضافة (سجل الأعطال التفصيلي) لمعرفة المعلم الذي سبب تعارض الجدول، وتطبيق قاعدة (أستاذ إيهاب) الخاصة!
             </p>
-          </div>
-          <div className="flex flex-col gap-3 relative z-10 w-full md:w-auto shrink-0">
-             <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl flex items-center gap-4">
-                <div><p className="text-xs text-slate-400 font-bold">فصول المتوسط</p><p className="text-xl font-black text-center">{sections.filter(s=>s.stage === 'middle').length}</p></div>
-                <div className="w-px h-8 bg-white/20"></div>
-                <div><p className="text-xs text-slate-400 font-bold">فصول الثانوي</p><p className="text-xl font-black text-center">{sections.filter(s=>s.stage === 'high').length}</p></div>
-             </div>
           </div>
         </div>
 
@@ -623,13 +627,8 @@ export default function AutoScheduleGenerator() {
                 ))}
               </div>
 
-              <button 
-                onClick={saveBudget}
-                disabled={loadingData || isBudgetSaved}
-                className={`mt-4 w-full py-3.5 rounded-xl font-black text-sm transition-all active:scale-95 shadow-md flex justify-center items-center gap-2 ${isBudgetSaved ? 'bg-emerald-50 border border-emerald-200 text-emerald-700 opacity-60' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
-              >
-                <CheckSquare className="w-5 h-5" /> 
-                {isBudgetSaved ? 'تم الاعتماد' : 'اعتماد الميزانية أولاً'}
+              <button onClick={saveBudget} disabled={loadingData || isBudgetSaved} className={`mt-4 w-full py-3.5 rounded-xl font-black text-sm transition-all active:scale-95 shadow-md flex justify-center items-center gap-2 ${isBudgetSaved ? 'bg-emerald-50 border border-emerald-200 text-emerald-700 opacity-60' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
+                <CheckSquare className="w-5 h-5" /> {isBudgetSaved ? 'تم الاعتماد' : 'اعتماد الميزانية أولاً'}
               </button>
             </div>
 
@@ -679,10 +678,11 @@ export default function AutoScheduleGenerator() {
                   </button>
                 )}
               </div>
-              <div className="mt-6 bg-slate-900 rounded-2xl p-4 h-40 overflow-y-auto font-mono text-[10px] text-slate-300 shadow-inner flex flex-col-reverse custom-scrollbar">
-                {generationLogs.length === 0 ? <span className="text-center opacity-50 m-auto">محرك الذكاء بانتظار الإطلاق...</span> : generationLogs.map((log, i) => <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('❌') || log.includes('⚠️') ? 'text-rose-400' : log.includes('✅') ? 'text-emerald-400' : ''}`}>&gt; {log}</div>)}
+              <div className="mt-6 bg-slate-900 rounded-2xl p-4 h-60 overflow-y-auto font-mono text-[10px] text-slate-300 shadow-inner flex flex-col-reverse custom-scrollbar">
+                {generationLogs.length === 0 ? <span className="text-center opacity-50 m-auto">محرك الذكاء بانتظار الإطلاق...</span> : generationLogs.map((log, i) => <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('❌') || log.includes('⚠️') ? 'text-rose-400' : log.includes('✅') ? 'text-emerald-400' : ''}`}>{'>'} {log}</div>)}
               </div>
             </div>
+            
           </div>
 
           <div className="xl:col-span-2">
