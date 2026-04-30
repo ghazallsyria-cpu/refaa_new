@@ -12,7 +12,6 @@ import { useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
 
-// Helper: Render HTML without math rendering needed for grading screen simplicity
 const createMarkup = (htmlString: string) => {
   return { __html: htmlString };
 };
@@ -41,7 +40,6 @@ export default function ArenaMonitorDashboard() {
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
 
-  // Object to store grades manually given by teacher for essay questions: { questionId: pointsGiven }
   const [manualGrades, setManualGrades] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -60,7 +58,7 @@ export default function ArenaMonitorDashboard() {
         }
 
         let query = supabase.from('assignments_v2')
-          .select('id, title, is_practice_mode, created_at, teacher_id')
+          .select('id, title, is_practice_mode, created_at, teacher_id, subject_id') // 🚀 جلب المادة لجدول الدرجات
           .order('created_at', { ascending: false })
           .limit(100);
         
@@ -116,7 +114,7 @@ export default function ArenaMonitorDashboard() {
 
       let targetStudents: any[] = [];
       if (sectionIds.length > 0) {
-        const { data: stData } = await supabase.from('students').select('id, user_id, section_id, sections(name, classes(name))').in('section_id', sectionIds);
+        const { data: stData } = await supabase.from('students').select('id, user_id, section_id, sections(id, name, classes(name))').in('section_id', sectionIds); // 🚀 جلب معرف الشعبة الأصلي
         targetStudents = stData || [];
       }
 
@@ -125,7 +123,7 @@ export default function ArenaMonitorDashboard() {
 
       if (targetStudents.length === 0 && progressRecords.length > 0) {
          const pStuIds = progressRecords.map(p => p.student_id);
-         const { data: missingSt } = await supabase.from('students').select('id, user_id, section_id, sections(name, classes(name))').in('id', pStuIds);
+         const { data: missingSt } = await supabase.from('students').select('id, user_id, section_id, sections(id, name, classes(name))').in('id', pStuIds);
          targetStudents = missingSt || progressRecords.map(p => ({ id: p.student_id, user_id: p.student_id, sections: null }));
       }
 
@@ -145,24 +143,27 @@ export default function ArenaMonitorDashboard() {
         if (isNaN(percentage)) percentage = 0;
 
         let secName = 'فصل غير محدد';
+        let secId = null;
         if (student.sections) {
           const className = Array.isArray(student.sections.classes) ? student.sections.classes[0]?.name : student.sections.classes?.name;
           secName = className ? `${className} - ${student.sections.name}` : student.sections.name;
+          secId = student.sections.id;
         }
 
         return {
           id: student.id,
           student_id: student.id,
-          user_id: student.user_id || student.id, // للاستخدام في جدول student_answers
+          user_id: student.user_id || student.id, 
           student_name: userInfo?.full_name || 'طالب غير معروف',
           section_name: secName,
+          section_id: secId, // للاستخدام في حفظ الدرجات
           percentage: Math.min(percentage, 100),
           correct_score: progress?.correct_score || 0,
           wrong_score: progress?.wrong_score || 0,
           teacher_feedback: progress?.teacher_feedback || null,
           has_started: !!progress,
           is_completed: progress?.is_completed || false,
-          is_graded: progress?.teacher_feedback?.includes('[تم رصد الدرجة]') // علامة خفية نستخدمها لنعرف أن الواجب صحح
+          is_graded: progress?.teacher_feedback?.includes('[تم رصد الدرجة]') 
         };
       });
 
@@ -195,7 +196,6 @@ export default function ArenaMonitorDashboard() {
     } catch (err) { alert("حدث خطأ أثناء حفظ الملاحظة."); } finally { setSavingFeedback(false); }
   };
 
-  // 🚀 فتح شاشة تصحيح الواجبات (للمقالي)
   const openGradingModal = async (student: any) => {
     if (currentRole === 'admin' || currentRole === 'management') {
        alert("التصحيح والرصد من صلاحيات معلم المادة فقط.");
@@ -204,15 +204,12 @@ export default function ArenaMonitorDashboard() {
     
     setIsGrading(true);
     try {
-      // جلب أسئلة الواجب بالكامل لكي نقارن الإجابات
       const { data: questions } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', selectedAssignment.id).order('order_index', { ascending: true });
       setAssignmentQuestions(questions || []);
 
-      // جلب إجابات الطالب المقالية من جدول الإجابات
       const { data: answers } = await supabase.from('student_answers').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
       setStudentAnswers(answers || []);
 
-      // تهيئة الدرجات المبدئية (لو كان مصححاً سابقاً)
       const initialGrades: Record<string, number> = {};
       if (answers) {
          answers.forEach(ans => {
@@ -227,7 +224,6 @@ export default function ArenaMonitorDashboard() {
     } catch (err) { alert("حدث خطأ أثناء جلب إجابات الطالب."); } finally { setIsGrading(false); }
   };
 
-  // 🚀 اعتماد التصحيح ورصد الدرجة النهائية
   const submitFinalGrades = async () => {
     setSavingFeedback(true);
     try {
@@ -243,13 +239,10 @@ export default function ArenaMonitorDashboard() {
       
       if (updates.length > 0) await Promise.all(updates);
 
-      // حساب الدرجة النهائية: درجة الاختياري التلقائية (score.totalPoints من التقدم) + درجات المقالي
       const finalScore = selectedStudent.correct_score + totalEssayPoints; 
-      // نحن افترضنا سابقاً أن totalPoints في الـ progress كان يعتمد على نقاط الـ MCQ.
-      
       const newFeedback = `[تم رصد الدرجة] أداء ممتاز، حصلت على ${finalScore} نقطة.`;
 
-      // 1. تحديث تقدم الطالب ليظهر أنه تم رصد الدرجة
+      // 1. تحديث تقدم الطالب
       await supabase.from('student_progress_v2').upsert({ 
            student_id: selectedStudent.student_id, 
            assignment_id: selectedAssignment.id,
@@ -257,33 +250,24 @@ export default function ArenaMonitorDashboard() {
            updated_at: new Date().toISOString() 
       }, { onConflict: 'student_id, assignment_id' });
 
-      // 2. 🚀 حفظ الدرجة في سجل الدرجات المركزي (Gradebook)
-      // نبحث أولاً عن العمود الخاص بهذا الواجب في Gradebook
-      const { data: colData } = await supabase.from('gradebook_columns').select('id').eq('assignment_id', selectedAssignment.id).maybeSingle();
-      let columnId = colData?.id;
-
-      if (!columnId) {
-        // إذا لم يكن هناك عمود لهذا الواجب، ننشئ واحداً
-        const { data: newCol } = await supabase.from('gradebook_columns').insert({
-          title: selectedAssignment.title,
-          max_score: selectedAssignment.max_points,
-          assignment_id: selectedAssignment.id,
-        }).select().single();
-        if (newCol) columnId = newCol.id;
-      }
-
-      if (columnId) {
-        await supabase.from('gradebook_scores').upsert({
-           student_id: selectedStudent.student_id,
-           column_id: columnId,
-           score: finalScore,
-           updated_at: new Date().toISOString()
-        }, { onConflict: 'student_id, column_id' });
+      // 2. 🚀 حفظ الدرجة في النظام القديم (grades) لتعمل كل الشاشات والتقارير بشكل طبيعي!
+      if (selectedAssignment.subject_id && selectedStudent.section_id) {
+         await supabase.from('grades').insert({
+            student_id: selectedStudent.student_id,
+            subject_id: selectedAssignment.subject_id,
+            section_id: selectedStudent.section_id,
+            score: finalScore,
+            max_score: selectedAssignment.max_points || 10, // من إعدادات الواجب
+            exam_type: 'assignment',
+            title: selectedAssignment.title,
+            recorded_by: user.id,
+            created_at: new Date().toISOString()
+         });
       }
 
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, is_graded: true, teacher_feedback: newFeedback } : p));
       setGradingModalOpen(false);
-      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات!');
+      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات (النظام الموحد)!');
 
     } catch (err) { alert("حدث خطأ أثناء اعتماد الدرجات."); } finally { setSavingFeedback(false); }
   };
@@ -430,10 +414,10 @@ export default function ArenaMonitorDashboard() {
                             {isOfficialMode ? (
                               <button 
                                 onClick={() => openGradingModal(student)} 
-                                disabled={!student.is_completed || isGrading}
+                                disabled={!student.is_completed || isGrading || student.is_graded}
                                 className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed font-black text-xs flex items-center gap-2 w-full justify-center"
                               >
-                                {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} تصحيح
+                                {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} {student.is_graded ? 'رُصدت' : 'تصحيح'}
                               </button>
                             ) : (
                               <button onClick={() => { setSelectedStudent(student); setFeedbackText(student.teacher_feedback || ''); setFeedbackModalOpen(true); }} className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95">
@@ -513,7 +497,7 @@ export default function ArenaMonitorDashboard() {
 
                 {assignmentQuestions.filter(q => q.question_type === 'essay').map((q, idx) => {
                   const studentAnsObj = studentAnswers.find(a => a.question_id === q.id);
-                  const studentText = studentAnsObj?.answer_text || 'لم يقم الطالب بالإجابة على هذا السؤال.';
+                  const studentText = studentAnsObj?.text_answer || studentAnsObj?.answer_text || 'لم يقم الطالب بالإجابة على هذا السؤال.';
                   const maxPts = q.points || 1;
                   
                   return (
