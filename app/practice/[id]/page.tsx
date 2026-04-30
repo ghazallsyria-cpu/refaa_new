@@ -281,19 +281,58 @@ export default function PracticeArena() {
       const element = document.getElementById('pdf-export-container');
       if (!element) throw new Error("Element not found");
       await new Promise(resolve => setTimeout(resolve, 800));
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, allowTaint: false, backgroundColor: '#f8fafc', windowWidth: 900 });
-      const imgData = canvas.toDataURL('image/png');
+      
+      const isMobile = window.innerWidth < 768;
+      
+      const canvas = await html2canvas(element, { 
+        scale: isMobile ? 1.5 : 2, // 🚀 تقليل سحب الذاكرة للموبايل لمنع الانهيار
+        useCORS: true, 
+        allowTaint: true, 
+        backgroundColor: '#f8fafc', 
+        windowWidth: 900,
+        onclone: (clonedDoc) => {
+          // 🚀 فك التقييد الوهمي لكي لا يقص المتصفح الصورة الطويلة
+          const parent = clonedDoc.getElementById('main-arena-container');
+          if (parent) {
+            parent.style.overflow = 'visible';
+            parent.style.height = 'auto';
+            parent.style.minHeight = 'auto';
+          }
+          const el = clonedDoc.getElementById('pdf-export-container');
+          if (el) {
+            el.style.position = 'relative';
+            el.style.top = '0';
+            el.style.left = '0';
+          }
+        }
+      });
+      
+      // 🚀 استخدام JPEG يوفر 80% من المساحة والذاكرة مقارنة بـ PNG ويمنع الخطأ في الجوال
+      const imgData = canvas.toDataURL('image/jpeg', 0.8); 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       let heightLeft = pdfHeight;
       let position = 0;
       const pageHeight = pdf.internal.pageSize.getHeight();
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
       heightLeft -= pageHeight;
-      while (heightLeft >= 0) { position = heightLeft - pdfHeight; pdf.addPage(); pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight); heightLeft -= pageHeight; }
+      
+      while (heightLeft > 0) { 
+        position = heightLeft - pdfHeight; 
+        pdf.addPage(); 
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight); 
+        heightLeft -= pageHeight; 
+      }
+      
       pdf.save(`مراجعة_أخطائي_${assignment?.title || 'تدريب'}.pdf`);
-    } catch (err) { console.error('Error generating PDF', err); alert('حدث خطأ أثناء إنشاء ملف الـ PDF.'); } finally { setIsGeneratingPDF(false); }
+    } catch (err) { 
+      console.error('Error generating PDF', err); 
+      alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة باستخدام متصفح كروم أو سفاري المحدث.'); 
+    } finally { 
+      setIsGeneratingPDF(false); 
+    }
   };
 
   if (loading) return <div className="min-h-[100dvh] flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
@@ -308,7 +347,8 @@ export default function PracticeArena() {
   const failedQsForPDF = allQuestions.filter(q => failedQuestionIds.has(q.id) && q.type !== 'section_header');
 
   return (
-    <div className="min-h-[100dvh] h-[100dvh] bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
+    // 🚀 إضافة المعرف main-arena-container لمساعدة الدالة الجديدة على التقاط الصفحة دون قص
+    <div id="main-arena-container" className="min-h-[100dvh] h-[100dvh] bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
       
       {isPreviewMode && (
         <div className="bg-gradient-to-r from-orange-600 to-amber-600 text-white px-4 py-2 flex items-center justify-center gap-3 font-black shadow-md z-50 shrink-0 text-sm sm:text-base">
