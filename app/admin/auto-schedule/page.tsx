@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare
+  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, Scale
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -47,11 +47,9 @@ export default function AutoScheduleGenerator() {
   const [rawTeacherAssignments, setRawTeacherAssignments] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   
-  // 🚀 ميزانية الحصص مفصّلة (المادة + اسم الصف/المسار)
   const [uniqueSubjectClasses, setUniqueSubjectClasses] = useState<{subj_id: string, class_id: string, class_name: string, subj_name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
   
-  // 🚀 حالة الاعتماد
   const [isBudgetSaved, setIsBudgetSaved] = useState(false);
 
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]); 
@@ -93,7 +91,6 @@ export default function AutoScheduleGenerator() {
         tsData.forEach(ts => {
           const sec = formattedSections.find(s => s.id === ts.section_id);
           if (sec && ts.subject_id && ts.subjects?.name) {
-            // استخدام مسار الصف (علمي/أدبي) كمفتاح أساسي
             const key = `${ts.subject_id}_${sec.class_id}`;
             if (!subjClassMap.has(key)) {
               subjClassMap.set(key, { 
@@ -107,7 +104,6 @@ export default function AutoScheduleGenerator() {
         });
 
         const subjClassList = Array.from(subjClassMap.values());
-        // ترتيب المسارات أبجدياً
         subjClassList.sort((a, b) => a.class_name.localeCompare(b.class_name) || a.subj_name.localeCompare(b.subj_name));
         setUniqueSubjectClasses(subjClassList);
 
@@ -120,7 +116,7 @@ export default function AutoScheduleGenerator() {
         
         subjClassList.forEach(item => {
           const key = `${item.subj_id}_${item.class_id}`;
-          if (initialQuotas[key] === undefined) initialQuotas[key] = 3; // النصاب الافتراضي
+          if (initialQuotas[key] === undefined) initialQuotas[key] = 3; 
         });
         setSubjectQuotas(initialQuotas);
       }
@@ -129,17 +125,17 @@ export default function AutoScheduleGenerator() {
   };
 
   const handleQuotaChange = (key: string, val: number) => {
-    let newVal = isNaN(val) ? 1 : val;
-    if (newVal < 1) newVal = 1;
+    let newVal = isNaN(val) ? 0 : val;
+    if (newVal < 0) newVal = 0; 
     const newQuotas = { ...subjectQuotas, [key]: newVal };
     setSubjectQuotas(newQuotas);
-    setIsBudgetSaved(false); // 🚀 إذا غيّر أي رقم، يجب أن يعتمد الميزانية من جديد
+    setIsBudgetSaved(false); 
   };
 
   const saveBudget = () => {
     localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(subjectQuotas));
     setIsBudgetSaved(true);
-    alert('تم اعتماد الميزانية وحفظها. يمكنك الآن توليد الجدول بناءً عليها.');
+    alert('تم اعتماد الميزانية وحفظها. المواد بصفر حصة سيتم استبعادها تماماً من الجدول.');
   };
 
   const fetchSavedPlans = async () => {
@@ -151,6 +147,30 @@ export default function AutoScheduleGenerator() {
     setGenerationLogs(prev => [msg, ...prev]);
   };
 
+  const teacherWorkloads = useMemo(() => {
+    const loads: Record<string, { total: number, details: string[] }> = {};
+    rawTeacherAssignments.forEach(ts => {
+      const section = sections.find(s => s.id === ts.section_id);
+      const key = section ? `${ts.subject_id}_${section.class_id}` : '';
+      const quota = key && subjectQuotas[key] !== undefined ? subjectQuotas[key] : 0;
+      
+      if (quota > 0 && ts.teachers?.users?.full_name) {
+        const tName = ts.teachers.users.full_name;
+        if (!loads[tName]) loads[tName] = { total: 0, details: [] };
+        loads[tName].total += quota;
+        const detailStr = `${ts.subjects?.name} (${section?.class_name}): ${quota} حصص`;
+        if (!loads[tName].details.includes(detailStr)) {
+            loads[tName].details.push(detailStr);
+        }
+      }
+    });
+    return Object.entries(loads).sort((a, b) => b[1].total - a[1].total);
+  }, [rawTeacherAssignments, subjectQuotas, sections]);
+
+
+  // ==========================================
+  // 🧠 THE CORE ALGORITHM (With Teacher Load Balancing)
+  // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) {
       alert("يرجى (حفظ واعتماد الميزانية) أولاً لتتمكن من توليد الجدول."); return;
@@ -160,76 +180,126 @@ export default function AutoScheduleGenerator() {
     }
 
     setGenerating(true); setGenerationLogs([]);
-    addLog("🚀 بدء تحليل الميزانية المخصصة (للمسارات) والقيود الصارمة...");
+    addLog("🚀 بدء تحليل التوازن العادل وتوزيع الأعباء على المعلمين...");
     
     let finalSchedule: any[] = [];
-    await new Promise(r => setTimeout(r, 800)); 
-
-    // 🚀 حساب النصاب لكل معلم بناءً على (المادة + مسار الصف)
+    
+    // 🚀 1. إعداد سجل تتبع عبء المعلم اليومي (Load Balancing Tracker)
+    const teacherDailyLoad: Record<string, Record<number, number>> = {};
+    
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
-      const quota = key ? (subjectQuotas[key] || 3) : 3;
+      const quota = key ? (subjectQuotas[key] !== undefined ? subjectQuotas[key] : 3) : 3;
+
+      // تهيئة العداد لكل معلم
+      if (!teacherDailyLoad[ts.teacher_id]) {
+        teacherDailyLoad[ts.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      }
 
       return {
         ...ts,
         weekly_quota: quota,
         teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
         subject_name: ts.subjects?.name || 'مادة',
-        class_name: section?.class_name
+        class_name: section?.class_name,
+        section_level: section?.level 
       };
-    });
+    }).filter(ta => ta.weekly_quota > 0); 
 
-    const sortedAssignments = [...teacherAssignments].sort((a, b) => b.weekly_quota - a.weekly_quota);
+    const sortedAssignments = [...teacherAssignments].sort((a, b) => {
+      const isHighA = (a.section_level || 0) >= 10 ? 1 : 0;
+      const isHighB = (b.section_level || 0) >= 10 ? 1 : 0;
+      if (isHighA !== isHighB) return isHighB - isHighA; 
+      return b.weekly_quota - a.weekly_quota; 
+    });
     
     addLog(`📊 جاري توزيع ${sortedAssignments.reduce((acc, a) => acc + a.weekly_quota, 0)} حصة أسبوعية...`);
+    addLog(`⚖️ تم تفعيل (ميزان العدل): سيتم توزيع حصص المعلمين بشكل متساوٍ على الأيام قدر الإمكان.`);
+    
     let failedPlacements = 0;
+    await new Promise(r => setTimeout(r, 800));
 
     for (const assignment of sortedAssignments) {
       const section = sections.find(s => s.id === assignment.section_id);
       if (!section) continue;
 
       let remainingLessons = assignment.weekly_quota;
-      
-      let targetDays: number[] = [];
-      if (remainingLessons <= 5) {
-        targetDays = shuffleArray([...workingDays]).slice(0, remainingLessons);
-      } else {
-        targetDays = [...workingDays];
-        const extraDays = remainingLessons - 5;
-        for (let i = 0; i < extraDays; i++) {
-          targetDays.push(workingDays[Math.floor(Math.random() * workingDays.length)]);
-        }
-      }
+      const maxPerDay = Math.ceil(assignment.weekly_quota / 5); // الحد الأقصى للحصص لنفس المادة في اليوم
 
-      for (const day of targetDays) {
-        const availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break);
-        const randomizedPeriods = shuffleArray(availablePeriods);
+      // تسكين حصة بحصة لضمان مراقبة الميزان
+      for (let i = 0; i < remainingLessons; i++) {
         
+        // 🚀 اختيار اليوم الأقل إرهاقاً للمعلم!
+        let preferredDays = shuffleArray([...workingDays]);
+        preferredDays.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
+
         let isPlaced = false;
 
-        for (const period of randomizedPeriods) {
-          const isSectionBusy = finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
-          if (isSectionBusy) continue;
+        for (const day of preferredDays) {
+          // منع تكرار نفس المادة للفصل في نفس اليوم، إلا إذا كان النصاب يستدعي ذلك
+          const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
+          if (subjectCountToday >= maxPerDay) continue;
 
-          const hasTeacherTimeClash = finalSchedule.some(s => 
-            s.teacher_id === assignment.teacher_id && 
-            s.day === day && 
-            isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time)
-          );
-          if (hasTeacherTimeClash) continue;
+          const availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break);
+          
+          // الجاذبية الزمنية (الثانوي صباحاً، المتوسط ظهراً)
+          let orderedPeriods = [...availablePeriods];
+          if (section.stage === 'high') {
+            orderedPeriods.sort((a, b) => a.period_number - b.period_number);
+          } else {
+            orderedPeriods.sort((a, b) => b.period_number - a.period_number);
+          }
+          
+          for (const period of orderedPeriods) {
+            const isSectionBusy = finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
+            if (isSectionBusy) continue;
 
-          finalSchedule.push({
-            section_id: section.id, section_name: section.full_name,
-            subject_id: assignment.subject_id, subject_name: assignment.subject_name,
-            teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name,
-            day: day, period_number: period.period_number,
-            start_time: period.start_time, end_time: period.end_time,
-            stage: section.stage
-          });
+            const hasTeacherTimeClash = finalSchedule.some(s => 
+              s.teacher_id === assignment.teacher_id && 
+              s.day === day && 
+              isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time)
+            );
+            if (hasTeacherTimeClash) continue;
 
-          isPlaced = true;
-          break; 
+            // تم الاعتماد!
+            finalSchedule.push({
+              section_id: section.id, section_name: section.full_name,
+              subject_id: assignment.subject_id, subject_name: assignment.subject_name,
+              teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name,
+              day: day, period_number: period.period_number,
+              start_time: period.start_time, end_time: period.end_time,
+              stage: section.stage
+            });
+
+            teacherDailyLoad[assignment.teacher_id][day]++; // زيادة عداد الإرهاق لهذا اليوم
+            isPlaced = true;
+            break; 
+          }
+          if (isPlaced) break;
+        }
+
+        // 🚀 فرصة أخيرة (Fallback) لو تعثر التسكين بسبب الشروط الصارمة
+        if (!isPlaced) {
+           const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break));
+           for (const day of shuffleArray([...workingDays])) {
+             for (const period of fallbackPeriods) {
+               const isSectionBusy = finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
+               if (isSectionBusy) continue;
+               const hasTeacherTimeClash = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
+               if (hasTeacherTimeClash) continue;
+               
+               finalSchedule.push({
+                 section_id: section.id, section_name: section.full_name, subject_id: assignment.subject_id, subject_name: assignment.subject_name,
+                 teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name, day: day, period_number: period.period_number,
+                 start_time: period.start_time, end_time: period.end_time, stage: section.stage
+               });
+               teacherDailyLoad[assignment.teacher_id][day]++;
+               isPlaced = true;
+               break; 
+             }
+             if (isPlaced) break;
+           }
         }
 
         if (!isPlaced) failedPlacements++;
@@ -237,10 +307,10 @@ export default function AutoScheduleGenerator() {
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد! تم تسكين ${finalSchedule.length} حصة بنجاح مع احترام المسارات (علمي/أدبي).`);
+    addLog(`✅ اكتمل التوليد العادل! تم تسكين ${finalSchedule.length} حصة.`);
     
     if (failedPlacements > 0) {
-      addLog(`⚠️ تنبيه: تعذر تسكين ${failedPlacements} حصة بسبب اختناق الجداول. قد تحتاج لتقليل الأنصبة أو زيادة عدد المعلمين.`);
+      addLog(`⚠️ تنبيه: تعذر تسكين ${failedPlacements} حصة بسبب اختناق الجداول.`);
     }
 
     finalSchedule.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
@@ -253,7 +323,7 @@ export default function AutoScheduleGenerator() {
     if (generatedSchedules.length === 0) return;
     
     setGenerating(true);
-    addLog("💾 جاري حفظ الخطة في قاعدة البيانات (البيئة التجريبية)...");
+    addLog("💾 جاري حفظ الخطة في قاعدة البيانات...");
 
     try {
       const { data: planData, error: planErr } = await supabase.from('auto_schedule_plans')
@@ -311,7 +381,6 @@ export default function AutoScheduleGenerator() {
     } catch(e) {} finally { setGenerating(false); }
   };
 
-  // 🚀 تجميع المواد حسب المسار (الصف) لترتيب العرض
   const groupedSubjectsByClass = useMemo(() => {
     const groups: Record<string, typeof uniqueSubjectClasses> = {};
     uniqueSubjectClasses.forEach(item => {
@@ -335,13 +404,13 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> خوارزمية قيود الوزارة المتقدمة
+              <Scale className="w-4 h-4" /> خوارزمية التوزيع العادل (Load Balancing)
             </div>
             <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
-              <Wand2 className="w-8 h-8 text-amber-400" /> محرك الجدولة الآلي (مسارات)
+              <Wand2 className="w-8 h-8 text-amber-400" /> محرك الجدولة الآلي المطور
             </h1>
             <p className="text-slate-300 font-bold max-w-xl">
-              يمكنك الآن إعداد ميزانية الحصص بناءً على (المسار العلمي/الأدبي) بشكل منظم. اعتمد الميزانية، ثم ولّد الجدول دون تضارب زمني!
+              تم تفعيل ميزة <span className="text-emerald-400">توازن الأعباء</span>. النظام الآن يوزع حصص كل معلم بشكل عادل على مدار أيام الأسبوع لمنع الضغط في يوم واحد!
             </p>
           </div>
           <div className="flex flex-col gap-3 relative z-10 w-full md:w-auto shrink-0">
@@ -356,7 +425,7 @@ export default function AutoScheduleGenerator() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
             
-            {/* لوحة الميزانية المنظمة حسب مسار الصف 🚀 */}
+            {/* لوحة الميزانية المنظمة حسب مسار الصف */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
@@ -369,7 +438,7 @@ export default function AutoScheduleGenerator() {
                 )}
               </div>
               <p className="text-xs font-bold text-slate-500 mb-4">
-                حدد نصاب الحصص الأسبوعي لكل مادة مقسمة حسب (مسار الصف).
+                حدد نصاب الحصص الأسبوعي. <span className="text-rose-500">ضع (0) لاستبعاد المادة تماماً.</span>
               </p>
               
               <div className="space-y-6 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar pb-4">
@@ -385,18 +454,21 @@ export default function AutoScheduleGenerator() {
                     <div className="space-y-2 pl-3 border-r-2 border-indigo-100 mr-2">
                       {groupedSubjectsByClass[className].map(item => {
                         const key = `${item.subj_id}_${item.class_id}`;
+                        const currentVal = subjectQuotas[key] !== undefined ? subjectQuotas[key] : 3;
+                        const isZero = currentVal === 0;
+
                         return (
-                          <div key={key} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors group">
-                            <span className="font-bold text-sm text-slate-700 truncate group-hover:text-indigo-700 transition-colors">
-                              {item.subj_name}
+                          <div key={key} className={`flex items-center justify-between p-2.5 rounded-xl border shadow-sm transition-colors group ${isZero ? 'bg-slate-50/50 border-slate-100 opacity-60' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
+                            <span className={`font-bold text-sm truncate transition-colors ${isZero ? 'text-slate-400 line-through' : 'text-slate-700 group-hover:text-indigo-700'}`}>
+                              {item.subj_name} {isZero && <Ban className="w-3 h-3 inline-block mr-1 text-rose-400"/>}
                             </span>
                             <div className="flex items-center gap-2 shrink-0">
                                <input 
                                  type="number" 
-                                 min="1" 
-                                 value={subjectQuotas[key] || 3} 
+                                 min="0" 
+                                 value={currentVal} 
                                  onChange={(e) => handleQuotaChange(key, parseInt(e.target.value))}
-                                 className={`w-14 p-1.5 text-center font-black rounded-lg outline-none shadow-inner transition-all ${isBudgetSaved ? 'bg-slate-50 border border-slate-200 text-slate-500' : 'bg-white border border-indigo-300 text-indigo-700 focus:border-indigo-500 focus:bg-white'}`}
+                                 className={`w-14 p-1.5 text-center font-black rounded-lg outline-none transition-all ${isZero ? 'bg-slate-100 text-slate-400 border border-slate-200' : isBudgetSaved ? 'bg-slate-50 border border-slate-200 text-slate-500' : 'bg-white border border-indigo-300 text-indigo-700 focus:border-indigo-500 focus:bg-white shadow-inner'}`}
                                />
                                <span className="text-[10px] font-bold text-slate-400">حصص</span>
                             </div>
@@ -408,7 +480,6 @@ export default function AutoScheduleGenerator() {
                 ))}
               </div>
 
-              {/* 🚀 زر اعتماد الميزانية */}
               <button 
                 onClick={saveBudget}
                 disabled={loadingData || isBudgetSaved}
@@ -417,6 +488,26 @@ export default function AutoScheduleGenerator() {
                 <CheckSquare className="w-5 h-5" /> 
                 {isBudgetSaved ? 'تم اعتماد الميزانية' : 'حفظ واعتماد الميزانية أولاً'}
               </button>
+            </div>
+
+            {/* مراقبة أنصبة المعلمين الكلية */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
+                <Briefcase className="w-5 h-5 text-indigo-500" /> إجمالي أنصبة المعلمين
+              </h3>
+              <p className="text-xs font-bold text-slate-500 mb-4">
+                يتم جمع حصص المعلم في المتوسط والثانوي معاً للتأكد من عدم الإرهاق قبل التوليد.
+              </p>
+              <div className="space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                {teacherWorkloads.map(([name, data], idx) => (
+                  <div key={idx} className="bg-slate-50 border border-slate-100 p-3 rounded-xl flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-700 truncate">{name}</span>
+                    <span className={`font-black text-xs px-2 py-1 rounded-lg ${data.total > 24 ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-indigo-100 text-indigo-700 border border-indigo-200'}`}>
+                      {data.total} حصة
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
@@ -436,7 +527,7 @@ export default function AutoScheduleGenerator() {
                   className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                  توليد الجدول آلياً
+                  توليد الجدول بالعدل
                 </button>
 
                 {generatedSchedules.length > 0 && !activePlanId && (
@@ -534,6 +625,4 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
-
-
 
