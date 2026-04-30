@@ -126,11 +126,11 @@ export default function AutoScheduleGenerator() {
 
   const generateSchedule = async () => {
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) {
-      alert("البيانات الأساسية غير مكتملة."); return;
+      alert('البيانات الأساسية غير مكتملة.'); return;
     }
 
     setGenerating(true); setGenerationLogs([]);
-    addLog("🚀 بدء تحليل قيود الوزارة الصارمة بناءً على الميزانية المحددة...");
+    addLog('🚀 بدء تحليل قيود الوزارة الصارمة بناءً على الميزانية المحددة...');
     
     let finalSchedule: any[] = [];
     await new Promise(r => setTimeout(r, 800)); 
@@ -215,7 +215,7 @@ export default function AutoScheduleGenerator() {
     if (generatedSchedules.length === 0) return;
     
     setGenerating(true);
-    addLog("💾 جاري حفظ الخطة في قاعدة البيانات (البيئة التجريبية)...");
+    addLog('💾 جاري حفظ الخطة في قاعدة البيانات (البيئة التجريبية)...');
 
     try {
       const { data: planData, error: planErr } = await supabase.from('auto_schedule_plans')
@@ -241,7 +241,7 @@ export default function AutoScheduleGenerator() {
 
     } catch (err) {
       addLog(`❌ خطأ أثناء الحفظ: ${err.message}`);
-      alert("خطأ أثناء الحفظ");
+      alert('خطأ أثناء الحفظ');
     } finally { setGenerating(false); }
   };
 
@@ -405,7 +405,7 @@ export default function AutoScheduleGenerator() {
                   <div className="h-full flex flex-col items-center justify-center text-slate-400">
                     <CalendarDays className="w-16 h-16 mb-4 opacity-20" />
                     <p className="font-bold text-lg">اللوحة فارغة</p>
-                    <p className="text-sm mt-1 opacity-70">قم بتحديد الميزانية، والضغط على &quot;توليد الجدول&quot; لتبدأ الخوارزمية.</p>
+                    <p className="text-sm mt-1 opacity-70">قم بتحديد الميزانية، والضغط على زر التوليد لتبدأ الخوارزمية.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -446,6 +446,4 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
-
-
 
