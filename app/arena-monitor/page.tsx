@@ -6,11 +6,16 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
+
+// Helper: Render HTML without math rendering needed for grading screen simplicity
+const createMarkup = (htmlString: string) => {
+  return { __html: htmlString };
+};
 
 export default function ArenaMonitorDashboard() {
   const router = useRouter();
@@ -23,10 +28,21 @@ export default function ArenaMonitorDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Modal States
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [gradingModalOpen, setGradingModalOpen] = useState(false);
+  
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [feedbackText, setFeedbackText] = useState('');
+  
+  // Grading States
+  const [studentAnswers, setStudentAnswers] = useState<any[]>([]);
+  const [assignmentQuestions, setAssignmentQuestions] = useState<any[]>([]);
   const [savingFeedback, setSavingFeedback] = useState(false);
+  const [isGrading, setIsGrading] = useState(false);
+
+  // Object to store grades manually given by teacher for essay questions: { questionId: pointsGiven }
+  const [manualGrades, setManualGrades] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
@@ -36,9 +52,8 @@ export default function ArenaMonitorDashboard() {
         let actualTeacherId = null;
         if (currentRole === 'teacher' && user?.id) {
           const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-          if (tByUserId?.id) {
-            actualTeacherId = tByUserId.id;
-          } else {
+          if (tByUserId?.id) actualTeacherId = tByUserId.id;
+          else {
              const { data: tById } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
              if (tById?.id) actualTeacherId = tById.id;
           }
@@ -50,44 +65,33 @@ export default function ArenaMonitorDashboard() {
           .limit(100);
         
         if (currentRole === 'teacher') {
-          if (actualTeacherId) {
-            query = query.eq('teacher_id', actualTeacherId);
-          } else {
-             query = query.eq('teacher_id', user.id); 
-          }
+          if (actualTeacherId) query = query.eq('teacher_id', actualTeacherId);
+          else query = query.eq('teacher_id', user.id); 
         }
 
         const { data: assignmentsData, error: assignErr } = await query;
         if (assignErr) throw assignErr;
 
         if (!assignmentsData || assignmentsData.length === 0) {
-           setAssignments([]);
-           setLoading(false);
-           return;
+           setAssignments([]); setLoading(false); return;
         }
 
         const assignmentIds = assignmentsData.map(a => a.id);
-        const { data: questionsData } = await supabase
-          .from('assignment_questions_v2')
-          .select('id, assignment_id')
-          .in('assignment_id', assignmentIds);
+        const { data: questionsData } = await supabase.from('assignment_questions_v2').select('id, assignment_id, points').in('assignment_id', assignmentIds);
 
         const formatted = assignmentsData.map(d => {
-          const qCount = (questionsData || []).filter(q => q.assignment_id === d.id).length;
+          const qsForThis = (questionsData || []).filter(q => q.assignment_id === d.id);
+          const totalPoints = qsForThis.reduce((sum, q) => sum + (q.points || 1), 0);
           return {
             ...d,
-            total_questions: qCount > 0 ? qCount : 1 
+            total_questions: qsForThis.length > 0 ? qsForThis.length : 1,
+            max_points: totalPoints > 0 ? totalPoints : 10
           };
         });
         
         setAssignments(formatted);
-      } catch (err) { 
-        console.error("Error fetching assignments for monitor:", err); 
-      } finally { 
-        setLoading(false); 
-      }
+      } catch (err) { console.error(err); } finally { setLoading(false); }
     };
-
     fetchAssignments();
   }, [user?.id, currentRole]);
 
@@ -99,9 +103,8 @@ export default function ArenaMonitorDashboard() {
       let sectionIds: string[] = [];
       const { data: v2Secs } = await supabase.from('assignment_sections_v2').select('section_id').eq('assignment_id', assignment.id);
       
-      if (v2Secs && v2Secs.length > 0) {
-        sectionIds = v2Secs.map(s => s.section_id);
-      } else {
+      if (v2Secs && v2Secs.length > 0) sectionIds = v2Secs.map(s => s.section_id);
+      else {
         const { data: v1Secs } = await supabase.from('assignment_sections').select('section_id').eq('assignment_id', assignment.id);
         if (v1Secs && v1Secs.length > 0) sectionIds = v1Secs.map(s => s.section_id);
       }
@@ -113,7 +116,6 @@ export default function ArenaMonitorDashboard() {
 
       let targetStudents: any[] = [];
       if (sectionIds.length > 0) {
-        // 🚀 جلب بيانات الفصل والصف مع الطالب
         const { data: stData } = await supabase.from('students').select('id, user_id, section_id, sections(name, classes(name))').in('section_id', sectionIds);
         targetStudents = stData || [];
       }
@@ -123,7 +125,6 @@ export default function ArenaMonitorDashboard() {
 
       if (targetStudents.length === 0 && progressRecords.length > 0) {
          const pStuIds = progressRecords.map(p => p.student_id);
-         // 🚀 جلب بيانات الفصل والصف للطلاب المفقودين أيضاً
          const { data: missingSt } = await supabase.from('students').select('id, user_id, section_id, sections(name, classes(name))').in('id', pStuIds);
          targetStudents = missingSt || progressRecords.map(p => ({ id: p.student_id, user_id: p.student_id, sections: null }));
       }
@@ -143,7 +144,6 @@ export default function ArenaMonitorDashboard() {
         let percentage = progress ? (progress.is_completed ? 100 : Math.round((progress.current_index / assignment.total_questions) * 100)) : 0;
         if (isNaN(percentage)) percentage = 0;
 
-        // 🚀 تحديد اسم الفصل
         let secName = 'فصل غير محدد';
         if (student.sections) {
           const className = Array.isArray(student.sections.classes) ? student.sections.classes[0]?.name : student.sections.classes?.name;
@@ -153,19 +153,20 @@ export default function ArenaMonitorDashboard() {
         return {
           id: student.id,
           student_id: student.id,
+          user_id: student.user_id || student.id, // للاستخدام في جدول student_answers
           student_name: userInfo?.full_name || 'طالب غير معروف',
           section_name: secName,
           percentage: Math.min(percentage, 100),
           correct_score: progress?.correct_score || 0,
           wrong_score: progress?.wrong_score || 0,
           teacher_feedback: progress?.teacher_feedback || null,
-          has_started: !!progress
+          has_started: !!progress,
+          is_completed: progress?.is_completed || false,
+          is_graded: progress?.teacher_feedback?.includes('[تم رصد الدرجة]') // علامة خفية نستخدمها لنعرف أن الواجب صحح
         };
       });
 
       const uniqueStudents = Array.from(new Map(studentsToDisplay.map(item => [item.student_id, item])).values());
-      
-      // 🚀 الفرز الذكي (حسب الفصل أولاً ثم حسب الاسم الأبجدي)
       uniqueStudents.sort((a, b) => {
         const secCompare = a.section_name.localeCompare(b.section_name, 'ar');
         if (secCompare !== 0) return secCompare; 
@@ -174,20 +175,14 @@ export default function ArenaMonitorDashboard() {
 
       setStudentsProgress(uniqueStudents);
 
-    } catch (err) { 
-      console.error("Error fetching progress:", err); 
-    } finally { 
-      setRefreshing(false); 
-    }
+    } catch (err) { console.error(err); } finally { setRefreshing(false); }
   };
 
   const saveFeedback = async () => {
     if (!selectedStudent || !selectedAssignment) return;
     setSavingFeedback(true);
     try {
-      const { error } = await supabase
-        .from('student_progress_v2')
-        .upsert({ 
+      const { error } = await supabase.from('student_progress_v2').upsert({ 
            student_id: selectedStudent.student_id, 
            assignment_id: selectedAssignment.id,
            teacher_feedback: feedbackText, 
@@ -195,22 +190,105 @@ export default function ArenaMonitorDashboard() {
         }, { onConflict: 'student_id, assignment_id' });
 
       if (error) throw error;
-      
-      setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText, has_started: true } : p));
+      setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText } : p));
       setFeedbackModalOpen(false);
-      setFeedbackText('');
-    } catch (err) { 
-      alert("حدث خطأ أثناء حفظ الملاحظة."); 
-    } finally { 
-      setSavingFeedback(false); 
-    }
+    } catch (err) { alert("حدث خطأ أثناء حفظ الملاحظة."); } finally { setSavingFeedback(false); }
   };
 
-  const openFeedbackModal = (student: any) => {
-    setSelectedStudent(student);
-    setFeedbackText(student.teacher_feedback || '');
-    setFeedbackModalOpen(true);
+  // 🚀 فتح شاشة تصحيح الواجبات (للمقالي)
+  const openGradingModal = async (student: any) => {
+    if (currentRole === 'admin' || currentRole === 'management') {
+       alert("التصحيح والرصد من صلاحيات معلم المادة فقط.");
+       return;
+    }
+    
+    setIsGrading(true);
+    try {
+      // جلب أسئلة الواجب بالكامل لكي نقارن الإجابات
+      const { data: questions } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', selectedAssignment.id).order('order_index', { ascending: true });
+      setAssignmentQuestions(questions || []);
+
+      // جلب إجابات الطالب المقالية من جدول الإجابات
+      const { data: answers } = await supabase.from('student_answers').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
+      setStudentAnswers(answers || []);
+
+      // تهيئة الدرجات المبدئية (لو كان مصححاً سابقاً)
+      const initialGrades: Record<string, number> = {};
+      if (answers) {
+         answers.forEach(ans => {
+            if (ans.points_earned !== null) initialGrades[ans.question_id] = ans.points_earned;
+            else initialGrades[ans.question_id] = 0;
+         });
+      }
+      setManualGrades(initialGrades);
+
+      setSelectedStudent(student);
+      setGradingModalOpen(true);
+    } catch (err) { alert("حدث خطأ أثناء جلب إجابات الطالب."); } finally { setIsGrading(false); }
   };
+
+  // 🚀 اعتماد التصحيح ورصد الدرجة النهائية
+  const submitFinalGrades = async () => {
+    setSavingFeedback(true);
+    try {
+      let totalEssayPoints = 0;
+      const updates = [];
+
+      for (const [qId, points] of Object.entries(manualGrades)) {
+        totalEssayPoints += points;
+        updates.push(
+          supabase.from('student_answers').update({ points_earned: points, is_graded: true }).eq('student_id', selectedStudent.user_id).eq('question_id', qId)
+        );
+      }
+      
+      if (updates.length > 0) await Promise.all(updates);
+
+      // حساب الدرجة النهائية: درجة الاختياري التلقائية (score.totalPoints من التقدم) + درجات المقالي
+      const finalScore = selectedStudent.correct_score + totalEssayPoints; 
+      // نحن افترضنا سابقاً أن totalPoints في الـ progress كان يعتمد على نقاط الـ MCQ.
+      
+      const newFeedback = `[تم رصد الدرجة] أداء ممتاز، حصلت على ${finalScore} نقطة.`;
+
+      // 1. تحديث تقدم الطالب ليظهر أنه تم رصد الدرجة
+      await supabase.from('student_progress_v2').upsert({ 
+           student_id: selectedStudent.student_id, 
+           assignment_id: selectedAssignment.id,
+           teacher_feedback: newFeedback, 
+           updated_at: new Date().toISOString() 
+      }, { onConflict: 'student_id, assignment_id' });
+
+      // 2. 🚀 حفظ الدرجة في سجل الدرجات المركزي (Gradebook)
+      // نبحث أولاً عن العمود الخاص بهذا الواجب في Gradebook
+      const { data: colData } = await supabase.from('gradebook_columns').select('id').eq('assignment_id', selectedAssignment.id).maybeSingle();
+      let columnId = colData?.id;
+
+      if (!columnId) {
+        // إذا لم يكن هناك عمود لهذا الواجب، ننشئ واحداً
+        const { data: newCol } = await supabase.from('gradebook_columns').insert({
+          title: selectedAssignment.title,
+          max_score: selectedAssignment.max_points,
+          assignment_id: selectedAssignment.id,
+        }).select().single();
+        if (newCol) columnId = newCol.id;
+      }
+
+      if (columnId) {
+        await supabase.from('gradebook_scores').upsert({
+           student_id: selectedStudent.student_id,
+           column_id: columnId,
+           score: finalScore,
+           updated_at: new Date().toISOString()
+        }, { onConflict: 'student_id, column_id' });
+      }
+
+      setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, is_graded: true, teacher_feedback: newFeedback } : p));
+      setGradingModalOpen(false);
+      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات!');
+
+    } catch (err) { alert("حدث خطأ أثناء اعتماد الدرجات."); } finally { setSavingFeedback(false); }
+  };
+
+  const isOfficialMode = selectedAssignment && selectedAssignment.is_practice_mode === false;
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center font-cairo font-bold">غير مصرح لك بالدخول.</div>;
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-indigo-500 font-bold flex flex-col items-center gap-2"><Activity className="w-8 h-8"/> جاري تهيئة الرادار...</div></div>;
@@ -226,7 +304,7 @@ export default function ArenaMonitorDashboard() {
             </div>
             <div>
               <h1 className="text-2xl font-black text-slate-800">رادار المتابعة الحية</h1>
-              <p className="text-sm font-bold text-slate-500">اختر درساً لمراقبة إنجازات الطلاب وإرسال الملاحظات.</p>
+              <p className="text-sm font-bold text-slate-500">مراقبة إنجازات الطلاب، وتقييم الواجبات الرسمية.</p>
             </div>
           </div>
           
@@ -239,9 +317,9 @@ export default function ArenaMonitorDashboard() {
               }}
               defaultValue=""
             >
-              <option value="" disabled>اختر التحدي / الدرس...</option>
+              <option value="" disabled>اختر التحدي / الواجب...</option>
               {assignments.map(a => (
-                <option key={a.id} value={a.id}>{a.is_practice_mode ? '🎮' : '📝'} {a.title}</option>
+                <option key={a.id} value={a.id}>{a.is_practice_mode ? '🎮 تدريب:' : '📝 واجب:'} {a.title}</option>
               ))}
             </select>
           </div>
@@ -253,52 +331,30 @@ export default function ArenaMonitorDashboard() {
             <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                <div>
                   <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                    <Target className="w-5 h-5 text-indigo-500"/> {selectedAssignment.title}
+                    {isOfficialMode ? <FileText className="w-5 h-5 text-indigo-500"/> : <Target className="w-5 h-5 text-indigo-500"/>} 
+                    {selectedAssignment.title}
                   </h2>
-                  <p className="text-xs font-bold text-slate-500 mt-1">يحتوي على {selectedAssignment.total_questions} سؤال</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-md ${isOfficialMode ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {isOfficialMode ? 'واجب رسمي (يتطلب تصحيح)' : 'تدريب تفاعلي ذاتي'}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">يحتوي على {selectedAssignment.total_questions} سؤال</span>
+                  </div>
                </div>
                
                <button 
                   onClick={() => router.push(`/practice/${selectedAssignment.id}?preview=true`)} 
                   className="w-full sm:w-auto px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-black rounded-xl border border-indigo-200 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
                >
-                 <Eye className="w-5 h-5" /> معاينة الدرس كطالب
+                 <Eye className="w-5 h-5" /> معاينة كطالب
                </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0"><Users className="w-6 h-6"/></div>
-                <div>
-                  <div className="text-2xl font-black text-slate-800">{studentsProgress.length}</div>
-                  <div className="text-xs font-bold text-slate-500 uppercase">الطلاب المستهدفين</div>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center shrink-0"><CheckCircle2 className="w-6 h-6"/></div>
-                <div>
-                  <div className="text-2xl font-black text-slate-800">
-                    {studentsProgress.filter(p => p.percentage === 100).length}
-                  </div>
-                  <div className="text-xs font-bold text-slate-500 uppercase">أكملوا التدريب (100%)</div>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center shrink-0"><Activity className="w-6 h-6"/></div>
-                <div>
-                  <div className="text-2xl font-black text-slate-800">
-                    {studentsProgress.filter(p => p.has_started && p.percentage < 100).length}
-                  </div>
-                  <div className="text-xs font-bold text-slate-500 uppercase">قيد التنفيذ حالياً</div>
-                </div>
-              </div>
             </div>
 
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="font-black text-lg text-slate-800">سجل الإنجاز والمتابعة</h3>
+                <h3 className="font-black text-lg text-slate-800">سجل الإنجاز والتقييم</h3>
                 <button onClick={() => fetchProgress(selectedAssignment)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors active:scale-95">
-                  <RefreshCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> تحديث البيانات
+                  <RefreshCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> تحديث
                 </button>
               </div>
               
@@ -308,14 +364,14 @@ export default function ArenaMonitorDashboard() {
                     <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase">
                       <th className="p-4 rounded-tr-3xl">اسم الطالب / الفصل</th>
                       <th className="p-4">نسبة الإنجاز</th>
-                      <th className="p-4 text-center">النقاط (صح / خطأ)</th>
-                      <th className="p-4">حالة الملاحظة</th>
+                      {!isOfficialMode && <th className="p-4 text-center">الإجابات الآلية</th>}
+                      <th className="p-4">حالة التقييم</th>
                       <th className="p-4 text-center rounded-tl-3xl">إجراء</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm font-bold text-slate-700">
                     {studentsProgress.length === 0 ? (
-                      <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold bg-slate-50/50">لا يوجد طلاب مسجلين في الفصول المخصصة لهذا التحدي، ولم يقم أحد بحله بعد.</td></tr>
+                      <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold bg-slate-50/50">لا يوجد طلاب مسجلين في الفصول المخصصة لهذا الواجب.</td></tr>
                     ) : (
                       studentsProgress.map((student) => (
                         <tr key={student.student_id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!student.has_started ? 'opacity-60' : ''}`}>
@@ -329,6 +385,7 @@ export default function ArenaMonitorDashboard() {
                               {!student.has_started && <span className="text-[10px] text-slate-400 block mt-0.5">لم يبدأ بعد</span>}
                             </div>
                           </td>
+                          
                           <td className="p-4 w-48">
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50">
@@ -337,27 +394,52 @@ export default function ArenaMonitorDashboard() {
                               <span className={`text-xs font-black w-8 ${student.percentage === 100 ? 'text-emerald-600' : student.has_started ? 'text-amber-600' : 'text-slate-400'}`}>{student.percentage}%</span>
                             </div>
                           </td>
+                          
+                          {!isOfficialMode && (
+                            <td className="p-4">
+                              {student.has_started ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> {student.correct_score}</span>
+                                  <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 shadow-sm font-black"><XCircle className="w-3 h-3"/> {student.wrong_score}</span>
+                                </div>
+                              ) : (
+                                <div className="text-center text-slate-400">-</div>
+                              )}
+                            </td>
+                          )}
+
                           <td className="p-4">
-                            {student.has_started ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> {student.correct_score}</span>
-                                <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 shadow-sm font-black"><XCircle className="w-3 h-3"/> {student.wrong_score}</span>
-                              </div>
+                            {isOfficialMode ? (
+                               student.is_graded ? (
+                                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> تم التصحيح والرصد</span>
+                               ) : student.is_completed ? (
+                                  <span className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><Activity className="w-3 h-3 animate-pulse"/> بانتظار تصحيح المعلم</span>
+                               ) : (
+                                  <span className="text-[10px] text-slate-400 border border-slate-200 px-2 py-1 rounded-lg bg-white shadow-sm font-bold">لم يسلم الواجب بعد</span>
+                               )
                             ) : (
-                              <div className="text-center text-slate-400">-</div>
+                              student.teacher_feedback ? (
+                                <span className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-600 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> أُرسلت ملاحظة</span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 border border-slate-200 px-2 py-1 rounded-lg bg-white shadow-sm font-bold">لا توجد ملاحظات</span>
+                              )
                             )}
                           </td>
-                          <td className="p-4">
-                            {student.teacher_feedback ? (
-                              <span className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-600 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> تم إرسال ملاحظة</span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 border border-slate-200 px-2 py-1 rounded-lg bg-white shadow-sm font-bold">لا توجد ملاحظات</span>
-                            )}
-                          </td>
+
                           <td className="p-4 text-center">
-                            <button onClick={() => openFeedbackModal(student)} className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95">
-                              <MessageSquareHeart className="w-5 h-5" />
-                            </button>
+                            {isOfficialMode ? (
+                              <button 
+                                onClick={() => openGradingModal(student)} 
+                                disabled={!student.is_completed || isGrading}
+                                className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed font-black text-xs flex items-center gap-2 w-full justify-center"
+                              >
+                                {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} تصحيح
+                              </button>
+                            ) : (
+                              <button onClick={() => { setSelectedStudent(student); setFeedbackText(student.teacher_feedback || ''); setFeedbackModalOpen(true); }} className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95">
+                                <MessageSquareHeart className="w-5 h-5" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -370,12 +452,12 @@ export default function ArenaMonitorDashboard() {
         )}
       </div>
 
+      {/* مودال إرسال الملاحظات (لوضع التدريب) */}
       <AnimatePresence>
-        {feedbackModalOpen && selectedStudent && (
+        {feedbackModalOpen && selectedStudent && !isOfficialMode && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setFeedbackModalOpen(false)} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100" dir="rtl">
-              
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><Sparkles className="w-5 h-5"/></div>
@@ -386,32 +468,94 @@ export default function ArenaMonitorDashboard() {
                 </div>
                 <button onClick={() => setFeedbackModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
               </div>
-
               <div className="p-6 space-y-4">
-                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex justify-between items-center text-sm font-bold shadow-inner">
-                  <span>إنجاز الطالب: <span className="text-indigo-600 font-black">{selectedStudent.percentage}%</span></span>
-                  <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4"/> {selectedStudent.correct_score} صح</span>
-                  <span className="text-rose-600 flex items-center gap-1"><XCircle className="w-4 h-4"/> {selectedStudent.wrong_score} خطأ</span>
-                </div>
-                
                 <div className="space-y-2">
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest pl-1">اكتب ملاحظتك التوجيهية أو التشجيعية:</label>
-                  <textarea 
-                    value={feedbackText} 
-                    onChange={(e) => setFeedbackText(e.target.value)} 
-                    placeholder="مثال: أداء ممتاز يا بطل! راجع قانون نيوتن الثاني وركز في الإشارات السلبية..."
-                    className="w-full h-32 bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-500 resize-none shadow-inner leading-relaxed transition-all focus:bg-white"
-                  ></textarea>
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest pl-1">اكتب ملاحظتك التوجيهية:</label>
+                  <textarea value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} placeholder="مثال: راجع قانون نيوتن الثاني..." className="w-full h-32 bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-500 resize-none shadow-inner leading-relaxed transition-all focus:bg-white"></textarea>
                 </div>
               </div>
-
               <div className="p-6 pt-0 flex gap-3">
                 <button onClick={() => setFeedbackModalOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
                 <button onClick={saveFeedback} disabled={savingFeedback} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 text-sm disabled:opacity-70 border border-indigo-500">
                   {savingFeedback ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} حفظ وإرسال للطالب
                 </button>
               </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
+      {/* 🚀 مودال نظام التصحيح والتقييم (لوضع الواجبات الرسمية) */}
+      <AnimatePresence>
+        {gradingModalOpen && selectedStudent && isOfficialMode && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" />
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 250 }} className="fixed bottom-0 left-0 w-full h-[95vh] bg-slate-100 rounded-t-[2rem] shadow-2xl z-50 flex flex-col overflow-hidden" dir="rtl">
+              
+              <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-white rounded-t-[2rem] shrink-0">
+                <button onClick={() => setGradingModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 rounded-full shadow-sm"><X className="w-5 h-5" /></button>
+                <div className="text-center">
+                   <h3 className="font-black text-slate-800 text-lg">تصحيح واجب: {selectedStudent.student_name}</h3>
+                   <p className="text-xs font-bold text-slate-500">مجموع نقاط الاختياري التلقائية: {selectedStudent.correct_score}</p>
+                </div>
+                <button onClick={submitFinalGrades} disabled={savingFeedback} className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm shadow-md active:scale-95 transition-all flex items-center gap-2">
+                  {savingFeedback ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4"/>} اعتماد ورصد الدرجة
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-32 space-y-6">
+                
+                {assignmentQuestions.filter(q => q.question_type === 'essay').length === 0 && (
+                   <div className="text-center p-10 bg-white rounded-2xl border border-slate-200 shadow-sm font-bold text-slate-500">
+                     لا يحتوي هذا الواجب على أسئلة مقالية تتطلب تصحيحاً يدوياً. الدرجة المعتمدة حالياً هي درجة أسئلة الاختيار التلقائية.
+                   </div>
+                )}
+
+                {assignmentQuestions.filter(q => q.question_type === 'essay').map((q, idx) => {
+                  const studentAnsObj = studentAnswers.find(a => a.question_id === q.id);
+                  const studentText = studentAnsObj?.answer_text || 'لم يقم الطالب بالإجابة على هذا السؤال.';
+                  const maxPts = q.points || 1;
+                  
+                  return (
+                    <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-6">
+                      <div className="flex-1 space-y-4">
+                        <div className="border-b border-slate-100 pb-3">
+                          <span className="text-xs font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md mb-2 inline-block">السؤال المقالي {idx + 1}</span>
+                          <div className="font-bold text-slate-800 prose prose-sm max-w-none" dangerouslySetInnerHTML={createMarkup(q.content_html)} />
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
+                          <p className="text-xs font-black text-slate-500 mb-2 uppercase tracking-widest">إجابة الطالب:</p>
+                          <p className="font-bold text-slate-700 whitespace-pre-wrap">{studentText}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="md:w-80 shrink-0 bg-indigo-50/50 p-5 rounded-xl border border-indigo-100 flex flex-col h-full">
+                        <div className="mb-4">
+                           <p className="text-xs font-black text-indigo-500 mb-2 flex items-center gap-1"><BrainCircuit className="w-3 h-3"/> الإجابة النموذجية كمرجع:</p>
+                           <div className="font-bold text-indigo-900 text-sm max-h-32 overflow-y-auto custom-scrollbar prose prose-sm max-w-none" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
+                        </div>
+                        
+                        <div className="mt-auto border-t border-indigo-100 pt-4">
+                           <label className="block text-xs font-black text-slate-600 mb-2">رصد الدرجة (من {maxPts})</label>
+                           <input 
+                             type="number" 
+                             min="0" max={maxPts} 
+                             value={manualGrades[q.id] !== undefined ? manualGrades[q.id] : 0} 
+                             onChange={(e) => {
+                               let val = Number(e.target.value);
+                               if (val > maxPts) val = maxPts;
+                               if (val < 0) val = 0;
+                               setManualGrades(prev => ({...prev, [q.id]: val}));
+                             }}
+                             className="w-full bg-white border border-indigo-200 text-center font-black text-lg p-3 rounded-xl shadow-inner focus:border-indigo-500 outline-none text-indigo-700" 
+                           />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              </div>
             </motion.div>
           </>
         )}
