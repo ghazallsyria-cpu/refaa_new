@@ -68,7 +68,6 @@ export default function TeacherDashboard() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  // 🚀 تحصين الدوال بالـ Number لتجنب أخطاء التطابق النصي
   const isCurrentClass = useCallback((period: number | string) => {
     if (!currentTime) return false;
     const periodInfo = periods.find(p => Number(p.period_number) === Number(period));
@@ -122,7 +121,6 @@ const fetchData = useCallback(async () => {
         }
 
         if (data.teacher?.id) {
-            // جلب سجلات الغياب الخطرة (أكثر من 5 غيابات)
             const { data: absences } = await supabase
               .from('attendance_records')
               .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -151,47 +149,49 @@ const fetchData = useCallback(async () => {
               setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
             }
 
-            // 🚀 [المنطق المطور للتحقق من تسجيل الغياب]
+            // 🚀 [إصلاح خلل التنبيه الإداري لتسجيل الغياب]
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
               
-              // 1. حساب التاريخ المحلي بدقة لضمان مطابقة سجلات الداتابيز
               const todayStr = format(now, 'yyyy-MM-dd');
               const currentDayOfWeek = now.getDay() + 1; 
               
-              // 2. تحديد حصص وشُعب المعلم لهذا اليوم
               const todaysScheduleData = data.schedule.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
               
               if (todaysScheduleData.length === 0) {
                 setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
               } else {
-                // 3. جلب جميع سجلات الحضور لهذه الشُعب اليوم
-                // نعتمد على section_id لأنه الرابط الأقوى بين الجدول والغياب
                 const todaySectionIds = Array.from(new Set(todaysScheduleData.map((s: any) => s.section_id)));
                 
-                const { data: attendanceRecs } = await supabase
-                  .from('attendance_records')
-                  .select('period, period_number, section_id')
-                  .eq('date', todayStr)
-                  .in('section_id', todaySectionIds);
+                // 🚀 سحب البيانات من السجلات والجلسات وتجنب الحقول غير الموجودة
+                const [ { data: recordsData }, { data: sessionsData } ] = await Promise.all([
+                  supabase.from('attendance_records').select('period, section_id').eq('date', todayStr).in('section_id', todaySectionIds),
+                  supabase.from('attendance_sessions').select('period_number, section_id').eq('date', todayStr).eq('status', 'submitted').in('section_id', todaySectionIds)
+                ]);
+
+                // تجميع كل المفاتيح المسجلة لضمان الدقة (رقم الشعبة - رقم الحصة)
+                const recordedKeys = new Set([
+                  ...(recordsData || []).map(r => `${r.section_id}-${Number(r.period)}`),
+                  ...(sessionsData || []).map(r => `${r.section_id}-${Number(r.period_number)}`)
+                ]);
 
                 const missed: number[] = [];
-                const recordedKeys = new Set(attendanceRecs?.map(r => `${r.section_id}-${Number(r.period || r.period_number)}`));
+                let totalRecorded = 0;
 
                 todaysScheduleData.forEach((slot: any) => {
                   const pNum = Number(slot.period);
                   const sId = slot.section_id;
                   const key = `${sId}-${pNum}`;
 
-                  // إذا لم يوجد سجل لهذه الشُعبة في هذه الحصة
-                  if (!recordedKeys.has(key)) {
+                  if (recordedKeys.has(key)) {
+                    totalRecorded++;
+                  } else {
                     const pInfo = data.periods.find((p: any) => Number(p.period_number) === pNum);
                     if (pInfo && pInfo.end_time) {
                       const [h, m] = pInfo.end_time.split(':').map(Number);
                       const endTime = new Date(now);
                       endTime.setHours(h, m, 0, 0);
 
-                      // إذا انتهى وقت الحصة ولم تُسجل
                       if (now > endTime) {
                         if (!missed.includes(pNum)) missed.push(pNum);
                       }
@@ -199,9 +199,7 @@ const fetchData = useCallback(async () => {
                   }
                 });
 
-                // التحقق النهائي: هل كل حصص المعلم اليوم مسجلة؟
                 const totalScheduled = todaysScheduleData.length;
-                const totalRecorded = Array.from(new Set(attendanceRecs?.map(r => `${r.section_id}-${r.period}`))).length;
 
                 setAttendanceStatus({
                   isActive: true,
@@ -367,8 +365,8 @@ const fetchData = useCallback(async () => {
               <Link href="/attendance" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0f1423]/80 backdrop-blur-md px-6 py-4 text-sm font-black text-white hover:bg-white/10 transition-all border border-white/10 active:scale-95 shadow-lg w-full sm:w-auto">
                 <UserCheck className="h-5 w-5 text-amber-400" /> رصد الحضور
               </Link>
-              <Link href="/exams/builder/new" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 px-6 py-4 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:from-amber-400 hover:to-yellow-400 transition-all active:scale-95 border border-amber-300/50 w-full sm:w-auto">
-                <Plus className="h-5 w-5" /> إنشاء اختبار
+              <Link href="/ai-assignments-v2" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 px-6 py-4 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:from-amber-400 hover:to-yellow-400 transition-all active:scale-95 border border-amber-300/50 w-full sm:w-auto">
+                <Plus className="h-5 w-5" /> بناء وتوزيع واجب
               </Link>
             </div>
           </div>
@@ -695,11 +693,10 @@ const fetchData = useCallback(async () => {
                         </span>
                       </div>
                       <p className="text-[10px] sm:text-xs font-bold text-slate-400 mb-3 sm:mb-4 bg-[#02040a]/80 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg inline-block border border-white/5 shadow-inner">
-                        {assignment.subject_name} • {assignment.section_name}
+                        {assignment.subject_name} • {assignment.section_name || 'توزيع ذكي'}
                       </p>
                       <div className="flex gap-2 sm:gap-3">
-                        <Link href={`/assignments/${assignment.id}`} className="flex-1 text-center py-1.5 sm:py-2 text-[10px] sm:text-xs font-black text-slate-300 bg-white/5 border border-white/10 rounded-xl hover:bg-amber-500/20 hover:text-amber-400 hover:border-amber-500/30 transition-all shadow-inner active:scale-95">تعديل</Link>
-                        <Link href={`/assignments/${assignment.id}`} className="flex-1 text-center py-1.5 sm:py-2 text-[10px] sm:text-xs font-black text-slate-950 bg-amber-50 rounded-xl hover:bg-amber-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] border border-amber-400 active:scale-95">التقييم</Link>
+                        <Link href="/arena-monitor" className="flex-1 text-center py-1.5 sm:py-2 text-[10px] sm:text-xs font-black text-slate-950 bg-amber-50 rounded-xl hover:bg-amber-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] border border-amber-400 active:scale-95">التقييم والمتابعة</Link>
                       </div>
                     </div>
                   ))
@@ -708,7 +705,7 @@ const fetchData = useCallback(async () => {
                 )}
               </div>
               <div className="p-4 border-t border-white/5 bg-[#02040a]/40">
-                <Link href="/assignments" className="block w-full text-center text-xs sm:text-sm font-black text-amber-400 hover:text-white hover:bg-amber-500/20 border border-transparent hover:border-amber-500/30 py-2.5 sm:py-3 rounded-xl transition-all active:scale-95">عرض كل الواجبات</Link>
+                <Link href="/arena-monitor" className="block w-full text-center text-xs sm:text-sm font-black text-amber-400 hover:text-white hover:bg-amber-500/20 border border-transparent hover:border-amber-500/30 py-2.5 sm:py-3 rounded-xl transition-all active:scale-95">فتح رادار المتابعة والتصحيح</Link>
               </div>
             </motion.div>
 
