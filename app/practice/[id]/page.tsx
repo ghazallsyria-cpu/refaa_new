@@ -9,8 +9,20 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
-  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay, ShieldAlert, Edit3
+  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay, ShieldAlert, Edit3,
+  Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft, Table as TableIcon, Calculator, ClipboardPaste
 } from 'lucide-react';
+
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import TextStyle from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -83,6 +95,52 @@ const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
   );
 };
 
+// 🚀 محرر نصي غني لتمكين الطالب من الحل باحترافية
+const StudentTiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
+  const editor = useEditor({
+    extensions: [
+      StarterKit, Underline,
+      TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }),
+      Table.configure({ resizable: true }), TableRow, TableHeader, TableCell, TextStyle, Color,
+    ],
+    content: content,
+    onUpdate: ({ editor }) => { onChange(editor.getHTML()); },
+    editorProps: {
+      attributes: { class: 'prose prose-slate max-w-none focus:outline-none min-h-[150px] p-4 text-slate-800 font-bold leading-loose tiptap-content bg-white rounded-b-xl', dir: 'rtl' },
+    }
+  });
+
+  if (!editor) return null;
+  const insertMath = (symbol: string) => { editor.chain().focus().insertContent(` ${symbol} `).run(); };
+
+  return (
+    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm flex flex-col relative focus-within:border-indigo-400 transition-colors">
+      <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap gap-1 items-center">
+        <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Bold className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Italic className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('underline') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><UnderlineIcon className="w-4 h-4"/></button>
+        <div className="w-px h-5 bg-slate-300 mx-1"></div>
+        <button onClick={() => editor.chain().focus().setTextAlign('right').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'right' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignRight className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().setTextAlign('center').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'center' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignCenter className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'left' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignLeft className="w-4 h-4"/></button>
+        <div className="w-px h-5 bg-slate-300 mx-1"></div>
+        <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200"><TableIcon className="w-4 h-4"/></button>
+      </div>
+      <div className="bg-indigo-50 border-b border-indigo-100 p-2 flex flex-wrap gap-2 items-center overflow-x-auto hide-scrollbar">
+        <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
+        <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
+        <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
+      </div>
+      <div className="flex-1 bg-white relative min-h-[150px]">
+        {!editor.getText() && !editor.isActive('table') && (
+          <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">{placeholder}</div>
+        )}
+        <EditorContent editor={editor} />
+      </div>
+    </div>
+  );
+};
+
 export default function PracticeArena() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -98,6 +156,8 @@ export default function PracticeArena() {
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  
+  const [editorKey, setEditorKey] = useState(0); // 🚀 مفتاح لتحديث المحرر عند نسخ الجدول
   
   // حالة حفظ الإجابات المقالية
   const [essayAnswers, setEssayAnswers] = useState<Record<string, string>>({});
@@ -245,6 +305,16 @@ export default function PracticeArena() {
   const currentQ = activeQuestions[currentIndex];
   const currentContextHeader = activeQuestions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
   
+  // 🚀 دالة للتحقق من وجود إجابة مقالية فعلية
+  const hasEssayAnswer = () => {
+    if (!currentQ) return false;
+    const ans = essayAnswers[currentQ.id] || '';
+    if (!ans) return false;
+    if (ans.includes('<table') || ans.includes('<img')) return true;
+    const cleanText = ans.replace(/<[^>]*>/g, '').trim();
+    return cleanText.length > 0;
+  };
+
   const handleOptionClick = (opt: any) => {
     if (isOfficial) {
       setSelectedOptionId(opt.id);
@@ -538,14 +608,30 @@ export default function PracticeArena() {
                     <div className="mt-8">
                       {isOfficial ? (
                         <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm space-y-3">
-                          <label className="text-sm font-black text-indigo-900 flex items-center gap-2">
-                            <Edit3 className="w-5 h-5 text-indigo-500" /> مساحة الإجابة:
-                          </label>
-                          <textarea 
-                            value={essayAnswers[currentQ.id] || ''} 
-                            onChange={(e) => setEssayAnswers({ ...essayAnswers, [currentQ.id]: e.target.value })} 
-                            placeholder="اكتب إجابتك العلمية هنا بالتفصيل (خطوات الحل والقوانين)..."
-                            className="w-full h-40 bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold text-slate-800 outline-none focus:border-indigo-500 resize-none shadow-inner leading-relaxed transition-all focus:bg-white custom-scrollbar"
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-black text-indigo-900 flex items-center gap-2">
+                              <Edit3 className="w-5 h-5 text-indigo-500" /> مساحة الإجابة والتنسيق:
+                            </label>
+                            {currentQ.content_html?.includes('<table') && (
+                              <button 
+                                onClick={() => {
+                                   const currentAns = essayAnswers[currentQ.id] || '';
+                                   if (!currentAns.includes('<table')) {
+                                      setEssayAnswers({ ...essayAnswers, [currentQ.id]: currentAns + currentQ.content_html });
+                                      setEditorKey(prev => prev + 1);
+                                   }
+                                }}
+                                className="text-[10px] sm:text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 font-black flex items-center gap-1 hover:bg-indigo-100 transition-colors shadow-sm active:scale-95"
+                              >
+                                <ClipboardPaste className="w-3.5 h-3.5" /> استيراد الجدول للحل داخله
+                              </button>
+                            )}
+                          </div>
+                          <StudentTiptapEditor 
+                            key={editorKey}
+                            content={essayAnswers[currentQ.id] || ''} 
+                            onChange={(html) => setEssayAnswers({ ...essayAnswers, [currentQ.id]: html })} 
+                            placeholder="اكتب إجابتك العلمية هنا بالتفصيل. يمكنك استخدام الأدوات لكتابة القوانين أو إدراج الجداول..."
                           />
                         </div>
                       ) : (
@@ -586,7 +672,7 @@ export default function PracticeArena() {
                   {isOfficial ? (
                     <button 
                       onClick={nextQuestion} 
-                      disabled={(isMCQ && !selectedOptionId) || (currentQ.type === 'essay' && !(essayAnswers[currentQ.id] || '').trim())} 
+                      disabled={(isMCQ && !selectedOptionId) || (currentQ.type === 'essay' && !hasEssayAnswer())} 
                       className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-md disabled:opacity-50 disabled:bg-slate-300 disabled:text-slate-500"
                     >
                       {currentIndex === activeQuestions.length - 1 ? 'تسليم الواجب وإنهاء الامتحان' : 'اعتماد الإجابة والانتقال للسؤال التالي'} 
