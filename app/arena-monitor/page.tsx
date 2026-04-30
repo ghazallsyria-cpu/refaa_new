@@ -1,4 +1,4 @@
-```tsx
+
 // @ts-nocheck
 'use client';
 
@@ -759,4 +759,3 @@ export default function ArenaMonitorDashboard() {
 }
 
 
-```
