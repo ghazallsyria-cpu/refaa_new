@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 /* eslint-disable react/no-unescaped-entities */
 /* eslint-disable @next/next/no-img-element */
@@ -208,12 +209,14 @@ export default function AssignmentBuilderV2() {
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
   
+  const [teachers, setTeachers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [sections, setSections] = useState([]);
   
   const [activeTab, setActiveTab] = useState<'builder' | 'import' | 'manage'>('builder');
   
   const [assignmentTitle, setAssignmentTitle] = useState('بنك تدريب جديد');
+  const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
@@ -247,6 +250,7 @@ export default function AssignmentBuilderV2() {
     setEditingAssignmentId(null);
     setQuestions([]);
     setAssignmentTitle('بنك تدريب جديد');
+    setSelectedTeacher('');
     setSelectedSubject('');
     setSelectedSections([]);
     setIsPracticeMode(true);
@@ -254,48 +258,55 @@ export default function AssignmentBuilderV2() {
   };
 
   useEffect(() => {
+    if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
+    const fetchTeachers = async () => {
+      const { data } = await supabase.from('teachers').select(`id, users ( full_name )`);
+      const formattedTeachers = (data || []).map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'بدون اسم' }));
+      formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
+      setTeachers(formattedTeachers);
+    };
+    fetchTeachers();
+  }, [currentRole]);
+
+  useEffect(() => {
     const fetchSubjects = async () => {
-      if (currentRole === 'admin' || currentRole === 'management') {
+      if (selectedTeacher) {
+        const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
+        const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
+        setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      } else if (currentRole === 'admin' || currentRole === 'management') {
         const { data } = await supabase.from('subjects').select('id, name').order('name');
         setSubjects(data || []);
-      } else if (currentRole === 'teacher') {
-        const { data: tData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (tData?.id) {
-          const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', tData.id);
-          const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
-          setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-        }
+      } else {
+        setSubjects([]);
       }
     };
-    if (user?.id) fetchSubjects();
-  }, [currentRole, user?.id]);
+    fetchSubjects();
+  }, [selectedTeacher, currentRole]);
 
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
       
-      if (currentRole === 'admin' || currentRole === 'management') {
+      if (selectedTeacher) {
+        const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
+        const extracted = (data || []).map((item: any) => {
+          if (!item.sections) return null;
+          const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
+          return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
+        }).filter(Boolean);
+        setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      } else if (currentRole === 'admin' || currentRole === 'management') {
         const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
         const formatted = (data || []).map((sec: any) => ({
           id: sec.id,
           name: `${sec.classes?.name || ''} - ${sec.name}`
         }));
         setSections(formatted);
-      } else if (currentRole === 'teacher') {
-        const { data: tData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (tData?.id) {
-          const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', tData.id).eq('subject_id', selectedSubject); 
-          const extracted = (data || []).map((item: any) => {
-            if (!item.sections) return null;
-            const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
-            return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
-          }).filter(Boolean);
-          setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-        }
       }
     };
     fetchSections();
-  }, [selectedSubject, currentRole, user?.id]);
+  }, [selectedTeacher, selectedSubject, currentRole]);
 
   useEffect(() => {
     if (activeTab === 'manage') fetchManageList();
@@ -444,7 +455,7 @@ export default function AssignmentBuilderV2() {
 2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" (خيار واحد فقط is_correct: true).
 3. 🚀 حقل "model_answer_html": لا تضع الإجابة النهائية فقط! بل اشرح خطوات الحل والتبرير المنطقي والقانون المستخدم بالتفصيل، واستخدم تنسيق HTML جميل <b> و <br>.
 4. 📸 رادار الصور (هام جداً): ابحث في نص السؤال عن كلمات تدل على وجود صورة مفقودة (مثل: في الشكل المجاور، الرسم البياني التالي، لاحظ الصورة، بناءً على الشكل، الدائرة الكهربائية المبينة). إذا وجدت دليلاً على ذلك، اجعل قيمة الحقل "needs_image" تساوي true، وإلا اجعلها false.
-5. التنسيق الرياضي: استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $ ... $ (مثال: $\frac{A}{B}$ و $\mu_0$).
+5. التنسيق الرياضي: استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $...$ (مثال: $\frac{A}{B}$ و $\mu_0$).
 
 هيكل JSON المطلوب:
 {
@@ -470,10 +481,23 @@ export default function AssignmentBuilderV2() {
     alert('تم نسخ البرومبت الخارق! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
+  // 🚀 استخلاص الـ JSON بشكل ذكي متجاهلاً كلام الذكاء الاصطناعي الخارجي
   const processManualJson = () => {
-    if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
+    if (!manualJson.trim()) { 
+      alert('يرجى لصق الكود أولاً.'); 
+      return; 
+    }
     try {
-      let safeJsonStr = manualJson.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+      let safeJsonStr = manualJson;
+      const firstBrace = safeJsonStr.indexOf('{');
+      const lastBrace = safeJsonStr.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        safeJsonStr = safeJsonStr.substring(firstBrace, lastBrace + 1);
+      } else {
+        throw new Error('لم يتم العثور على صيغة JSON صحيحة');
+      }
+
       const parsedData = JSON.parse(safeJsonStr);
       
       const newQuestions = (parsedData.questions || []).map((q:any) => {
@@ -494,12 +518,15 @@ export default function AssignmentBuilderV2() {
             opts[0].is_correct = true;
           }
         }
+        
+        const parsedPoints = Number(q.points);
+
         return {
           id: crypto.randomUUID(),
           content_html: q.content || q.section_header || '',
           model_answer_html: q.model_answer_html || '', 
           type: q.type || 'essay',
-          points: Number(q.points) || 1,
+          points: isNaN(parsedPoints) ? 1 : parsedPoints, // منع الـ NaN
           needs_image: !!q.needs_image,
           options: opts,
         };
@@ -510,7 +537,10 @@ export default function AssignmentBuilderV2() {
       setManualJson(''); 
       setManualJsonError(null);
       setActiveTab('builder');
-    } catch (err: any) { setManualJsonError('الكود المنسوخ غير صالح، تأكد أنه بصيغة JSON.'); }
+    } catch (err: any) { 
+      console.error(err);
+      alert('الكود المنسوخ غير صالح للأسف ❌\nيرجى التأكد من نسخ الرد بالكامل من ChatGPT وعدم انقطاعه في المنتصف.'); 
+    }
   };
 
   const openNewQuestion = () => {
@@ -521,7 +551,7 @@ export default function AssignmentBuilderV2() {
 
   const openEditQuestion = (index: number) => {
     const questionToEdit = JSON.parse(JSON.stringify(questions[index]));
-    questionToEdit.needs_image = false; 
+    questionToEdit.needs_image = false; // نطفئ منبه الصورة عند فتح التعديل لكي يرفقها المعلم
     setCurrentQ(questionToEdit);
     setEditingIndex(index);
     setIsEditorOpen(true);
@@ -569,7 +599,6 @@ export default function AssignmentBuilderV2() {
   };
   const updateOptionContent = (optId: string, val: string) => { if(currentQ) setCurrentQ({...currentQ, options: currentQ.options.map(o => o.id === optId ? { ...o, content: val } : o)}); };
 
-  // 🚀 التوزيع الذكي والمدمج للمعلمين والصفوف - مُعالج مشكلة الاستنساخ!
   const saveAssignmentToDB = async () => {
     if (!assignmentTitle || questions.length === 0 || !selectedSubject || selectedSections.length === 0) {
       alert('يرجى إكمال بيانات الواجب واختيار المادة والصفوف أولاً.'); return;
@@ -610,34 +639,24 @@ export default function AssignmentBuilderV2() {
       }
 
       if (editingAssignmentId) {
-        // 🚀 تنظيف جذري قبل التوزيع: نمسح السجل القديم بالكامل لكي لا يتعارض مع النسخ الجديدة
-        await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
-        await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
-        await supabase.from('assignments_v2').delete().eq('id', editingAssignmentId);
-      }
-
-      // 🚀 توزيع ذكي شامل (سواء كان درساً جديداً أو درساً معدلاً تم مسح نسخه القديمة)
-      for (const [tId, sIds] of Array.from(teacherSectionMap.entries())) {
-        const dbTeacherId = tId === 'unassigned' ? null : tId;
-
-        const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
+        const { error: assignErr } = await supabase.from('assignments_v2').update({ 
           title: assignmentTitle, 
           description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
           subject_id: selectedSubject, 
-          teacher_id: dbTeacherId, 
-          due_date: dueDate.toISOString(), 
           status: assignmentStatus,
           is_practice_mode: isPracticeMode 
-        }).select().single();
+        }).eq('id', editingAssignmentId);
         
         if (assignErr) throw assignErr;
-        const finalAssignmentId = assignData.id;
 
-        const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
+        await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
+        await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
+
+        const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
         await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
         const questionsPayload = questions.map((q, index) => ({ 
-          assignment_id: finalAssignmentId, 
+          assignment_id: editingAssignmentId, 
           question_type: q.type, 
           content_html: q.content_html, 
           model_answer_html: q.model_answer_html, 
@@ -646,9 +665,41 @@ export default function AssignmentBuilderV2() {
           order_index: index + 1 
         }));
         await supabase.from('assignment_questions_v2').insert(questionsPayload);
+
+      } else {
+        for (const [tId, sIds] of Array.from(teacherSectionMap.entries())) {
+          const dbTeacherId = tId === 'unassigned' ? null : tId;
+
+          const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
+            title: assignmentTitle, 
+            description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+            subject_id: selectedSubject, 
+            teacher_id: dbTeacherId, 
+            due_date: dueDate.toISOString(), 
+            status: assignmentStatus,
+            is_practice_mode: isPracticeMode 
+          }).select().single();
+          
+          if (assignErr) throw assignErr;
+          const finalAssignmentId = assignData.id;
+
+          const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
+          await supabase.from('assignment_sections_v2').insert(sectionsPayload);
+
+          const questionsPayload = questions.map((q, index) => ({ 
+            assignment_id: finalAssignmentId, 
+            question_type: q.type, 
+            content_html: q.content_html, 
+            model_answer_html: q.model_answer_html, 
+            points: q.points, 
+            options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), 
+            order_index: index + 1 
+          }));
+          await supabase.from('assignment_questions_v2').insert(questionsPayload);
+        }
       }
 
-      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس وتوزيعه مجدداً بنجاح!' : 'تم التوزيع الذكي للدرس بنجاح!', type: 'success' });
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم التوزيع الذكي للدرس بنجاح!', type: 'success' });
       
       setTimeout(() => { 
         setActiveTab('manage'); 
@@ -1074,3 +1125,4 @@ export default function AssignmentBuilderV2() {
     </div>
   );
 }
+
