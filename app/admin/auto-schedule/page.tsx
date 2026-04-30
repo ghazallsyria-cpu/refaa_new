@@ -1,5 +1,6 @@
 
 // @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -404,7 +405,7 @@ export default function AutoScheduleGenerator() {
                   <div className="h-full flex flex-col items-center justify-center text-slate-400">
                     <CalendarDays className="w-16 h-16 mb-4 opacity-20" />
                     <p className="font-bold text-lg">اللوحة فارغة</p>
-                    <p className="text-sm mt-1 opacity-70">قم بتحديد الميزانية، والضغط على "توليد الجدول" لتبدأ الخوارزمية.</p>
+                    <p className="text-sm mt-1 opacity-70">قم بتحديد الميزانية، والضغط على &quot;توليد الجدول&quot; لتبدأ الخوارزمية.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -445,5 +446,6 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
+
 
 
