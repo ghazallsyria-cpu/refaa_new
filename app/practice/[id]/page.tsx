@@ -9,7 +9,7 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
-  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay
+  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay, ShieldAlert
 } from 'lucide-react';
 
 import katex from 'katex';
@@ -193,7 +193,6 @@ export default function PracticeArena() {
     if (mode === 'normal' && !isPreviewMode) saveProgressToDB(currentIndex, finalScore, true);
   };
 
-  // 🚀 الدالة التي كانت مفقودة وتسببت بالانهيار (Application Error)
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -208,8 +207,18 @@ export default function PracticeArena() {
 
   const currentQ = activeQuestions[currentIndex];
   const currentContextHeader = activeQuestions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
+  
+  // 🚀 التحقق مما إذا كان هذا الواجب رسمياً (امتحان) وليس تدريباً
+  const isOfficial = assignment && assignment.is_practice_mode === false && mode === 'normal';
 
   const handleOptionClick = (opt: any) => {
+    // في وضع الامتحان، نسمح بتغيير الإجابة قبل الانتقال للتالي، ولا نظهر النتيجة فوراً
+    if (isOfficial) {
+      setSelectedOptionId(opt.id);
+      return;
+    }
+
+    // 🎮 منطق التدريب واللعب (التصحيح الفوري)
     if (isSuccess) return; 
     setSelectedOptionId(opt.id);
     
@@ -231,13 +240,34 @@ export default function PracticeArena() {
   };
 
   const nextQuestion = () => {
+    let currentNewScore = { ...score };
+
+    // 🚀 في وضع الامتحان، يتم التصحيح "في الخلفية" عند الانتقال للسؤال التالي
+    if (isOfficial && (currentQ.type === 'multiple_choice' || currentQ.type === 'true_false')) {
+      if (selectedOptionId) {
+        const selectedOpt = currentQ.options.find((o:any) => o.id === selectedOptionId);
+        if (selectedOpt?.is_correct) {
+          currentNewScore.correct += 1;
+          currentNewScore.totalPoints += (currentQ.points || 1);
+        } else {
+          currentNewScore.wrong += 1;
+          setFailedQuestionIds(prev => new Set(prev).add(currentQ.id));
+        }
+      } else {
+        // إذا لم يختر إجابة وانتقل، تحسب خاطئة
+        currentNewScore.wrong += 1;
+        setFailedQuestionIds(prev => new Set(prev).add(currentQ.id));
+      }
+      setScore(currentNewScore);
+    }
+
     if (currentIndex < activeQuestions.length - 1) {
       let nextIdx = currentIndex + 1;
       if (activeQuestions[nextIdx].type === 'section_header' && nextIdx < activeQuestions.length - 1) nextIdx++;
       setCurrentIndex(nextIdx); setSelectedOptionId(null); setIsSuccess(false); setAttempts(0); setShowHint(false);
-      if (mode === 'normal' && !isPreviewMode) saveProgressToDB(nextIdx, score, false);
+      if (mode === 'normal' && !isPreviewMode) saveProgressToDB(nextIdx, currentNewScore, false);
     } else {
-      handleFinish(score);
+      handleFinish(currentNewScore);
     }
   };
 
@@ -281,33 +311,17 @@ export default function PracticeArena() {
       const element = document.getElementById('pdf-export-container');
       if (!element) throw new Error("Element not found");
       await new Promise(resolve => setTimeout(resolve, 800));
-      
       const isMobile = window.innerWidth < 768;
-      
       const canvas = await html2canvas(element, { 
-        scale: isMobile ? 1.5 : 2, // 🚀 تقليل سحب الذاكرة للموبايل لمنع الانهيار
-        useCORS: true, 
-        allowTaint: true, 
-        backgroundColor: '#f8fafc', 
-        windowWidth: 900,
+        scale: isMobile ? 1.5 : 2, 
+        useCORS: true, allowTaint: true, backgroundColor: '#f8fafc', windowWidth: 900,
         onclone: (clonedDoc) => {
-          // 🚀 فك التقييد الوهمي لكي لا يقص المتصفح الصورة الطويلة
           const parent = clonedDoc.getElementById('main-arena-container');
-          if (parent) {
-            parent.style.overflow = 'visible';
-            parent.style.height = 'auto';
-            parent.style.minHeight = 'auto';
-          }
+          if (parent) { parent.style.overflow = 'visible'; parent.style.height = 'auto'; parent.style.minHeight = 'auto'; }
           const el = clonedDoc.getElementById('pdf-export-container');
-          if (el) {
-            el.style.position = 'relative';
-            el.style.top = '0';
-            el.style.left = '0';
-          }
+          if (el) { el.style.position = 'relative'; el.style.top = '0'; el.style.left = '0'; }
         }
       });
-      
-      // 🚀 استخدام JPEG يوفر 80% من المساحة والذاكرة مقارنة بـ PNG ويمنع الخطأ في الجوال
       const imgData = canvas.toDataURL('image/jpeg', 0.8); 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -315,24 +329,11 @@ export default function PracticeArena() {
       let heightLeft = pdfHeight;
       let position = 0;
       const pageHeight = pdf.internal.pageSize.getHeight();
-      
       pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
       heightLeft -= pageHeight;
-      
-      while (heightLeft > 0) { 
-        position = heightLeft - pdfHeight; 
-        pdf.addPage(); 
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight); 
-        heightLeft -= pageHeight; 
-      }
-      
+      while (heightLeft > 0) { position = heightLeft - pdfHeight; pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight); heightLeft -= pageHeight; }
       pdf.save(`مراجعة_أخطائي_${assignment?.title || 'تدريب'}.pdf`);
-    } catch (err) { 
-      console.error('Error generating PDF', err); 
-      alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة باستخدام متصفح كروم أو سفاري المحدث.'); 
-    } finally { 
-      setIsGeneratingPDF(false); 
-    }
+    } catch (err) { console.error('Error generating PDF', err); alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة باستخدام متصفح كروم أو سفاري المحدث.'); } finally { setIsGeneratingPDF(false); }
   };
 
   if (loading) return <div className="min-h-[100dvh] flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
@@ -340,20 +341,24 @@ export default function PracticeArena() {
 
   const progress = ((currentIndex + 1) / activeQuestions.length) * 100;
   const safeOptions = currentQ ? safeParseOptions(currentQ.options) : [];
-  
-  // 🚀 التعديل هنا: قمنا بإضافة true_false لكي يتعرف عليها النظام ويُظهر الأزرار الخاصة بها
   const isMCQ = (currentQ?.type === 'multiple_choice' || currentQ?.type === 'true_false') && safeOptions.length > 0;
-  
   const failedQsForPDF = allQuestions.filter(q => failedQuestionIds.has(q.id) && q.type !== 'section_header');
 
   return (
-    // 🚀 إضافة المعرف main-arena-container لمساعدة الدالة الجديدة على التقاط الصفحة دون قص
     <div id="main-arena-container" className="min-h-[100dvh] h-[100dvh] bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
       
       {isPreviewMode && (
         <div className="bg-gradient-to-r from-orange-600 to-amber-600 text-white px-4 py-2 flex items-center justify-center gap-3 font-black shadow-md z-50 shrink-0 text-sm sm:text-base">
           <MonitorPlay className="w-5 h-5 animate-pulse shrink-0" /> 
           <span className="truncate">وضع البث الحي (لن تُحفظ الإجابات)</span>
+        </div>
+      )}
+
+      {/* 🚀 تنبيه وضع الامتحان للطالب */}
+      {isOfficial && !isFinished && (
+        <div className="bg-slate-800 text-white px-4 py-2 flex items-center justify-center gap-3 font-bold shadow-md z-50 shrink-0 text-xs sm:text-sm">
+          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" /> 
+          <span className="truncate">هذا التقييم رسمي. لن تظهر النتيجة إلا بعد تسليم الواجب بالكامل.</span>
         </div>
       )}
 
@@ -410,12 +415,13 @@ export default function PracticeArena() {
                 <motion.div initial={{ width: 0 }} animate={{ width: `${isFinished ? 100 : progress}%` }} className="h-full bg-gradient-to-l from-indigo-500 to-indigo-600 rounded-full" />
                 </div>
                 <div className="text-[10px] font-black text-indigo-400 mt-1.5 text-center tracking-widest uppercase">
-                  {mode === 'retake_errors' ? 'تحدي تصحيح الأخطاء' : `التحدي ${currentIndex + 1} / ${activeQuestions.length}`}
+                  {mode === 'retake_errors' ? 'تحدي تصحيح الأخطاء' : `${isOfficial ? 'السؤال' : 'التحدي'} ${currentIndex + 1} / ${activeQuestions.length}`}
                 </div>
             </div>
             
+            {/* 🚀 إخفاء النيران في وضع الامتحان الرسمي لعدم تشتيت الطالب */}
             <AnimatePresence>
-                {streak >= 2 && (
+                {!isOfficial && streak >= 2 && (
                     <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0 }} className="flex items-center gap-1 bg-gradient-to-r from-orange-100 to-amber-100 px-3 py-1 rounded-full border border-orange-200 shadow-sm shrink-0">
                         <Flame className="w-4 h-4 text-orange-500 fill-orange-500 animate-pulse" />
                         <span className="text-xs font-black text-orange-700">{streak}x</span>
@@ -423,10 +429,14 @@ export default function PracticeArena() {
                 )}
             </AnimatePresence>
           </div>
-          <div className="flex items-center gap-3 text-sm font-black bg-slate-50 px-4 py-1.5 rounded-full border border-slate-200 shrink-0">
-            <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4"/> {score.correct}</span>
-            <span className="text-rose-500 flex items-center gap-1"><XCircle className="w-4 h-4"/> {score.wrong}</span>
-          </div>
+          
+          {/* 🚀 إخفاء العداد الحي للأخطاء والصح في وضع الامتحان */}
+          {!isOfficial && (
+            <div className="flex items-center gap-3 text-sm font-black bg-slate-50 px-4 py-1.5 rounded-full border border-slate-200 shrink-0">
+              <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4"/> {score.correct}</span>
+              <span className="text-rose-500 flex items-center gap-1"><XCircle className="w-4 h-4"/> {score.wrong}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -444,10 +454,15 @@ export default function PracticeArena() {
         <div className={`flex-1 flex flex-col h-full min-h-0 ${currentContextHeader ? 'md:w-1/2' : 'w-full max-w-2xl mx-auto'}`}>
           <AnimatePresence mode="wait">
             {!isFinished && currentQ ? (
-              <motion.div key={currentQ.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1, x: shake ? [-10, 10, -10, 10, 0] : 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", bounce: 0.4 }} className={`bg-white rounded-[2rem] shadow-xl border-2 overflow-hidden flex flex-col h-full ${isSuccess ? 'border-emerald-400 shadow-emerald-100' : 'border-slate-200'}`}>
+              <motion.div key={currentQ.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1, x: shake ? [-10, 10, -10, 10, 0] : 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", bounce: 0.4 }} className={`bg-white rounded-[2rem] shadow-xl border-2 overflow-hidden flex flex-col h-full ${isSuccess && !isOfficial ? 'border-emerald-400 shadow-emerald-100' : 'border-slate-200'}`}>
                 
-                <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isSuccess ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
-                  <div className="flex items-center gap-2"><Target className={`w-5 h-5 ${isSuccess ? 'text-emerald-500' : 'text-indigo-500'}`} /><h3 className={`font-black text-sm ${isSuccess ? 'text-emerald-700' : 'text-slate-700'}`}>{isSuccess ? "إجابة صحيحة!" : (currentQ.type === 'essay' ? 'تحدي مقالي' : currentQ.type === 'section_header' ? 'معلومة للقراءة' : 'تحدي اختياري')}</h3></div>
+                <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isSuccess && !isOfficial ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                  <div className="flex items-center gap-2">
+                    <Target className={`w-5 h-5 ${isSuccess && !isOfficial ? 'text-emerald-500' : 'text-indigo-500'}`} />
+                    <h3 className={`font-black text-sm ${isSuccess && !isOfficial ? 'text-emerald-700' : 'text-slate-700'}`}>
+                      {isSuccess && !isOfficial ? "إجابة صحيحة!" : (currentQ.type === 'essay' ? 'سؤال مقالي' : currentQ.type === 'section_header' ? 'معلومة للقراءة' : (isOfficial ? 'اختر الإجابة الصحيحة' : 'تحدي اختياري'))}
+                    </h3>
+                  </div>
                   <div className="flex items-center gap-2">
                     {isPreviewMode && (
                       <button onClick={() => alert('ميزة اقتراح التعديلات للإدارة قيد الإطلاق قريباً 🚀')} className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg border border-amber-200 text-[10px] font-black flex items-center gap-1 hover:bg-amber-100 transition-colors">
@@ -460,23 +475,54 @@ export default function PracticeArena() {
 
                 <div className="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
                   <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
+                  
                   {isMCQ && (
                     <div className="mt-8 space-y-3">
                       {safeOptions.map((opt: any) => {
-                        const isSelected = selectedOptionId === opt.id; const isCorrect = opt.is_correct; let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 hover:shadow-md";
-                        if (isSuccess) { if (isCorrect) btnStyle = "bg-emerald-50 border-emerald-400 text-emerald-800 shadow-lg scale-[1.02] ring-4 ring-emerald-100"; else btnStyle = "bg-white border-slate-100 text-slate-300 opacity-40"; }
-                        else if (attempts > 0 && isSelected && !isCorrect) btnStyle = "bg-rose-50 border-rose-300 text-rose-700 opacity-60";
-                        return ( <button key={opt.id} onClick={() => handleOptionClick(opt)} disabled={isSuccess || (attempts > 0 && isSelected && !isCorrect)} className={`w-full p-4 rounded-2xl border-2 font-bold text-base text-right transition-all duration-300 flex items-center justify-between ${btnStyle}`}><div className="katex-container flex-1"><Latex>{opt.content}</Latex></div>{isSuccess && isCorrect && <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />}{attempts > 0 && isSelected && !isCorrect && !isSuccess && <XCircle className="w-6 h-6 text-rose-400 shrink-0" />}</button> );
+                        const isSelected = selectedOptionId === opt.id; 
+                        const isCorrect = opt.is_correct; 
+                        
+                        // 🚀 تعديل ستايل الأزرار ليتناسب مع وضع الامتحان الرسمي أو التدريب
+                        let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 hover:shadow-md";
+                        
+                        if (isOfficial) {
+                          if (isSelected) btnStyle = "bg-indigo-50 border-indigo-500 text-indigo-900 shadow-md ring-2 ring-indigo-200 scale-[1.01]";
+                        } else {
+                          if (isSuccess) { 
+                            if (isCorrect) btnStyle = "bg-emerald-50 border-emerald-400 text-emerald-800 shadow-lg scale-[1.02] ring-4 ring-emerald-100"; 
+                            else btnStyle = "bg-white border-slate-100 text-slate-300 opacity-40"; 
+                          } else if (attempts > 0 && isSelected && !isCorrect) {
+                            btnStyle = "bg-rose-50 border-rose-300 text-rose-700 opacity-60";
+                          }
+                        }
+
+                        return ( 
+                          <button key={opt.id} onClick={() => handleOptionClick(opt)} disabled={!isOfficial && (isSuccess || (attempts > 0 && isSelected && !isCorrect))} className={`w-full p-4 rounded-2xl border-2 font-bold text-base text-right transition-all duration-300 flex items-center justify-between ${btnStyle}`}>
+                            <div className="katex-container flex-1"><Latex>{opt.content}</Latex></div>
+                            {!isOfficial && isSuccess && isCorrect && <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />}
+                            {!isOfficial && attempts > 0 && isSelected && !isCorrect && !isSuccess && <XCircle className="w-6 h-6 text-rose-400 shrink-0" />}
+                            {isOfficial && isSelected && <CheckCircle2 className="w-6 h-6 text-indigo-600 shrink-0" />}
+                          </button> 
+                        );
                       })}
                     </div>
                   )}
+
                   {currentQ.type === 'essay' && !showHint && (
                     <div className="mt-8 text-center bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed">
-                      <p className="text-sm font-bold text-slate-500 mb-4">✍️ فكر جيداً وحل المسألة في ورقة خارجية...</p>
-                      <button onClick={() => setShowHint(true)} className="w-full bg-white text-indigo-600 border-2 border-indigo-200 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-50 hover:border-indigo-400 transition-all shadow-sm"><Lightbulb className="w-5 h-5" /> تأكدت من حلي، اكشف لي الجواب!</button>
+                      {isOfficial ? (
+                        <p className="text-sm font-bold text-slate-600">✍️ يرجى حل هذا السؤال في ورقة خارجية لتتم مراجعته لاحقاً من قبل المعلم.</p>
+                      ) : (
+                        <>
+                          <p className="text-sm font-bold text-slate-500 mb-4">✍️ فكر جيداً وحل المسألة في ورقة خارجية...</p>
+                          <button onClick={() => setShowHint(true)} className="w-full bg-white text-indigo-600 border-2 border-indigo-200 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-50 hover:border-indigo-400 transition-all shadow-sm"><Lightbulb className="w-5 h-5" /> تأكدت من حلي، اكشف لي الجواب!</button>
+                        </>
+                      )}
                     </div>
                   )}
-                  {showHint && (() => {
+
+                  {/* 🚀 إخفاء المساعد الذكي والشرح تماماً في وضع الامتحان */}
+                  {!isOfficial && showHint && (() => {
                     let extractedImages = [];
                     if (typeof window !== 'undefined') {
                       try {
@@ -502,7 +548,19 @@ export default function PracticeArena() {
                 </div>
 
                 <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
-                  {isMCQ ? (
+                  {/* 🚀 شريط أزرار وضع الامتحان الرسمي */}
+                  {isOfficial ? (
+                    <button 
+                      onClick={nextQuestion} 
+                      disabled={isMCQ && !selectedOptionId} 
+                      className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-md disabled:opacity-50 disabled:bg-slate-300 disabled:text-slate-500"
+                    >
+                      {currentIndex === activeQuestions.length - 1 ? 'تسليم الواجب وإنهاء الامتحان' : 'اعتماد الإجابة والانتقال للسؤال التالي'} 
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  ) : (
+                  /* 🎮 شريط أزرار وضع التدريب (كما هو سابقاً) */
+                  isMCQ ? (
                     <AnimatePresence mode="wait">
                       {isSuccess ? (
                         <motion.div key="success" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full bg-emerald-100 border-2 border-emerald-500 rounded-2xl p-4 flex flex-col items-center gap-3 shadow-lg shadow-emerald-200/50"><div className="font-black text-emerald-800 text-lg flex items-center gap-2"><Sparkles className="w-6 h-6" /> {randomSuccessMsg}</div><button onClick={nextQuestion} className="w-full bg-emerald-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all shadow-md shadow-emerald-200">متابعة التحدي <ChevronRight className="w-5 h-5" /></button></motion.div>
@@ -516,24 +574,27 @@ export default function PracticeArena() {
                     ) : <div className="text-center"><span className="text-xs font-bold text-slate-400">انقر على "اكشف لي الجواب" في الأعلى لتقييم نفسك.</span></div>
                   ) : currentQ.type === 'section_header' ? (
                     <button onClick={nextQuestion} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-200">تمت القراءة، متابعة <ChevronRight className="w-5 h-5" /></button>
-                  ) : <button onClick={nextQuestion} className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-lg">تخطي هذا السؤال (لا توجد خيارات) <ChevronRight className="w-5 h-5" /></button>}
+                  ) : <button onClick={nextQuestion} className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-lg">تخطي هذا السؤال (لا توجد خيارات) <ChevronRight className="w-5 h-5" /></button>
+                  )}
                 </div>
               </motion.div>
             ) : (
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-6 sm:p-8 text-center relative overflow-hidden h-full flex flex-col justify-center">
-                <div className="w-28 h-28 bg-gradient-to-br from-indigo-100 to-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-indigo-100"><Trophy className="w-14 h-14" /></div>
-                <h2 className="text-3xl font-black text-slate-800 mb-2">{mode === 'retake_errors' ? 'تم إنهاء المراجعة! 🛡️' : 'إنجاز رائع! 🚀'}</h2>
-                <p className="text-slate-500 font-bold mb-6">{mode === 'retake_errors' ? 'لقد واجهت نقاط ضعفك بقوة.' : 'لقد أكملت التدريب.'}</p>
+                <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border ${isOfficial ? 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600 border-slate-300' : 'bg-gradient-to-br from-indigo-100 to-indigo-50 text-indigo-600 border-indigo-100'}`}>
+                  {isOfficial ? <FileText className="w-14 h-14" /> : <Trophy className="w-14 h-14" />}
+                </div>
+                <h2 className="text-3xl font-black text-slate-800 mb-2">{isOfficial ? 'تم تسليم الواجب بنجاح!' : (mode === 'retake_errors' ? 'تم إنهاء المراجعة! 🛡️' : 'إنجاز رائع! 🚀')}</h2>
+                <p className="text-slate-500 font-bold mb-6">{isOfficial ? 'تم حفظ إجاباتك وإرسالها للمعلم.' : (mode === 'retake_errors' ? 'لقد واجهت نقاط ضعفك بقوة.' : 'لقد أكملت التدريب.')}</p>
                 
                 <div className="grid grid-cols-2 gap-4 mb-8 bg-slate-50 p-6 rounded-3xl border border-slate-100"><div className="text-center border-l border-slate-200"><div className="text-4xl font-black text-emerald-500 mb-1">{score.correct}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">نقاط القوة</div></div><div className="text-center"><div className="text-4xl font-black text-rose-500 mb-1">{score.wrong}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">تحتاج مراجعة</div></div><div className="col-span-2 mt-4 pt-4 border-t border-slate-200 text-center flex items-center justify-center gap-2 text-indigo-600 font-black"><Clock className="w-4 h-4" /> استغرقت: {formatTime(timeSpentSeconds)}</div></div>
 
                 <div className="flex flex-col gap-3">
                   {!isPreviewMode && failedQuestionIds.size > 0 && ( <button onClick={generatePDF} disabled={isGeneratingPDF} className="w-full bg-emerald-50 text-emerald-700 border-2 border-emerald-200 font-black py-4 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">{isGeneratingPDF ? <>جاري تجهيز الملف... <span className="animate-spin text-xl">⏳</span></> : <>تحميل ملخص أخطائي (مع الشرح PDF) <FileText className="w-5 h-5" /></>}</button> )}
-                  {failedQuestionIds.size > 0 && mode === 'normal' && ( <button onClick={handleRetakeErrorsOnly} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200">مراجعة الأخطاء فقط 🎯</button> )}
+                  {failedQuestionIds.size > 0 && mode === 'normal' && !isOfficial && ( <button onClick={handleRetakeErrorsOnly} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200">مراجعة الأخطاء فقط 🎯</button> )}
                   
                   <div className="grid grid-cols-2 gap-3">
-                    <button onClick={handleRetakeFull} className="bg-slate-100 text-slate-700 border border-slate-200 font-black py-4 rounded-xl hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2">إعادة بالكامل <RefreshCcw className="w-5 h-5" /></button>
-                    <button onClick={() => router.back()} className="bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200">إنهاء التدريب <Sparkles className="w-5 h-5" /></button>
+                    {!isOfficial && <button onClick={handleRetakeFull} className="bg-slate-100 text-slate-700 border border-slate-200 font-black py-4 rounded-xl hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2">إعادة بالكامل <RefreshCcw className="w-5 h-5" /></button>}
+                    <button onClick={() => router.back()} className={`${isOfficial ? 'col-span-2' : ''} bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200`}>إنهاء {isOfficial ? 'الواجب' : 'التدريب'} ومغادرة القاعة <Sparkles className="w-5 h-5" /></button>
                   </div>
                 </div>
               </motion.div>
