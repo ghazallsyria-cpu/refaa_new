@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers
+  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -47,8 +47,12 @@ export default function AutoScheduleGenerator() {
   const [rawTeacherAssignments, setRawTeacherAssignments] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   
-  const [uniqueSubjectLevels, setUniqueSubjectLevels] = useState<{subj_id: string, level: number, subj_name: string}[]>([]);
+  // 🚀 ميزانية الحصص مفصّلة (المادة + اسم الصف/المسار)
+  const [uniqueSubjectClasses, setUniqueSubjectClasses] = useState<{subj_id: string, class_id: string, class_name: string, subj_name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
+  
+  // 🚀 حالة الاعتماد
+  const [isBudgetSaved, setIsBudgetSaved] = useState(false);
 
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]); 
   const [planName, setPlanName] = useState('جدول الفصل الدراسي الثاني - معتمد');
@@ -66,11 +70,14 @@ export default function AutoScheduleGenerator() {
     try {
       setLoadingData(true);
       
-      const { data: sectionsData } = await supabase.from('sections').select('id, name, classes(id, name, level)');
+      const { data: sectionsData } = await supabase.from('sections').select('id, name, class_id, classes(id, name, level)');
       const formattedSections = (sectionsData || []).map(sec => {
-        const level = (Array.isArray(sec.classes) ? sec.classes[0]?.level : sec.classes?.level) || 0;
+        const cData = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
+        const level = cData?.level || 0;
+        const className = cData?.name || 'صف غير محدد';
+        const classId = cData?.id || 'unknown';
         const stage = level >= 10 ? 'high' : 'middle';
-        return { ...sec, level, stage, full_name: `${Array.isArray(sec.classes) ? sec.classes[0]?.name : sec.classes?.name} - ${sec.name}` };
+        return { ...sec, class_id: classId, class_name: className, level, stage, full_name: `${className} - ${sec.name}` };
       });
       setSections(formattedSections);
 
@@ -81,32 +88,39 @@ export default function AutoScheduleGenerator() {
       setRawTeacherAssignments(tsData || []);
 
       if (tsData && formattedSections.length > 0) {
-        const subjLevelMap = new Map();
+        const subjClassMap = new Map();
         
         tsData.forEach(ts => {
           const sec = formattedSections.find(s => s.id === ts.section_id);
           if (sec && ts.subject_id && ts.subjects?.name) {
-            const key = `${ts.subject_id}_${sec.level}`;
-            if (!subjLevelMap.has(key)) {
-              subjLevelMap.set(key, { subj_id: ts.subject_id, level: sec.level, subj_name: ts.subjects.name });
+            // استخدام مسار الصف (علمي/أدبي) كمفتاح أساسي
+            const key = `${ts.subject_id}_${sec.class_id}`;
+            if (!subjClassMap.has(key)) {
+              subjClassMap.set(key, { 
+                subj_id: ts.subject_id, 
+                class_id: sec.class_id, 
+                class_name: sec.class_name, 
+                subj_name: ts.subjects.name 
+              });
             }
           }
         });
 
-        const subjLevelList = Array.from(subjLevelMap.values());
-        subjLevelList.sort((a, b) => a.subj_name.localeCompare(b.subj_name) || a.level - b.level);
-        setUniqueSubjectLevels(subjLevelList);
+        const subjClassList = Array.from(subjClassMap.values());
+        // ترتيب المسارات أبجدياً
+        subjClassList.sort((a, b) => a.class_name.localeCompare(b.class_name) || a.subj_name.localeCompare(b.subj_name));
+        setUniqueSubjectClasses(subjClassList);
 
-        const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v2');
+        const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v3');
         let initialQuotas: Record<string, number> = {};
         
         if (savedQuotasStr) {
           try { initialQuotas = JSON.parse(savedQuotasStr); } catch (e) {}
         }
         
-        subjLevelList.forEach(item => {
-          const key = `${item.subj_id}_${item.level}`;
-          if (initialQuotas[key] === undefined) initialQuotas[key] = 3;
+        subjClassList.forEach(item => {
+          const key = `${item.subj_id}_${item.class_id}`;
+          if (initialQuotas[key] === undefined) initialQuotas[key] = 3; // النصاب الافتراضي
         });
         setSubjectQuotas(initialQuotas);
       }
@@ -119,7 +133,13 @@ export default function AutoScheduleGenerator() {
     if (newVal < 1) newVal = 1;
     const newQuotas = { ...subjectQuotas, [key]: newVal };
     setSubjectQuotas(newQuotas);
-    localStorage.setItem('auto_schedule_quotas_v2', JSON.stringify(newQuotas));
+    setIsBudgetSaved(false); // 🚀 إذا غيّر أي رقم، يجب أن يعتمد الميزانية من جديد
+  };
+
+  const saveBudget = () => {
+    localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(subjectQuotas));
+    setIsBudgetSaved(true);
+    alert('تم اعتماد الميزانية وحفظها. يمكنك الآن توليد الجدول بناءً عليها.');
   };
 
   const fetchSavedPlans = async () => {
@@ -132,19 +152,23 @@ export default function AutoScheduleGenerator() {
   };
 
   const generateSchedule = async () => {
+    if (!isBudgetSaved) {
+      alert("يرجى (حفظ واعتماد الميزانية) أولاً لتتمكن من توليد الجدول."); return;
+    }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) {
       alert("البيانات الأساسية غير مكتملة."); return;
     }
 
     setGenerating(true); setGenerationLogs([]);
-    addLog("🚀 بدء تحليل الميزانية المخصصة والقيود الصارمة...");
+    addLog("🚀 بدء تحليل الميزانية المخصصة (للمسارات) والقيود الصارمة...");
     
     let finalSchedule: any[] = [];
     await new Promise(r => setTimeout(r, 800)); 
 
+    // 🚀 حساب النصاب لكل معلم بناءً على (المادة + مسار الصف)
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
-      const key = section ? `${ts.subject_id}_${section.level}` : '';
+      const key = section ? `${ts.subject_id}_${section.class_id}` : '';
       const quota = key ? (subjectQuotas[key] || 3) : 3;
 
       return {
@@ -152,7 +176,7 @@ export default function AutoScheduleGenerator() {
         weekly_quota: quota,
         teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
         subject_name: ts.subjects?.name || 'مادة',
-        section_level: section?.level
+        class_name: section?.class_name
       };
     });
 
@@ -213,7 +237,7 @@ export default function AutoScheduleGenerator() {
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد! تم تسكين ${finalSchedule.length} حصة بنجاح مع احترام اختلاف الأنصبة بين الصفوف.`);
+    addLog(`✅ اكتمل التوليد! تم تسكين ${finalSchedule.length} حصة بنجاح مع احترام المسارات (علمي/أدبي).`);
     
     if (failedPlacements > 0) {
       addLog(`⚠️ تنبيه: تعذر تسكين ${failedPlacements} حصة بسبب اختناق الجداول. قد تحتاج لتقليل الأنصبة أو زيادة عدد المعلمين.`);
@@ -287,18 +311,18 @@ export default function AutoScheduleGenerator() {
     } catch(e) {} finally { setGenerating(false); }
   };
 
-  // 🚀 تجميع المواد حسب الصف لترتيب العرض
-  const groupedSubjectsByLevel = useMemo(() => {
-    const groups: Record<number, typeof uniqueSubjectLevels> = {};
-    uniqueSubjectLevels.forEach(item => {
-      const lvl = item.level || 0;
-      if (!groups[lvl]) groups[lvl] = [];
-      groups[lvl].push(item);
+  // 🚀 تجميع المواد حسب المسار (الصف) لترتيب العرض
+  const groupedSubjectsByClass = useMemo(() => {
+    const groups: Record<string, typeof uniqueSubjectClasses> = {};
+    uniqueSubjectClasses.forEach(item => {
+      const cName = item.class_name || 'غير محدد';
+      if (!groups[cName]) groups[cName] = [];
+      groups[cName].push(item);
     });
     return groups;
-  }, [uniqueSubjectLevels]);
+  }, [uniqueSubjectClasses]);
 
-  const sortedLevels = Object.keys(groupedSubjectsByLevel).map(Number).sort((a, b) => a - b);
+  const sortedClassNames = Object.keys(groupedSubjectsByClass).sort();
 
   if (currentRole !== 'admin' && currentRole !== 'management') return <div className="p-10 text-center font-bold">غير مصرح لك.</div>;
 
@@ -314,10 +338,10 @@ export default function AutoScheduleGenerator() {
               <ShieldAlert className="w-4 h-4" /> خوارزمية قيود الوزارة المتقدمة
             </div>
             <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
-              <Wand2 className="w-8 h-8 text-amber-400" /> محرك الجدولة الآلي المطور
+              <Wand2 className="w-8 h-8 text-amber-400" /> محرك الجدولة الآلي (مسارات)
             </h1>
             <p className="text-slate-300 font-bold max-w-xl">
-              يمكنك الآن إعداد ميزانية الحصص بناءً على (المادة + المرحلة/الصف) بشكل منظم. الخوارزمية ستقرأ نصاب كل مادة لكل صف بدقة وتطبق الانتشار اليومي!
+              يمكنك الآن إعداد ميزانية الحصص بناءً على (المسار العلمي/الأدبي) بشكل منظم. اعتمد الميزانية، ثم ولّد الجدول دون تضارب زمني!
             </p>
           </div>
           <div className="flex flex-col gap-3 relative z-10 w-full md:w-auto shrink-0">
@@ -332,28 +356,35 @@ export default function AutoScheduleGenerator() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
             
-            {/* لوحة الميزانية المنظمة حسب الصف 🚀 */}
+            {/* لوحة الميزانية المنظمة حسب مسار الصف 🚀 */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
-                <SlidersHorizontal className="w-5 h-5 text-indigo-500" /> ميزانية الحصص الدقيقة
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                  <SlidersHorizontal className="w-5 h-5 text-indigo-500" /> ميزانية الحصص
+                </h3>
+                {isBudgetSaved ? (
+                  <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg border border-emerald-200 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> معتمدة</span>
+                ) : (
+                  <span className="text-[10px] font-black bg-amber-50 text-amber-600 px-2 py-1 rounded-lg border border-amber-200 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> بانتظار الاعتماد</span>
+                )}
+              </div>
               <p className="text-xs font-bold text-slate-500 mb-4">
-                حدد نصاب الحصص الأسبوعي لكل مادة مقسمة حسب الصف. سيتم حفظ الإعدادات تلقائياً.
+                حدد نصاب الحصص الأسبوعي لكل مادة مقسمة حسب (مسار الصف).
               </p>
               
-              <div className="space-y-6 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar pb-4">
-                {uniqueSubjectLevels.length === 0 && !loadingData && (
+              <div className="space-y-6 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar pb-4">
+                {uniqueSubjectClasses.length === 0 && !loadingData && (
                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">لم يتم إسناد مواد للمعلمين بعد.</p>
                 )}
                 
-                {sortedLevels.map(level => (
-                  <div key={level} className="space-y-3">
+                {sortedClassNames.map(className => (
+                  <div key={className} className="space-y-3">
                     <h4 className="font-black text-sm text-indigo-900 bg-indigo-50/80 px-3 py-2.5 rounded-lg border border-indigo-100 flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-indigo-500" /> {level === 0 ? 'مرحلة غير محددة' : `الصف ${level}`}
+                      <Layers className="w-4 h-4 text-indigo-500" /> {className}
                     </h4>
                     <div className="space-y-2 pl-3 border-r-2 border-indigo-100 mr-2">
-                      {groupedSubjectsByLevel[level].map(item => {
-                        const key = `${item.subj_id}_${item.level}`;
+                      {groupedSubjectsByClass[className].map(item => {
+                        const key = `${item.subj_id}_${item.class_id}`;
                         return (
                           <div key={key} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors group">
                             <span className="font-bold text-sm text-slate-700 truncate group-hover:text-indigo-700 transition-colors">
@@ -365,7 +396,7 @@ export default function AutoScheduleGenerator() {
                                  min="1" 
                                  value={subjectQuotas[key] || 3} 
                                  onChange={(e) => handleQuotaChange(key, parseInt(e.target.value))}
-                                 className="w-14 p-1.5 text-center font-black text-indigo-700 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-indigo-500 focus:bg-white shadow-inner transition-all"
+                                 className={`w-14 p-1.5 text-center font-black rounded-lg outline-none shadow-inner transition-all ${isBudgetSaved ? 'bg-slate-50 border border-slate-200 text-slate-500' : 'bg-white border border-indigo-300 text-indigo-700 focus:border-indigo-500 focus:bg-white'}`}
                                />
                                <span className="text-[10px] font-bold text-slate-400">حصص</span>
                             </div>
@@ -376,6 +407,16 @@ export default function AutoScheduleGenerator() {
                   </div>
                 ))}
               </div>
+
+              {/* 🚀 زر اعتماد الميزانية */}
+              <button 
+                onClick={saveBudget}
+                disabled={loadingData || isBudgetSaved}
+                className={`mt-4 w-full py-3.5 rounded-xl font-black text-sm transition-all active:scale-95 shadow-md flex justify-center items-center gap-2 ${isBudgetSaved ? 'bg-emerald-50 border border-emerald-200 text-emerald-700 opacity-60' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}
+              >
+                <CheckSquare className="w-5 h-5" /> 
+                {isBudgetSaved ? 'تم اعتماد الميزانية' : 'حفظ واعتماد الميزانية أولاً'}
+              </button>
             </div>
 
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
@@ -389,7 +430,11 @@ export default function AutoScheduleGenerator() {
                   <input type="text" value={planName} onChange={e=>setPlanName(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-bold bg-slate-50 focus:border-indigo-500 outline-none" />
                 </div>
                 
-                <button onClick={generateSchedule} disabled={loadingData || generating} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 disabled:opacity-50">
+                <button 
+                  onClick={generateSchedule} 
+                  disabled={loadingData || generating || !isBudgetSaved} 
+                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
                   توليد الجدول آلياً
                 </button>
@@ -489,5 +534,6 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
+
 
 
