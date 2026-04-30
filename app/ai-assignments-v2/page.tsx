@@ -1,4 +1,3 @@
-
 // @ts-nocheck
 /* eslint-disable react/no-unescaped-entities */
 /* eslint-disable @next/next/no-img-element */
@@ -445,6 +444,7 @@ export default function AssignmentBuilderV2() {
   };
 
   const copyPrompt = () => { 
+    // 🚀 توسيع البرومبت ليدعم الجداول والمقارنات بشكل ذكي واحترافي
     const basePromptText = String.raw`أنت خبير تعليمي متمرس في جميع المواد الدراسية وقارئ نصوص دقيق جداً لا يفوّت أي تفصيل. سأعطيك نصاً يحتوي على "أسئلة" و "إجابات".
 استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
 
@@ -454,8 +454,9 @@ export default function AssignmentBuilderV2() {
 1. الأسئلة العامة أو العناوين اجعل نوعها "section_header".
 2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" (خيار واحد فقط is_correct: true).
 3. 🚀 حقل "model_answer_html": لا تضع الإجابة النهائية فقط! بل اشرح خطوات الحل والتبرير المنطقي والقانون المستخدم بالتفصيل، واستخدم تنسيق HTML جميل <b> و <br>.
-4. 📸 رادار الصور (هام جداً): ابحث في نص السؤال عن كلمات تدل على وجود صورة مفقودة (مثل: في الشكل المجاور، الرسم البياني التالي، لاحظ الصورة، بناءً على الشكل، الدائرة الكهربائية المبينة). إذا وجدت دليلاً على ذلك، اجعل قيمة الحقل "needs_image" تساوي true، وإلا اجعلها false.
-5. التنسيق الرياضي: استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $...$ (مثال: $\frac{A}{B}$ و $\mu_0$).
+4. 📊 أسئلة المقارنة والجداول: إذا كان السؤال يحتوي على مقارنة (مثال: قارن بين كذا وكذا)، أو كان الجواب في النص الأصلي عبارة عن جدول، **يجب** عليك إنشاء جدول HTML متجاوب ومنسق داخل حقل "model_answer_html" (أو "content_html" إذا كان الجدول في السؤال) باستخدام وسوم (<table>, <tr>, <th>, <td>).
+5. 📸 رادار الصور (هام جداً): ابحث في نص السؤال عن كلمات تدل على وجود صورة مفقودة (مثل: في الشكل المجاور، الرسم البياني التالي، لاحظ الصورة، بناءً على الشكل، الدائرة الكهربائية المبينة). إذا وجدت دليلاً على ذلك، اجعل قيمة الحقل "needs_image" تساوي true، وإلا اجعلها false.
+6. التنسيق الرياضي: استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $...$ (مثال: $\frac{A}{B}$ و $\mu_0$).
 
 هيكل JSON المطلوب:
 {
@@ -466,7 +467,7 @@ export default function AssignmentBuilderV2() {
       "type": "multiple_choice",
       "content": "نص السؤال هنا بصيغة HTML",
       "needs_image": true, 
-      "model_answer_html": "<b>خطوات الحل:</b> <br> ...",
+      "model_answer_html": "<b>خطوات الحل:</b> <br> ... (أو ضع هنا جدول <table> للمقارنة إذا تطلب الأمر)",
       "points": 1,
       "options": [
          { "content": "خيار خاطئ", "is_correct": false },
@@ -478,10 +479,9 @@ export default function AssignmentBuilderV2() {
 
 إليك الأسئلة والإجابات المرفقة لتقوم بتحليلها بالكامل دون تخطي:`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الخارق! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
+    alert('تم نسخ البرومبت الخارق (يدعم الجداول والمقارنات)! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
-  // 🚀 استخلاص الـ JSON بشكل ذكي متجاهلاً كلام الذكاء الاصطناعي الخارجي
   const processManualJson = () => {
     if (!manualJson.trim()) { 
       alert('يرجى لصق الكود أولاً.'); 
@@ -551,7 +551,7 @@ export default function AssignmentBuilderV2() {
 
   const openEditQuestion = (index: number) => {
     const questionToEdit = JSON.parse(JSON.stringify(questions[index]));
-    questionToEdit.needs_image = false; // نطفئ منبه الصورة عند فتح التعديل لكي يرفقها المعلم
+    questionToEdit.needs_image = false; 
     setCurrentQ(questionToEdit);
     setEditingIndex(index);
     setIsEditorOpen(true);
@@ -1125,4 +1125,3 @@ export default function AssignmentBuilderV2() {
     </div>
   );
 }
-
