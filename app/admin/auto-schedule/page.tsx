@@ -11,7 +11,6 @@ import {
   Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal
 } from 'lucide-react';
 
-// === Helper Functions for Algorithm ===
 const timeToMinutes = (timeStr: string) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
@@ -43,16 +42,13 @@ export default function AutoScheduleGenerator() {
   const [generating, setGenerating] = useState(false);
   const [generationLogs, setGenerationLogs] = useState<string[]>([]);
   
-  // Data States
   const [sections, setSections] = useState<any[]>([]);
   const [rawTeacherAssignments, setRawTeacherAssignments] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   
-  // 🚀 Dynamic Budgeting States
   const [uniqueSubjects, setUniqueSubjects] = useState<{id: string, name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
 
-  // Config
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]); 
   const [planName, setPlanName] = useState('جدول الفصل الدراسي الثاني - معتمد');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
@@ -84,7 +80,6 @@ export default function AutoScheduleGenerator() {
       
       setRawTeacherAssignments(tsData || []);
 
-      // 🚀 Extract Unique Subjects for the Budgeting Panel
       if (tsData) {
         const subjMap = new Map();
         tsData.forEach(ts => {
@@ -95,7 +90,6 @@ export default function AutoScheduleGenerator() {
         const subjList = Array.from(subjMap.values());
         setUniqueSubjects(subjList);
 
-        // Load saved quotas from local storage if they exist
         const savedQuotasStr = localStorage.getItem('auto_schedule_quotas');
         let initialQuotas: Record<string, number> = {};
         
@@ -103,7 +97,6 @@ export default function AutoScheduleGenerator() {
           try { initialQuotas = JSON.parse(savedQuotasStr); } catch (e) {}
         }
         
-        // Ensure all subjects have at least a default quota (e.g., 3)
         subjList.forEach(s => {
           if (initialQuotas[s.id] === undefined) initialQuotas[s.id] = 3;
         });
@@ -130,9 +123,6 @@ export default function AutoScheduleGenerator() {
     setGenerationLogs(prev => [msg, ...prev]);
   };
 
-  // ==========================================
-  // 🧠 THE CORE ALGORITHM (Dynamic Budget Engine)
-  // ==========================================
   const generateSchedule = async () => {
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) {
       alert("البيانات الأساسية غير مكتملة."); return;
@@ -144,15 +134,13 @@ export default function AutoScheduleGenerator() {
     let finalSchedule: any[] = [];
     await new Promise(r => setTimeout(r, 800)); 
 
-    // 🚀 1. Build the active assignments using the dynamically set quotas
     const teacherAssignments = rawTeacherAssignments.map(ts => ({
       ...ts,
-      weekly_quota: subjectQuotas[ts.subject_id] || 3, // Reading from admin UI settings
+      weekly_quota: subjectQuotas[ts.subject_id] || 3,
       teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
       subject_name: ts.subjects?.name || 'مادة'
     }));
 
-    // 2. فرز المهام: المواد ذات النصاب العالي أولاً
     const sortedAssignments = [...teacherAssignments].sort((a, b) => b.weekly_quota - a.weekly_quota);
     
     addLog(`📊 جاري توزيع ${sortedAssignments.reduce((acc, a) => acc + a.weekly_quota, 0)} حصة أسبوعية...`);
@@ -314,10 +302,8 @@ export default function AutoScheduleGenerator() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* لوحة التحكم والإعدادات */}
           <div className="lg:col-span-1 space-y-6">
             
-            {/* 🚀 Dynamic Budgeting Panel */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
                 <SlidersHorizontal className="w-5 h-5 text-indigo-500" /> ميزانية الحصص الأسبوعية
@@ -348,7 +334,6 @@ export default function AutoScheduleGenerator() {
               </div>
             </div>
 
-            {/* إعدادات الخطة والتشغيل */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
                 <Settings className="w-5 h-5 text-indigo-500" /> إعدادات التوليد
@@ -362,7 +347,7 @@ export default function AutoScheduleGenerator() {
                 
                 <button onClick={generateSchedule} disabled={loadingData || generating} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 disabled:opacity-50">
                   {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                  توليد الجدول مع تطبيق الميزانية والقيود
+                  توليد الجدول مع تطبيق الميزانية
                 </button>
 
                 {generatedSchedules.length > 0 && !activePlanId && (
@@ -372,21 +357,19 @@ export default function AutoScheduleGenerator() {
                 )}
               </div>
 
-              {/* Logs Console */}
               <div className="mt-6 bg-slate-900 rounded-2xl p-4 h-48 overflow-y-auto font-mono text-[10px] text-slate-300 shadow-inner flex flex-col-reverse custom-scrollbar">
                 {generationLogs.length === 0 ? (
                    <span className="text-center opacity-50 m-auto">محرك الذكاء بانتظار الإطلاق...</span>
                 ) : (
                   generationLogs.map((log, i) => (
                     <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('❌') || log.includes('⚠️') ? 'text-rose-400' : log.includes('✅') ? 'text-emerald-400' : ''}`}>
-                      > {log}
+                      {'>'} {log}
                     </div>
                   ))
                 )}
               </div>
             </div>
 
-            {/* Saved Plans */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
                 <Save className="w-5 h-5 text-amber-500" /> المسودات المحفوظة
@@ -409,7 +392,6 @@ export default function AutoScheduleGenerator() {
             </div>
           </div>
 
-          {/* شاشة عرض النتيجة */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 h-full overflow-hidden flex flex-col">
               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -426,7 +408,6 @@ export default function AutoScheduleGenerator() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                     {/* عرض عينة (أول 150 حصة فقط لتخفيف الضغط على واجهة المستخدم) */}
                      {generatedSchedules.slice(0, 150).map((slot, i) => (
                        <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
