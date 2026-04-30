@@ -96,11 +96,11 @@ const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
   );
 };
 
-// 🚀 سبورة الرسم الذكية (Whiteboard)
+// 🚀 سبورة الرسم الذكية (Whiteboard) - مع إصلاح مشكلة الإحداثيات
 const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: () => void, onSave: (dataUrl: string) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [color, setColor] = useState('#1e293b'); // لون القلم (كحلي غامق)
+  const [color, setColor] = useState('#1e293b'); 
   const [lineWidth, setLineWidth] = useState(3);
   const [isEraser, setIsEraser] = useState(false);
 
@@ -109,7 +109,6 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        // تعبئة الخلفية باللون الأبيض لضمان وضوح الصورة عند تصديرها
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.lineCap = 'round';
@@ -118,18 +117,35 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
     }
   }, [isOpen]);
 
-  const startDrawing = (e: any) => {
+  // 🚀 دالة ذكية لحساب الإحداثيات الدقيقة (تطابق الشاشة مع حجم الكانفاس)
+  const getCoordinates = (e: any) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    // منع السحب الافتراضي للصفحة أثناء الرسم
-    e.preventDefault();
-
+    if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    let clientX = e.clientX;
+    let clientY = e.clientY;
+
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    }
+
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
+    };
+  };
+
+  const startDrawing = (e: any) => {
+    e.preventDefault(); // منع السحب الافتراضي للشاشة على الجوال
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    const { x, y } = getCoordinates(e);
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -138,16 +154,12 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
 
   const draw = (e: any) => {
     if (!isDrawing) return;
+    e.preventDefault();
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas?.getContext('2d');
     if (!ctx) return;
 
-    e.preventDefault();
-
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    const { x, y } = getCoordinates(e);
 
     ctx.strokeStyle = isEraser ? '#ffffff' : color;
     ctx.lineWidth = isEraser ? 15 : lineWidth;
@@ -210,20 +222,20 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-4 py-2 font-black text-sm text-slate-500 hover:bg-slate-100 rounded-xl transition-all">إلغاء</button>
             <button onClick={handleSave} className="px-6 py-2 bg-indigo-600 text-white font-black text-sm flex items-center gap-2 rounded-xl hover:bg-indigo-700 shadow-md active:scale-95 transition-all">
-              <SaveIcon className="w-4 h-4" /> اعتماد الرسم وإدراجه بالحل
+              <SaveIcon className="w-4 h-4" /> اعتماد الرسم
             </button>
           </div>
         </div>
         
         <div className="flex-1 bg-slate-200 p-2 sm:p-4 overflow-hidden relative cursor-crosshair">
-          {/* Canvas بحجم ثابت لتجنب مشاكل الإحداثيات عند تصغير الشاشة */}
-          <div className="w-full h-full bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden relative">
+          <div className="w-full h-full bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden relative flex items-center justify-center">
+            {/* 🚀 إزالة object-fit للحفاظ على أبعاد الرسم الحقيقية */}
             <canvas 
               ref={canvasRef}
               width={1200}
               height={800}
-              className="w-full h-full touch-none"
-              style={{ objectFit: 'contain' }}
+              className="max-w-full max-h-full touch-none"
+              style={{ display: 'block', margin: 'auto' }}
               onMouseDown={startDrawing}
               onMouseMove={draw}
               onMouseUp={stopDrawing}
@@ -331,7 +343,6 @@ const StudentTiptapEditor = ({ content, onChange, placeholder }: { content: stri
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
         <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200"><TableIcon className="w-4 h-4"/></button>
         
-        {/* 🚀 أدوات الرسم ورفع الصور */}
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
         <button onClick={() => setIsWhiteboardOpen(true)} className="px-2 py-1.5 rounded-lg text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 font-black text-[10px] sm:text-xs flex items-center gap-1 transition-colors">
            <PenTool className="w-3.5 h-3.5" /> الحل بالسبورة
@@ -363,7 +374,6 @@ const StudentTiptapEditor = ({ content, onChange, placeholder }: { content: stri
         <EditorContent editor={editor} />
       </div>
 
-      {/* 🚀 نافذة السبورة الذكية */}
       <WhiteboardModal 
         isOpen={isWhiteboardOpen} 
         onClose={() => setIsWhiteboardOpen(false)} 
@@ -389,7 +399,7 @@ export default function PracticeArena() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   
-  const [editorKey, setEditorKey] = useState(0); // 🚀 مفتاح لتحديث المحرر عند نسخ الجدول
+  const [editorKey, setEditorKey] = useState(0); 
   
   // حالة حفظ الإجابات المقالية
   const [essayAnswers, setEssayAnswers] = useState<Record<string, string>>({});
@@ -453,7 +463,6 @@ export default function PracticeArena() {
   useEffect(() => {
     if (loading || isFinished || !user || isPreviewMode) return; 
     const localSaveKey = `arena_save_${user.id}_${id}`;
-    // 🚀 حفظ الإجابات المقالية في الكاش لضمان عدم ضياعها
     const saveData = { currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds), essayAnswers };
     localStorage.setItem(localSaveKey, JSON.stringify(saveData));
   }, [currentIndex, score, streak, failedQuestionIds, essayAnswers, loading, isFinished, isPreviewMode]);
@@ -468,9 +477,7 @@ export default function PracticeArena() {
         wrong_score: newScore.wrong, is_completed: finished, updated_at: new Date().toISOString()
       }, { onConflict: 'student_id, assignment_id' });
 
-      // إذا كان الواجب انتهى وهو رسمي، نقوم بإرسال الإجابات المقالية
       if (finished && isOfficial && Object.keys(essayAnswers).length > 0) {
-        
         let attemptId = null;
         const { data: existingAttempt } = await supabase.from('exam_attempts').select('id').eq('student_id', user.id).eq('exam_id', id).maybeSingle();
         
@@ -518,7 +525,6 @@ export default function PracticeArena() {
         triggerConfetti();
     }
     
-    // حفظ التقدم النهائي
     if (mode === 'normal' && !isPreviewMode) saveProgressToDB(currentIndex, finalScore, true);
   };
 
@@ -537,7 +543,6 @@ export default function PracticeArena() {
   const currentQ = activeQuestions[currentIndex];
   const currentContextHeader = activeQuestions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
   
-  // 🚀 دالة للتحقق من وجود إجابة مقالية فعلية
   const hasEssayAnswer = () => {
     if (!currentQ) return false;
     const ans = essayAnswers[currentQ.id] || '';
