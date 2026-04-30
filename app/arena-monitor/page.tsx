@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -26,6 +26,10 @@ export default function ArenaMonitorDashboard() {
   const [studentsProgress, setStudentsProgress] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // 🚀 حالة فلتر الفصول
+  const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
+  const [availableClasses, setAvailableClasses] = useState<{id: string, name: string}[]>([]);
 
   // Modal States
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -58,7 +62,7 @@ export default function ArenaMonitorDashboard() {
         }
 
         let query = supabase.from('assignments_v2')
-          .select('id, title, is_practice_mode, created_at, teacher_id, subject_id') // 🚀 جلب المادة لجدول الدرجات
+          .select('id, title, is_practice_mode, created_at, teacher_id, subject_id, description') 
           .order('created_at', { ascending: false })
           .limit(100);
         
@@ -80,10 +84,15 @@ export default function ArenaMonitorDashboard() {
         const formatted = assignmentsData.map(d => {
           const qsForThis = (questionsData || []).filter(q => q.assignment_id === d.id);
           const totalPoints = qsForThis.reduce((sum, q) => sum + (q.points || 1), 0);
+          
+          // محاولة استخراج الإعدادات المتقدمة
+          let maxScore = 100;
+          try { if (d.description && d.description.startsWith('{')) maxScore = JSON.parse(d.description).maxScore || 100; } catch(e) {}
+          
           return {
             ...d,
             total_questions: qsForThis.length > 0 ? qsForThis.length : 1,
-            max_points: totalPoints > 0 ? totalPoints : 10
+            max_points: maxScore // 🚀 استخدام الدرجة العظمى من الإعدادات أو 100
           };
         });
         
@@ -96,6 +105,7 @@ export default function ArenaMonitorDashboard() {
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
+    setSelectedClassFilter('all'); // تصفير الفلتر عند تغيير الواجب
     
     try {
       let sectionIds: string[] = [];
@@ -114,7 +124,7 @@ export default function ArenaMonitorDashboard() {
 
       let targetStudents: any[] = [];
       if (sectionIds.length > 0) {
-        const { data: stData } = await supabase.from('students').select('id, user_id, section_id, sections(id, name, classes(name))').in('section_id', sectionIds); // 🚀 جلب معرف الشعبة الأصلي
+        const { data: stData } = await supabase.from('students').select('id, user_id, section_id, sections(id, name, classes(name))').in('section_id', sectionIds);
         targetStudents = stData || [];
       }
 
@@ -135,6 +145,8 @@ export default function ArenaMonitorDashboard() {
          usersData = uData || [];
       }
 
+      const uniqueClassesMap = new Map();
+
       const studentsToDisplay = targetStudents.map(student => {
         const progress = progressRecords.find(p => p.student_id === student.id);
         const userInfo = usersData.find(u => u.id === (student.user_id || student.id));
@@ -143,11 +155,12 @@ export default function ArenaMonitorDashboard() {
         if (isNaN(percentage)) percentage = 0;
 
         let secName = 'فصل غير محدد';
-        let secId = null;
+        let secId = 'unknown';
         if (student.sections) {
           const className = Array.isArray(student.sections.classes) ? student.sections.classes[0]?.name : student.sections.classes?.name;
           secName = className ? `${className} - ${student.sections.name}` : student.sections.name;
           secId = student.sections.id;
+          uniqueClassesMap.set(secId, secName); // 🚀 تجميع الفصول المتاحة للفلتر
         }
 
         return {
@@ -156,7 +169,7 @@ export default function ArenaMonitorDashboard() {
           user_id: student.user_id || student.id, 
           student_name: userInfo?.full_name || 'طالب غير معروف',
           section_name: secName,
-          section_id: secId, // للاستخدام في حفظ الدرجات
+          section_id: secId, 
           percentage: Math.min(percentage, 100),
           correct_score: progress?.correct_score || 0,
           wrong_score: progress?.wrong_score || 0,
@@ -175,6 +188,7 @@ export default function ArenaMonitorDashboard() {
       });
 
       setStudentsProgress(uniqueStudents);
+      setAvailableClasses(Array.from(uniqueClassesMap, ([id, name]) => ({ id, name })));
 
     } catch (err) { console.error(err); } finally { setRefreshing(false); }
   };
@@ -239,10 +253,10 @@ export default function ArenaMonitorDashboard() {
       
       if (updates.length > 0) await Promise.all(updates);
 
+      // هنا الدرجة العظمى هي selectedAssignment.max_points المحددة في الإعدادات المتقدمة
       const finalScore = selectedStudent.correct_score + totalEssayPoints; 
-      const newFeedback = `[تم رصد الدرجة] أداء ممتاز، حصلت على ${finalScore} نقطة.`;
+      const newFeedback = `[تم رصد الدرجة] النتيجة المعتمدة: ${finalScore} / ${selectedAssignment.max_points}`;
 
-      // 1. تحديث تقدم الطالب
       await supabase.from('student_progress_v2').upsert({ 
            student_id: selectedStudent.student_id, 
            assignment_id: selectedAssignment.id,
@@ -250,14 +264,13 @@ export default function ArenaMonitorDashboard() {
            updated_at: new Date().toISOString() 
       }, { onConflict: 'student_id, assignment_id' });
 
-      // 2. 🚀 حفظ الدرجة في النظام القديم (grades) لتعمل كل الشاشات والتقارير بشكل طبيعي!
       if (selectedAssignment.subject_id && selectedStudent.section_id) {
          await supabase.from('grades').insert({
             student_id: selectedStudent.student_id,
             subject_id: selectedAssignment.subject_id,
             section_id: selectedStudent.section_id,
             score: finalScore,
-            max_score: selectedAssignment.max_points || 10, // من إعدادات الواجب
+            max_score: selectedAssignment.max_points || 10,
             exam_type: 'assignment',
             title: selectedAssignment.title,
             recorded_by: user.id,
@@ -272,7 +285,63 @@ export default function ArenaMonitorDashboard() {
     } catch (err) { alert("حدث خطأ أثناء اعتماد الدرجات."); } finally { setSavingFeedback(false); }
   };
 
+  // 🚀 الضربة القاضية: تصفير المتأخرين
+  const handleZeroOutMissing = async () => {
+    const missingStudents = studentsProgress.filter(s => (!s.has_started || !s.is_completed) && !s.is_graded);
+    
+    if (missingStudents.length === 0) {
+      alert("لا يوجد طلاب غائبين أو متأخرين في هذا الواجب.");
+      return;
+    }
+
+    if (!confirm(`تحذير إداري: أنت على وشك رصد الدرجة (صفر) لعدد ${missingStudents.length} طلاب لعدم تسليمهم الواجب. هل أنت متأكد؟ هذا الإجراء سيرسل صفر لسجل الدرجات الرسمي.`)) return;
+
+    setRefreshing(true);
+    try {
+      const feedbackZero = `[تم رصد الدرجة] لم يقم بالتسليم. الدرجة: 0 / ${selectedAssignment.max_points}`;
+      const progressUpdates = missingStudents.map(s => ({
+        student_id: s.student_id,
+        assignment_id: selectedAssignment.id,
+        current_index: 0,
+        correct_score: 0,
+        wrong_score: 0,
+        is_completed: true,
+        teacher_feedback: feedbackZero,
+        updated_at: new Date().toISOString()
+      }));
+
+      const gradesInserts = missingStudents.filter(s => selectedAssignment.subject_id && s.section_id !== 'unknown').map(s => ({
+        student_id: s.student_id,
+        subject_id: selectedAssignment.subject_id,
+        section_id: s.section_id,
+        score: 0,
+        max_score: selectedAssignment.max_points || 10,
+        exam_type: 'assignment',
+        title: selectedAssignment.title,
+        recorded_by: user.id,
+        created_at: new Date().toISOString()
+      }));
+
+      await supabase.from('student_progress_v2').upsert(progressUpdates, { onConflict: 'student_id, assignment_id' });
+      
+      if (gradesInserts.length > 0) {
+        await supabase.from('grades').insert(gradesInserts);
+      }
+
+      setStudentsProgress(prev => prev.map(p => missingStudents.find(m => m.student_id === p.student_id) ? { ...p, is_graded: true, teacher_feedback: feedbackZero, has_started: true, is_completed: true } : p));
+      
+      alert(`تم بنجاح تصفير ${missingStudents.length} طلاب وإغلاق الواجب لهم.`);
+    } catch (err) {
+      alert("حدث خطأ أثناء تصفير الطلاب.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const isOfficialMode = selectedAssignment && selectedAssignment.is_practice_mode === false;
+  
+  // 🚀 تطبيق الفلتر على قائمة العرض
+  const displayedStudents = selectedClassFilter === 'all' ? studentsProgress : studentsProgress.filter(s => s.section_id === selectedClassFilter);
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center font-cairo font-bold">غير مصرح لك بالدخول.</div>;
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-indigo-500 font-bold flex flex-col items-center gap-2"><Activity className="w-8 h-8"/> جاري تهيئة الرادار...</div></div>;
@@ -323,6 +392,7 @@ export default function ArenaMonitorDashboard() {
                       {isOfficialMode ? 'واجب رسمي (يتطلب تصحيح)' : 'تدريب تفاعلي ذاتي'}
                     </span>
                     <span className="text-xs font-bold text-slate-500">يحتوي على {selectedAssignment.total_questions} سؤال</span>
+                    {isOfficialMode && <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">الدرجة العظمى: {selectedAssignment.max_points}</span>}
                   </div>
                </div>
                
@@ -335,11 +405,38 @@ export default function ArenaMonitorDashboard() {
             </div>
 
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="font-black text-lg text-slate-800">سجل الإنجاز والتقييم</h3>
-                <button onClick={() => fetchProgress(selectedAssignment)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors active:scale-95">
-                  <RefreshCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> تحديث
-                </button>
+              <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <h3 className="font-black text-lg text-slate-800">سجل الإنجاز والتقييم</h3>
+                  
+                  {/* 🚀 فلتر الفصول للمدرس */}
+                  {availableClasses.length > 0 && (
+                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                      <Filter className="w-4 h-4 text-slate-400" />
+                      <select 
+                        value={selectedClassFilter} 
+                        onChange={e => setSelectedClassFilter(e.target.value)}
+                        className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+                      >
+                        <option value="all">عرض جميع الفصول ({studentsProgress.length})</option>
+                        {availableClasses.map(cls => (
+                          <option key={cls.id} value={cls.id}>{cls.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {isOfficialMode && (
+                    <button onClick={handleZeroOutMissing} disabled={refreshing} className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors active:scale-95">
+                      <UserMinus className="w-4 h-4" /> تصفير المتأخرين
+                    </button>
+                  )}
+                  <button onClick={() => fetchProgress(selectedAssignment)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors active:scale-95">
+                    <RefreshCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> تحديث
+                  </button>
+                </div>
               </div>
               
               <div className="overflow-x-auto">
@@ -354,10 +451,10 @@ export default function ArenaMonitorDashboard() {
                     </tr>
                   </thead>
                   <tbody className="text-sm font-bold text-slate-700">
-                    {studentsProgress.length === 0 ? (
-                      <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold bg-slate-50/50">لا يوجد طلاب مسجلين في الفصول المخصصة لهذا الواجب.</td></tr>
+                    {displayedStudents.length === 0 ? (
+                      <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold bg-slate-50/50">لا يوجد طلاب مطابقين للفرز في هذا الواجب.</td></tr>
                     ) : (
-                      studentsProgress.map((student) => (
+                      displayedStudents.map((student) => (
                         <tr key={student.student_id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!student.has_started ? 'opacity-60' : ''}`}>
                           <td className="p-4 flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black shrink-0 shadow-inner ${student.percentage === 100 ? 'bg-emerald-100 text-emerald-700' : student.has_started ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
@@ -395,7 +492,7 @@ export default function ArenaMonitorDashboard() {
                           <td className="p-4">
                             {isOfficialMode ? (
                                student.is_graded ? (
-                                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> تم التصحيح والرصد</span>
+                                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> {student.teacher_feedback || 'تم التصحيح'}</span>
                                ) : student.is_completed ? (
                                   <span className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><Activity className="w-3 h-3 animate-pulse"/> بانتظار تصحيح المعلم</span>
                                ) : (
@@ -516,7 +613,7 @@ export default function ArenaMonitorDashboard() {
                       <div className="md:w-80 shrink-0 bg-indigo-50/50 p-5 rounded-xl border border-indigo-100 flex flex-col h-full">
                         <div className="mb-4">
                            <p className="text-xs font-black text-indigo-500 mb-2 flex items-center gap-1"><BrainCircuit className="w-3 h-3"/> الإجابة النموذجية كمرجع:</p>
-                           <div className="font-bold text-indigo-900 text-sm max-h-32 overflow-y-auto custom-scrollbar prose prose-sm max-w-none" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
+                           <div className="font-bold text-indigo-900 text-sm max-h-32 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
                         </div>
                         
                         <div className="mt-auto border-t border-indigo-100 pt-4">
