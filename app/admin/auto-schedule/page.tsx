@@ -207,18 +207,19 @@ export default function AutoScheduleGenerator() {
     return Object.entries(loads).sort((a, b) => b[1].total - a[1].total);
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
+
   // ==========================================
-  // 🧠 THE ULTIMATE ALGORITHM (With Custom VIP Rules & Verbose Logging)
+  // 🧠 THE ULTIMATE ALGORITHM (Flexible Emergency Fallbacks)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]);
-    addLog("🚀 بدء التوليد الذكي (توزيع عشوائي + تعبئة + استثناءات خاصة)...");
+    addLog("🚀 بدء التوليد الذكي...");
     
     let finalSchedule: any[] = [];
-    let failedDetailsLog: string[] = []; // 🚀 سجل الأخطاء التفصيلي
+    let failedDetailsLog: string[] = []; 
     const teacherDailyLoad: Record<string, Record<number, number>> = {};
     
     const teacherStages = new Map<string, Set<string>>();
@@ -283,41 +284,42 @@ export default function AutoScheduleGenerator() {
 
       if (allowedDaysForTeacher.length === 0) {
         failedPlacements += assignment.weekly_quota;
-        failedDetailsLog.push(`المعلم ${assignment.teacher_name} - لا يوجد لديه أيام مسموحة في الإعدادات!`);
+        failedDetailsLog.push(`${assignment.subject_name} (${section.full_name}) | المعلم: ${assignment.teacher_name} - لا يوجد أيام مسموحة`);
         continue;
       }
 
       let remainingLessons = assignment.weekly_quota;
       
-      // 🚀 قاعدة الـ VIP المخصصة للأستاذ إيهاب
       const isEhab = assignment.teacher_name.includes('ايهاب') || assignment.teacher_name.includes('إيهاب');
       const isEhabPhysics = isEhab && section.stage === 'high' && (assignment.subject_name.includes('فيزياء') || assignment.subject_name.includes('فيزيا'));
 
       let maxPerDay = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length); 
-      if (isEhabPhysics) maxPerDay = Math.ceil(assignment.weekly_quota / 2); // لأنه سيُحشر في يومين فقط
+      if (isEhabPhysics) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
       for (let i = 0; i < remainingLessons; i++) {
         
         let preferredDays = shuffleArray([...allowedDaysForTeacher]);
         preferredDays.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
         
-        // 🚀 فرض أيام معينة لقاعدة الأستاذ إيهاب (الأحد 1 والإثنين 2)
         if (isEhabPhysics) {
            preferredDays = preferredDays.filter(d => d === 1 || d === 2);
+           // إذا فشل وضع الحصص في الأحد والإثنين بسبب الازدحام، نعيد إضافة الأيام الأخرى لإنقاذ الموقف!
+           if (preferredDays.length === 0 || i > 6) preferredDays = shuffleArray([...allowedDaysForTeacher]);
         }
 
         let isPlaced = false;
 
-        // 🟢 المحاولة 1: التسكين الأساسي
+        // 🟢 المحاولة 1: التسكين الأساسي (التزام صارم)
         for (const day of preferredDays) {
           const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
           if (subjectCountToday >= maxPerDay) continue;
 
           let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number));
           
-          // 🚀 فرض الحصص الأولى لقاعدة الأستاذ إيهاب فيزياء ثانوي
           if (isEhabPhysics) {
-             availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
+             const morningPeriods = availablePeriods.filter(p => p.period_number <= 3);
+             if (morningPeriods.length > 0) availablePeriods = morningPeriods;
+             // إذا لم تتوفر حصص صباحية، سيستخدم النظام حصصاً أخرى بدلاً من الفشل.
           }
           
           let orderedPeriods = [];
@@ -345,8 +347,9 @@ export default function AutoScheduleGenerator() {
           if (isPlaced) break;
         }
 
-        // 🟡 المحاولة 2: إنقاذ الفراغات بالتغاضي عن تباعد المواد (لغير قوانين الـ VIP)
-        if (!isPlaced && !isEhabPhysics) {
+        // 🟡 المحاولة 2: إنقاذ الفراغات (Emergency Fallback)
+        // نتغاضى عن قيود الأيام والحد الأقصى اليومي، ونتغاضى عن قواعد الـ VIP لسد العجز.
+        if (!isPlaced) {
            for (const day of shuffleArray([...allowedDaysForTeacher])) {
              const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number)));
              for (const period of fallbackPeriods) {
@@ -360,8 +363,8 @@ export default function AutoScheduleGenerator() {
            }
         }
 
-        // 🔴 المحاولة 3 (الإزاحة الذكية Swapping - لغير الـ VIP لكي لا نفسد الترتيب الصارم)
-        if (!isPlaced && !isEhabPhysics) {
+        // 🔴 المحاولة 3 (الإزاحة الذكية Swapping): 
+        if (!isPlaced) {
           for (const day of shuffleArray([...allowedDaysForTeacher])) {
             if (isPlaced) break;
             const dayPeriods = periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number));
@@ -398,20 +401,18 @@ export default function AutoScheduleGenerator() {
         
         if (!isPlaced) {
           failedPlacements++;
-          // 🚀 توثيق الخطأ بدقة لمعرفة من المعلم المزدحم
           failedDetailsLog.push(`${assignment.subject_name} (${section.full_name}) | المعلم: ${assignment.teacher_name}`);
         }
       }
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد! تم تفعيل استثناءات الـ VIP وقواعد الإزاحة العشوائية.`);
+    addLog(`✅ اكتمل التوليد! تم تفعيل الإزاحة القصوى لمنع الفراغات.`);
     
     if (failedPlacements > 0) {
-      addLog(`⚠️ تحذير: ${failedPlacements} حصة فشلت في التسكين. يرجى المراجعة! تفاصيل المواد التي فشلت:`);
-      // إزالة التكرار من السجل لعدم الإزعاج
+      addLog(`⚠️ تحذير: ${failedPlacements} حصة فشلت في التسكين. تفاصيل المواد:`);
       const uniqueFails = [...new Set(failedDetailsLog)];
-      uniqueFails.forEach(f => addLog(`❌ تعذر تسكين: ${f}`));
+      uniqueFails.forEach(f => addLog(`❌ فشل: ${f}`));
     }
 
     finalSchedule.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
@@ -563,13 +564,13 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] md:text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> خوارزمية التشخيص الذكي وكسر الأنماط
+              <ShieldAlert className="w-4 h-4" /> خوارزمية التعافي من الفراغات
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
-              <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
+              <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الآلي
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              تم إضافة (سجل الأعطال التفصيلي) لمعرفة المعلم الذي سبب تعارض الجدول، وتطبيق قاعدة (أستاذ إيهاب) الخاصة!
+              تم تحديث الخوارزمية لتكون (مرنة جداً) في حالات الطوارئ. إذا لم تجد مكاناً لحصة، ستتجاهل بعض القيود من أجل سد الفراغ وإنقاذ الجدول!
             </p>
           </div>
         </div>
@@ -634,11 +635,8 @@ export default function AutoScheduleGenerator() {
 
             <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200">
               <h3 className="text-base md:text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
-                <Briefcase className="w-5 h-5 text-indigo-500" /> إعدادات وأنصبة المعلمين
+                <Briefcase className="w-5 h-5 text-indigo-500" /> إعدادات المعلمين
               </h3>
-              <p className="text-[10px] md:text-xs font-bold text-slate-500 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                انقر على الأيقونة ⚙️ لتحديد أيام دوام المعلم وحصصه المسموحة بدقة.
-              </p>
               
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                 {teacherWorkloads.map(([name, data]) => {
@@ -655,7 +653,7 @@ export default function AutoScheduleGenerator() {
                         <span className={`font-black text-xs md:text-sm px-2.5 py-1 rounded-lg shrink-0 ${data.total > 24 ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>{data.total} حصة</span>
                       </div>
                       <button onClick={() => openTeacherConstraintsModal(data.id, name)} className={`w-full md:w-auto px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shrink-0 transition-all active:scale-95 shadow-sm border ${hasCustomConstraints ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-indigo-100 hover:text-indigo-600 hover:border-indigo-200'}`}>
-                        <UserCog className="w-5 h-5" /> <span className="text-xs font-black">القيود والدوام</span>
+                        <UserCog className="w-5 h-5" /> <span className="text-xs font-black">دوام المعلم</span>
                       </button>
                     </div>
                   );
@@ -780,5 +778,6 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
+
 
 
