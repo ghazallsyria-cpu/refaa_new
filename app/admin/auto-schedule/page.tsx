@@ -3,13 +3,13 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal
+  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -47,7 +47,6 @@ export default function AutoScheduleGenerator() {
   const [rawTeacherAssignments, setRawTeacherAssignments] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   
-  // 🚀 ميزانية الحصص مفصّلة (المادة + الصف)
   const [uniqueSubjectLevels, setUniqueSubjectLevels] = useState<{subj_id: string, level: number, subj_name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
 
@@ -95,7 +94,6 @@ export default function AutoScheduleGenerator() {
         });
 
         const subjLevelList = Array.from(subjLevelMap.values());
-        // الترتيب أبجدياً ثم حسب الصف
         subjLevelList.sort((a, b) => a.subj_name.localeCompare(b.subj_name) || a.level - b.level);
         setUniqueSubjectLevels(subjLevelList);
 
@@ -144,7 +142,6 @@ export default function AutoScheduleGenerator() {
     let finalSchedule: any[] = [];
     await new Promise(r => setTimeout(r, 800)); 
 
-    // 🚀 حساب النصاب لكل معلم بناءً على (المادة + مستوى الفصل)
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.level}` : '';
@@ -290,6 +287,19 @@ export default function AutoScheduleGenerator() {
     } catch(e) {} finally { setGenerating(false); }
   };
 
+  // 🚀 تجميع المواد حسب الصف لترتيب العرض
+  const groupedSubjectsByLevel = useMemo(() => {
+    const groups: Record<number, typeof uniqueSubjectLevels> = {};
+    uniqueSubjectLevels.forEach(item => {
+      const lvl = item.level || 0;
+      if (!groups[lvl]) groups[lvl] = [];
+      groups[lvl].push(item);
+    });
+    return groups;
+  }, [uniqueSubjectLevels]);
+
+  const sortedLevels = Object.keys(groupedSubjectsByLevel).map(Number).sort((a, b) => a - b);
+
   if (currentRole !== 'admin' && currentRole !== 'management') return <div className="p-10 text-center font-bold">غير مصرح لك.</div>;
 
   return (
@@ -307,7 +317,7 @@ export default function AutoScheduleGenerator() {
               <Wand2 className="w-8 h-8 text-amber-400" /> محرك الجدولة الآلي المطور
             </h1>
             <p className="text-slate-300 font-bold max-w-xl">
-              يمكنك الآن إعداد ميزانية الحصص بناءً على (المادة + المرحلة/الصف). الخوارزمية ستقرأ نصاب كل مادة لكل صف بدقة وتطبق الانتشار اليومي وتمنع تضارب المعلمين بالدقيقة!
+              يمكنك الآن إعداد ميزانية الحصص بناءً على (المادة + المرحلة/الصف) بشكل منظم. الخوارزمية ستقرأ نصاب كل مادة لكل صف بدقة وتطبق الانتشار اليومي!
             </p>
           </div>
           <div className="flex flex-col gap-3 relative z-10 w-full md:w-auto shrink-0">
@@ -322,38 +332,49 @@ export default function AutoScheduleGenerator() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
             
+            {/* لوحة الميزانية المنظمة حسب الصف 🚀 */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
                 <SlidersHorizontal className="w-5 h-5 text-indigo-500" /> ميزانية الحصص الدقيقة
               </h3>
               <p className="text-xs font-bold text-slate-500 mb-4">
-                حدد نصاب الحصص الأسبوعي لكل (مادة + صف). سيتم حفظ الإعدادات تلقائياً.
+                حدد نصاب الحصص الأسبوعي لكل مادة مقسمة حسب الصف. سيتم حفظ الإعدادات تلقائياً.
               </p>
               
-              <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-6 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar pb-4">
                 {uniqueSubjectLevels.length === 0 && !loadingData && (
                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">لم يتم إسناد مواد للمعلمين بعد.</p>
                 )}
-                {uniqueSubjectLevels.map(item => {
-                  const key = `${item.subj_id}_${item.level}`;
-                  return (
-                    <div key={key} className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-                      <span className="font-black text-sm text-slate-700 truncate ml-2">
-                        {item.subj_name} <span className="text-xs text-slate-500 font-bold bg-white px-2 py-0.5 rounded-md border border-slate-200 mr-1">الصف {item.level}</span>
-                      </span>
-                      <div className="flex items-center gap-2 shrink-0">
-                         <input 
-                           type="number" 
-                           min="1" 
-                           value={subjectQuotas[key] || 3} 
-                           onChange={(e) => handleQuotaChange(key, parseInt(e.target.value))}
-                           className="w-16 p-1.5 text-center font-black text-indigo-700 bg-white border border-indigo-200 rounded-lg outline-none focus:border-indigo-500 shadow-sm"
-                         />
-                         <span className="text-[10px] font-bold text-slate-500">حصص</span>
-                      </div>
+                
+                {sortedLevels.map(level => (
+                  <div key={level} className="space-y-3">
+                    <h4 className="font-black text-sm text-indigo-900 bg-indigo-50/80 px-3 py-2.5 rounded-lg border border-indigo-100 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-indigo-500" /> {level === 0 ? 'مرحلة غير محددة' : `الصف ${level}`}
+                    </h4>
+                    <div className="space-y-2 pl-3 border-r-2 border-indigo-100 mr-2">
+                      {groupedSubjectsByLevel[level].map(item => {
+                        const key = `${item.subj_id}_${item.level}`;
+                        return (
+                          <div key={key} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors group">
+                            <span className="font-bold text-sm text-slate-700 truncate group-hover:text-indigo-700 transition-colors">
+                              {item.subj_name}
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                               <input 
+                                 type="number" 
+                                 min="1" 
+                                 value={subjectQuotas[key] || 3} 
+                                 onChange={(e) => handleQuotaChange(key, parseInt(e.target.value))}
+                                 className="w-14 p-1.5 text-center font-black text-indigo-700 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-indigo-500 focus:bg-white shadow-inner transition-all"
+                               />
+                               <span className="text-[10px] font-bold text-slate-400">حصص</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -386,7 +407,7 @@ export default function AutoScheduleGenerator() {
                 ) : (
                   generationLogs.map((log, i) => (
                     <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('❌') || log.includes('⚠️') ? 'text-rose-400' : log.includes('✅') ? 'text-emerald-400' : ''}`}>
-                      {'>'} {log}
+                      &gt; {log}
                     </div>
                   ))
                 )}
