@@ -214,12 +214,13 @@ export default function AssignmentBuilderV2() {
   
   const [activeTab, setActiveTab] = useState<'builder' | 'import' | 'manage'>('builder');
   
-  const [assignmentTitle, setAssignmentTitle] = useState('بنك تدريب جديد');
+  // 🚀 التعديل 1: الوضع الافتراضي هو واجب رسمي
+  const [assignmentTitle, setAssignmentTitle] = useState('واجب جديد');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
-  const [isPracticeMode, setIsPracticeMode] = useState<boolean>(true);
+  const [isPracticeMode, setIsPracticeMode] = useState<boolean>(false);
   
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
 
@@ -243,16 +244,16 @@ export default function AssignmentBuilderV2() {
   const [showPreviewHint, setShowPreviewHint] = useState(false);
 
   const handleResetBuilder = (force = false) => {
-    if (!force && (questions.length > 0 || assignmentTitle !== 'بنك تدريب جديد')) {
+    if (!force && (questions.length > 0 || assignmentTitle !== 'واجب جديد')) {
       if (!confirm('هل أنت متأكد من مسح جميع الأسئلة والبيانات للبدء بدرس جديد؟')) return;
     }
     setEditingAssignmentId(null);
     setQuestions([]);
-    setAssignmentTitle('بنك تدريب جديد');
+    setAssignmentTitle('واجب جديد');
     setSelectedTeacher('');
     setSelectedSubject('');
     setSelectedSections([]);
-    setIsPracticeMode(true);
+    setIsPracticeMode(false); // 🚀 العودة للواجب الرسمي كافتراضي
     setAssignmentStatus('draft');
   };
 
@@ -408,7 +409,7 @@ export default function AssignmentBuilderV2() {
       await supabase.from('assignments_v2').delete().eq('id', id);
       
       fetchManageList();
-      setGlobalMessage({ text: 'تم حذف الدرس وتنظيف الصور السحابية بنجاح!', type: 'success' });
+      setGlobalMessage({ text: 'تم حذف الواجب وتنظيف الصور السحابية بنجاح!', type: 'success' });
       setTimeout(() => setGlobalMessage({ text: '', type: '' }), 4000);
     } catch (err) { 
       alert('حدث خطأ أثناء الحذف.'); 
@@ -443,7 +444,6 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
-  // 🚀 برومبت مقاتل لا يسمح بتخطي الأسئلة أو هلوسة الصور
   const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم الدقة. سأعطيك نصاً مقتطعاً من بنك أسئلة.
 المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي، ولا تقم بإضافة أي نصوص أخرى.
@@ -535,10 +535,9 @@ export default function AssignmentBuilderV2() {
         };
       });
 
-      // 🚀 إذا كان هناك أسئلة سابقة، نحتفظ بالعنوان القديم ونضيف الأسئلة الجديدة تحته
-      setAssignmentTitle(prev => prev === 'بنك تدريب جديد' ? (parsedData.title || 'بنك مستورد بذكاء') : prev);
+      setAssignmentTitle(prev => prev === 'واجب جديد' || prev === 'بنك تدريب جديد' ? (parsedData.title || 'بنك مستورد بذكاء') : prev);
       
-      setQuestions(prev => [...prev, ...newQuestions]); // Append!
+      setQuestions(prev => [...prev, ...newQuestions]); 
       setManualJson(''); 
       setManualJsonError(null);
       setActiveTab('builder');
@@ -704,7 +703,7 @@ export default function AssignmentBuilderV2() {
         }
       }
 
-      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم التوزيع الذكي للدرس بنجاح!', type: 'success' });
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب بنجاح!' : 'تم توزيع الواجب للطلاب بنجاح!', type: 'success' });
       
       setTimeout(() => { 
         setActiveTab('manage'); 
@@ -751,12 +750,12 @@ export default function AssignmentBuilderV2() {
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
           <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
           <h1 className="text-2xl font-black text-slate-900">غرفة التحكم والإنشاء (V2)</h1>
-          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والتوزيع الذكي للواجبات.</p>
+          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والواجبات الرسمية.</p>
         </div>
 
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'بناء وتوزيع درس جديد'}
+            <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'إعداد وتوزيع واجب جديد'}
           </button>
           <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <FileJson className="w-4 h-4" /> استيراد ذكي (AI)
@@ -780,7 +779,7 @@ export default function AssignmentBuilderV2() {
             {(currentRole === 'admin' || currentRole === 'management') && teacherStats.length > 0 && (
               <div className="mb-6 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-inner">
                 <h3 className="text-sm font-black text-indigo-800 mb-3 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4"/> إحصائيات رفع الدروس للمعلمين
+                  <BarChart3 className="w-4 h-4"/> إحصائيات رفع الواجبات والدروس
                 </h3>
                 <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
                   {teacherStats.map((stat, i) => (
@@ -789,7 +788,7 @@ export default function AssignmentBuilderV2() {
                         <GraduationCap className="w-4 h-4 text-indigo-400" />
                         <span className="font-bold text-slate-700 text-sm">{stat.name}</span>
                       </div>
-                      <span className="bg-indigo-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-sm">{stat.count} درس</span>
+                      <span className="bg-indigo-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-sm">{stat.count} ملف</span>
                     </div>
                   ))}
                 </div>
@@ -799,7 +798,7 @@ export default function AssignmentBuilderV2() {
             {isManageLoading ? (
               <div className="text-center p-10 text-slate-400 font-bold animate-pulse">جاري جلب السجلات...</div>
             ) : manageAssignments.length === 0 ? (
-              <div className="text-center p-10 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-slate-500">لا توجد دروس أو تحديات محفوظة في النظام حتى الآن.</div>
+              <div className="text-center p-10 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-slate-500">لا توجد واجبات أو دروس محفوظة في النظام حتى الآن.</div>
             ) : (
               <div className="space-y-4">
                 {manageAssignments.map((assign) => (
@@ -839,7 +838,6 @@ export default function AssignmentBuilderV2() {
         {activeTab === 'import' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
             
-            {/* 🚀 إشعار تحذيري هام للمعلم لضمان عدم تخطي الأسئلة */}
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex gap-3 shadow-inner">
               <Info className="w-5 h-5 shrink-0 text-amber-500" />
               <div className="text-sm font-bold">
@@ -867,20 +865,29 @@ export default function AssignmentBuilderV2() {
               
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
                 <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner w-full sm:w-auto flex-1 max-w-md">
-                  <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                    <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
-                  </button>
-                  <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                    <FileText className="w-4 h-4" /> واجب رسمي
-                  </button>
+                  {currentRole === 'teacher' ? (
+                    // 🚀 إجبار المعلم على إنشاء واجب رسمي فقط
+                    <div className="flex-1 py-3 rounded-xl font-black text-sm bg-slate-800 text-white shadow-md flex justify-center items-center gap-2 cursor-default">
+                      <FileText className="w-4 h-4" /> وضع الواجب الرسمي (مفعل دائماً)
+                    </div>
+                  ) : (
+                    <>
+                      <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+                        <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
+                      </button>
+                      <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+                        <FileText className="w-4 h-4" /> واجب رسمي
+                      </button>
+                    </>
+                  )}
                 </div>
                 <button onClick={() => handleResetBuilder(false)} className="w-full sm:w-auto px-5 py-3 bg-rose-50 text-rose-600 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-rose-100 transition-colors border border-rose-200 shadow-sm shrink-0">
-                  <RefreshCcw className="w-4 h-4" /> إفراغ المحتوى لدرس جديد
+                  <RefreshCcw className="w-4 h-4" /> إفراغ المحتوى
                 </button>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">عنوان الدرس</label>
+                <label className="block text-xs font-bold text-slate-500 mb-2">عنوان الواجب</label>
                 <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
               </div>
               
@@ -889,7 +896,7 @@ export default function AssignmentBuilderV2() {
                   <div className="w-full p-3.5 bg-indigo-50/80 text-indigo-700 border border-indigo-200 rounded-xl font-bold flex items-center gap-3 shadow-inner">
                     <Network className="w-5 h-5 shrink-0"/> 
                     <span className="text-xs leading-relaxed">
-                      <strong>نظام التوزيع الذكي:</strong> حدد المادة والصفوف، وسيقوم النظام أوتوماتيكياً بتقسيم الدرس وإرساله لحسابات معلمي هذه المادة.
+                      <strong>نظام التوزيع الذكي:</strong> حدد المادة والصفوف، وسيقوم النظام أوتوماتيكياً بتقسيم الواجب وإرساله لحسابات معلمي هذه المادة.
                     </span>
                   </div>
                 ) : (
@@ -952,7 +959,7 @@ export default function AssignmentBuilderV2() {
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
-              <label className="block text-xs font-bold text-slate-500">حالة الدرس عند الحفظ</label>
+              <label className="block text-xs font-bold text-slate-500">حالة الواجب عند الحفظ</label>
               <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none shadow-sm">
                 <option value="draft">حفظ كمسودة (مخفي)</option>
                 <option value="published">نشر للطلاب</option>
@@ -960,7 +967,7 @@ export default function AssignmentBuilderV2() {
 
               <button onClick={saveAssignmentToDB} disabled={isSavingDB} className={`w-full text-white font-black text-lg py-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${editingAssignmentId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
                 {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5" /> : <Save className="w-5 h-5" />)} 
-                {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'توزيع الدرس للطلاب والمعلمين'}
+                {editingAssignmentId ? 'حفظ التعديلات وتحديث الواجب' : 'توزيع الواجب للطلاب'}
               </button>
             </div>
           </motion.div>
