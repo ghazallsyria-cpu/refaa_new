@@ -6,14 +6,39 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown,Database
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, Database
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
-const createMarkup = (htmlString: string) => {
-  return { __html: htmlString };
+// 🚀 دالة لمعالجة نصوص LaTeX والرياضيات للمعلم بدلاً من النص الخام
+const renderHTMLWithMath = (html: string) => {
+  if (!html) return '';
+  let parsed = html;
+  if (typeof window !== 'undefined') {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(parsed, 'text/html');
+      const images = doc.querySelectorAll('img');
+      images.forEach((img) => {
+        if (img.src && img.src.startsWith('http')) img.setAttribute('crossorigin', 'anonymous');
+      });
+      parsed = doc.body.innerHTML;
+    } catch (e) {}
+  }
+  const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
+    try {
+      let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
+      return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
+    } catch (e) { return match; }
+  };
+  parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
+  parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
+  return { __html: parsed };
 };
 
 export default function ArenaMonitorDashboard() {
@@ -27,18 +52,15 @@ export default function ArenaMonitorDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // 🚀 حالة فلتر الفصول والإحصائيات
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
   const [availableClasses, setAvailableClasses] = useState<{id: string, name: string, count: number}[]>([]);
 
-  // Modal States
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [gradingModalOpen, setGradingModalOpen] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [feedbackText, setFeedbackText] = useState('');
   
-  // Grading States
   const [studentAnswers, setStudentAnswers] = useState<any[]>([]);
   const [assignmentQuestions, setAssignmentQuestions] = useState<any[]>([]);
   const [savingFeedback, setSavingFeedback] = useState(false);
@@ -104,7 +126,7 @@ export default function ArenaMonitorDashboard() {
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
-    setSelectedClassFilter('all'); // تصفير الفلتر عند اختيار واجب جديد
+    setSelectedClassFilter('all'); 
     
     try {
       let sectionIds: string[] = [];
@@ -185,7 +207,6 @@ export default function ArenaMonitorDashboard() {
 
       const uniqueStudents = Array.from(new Map(studentsToDisplay.map(item => [item.student_id, item])).values());
       
-      // 🚀 الفرز الأبجدي الدقيق (الفصل أولاً، ثم اسم الطالب)
       uniqueStudents.sort((a, b) => {
         const secCompare = a.section_name.localeCompare(b.section_name, 'ar');
         if (secCompare !== 0) return secCompare; 
@@ -194,7 +215,6 @@ export default function ArenaMonitorDashboard() {
 
       setStudentsProgress(uniqueStudents);
       
-      // 🚀 تجهيز قائمة الفصول للفلتر مع ترتيبها أبجدياً
       const sortedClasses = Array.from(uniqueClassesMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
       setAvailableClasses(sortedClasses);
 
@@ -229,7 +249,8 @@ export default function ArenaMonitorDashboard() {
       const { data: questions } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', selectedAssignment.id).order('order_index', { ascending: true });
       setAssignmentQuestions(questions || []);
 
-      const { data: answers } = await supabase.from('student_answers').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
+      // 🚀 جلب الإجابات من الجدول الجديد V2
+      const { data: answers } = await supabase.from('student_answers_v2').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
       setStudentAnswers(answers || []);
 
       const initialGrades: Record<string, number> = {};
@@ -255,7 +276,7 @@ export default function ArenaMonitorDashboard() {
       for (const [qId, points] of Object.entries(manualGrades)) {
         totalEssayPoints += points;
         updates.push(
-          supabase.from('student_answers').update({ points_earned: points, is_graded: true }).eq('student_id', selectedStudent.user_id).eq('question_id', qId)
+          supabase.from('student_answers_v2').update({ points_earned: points, is_graded: true }).eq('student_id', selectedStudent.user_id).eq('question_id', qId)
         );
       }
       
@@ -287,20 +308,17 @@ export default function ArenaMonitorDashboard() {
 
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, is_graded: true, teacher_feedback: newFeedback } : p));
       setGradingModalOpen(false);
-      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات!');
+      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات (النظام الموحد)!');
 
     } catch (err) { alert("حدث خطأ أثناء اعتماد الدرجات."); } finally { setSavingFeedback(false); }
   };
 
-  // 🚀 تطبيق الفلتر على قائمة العرض
   const displayedStudents = useMemo(() => {
     if (selectedClassFilter === 'all') return studentsProgress;
     return studentsProgress.filter(s => s.section_id === selectedClassFilter);
   }, [studentsProgress, selectedClassFilter]);
 
-  // 🚀 الضربة القاضية: تصفير المتأخرين (يطبق على الفصل المحدد فقط)
   const handleZeroOutMissing = async () => {
-    // نجلب الطلاب الذين يظهرون حالياً في الجدول فقط (حسب الفلتر) ولم يسلموا
     const missingStudents = displayedStudents.filter(s => (!s.has_started || !s.is_completed) && !s.is_graded);
     
     if (missingStudents.length === 0) {
@@ -357,7 +375,6 @@ export default function ArenaMonitorDashboard() {
 
   const isOfficialMode = selectedAssignment && selectedAssignment.is_practice_mode === false;
   
-  // 🚀 إحصائيات سريعة للوحة بناءً على الفلتر
   const statsCounts = useMemo(() => {
     return {
       total: displayedStudents.length,
@@ -372,6 +389,17 @@ export default function ArenaMonitorDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
+      
+      <style dangerouslySetInnerHTML={{ __html: `
+        .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
+        .katex { direction: ltr !important; text-align: left !important; }
+        .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
+        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); background: white; }
+        .tiptap-content td, .tiptap-content th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
+        .tiptap-content th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
+        .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
+      `}} />
+
       <div className="max-w-6xl mx-auto space-y-6">
         
         <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -428,7 +456,6 @@ export default function ArenaMonitorDashboard() {
                </button>
             </div>
 
-            {/* 🚀 إحصائيات سريعة للفصل المفلتر */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0"><Users className="w-5 h-5"/></div>
@@ -457,7 +484,6 @@ export default function ArenaMonitorDashboard() {
                     <Database className="w-5 h-5 text-indigo-500" /> سجل الإنجاز
                   </h3>
                   
-                  {/* 🚀 فلتر الفصول للمدرس */}
                   {availableClasses.length > 0 && (
                     <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm relative w-full sm:w-auto">
                       <Filter className="w-4 h-4 text-slate-400 shrink-0" />
@@ -581,7 +607,6 @@ export default function ArenaMonitorDashboard() {
         )}
       </div>
 
-      {/* مودال إرسال الملاحظات (لوضع التدريب) */}
       <AnimatePresence>
         {feedbackModalOpen && selectedStudent && !isOfficialMode && (
           <>
@@ -614,7 +639,6 @@ export default function ArenaMonitorDashboard() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 مودال نظام التصحيح والتقييم (لوضع الواجبات الرسمية) */}
       <AnimatePresence>
         {gradingModalOpen && selectedStudent && isOfficialMode && (
           <>
@@ -650,18 +674,18 @@ export default function ArenaMonitorDashboard() {
                       <div className="flex-1 space-y-5">
                         <div className="border-b border-slate-100 pb-4">
                           <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg mb-3 inline-block">السؤال المقالي {idx + 1}</span>
-                          <div className="font-bold text-slate-800 prose prose-sm max-w-none" dangerouslySetInnerHTML={createMarkup(q.content_html)} />
+                          <div className="font-bold text-slate-800 prose prose-sm max-w-none" dangerouslySetInnerHTML={renderHTMLWithMath(q.content_html)} />
                         </div>
                         <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm relative">
                           <div className="absolute top-0 right-6 -mt-3 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">إجابة الطالب</div>
-                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar" dangerouslySetInnerHTML={createMarkup(studentText)} />
+                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar" dangerouslySetInnerHTML={renderHTMLWithMath(studentText)} />
                         </div>
                       </div>
                       
                       <div className="xl:w-96 shrink-0 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 flex flex-col h-full shadow-inner">
                         <div className="mb-6 flex-1">
                            <p className="text-xs font-black text-indigo-500 mb-3 flex items-center gap-1.5"><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
-                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
+                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100" dangerouslySetInnerHTML={renderHTMLWithMath(q.model_answer_html)} />
                         </div>
                         
                         <div className="mt-auto border-t border-indigo-200 pt-5">
