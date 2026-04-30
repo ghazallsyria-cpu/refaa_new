@@ -96,7 +96,6 @@ const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
   );
 };
 
-// 🚀 سبورة الرسم الذكية (Whiteboard) - مع إصلاح مشكلة الإحداثيات
 const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: () => void, onSave: (dataUrl: string) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -117,7 +116,6 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
     }
   }, [isOpen]);
 
-  // 🚀 دالة ذكية لحساب الإحداثيات الدقيقة (تطابق الشاشة مع حجم الكانفاس)
   const getCoordinates = (e: any) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -140,7 +138,7 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
   };
 
   const startDrawing = (e: any) => {
-    e.preventDefault(); // منع السحب الافتراضي للشاشة على الجوال
+    e.preventDefault(); 
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx) return;
@@ -229,7 +227,6 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
         
         <div className="flex-1 bg-slate-200 p-2 sm:p-4 overflow-hidden relative cursor-crosshair">
           <div className="w-full h-full bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden relative flex items-center justify-center">
-            {/* 🚀 إزالة object-fit للحفاظ على أبعاد الرسم الحقيقية */}
             <canvas 
               ref={canvasRef}
               width={1200}
@@ -251,7 +248,6 @@ const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose
   );
 };
 
-// 🚀 محرر نصي غني لتمكين الطالب من الحل باحترافية
 const StudentTiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
@@ -321,9 +317,34 @@ const StudentTiptapEditor = ({ content, onChange, placeholder }: { content: stri
     }
   };
 
-  const handleSaveWhiteboard = (dataUrl: string) => {
-    if (editor) {
-      editor.chain().focus().setImage({ src: dataUrl }).run();
+  // 🚀 رفع صورة السبورة الذكية إلى Cloudinary لتجنب مشاكل Base64
+  const handleSaveWhiteboard = async (dataUrl: string) => {
+    setIsUploading(true);
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], "whiteboard-drawing.png", { type: "image/png" });
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
+
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await uploadRes.json();
+      
+      if (data.secure_url && editor) {
+        editor.chain().focus().setImage({ src: data.secure_url }).run();
+      } else if (editor) {
+        // Fallback to base64 if Cloudinary fails
+        editor.chain().focus().setImage({ src: dataUrl }).run();
+      }
+    } catch (err) {
+      if (editor) editor.chain().focus().setImage({ src: dataUrl }).run();
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -401,7 +422,6 @@ export default function PracticeArena() {
   
   const [editorKey, setEditorKey] = useState(0); 
   
-  // حالة حفظ الإجابات المقالية
   const [essayAnswers, setEssayAnswers] = useState<Record<string, string>>({});
   
   const [attempts, setAttempts] = useState(0);
@@ -478,29 +498,16 @@ export default function PracticeArena() {
       }, { onConflict: 'student_id, assignment_id' });
 
       if (finished && isOfficial && Object.keys(essayAnswers).length > 0) {
-        let attemptId = null;
-        const { data: existingAttempt } = await supabase.from('exam_attempts').select('id').eq('student_id', user.id).eq('exam_id', id).maybeSingle();
-        
-        if (existingAttempt) {
-            attemptId = existingAttempt.id;
-        } else {
-            const { data: newAttempt } = await supabase.from('exam_attempts').insert({
-                exam_id: '00000000-0000-0000-0000-000000000000', 
-                student_id: user.id,
-                status: 'completed'
-            }).select('id').maybeSingle();
-            if (newAttempt) attemptId = newAttempt.id;
-        }
-
+        // 🚀 حفظ الإجابات المقالية في الجدول الجديد student_answers_v2 لضمان التوافق المطلق
         const answersToInsert = Object.entries(essayAnswers).map(([qId, text]) => ({
-          attempt_id: attemptId || '00000000-0000-0000-0000-000000000000', 
+          student_id: user.id,
+          assignment_id: id,
           question_id: qId,
-          text_answer: text,
-          is_correct: null, 
-          points_earned: 0 
+          answer_text: text,
+          is_graded: false
         }));
         
-        await supabase.from('student_answers').upsert(answersToInsert, { onConflict: 'attempt_id, question_id' }).catch(err => console.log('Answers Table Pending Setup', err));
+        await supabase.from('student_answers_v2').upsert(answersToInsert, { onConflict: 'student_id, assignment_id, question_id' }).catch(err => console.log('Error saving to v2 table:', err));
       }
 
       if (finished) localStorage.removeItem(`arena_save_${user.id}_${id}`);
@@ -525,7 +532,7 @@ export default function PracticeArena() {
         triggerConfetti();
     }
     
-    if (mode === 'normal' && !isPreviewMode) saveProgressToDB(currentIndex, finalScore, true);
+    saveProgressToDB(currentIndex, finalScore, true);
   };
 
   const formatTime = (seconds: number) => {
