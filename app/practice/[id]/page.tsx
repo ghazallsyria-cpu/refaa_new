@@ -193,7 +193,13 @@ export default function PracticeArena() {
     if (mode === 'normal' && !isPreviewMode) saveProgressToDB(currentIndex, finalScore, true);
   };
 
-  // 🚀 إعادة تعريف رسائل النجاح والتحفيز (المتسببة بمشكلة length)
+  // 🚀 الدالة التي كانت مفقودة وتسببت بالانهيار (Application Error)
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m} دقيقة و ${s} ثانية`;
+  };
+
   const successMessages = ["أنت بطل! إجابة دقيقة 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية، استمر! 👏"];
   const encourageMessages = ["لا بأس، الخطأ طريق التعلم! 💪", "اقتربت جداً، اقرأ الشرح بتركيز! 🎯", "أنت قادر عليها يا بطل! 🧠", "المحاولات تصنع النجاح! 🔄"];
   
@@ -299,7 +305,6 @@ export default function PracticeArena() {
   const failedQsForPDF = allQuestions.filter(q => failedQuestionIds.has(q.id) && q.type !== 'section_header');
 
   return (
-    // 🚀 تم تغيير الارتفاع إلى 100dvh لضمان عدم خروج الفوتر من متصفحات الجوال
     <div className="min-h-[100dvh] h-[100dvh] bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
       
       {isPreviewMode && (
@@ -382,7 +387,6 @@ export default function PracticeArena() {
         </div>
       </div>
 
-      {/* 🚀 حل مشكلة السحب للجوال باستخدام min-h-0 لضمان عمل الـ overflow-y-auto الداخلي بشكل صحيح */}
       <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 flex flex-col md:flex-row gap-4 sm:gap-6 min-h-0">
         
         <AnimatePresence>
@@ -397,7 +401,6 @@ export default function PracticeArena() {
         <div className={`flex-1 flex flex-col h-full min-h-0 ${currentContextHeader ? 'md:w-1/2' : 'w-full max-w-2xl mx-auto'}`}>
           <AnimatePresence mode="wait">
             {!isFinished && currentQ ? (
-              // 🚀 تقييد الارتفاع الكلي للبطاقة للسماح بالتمرير الداخلي فقط
               <motion.div key={currentQ.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1, x: shake ? [-10, 10, -10, 10, 0] : 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", bounce: 0.4 }} className={`bg-white rounded-[2rem] shadow-xl border-2 overflow-hidden flex flex-col h-full ${isSuccess ? 'border-emerald-400 shadow-emerald-100' : 'border-slate-200'}`}>
                 
                 <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isSuccess ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
@@ -412,7 +415,6 @@ export default function PracticeArena() {
                   </div>
                 </div>
 
-                {/* 🚀 منطقة التمرير الداخلي المحمية */}
                 <div className="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
                   <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
                   {isMCQ && (
@@ -456,8 +458,7 @@ export default function PracticeArena() {
                   })()}
                 </div>
 
-                {/* 🚀 الفوتر ثابت أسفل البطاقة */}
-                <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 shrink-0">
+                <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
                       {isSuccess ? (
