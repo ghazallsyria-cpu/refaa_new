@@ -301,7 +301,10 @@ export default function PracticeArena() {
 
   const progress = ((currentIndex + 1) / activeQuestions.length) * 100;
   const safeOptions = currentQ ? safeParseOptions(currentQ.options) : [];
-  const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
+  
+  // 🚀 التعديل هنا: قمنا بإضافة true_false لكي يتعرف عليها النظام ويُظهر الأزرار الخاصة بها
+  const isMCQ = (currentQ?.type === 'multiple_choice' || currentQ?.type === 'true_false') && safeOptions.length > 0;
+  
   const failedQsForPDF = allQuestions.filter(q => failedQuestionIds.has(q.id) && q.type !== 'section_header');
 
   return (
