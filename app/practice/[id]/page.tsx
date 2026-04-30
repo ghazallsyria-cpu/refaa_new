@@ -88,7 +88,7 @@ export default function PracticeArena() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = params?.id as string;
-  const isPreviewMode = searchParams?.get('preview') === 'true'; // وضع المعاينة
+  const isPreviewMode = searchParams?.get('preview') === 'true'; 
   const { user, userName } = useAuth() as any; 
 
   const [assignment, setAssignment] = useState<any>(null);
@@ -126,7 +126,6 @@ export default function PracticeArena() {
         setAllQuestions(formattedQs);
         setActiveQuestions(formattedQs);
 
-        // جلب تقدم الطالب الفعلي (فقط إذا لم يكن في وضع المعاينة)
         if (!isPreviewMode && user) {
           const { data: progressData } = await supabase.from('student_progress_v2').select('*').eq('student_id', user.id).eq('assignment_id', id).maybeSingle();
           const localSaveKey = `arena_save_${user.id}_${id}`;
@@ -163,7 +162,7 @@ export default function PracticeArena() {
   }, [currentIndex, score, streak, failedQuestionIds, loading, isFinished, isPreviewMode]);
 
   const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
-    if (!user || isPreviewMode) return; // 🚀 حماية: لا نحفظ بيانات المعلم في الداتابيز إطلاقاً
+    if (!user || isPreviewMode) return; 
     try {
       await supabase.from('student_progress_v2').upsert({
         student_id: user.id, assignment_id: id, current_index: newIndex, correct_score: newScore.correct,
@@ -174,7 +173,6 @@ export default function PracticeArena() {
   };
 
   const triggerConfetti = () => {
-    // 🚀 سمحنا للمعلم برؤية الاحتفالات لتشجيع الطلاب عبر Zoom
     const end = Date.now() + 3000;
     const frame = () => {
       confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#10b981', '#3b82f6', '#f59e0b'] });
@@ -188,13 +186,19 @@ export default function PracticeArena() {
     setIsFinished(true);
     if (startTime) setTimeSpentSeconds(Math.floor((Date.now() - startTime) / 1000));
     
-    // 🚀 الاحتفال يعمل للجميع
     if (finalScore.wrong === 0 || (finalScore.correct / (finalScore.correct + finalScore.wrong) > 0.8)) {
         triggerConfetti();
     }
     
     if (mode === 'normal' && !isPreviewMode) saveProgressToDB(currentIndex, finalScore, true);
   };
+
+  // 🚀 إعادة تعريف رسائل النجاح والتحفيز (المتسببة بمشكلة length)
+  const successMessages = ["أنت بطل! إجابة دقيقة 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية، استمر! 👏"];
+  const encourageMessages = ["لا بأس، الخطأ طريق التعلم! 💪", "اقتربت جداً، اقرأ الشرح بتركيز! 🎯", "أنت قادر عليها يا بطل! 🧠", "المحاولات تصنع النجاح! 🔄"];
+  
+  const randomSuccessMsg = successMessages[currentIndex % successMessages.length];
+  const randomEncourageMsg = encourageMessages[currentIndex % encourageMessages.length];
 
   const currentQ = activeQuestions[currentIndex];
   const currentContextHeader = activeQuestions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
@@ -286,7 +290,7 @@ export default function PracticeArena() {
     } catch (err) { console.error('Error generating PDF', err); alert('حدث خطأ أثناء إنشاء ملف الـ PDF.'); } finally { setIsGeneratingPDF(false); }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
+  if (loading) return <div className="min-h-[100dvh] flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
   if (!assignment || allQuestions.length === 0) return <div className="p-10 text-center font-cairo">لا يوجد تدريب متاح هنا.</div>;
 
   const progress = ((currentIndex + 1) / activeQuestions.length) * 100;
@@ -295,13 +299,13 @@ export default function PracticeArena() {
   const failedQsForPDF = allQuestions.filter(q => failedQuestionIds.has(q.id) && q.type !== 'section_header');
 
   return (
-    <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
+    // 🚀 تم تغيير الارتفاع إلى 100dvh لضمان عدم خروج الفوتر من متصفحات الجوال
+    <div className="min-h-[100dvh] h-[100dvh] bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
       
-      {/* 🚀 إشعار وضع المعاينة للمعلم المتميز */}
       {isPreviewMode && (
-        <div className="bg-gradient-to-r from-orange-600 to-amber-600 text-white px-4 py-2 flex items-center justify-center gap-3 font-black shadow-md z-50">
-          <MonitorPlay className="w-5 h-5 animate-pulse" /> 
-          أنت في (وضع المعاينة والبث الحي) - استمتع بمشاركة الشاشة مع طلابك، لن تُحفظ إجاباتك هنا بالداتابيز.
+        <div className="bg-gradient-to-r from-orange-600 to-amber-600 text-white px-4 py-2 flex items-center justify-center gap-3 font-black shadow-md z-50 shrink-0 text-sm sm:text-base">
+          <MonitorPlay className="w-5 h-5 animate-pulse shrink-0" /> 
+          <span className="truncate">وضع البث الحي (لن تُحفظ الإجابات)</span>
         </div>
       )}
 
@@ -344,6 +348,9 @@ export default function PracticeArena() {
         .tiptap-content th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
         .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
         .tiptap-content p { margin-bottom: 0.5em !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 10px; }
       `}} />
 
       <div className="bg-white shadow-sm z-20 shrink-0 border-b border-slate-200">
@@ -359,7 +366,6 @@ export default function PracticeArena() {
                 </div>
             </div>
             
-            {/* 🚀 النيران مفعلة الآن للجميع للحماس */}
             <AnimatePresence>
                 {streak >= 2 && (
                     <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0 }} className="flex items-center gap-1 bg-gradient-to-r from-orange-100 to-amber-100 px-3 py-1 rounded-full border border-orange-200 shadow-sm shrink-0">
@@ -376,24 +382,27 @@ export default function PracticeArena() {
         </div>
       </div>
 
-      <div className="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col md:flex-row gap-6 overflow-hidden h-[calc(100vh-70px)]">
+      {/* 🚀 حل مشكلة السحب للجوال باستخدام min-h-0 لضمان عمل الـ overflow-y-auto الداخلي بشكل صحيح */}
+      <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 flex flex-col md:flex-row gap-4 sm:gap-6 min-h-0">
+        
         <AnimatePresence>
           {currentContextHeader && currentQ?.type !== 'section_header' && !isFinished && (
             <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }} className="md:w-1/2 flex flex-col bg-indigo-50/50 rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden h-[30vh] md:h-full shrink-0">
               <div className="bg-indigo-100/50 px-5 py-3 flex items-center gap-2 border-b border-indigo-100 shrink-0"><Quote className="w-5 h-5 text-indigo-500" /><h3 className="font-black text-indigo-800 text-sm">اقرأ النص أو ادرس الشكل التالي:</h3></div>
-              <div className="p-5 overflow-y-auto flex-1"><div className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentContextHeader.content_html) }}></div></div>
+              <div className="p-5 overflow-y-auto flex-1 custom-scrollbar"><div className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentContextHeader.content_html) }}></div></div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className={`flex-1 flex flex-col justify-center h-full ${currentContextHeader ? 'md:w-1/2' : 'w-full max-w-2xl mx-auto'}`}>
+        <div className={`flex-1 flex flex-col h-full min-h-0 ${currentContextHeader ? 'md:w-1/2' : 'w-full max-w-2xl mx-auto'}`}>
           <AnimatePresence mode="wait">
             {!isFinished && currentQ ? (
-              <motion.div key={currentQ.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1, x: shake ? [-10, 10, -10, 10, 0] : 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", bounce: 0.4 }} className={`bg-white rounded-[2rem] shadow-xl border-2 overflow-hidden flex flex-col max-h-full ${isSuccess ? 'border-emerald-400 shadow-emerald-100' : 'border-slate-200'}`}>
+              // 🚀 تقييد الارتفاع الكلي للبطاقة للسماح بالتمرير الداخلي فقط
+              <motion.div key={currentQ.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1, x: shake ? [-10, 10, -10, 10, 0] : 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", bounce: 0.4 }} className={`bg-white rounded-[2rem] shadow-xl border-2 overflow-hidden flex flex-col h-full ${isSuccess ? 'border-emerald-400 shadow-emerald-100' : 'border-slate-200'}`}>
+                
                 <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isSuccess ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                   <div className="flex items-center gap-2"><Target className={`w-5 h-5 ${isSuccess ? 'text-emerald-500' : 'text-indigo-500'}`} /><h3 className={`font-black text-sm ${isSuccess ? 'text-emerald-700' : 'text-slate-700'}`}>{isSuccess ? "إجابة صحيحة!" : (currentQ.type === 'essay' ? 'تحدي مقالي' : currentQ.type === 'section_header' ? 'معلومة للقراءة' : 'تحدي اختياري')}</h3></div>
                   <div className="flex items-center gap-2">
-                    {/* 🚀 اقتراح التعديل للإدارة متاح للمعلم في وضع المعاينة */}
                     {isPreviewMode && (
                       <button onClick={() => alert('ميزة اقتراح التعديلات للإدارة قيد الإطلاق قريباً 🚀')} className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg border border-amber-200 text-[10px] font-black flex items-center gap-1 hover:bg-amber-100 transition-colors">
                         <AlertTriangle className="w-3 h-3" /> اقتراح تعديل
@@ -402,7 +411,9 @@ export default function PracticeArena() {
                     {currentQ.points > 0 && <span className="bg-white px-3 py-1 rounded-lg text-xs font-black text-slate-500 border border-slate-200 shadow-sm">{currentQ.points} نقاط</span>}
                   </div>
                 </div>
-                <div className="p-6 overflow-y-auto flex-1">
+
+                {/* 🚀 منطقة التمرير الداخلي المحمية */}
+                <div className="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
                   <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
                   {isMCQ && (
                     <div className="mt-8 space-y-3">
@@ -445,7 +456,8 @@ export default function PracticeArena() {
                   })()}
                 </div>
 
-                <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
+                {/* 🚀 الفوتر ثابت أسفل البطاقة */}
+                <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 shrink-0">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
                       {isSuccess ? (
@@ -469,7 +481,6 @@ export default function PracticeArena() {
                 <h2 className="text-3xl font-black text-slate-800 mb-2">{mode === 'retake_errors' ? 'تم إنهاء المراجعة! 🛡️' : 'إنجاز رائع! 🚀'}</h2>
                 <p className="text-slate-500 font-bold mb-6">{mode === 'retake_errors' ? 'لقد واجهت نقاط ضعفك بقوة.' : 'لقد أكملت التدريب.'}</p>
                 
-                {/* 🚀 إظهار النقاط والإحصائيات للمعلم أثناء المعاينة لتشجيع الطلاب عبر الشاشة المشتَرَكة */}
                 <div className="grid grid-cols-2 gap-4 mb-8 bg-slate-50 p-6 rounded-3xl border border-slate-100"><div className="text-center border-l border-slate-200"><div className="text-4xl font-black text-emerald-500 mb-1">{score.correct}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">نقاط القوة</div></div><div className="text-center"><div className="text-4xl font-black text-rose-500 mb-1">{score.wrong}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">تحتاج مراجعة</div></div><div className="col-span-2 mt-4 pt-4 border-t border-slate-200 text-center flex items-center justify-center gap-2 text-indigo-600 font-black"><Clock className="w-4 h-4" /> استغرقت: {formatTime(timeSpentSeconds)}</div></div>
 
                 <div className="flex flex-col gap-3">
