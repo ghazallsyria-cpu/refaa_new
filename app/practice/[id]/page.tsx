@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
   Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay, ShieldAlert, Edit3,
-  Bold, Italic, Underline as UnderlineIcon, AlignRight,Loader2, AlignCenter, AlignLeft, Table as TableIcon, Calculator, ClipboardPaste, PenTool, Image as ImageIcon, Eraser, Palette, Save as SaveIcon
+  Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft, Table as TableIcon, Calculator, ClipboardPaste, PenTool, Image as ImageIcon, Eraser, Palette, Save as SaveIcon, Loader2
 } from 'lucide-react';
 
 import { useEditor, EditorContent } from '@tiptap/react';
