@@ -99,7 +99,7 @@ export default function PracticeArena() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   
-  // 🚀 حالة جديدة لحفظ الإجابات المقالية للطلاب
+  // حالة حفظ الإجابات المقالية
   const [essayAnswers, setEssayAnswers] = useState<Record<string, string>>({});
   
   const [attempts, setAttempts] = useState(0);
@@ -140,7 +140,6 @@ export default function PracticeArena() {
              setScore(parsedLocal.score || { correct: 0, wrong: 0, totalPoints: 0 });
              setStreak(parsedLocal.streak || 0);
              setFailedQuestionIds(new Set(parsedLocal.failedQuestionIds || []));
-             // 🚀 استرجاع الإجابات المقالية من الكاش
              if (parsedLocal.essayAnswers) setEssayAnswers(parsedLocal.essayAnswers);
           } else if (progressData) {
             if (progressData.is_completed) {
@@ -162,12 +161,10 @@ export default function PracticeArena() {
   useEffect(() => {
     if (loading || isFinished || !user || isPreviewMode) return; 
     const localSaveKey = `arena_save_${user.id}_${id}`;
-    // 🚀 حفظ الإجابات المقالية في الكاش لضمان عدم ضياعها
     const saveData = { currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds), essayAnswers };
     localStorage.setItem(localSaveKey, JSON.stringify(saveData));
   }, [currentIndex, score, streak, failedQuestionIds, essayAnswers, loading, isFinished, isPreviewMode]);
 
-  // التحقق مما إذا كان هذا الواجب رسمياً (امتحان) وليس تدريباً
   const isOfficial = assignment && assignment.is_practice_mode === false && mode === 'normal';
 
   const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
@@ -178,18 +175,34 @@ export default function PracticeArena() {
         wrong_score: newScore.wrong, is_completed: finished, updated_at: new Date().toISOString()
       }, { onConflict: 'student_id, assignment_id' });
 
-      // 🚀 إذا كان الواجب قد انتهى وهو رسمي، نقوم بإرسال الإجابات المقالية لقاعدة البيانات
+      // إذا كان الواجب انتهى وهو رسمي، نقوم بإرسال الإجابات المقالية
       if (finished && isOfficial && Object.keys(essayAnswers).length > 0) {
+        
+        // 🚀 البحث عن attempt_id أو إنشاء محاولة وهمية لربط الإجابات بها
+        let attemptId = null;
+        const { data: existingAttempt } = await supabase.from('exam_attempts').select('id').eq('student_id', user.id).eq('exam_id', id).maybeSingle();
+        
+        if (existingAttempt) {
+            attemptId = existingAttempt.id;
+        } else {
+            // إنشاء سجل محاولة وهمي (Dummy) لربط الـ Foreign Key
+            const { data: newAttempt } = await supabase.from('exam_attempts').insert({
+                exam_id: '00000000-0000-0000-0000-000000000000', // استخدام معرف ثابت أو حذف القيد لاحقاً
+                student_id: user.id,
+                status: 'completed'
+            }).select('id').maybeSingle();
+            if (newAttempt) attemptId = newAttempt.id;
+        }
+
         const answersToInsert = Object.entries(essayAnswers).map(([qId, text]) => ({
-          student_id: user.id,
-          assignment_id: id,
+          attempt_id: attemptId || '00000000-0000-0000-0000-000000000000', 
           question_id: qId,
-          answer_text: text,
-          is_graded: false // بحاجة لتصحيح المعلم لاحقاً
+          text_answer: text,
+          is_correct: null, 
+          points_earned: 0 
         }));
         
-        // المحاولة في إدراج الإجابات (تم استخدام catch صامت لعدم إيقاف الواجهة إذا لم يكن الجدول مهيأ 100%)
-        await supabase.from('student_answers').upsert(answersToInsert, { onConflict: 'student_id, question_id' }).catch(err => console.log('Answers Table Pending Setup', err));
+        await supabase.from('student_answers').upsert(answersToInsert, { onConflict: 'attempt_id, question_id' }).catch(err => console.log('Answers Table Pending Setup', err));
       }
 
       if (finished) localStorage.removeItem(`arena_save_${user.id}_${id}`);
@@ -210,7 +223,6 @@ export default function PracticeArena() {
     setIsFinished(true);
     if (startTime) setTimeSpentSeconds(Math.floor((Date.now() - startTime) / 1000));
     
-    // في وضع الامتحان لا توجد احتفالات مبالغ فيها لتجنب الإحباط إذا كان الامتحان صعباً
     if (!isOfficial && (finalScore.wrong === 0 || (finalScore.correct / (finalScore.correct + finalScore.wrong) > 0.8))) {
         triggerConfetti();
     }
@@ -574,7 +586,6 @@ export default function PracticeArena() {
                   {isOfficial ? (
                     <button 
                       onClick={nextQuestion} 
-                      // 🚀 تعطيل زر الانتقال إذا لم يختر إجابة (في الـ MCQ) أو لم يكتب إجابة مقالية
                       disabled={(isMCQ && !selectedOptionId) || (currentQ.type === 'essay' && !(essayAnswers[currentQ.id] || '').trim())} 
                       className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-md disabled:opacity-50 disabled:bg-slate-300 disabled:text-slate-500"
                     >
