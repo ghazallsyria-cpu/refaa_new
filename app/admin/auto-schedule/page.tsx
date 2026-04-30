@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List
+  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -63,7 +63,13 @@ export default function AutoScheduleGenerator() {
   const [planName, setPlanName] = useState('جدول الفصل الدراسي الثاني - معتمد');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
+  
   const [generatedSchedules, setGeneratedSchedules] = useState<any[]>([]);
+  
+  // 🚀 حالات التسكين اليدوي وسلة الانتظار
+  const [unplacedLessons, setUnplacedLessons] = useState<any[]>([]);
+  const [manualAssignModalOpen, setManualAssignModalOpen] = useState(false);
+  const [lessonToAssign, setLessonToAssign] = useState<any>(null);
 
   const [displayMode, setDisplayMode] = useState<'grid' | 'raw'>('grid');
   const [gridFilterType, setGridFilterType] = useState<'section' | 'teacher'>('section');
@@ -207,19 +213,18 @@ export default function AutoScheduleGenerator() {
     return Object.entries(loads).sort((a, b) => b[1].total - a[1].total);
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
-
   // ==========================================
-  // 🧠 THE ULTIMATE ALGORITHM (Flexible Emergency Fallbacks)
+  // 🧠 THE ULTIMATE ALGORITHM (With Unplaced Lessons Basket)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
-    setGenerating(true); setGenerationLogs([]);
+    setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]);
     addLog("🚀 بدء التوليد الذكي...");
     
     let finalSchedule: any[] = [];
-    let failedDetailsLog: string[] = []; 
+    let unplacedQueue: any[] = []; // سلة المهملات للحصص المتعثرة
     const teacherDailyLoad: Record<string, Record<number, number>> = {};
     
     const teacherStages = new Map<string, Set<string>>();
@@ -253,11 +258,11 @@ export default function AutoScheduleGenerator() {
       return b.weekly_quota - a.weekly_quota; 
     });
     
-    let failedPlacements = 0;
     await new Promise(r => setTimeout(r, 800));
 
     const commitPlacement = (section, assignment, day, period) => {
       finalSchedule.push({
+        id: crypto.randomUUID(), // لحاجتها في التعديل اليدوي
         section_id: section.id, section_name: section.full_name,
         subject_id: assignment.subject_id, subject_name: assignment.subject_name,
         teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name,
@@ -283,13 +288,11 @@ export default function AutoScheduleGenerator() {
       const allowedDaysForTeacher = workingDays.filter(d => tConst.days.includes(d));
 
       if (allowedDaysForTeacher.length === 0) {
-        failedPlacements += assignment.weekly_quota;
-        failedDetailsLog.push(`${assignment.subject_name} (${section.full_name}) | المعلم: ${assignment.teacher_name} - لا يوجد أيام مسموحة`);
+        for(let i=0; i<assignment.weekly_quota; i++) unplacedQueue.push({...assignment, section_id: section.id, section_name: section.full_name, stage: section.stage, id: crypto.randomUUID()});
         continue;
       }
 
       let remainingLessons = assignment.weekly_quota;
-      
       const isEhab = assignment.teacher_name.includes('ايهاب') || assignment.teacher_name.includes('إيهاب');
       const isEhabPhysics = isEhab && section.stage === 'high' && (assignment.subject_name.includes('فيزياء') || assignment.subject_name.includes('فيزيا'));
 
@@ -303,23 +306,20 @@ export default function AutoScheduleGenerator() {
         
         if (isEhabPhysics) {
            preferredDays = preferredDays.filter(d => d === 1 || d === 2);
-           // إذا فشل وضع الحصص في الأحد والإثنين بسبب الازدحام، نعيد إضافة الأيام الأخرى لإنقاذ الموقف!
            if (preferredDays.length === 0 || i > 6) preferredDays = shuffleArray([...allowedDaysForTeacher]);
         }
 
         let isPlaced = false;
 
-        // 🟢 المحاولة 1: التسكين الأساسي (التزام صارم)
+        // المحاولة 1
         for (const day of preferredDays) {
           const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
           if (subjectCountToday >= maxPerDay) continue;
 
           let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number));
-          
           if (isEhabPhysics) {
              const morningPeriods = availablePeriods.filter(p => p.period_number <= 3);
              if (morningPeriods.length > 0) availablePeriods = morningPeriods;
-             // إذا لم تتوفر حصص صباحية، سيستخدم النظام حصصاً أخرى بدلاً من الفشل.
           }
           
           let orderedPeriods = [];
@@ -340,41 +340,36 @@ export default function AutoScheduleGenerator() {
           for (const period of orderedPeriods) {
             if (canPlace(assignment.teacher_id, section.id, day, period)) {
               commitPlacement(section, assignment, day, period);
-              isPlaced = true;
-              break; 
+              isPlaced = true; break; 
             }
           }
           if (isPlaced) break;
         }
 
-        // 🟡 المحاولة 2: إنقاذ الفراغات (Emergency Fallback)
-        // نتغاضى عن قيود الأيام والحد الأقصى اليومي، ونتغاضى عن قواعد الـ VIP لسد العجز.
-        if (!isPlaced) {
+        // المحاولة 2: Fallback
+        if (!isPlaced && !isEhabPhysics) {
            for (const day of shuffleArray([...allowedDaysForTeacher])) {
              const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number)));
              for (const period of fallbackPeriods) {
                if (canPlace(assignment.teacher_id, section.id, day, period)) {
                  commitPlacement(section, assignment, day, period);
-                 isPlaced = true;
-                 break; 
+                 isPlaced = true; break; 
                }
              }
              if (isPlaced) break;
            }
         }
 
-        // 🔴 المحاولة 3 (الإزاحة الذكية Swapping): 
-        if (!isPlaced) {
+        // المحاولة 3: Swapping
+        if (!isPlaced && !isEhabPhysics) {
           for (const day of shuffleArray([...allowedDaysForTeacher])) {
             if (isPlaced) break;
             const dayPeriods = periods.filter(p => p.stage === section.stage && !p.is_break && tConst.periods.includes(p.period_number));
-            
             for (const period of shuffleArray(dayPeriods)) {
               const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
               if (teacherYBusy) continue;
 
               const blockingSlotIndex = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
-              
               if (blockingSlotIndex !== -1) {
                 const blockingSlot = finalSchedule[blockingSlotIndex];
                 for (const altPeriod of shuffleArray(dayPeriods)) {
@@ -387,10 +382,8 @@ export default function AutoScheduleGenerator() {
                     finalSchedule[blockingSlotIndex].period_number = altPeriod.period_number;
                     finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
                     finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
-
                     commitPlacement(section, assignment, day, period);
-                    isPlaced = true;
-                    break;
+                    isPlaced = true; break;
                   }
                 }
               }
@@ -399,29 +392,93 @@ export default function AutoScheduleGenerator() {
           }
         }
         
+        // 🚀 الفشل النهائي -> إرسال لسلة المهملات / الانتظار
         if (!isPlaced) {
-          failedPlacements++;
-          failedDetailsLog.push(`${assignment.subject_name} (${section.full_name}) | المعلم: ${assignment.teacher_name}`);
+          unplacedQueue.push({
+             id: crypto.randomUUID(),
+             section_id: section.id, section_name: section.full_name,
+             subject_id: assignment.subject_id, subject_name: assignment.subject_name,
+             teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name,
+             stage: section.stage
+          });
         }
       }
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد! تم تفعيل الإزاحة القصوى لمنع الفراغات.`);
+    addLog(`✅ اكتمل التوليد! تم إنشاء سلة المهملات للحصص المتعثرة للتدخل اليدوي.`);
     
-    if (failedPlacements > 0) {
-      addLog(`⚠️ تحذير: ${failedPlacements} حصة فشلت في التسكين. تفاصيل المواد:`);
-      const uniqueFails = [...new Set(failedDetailsLog)];
-      uniqueFails.forEach(f => addLog(`❌ فشل: ${f}`));
-    }
-
     finalSchedule.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
     setGeneratedSchedules(finalSchedule);
+    setUnplacedLessons(unplacedQueue);
     setGenerating(false);
   };
 
+  // 🚀 دوال التسكين اليدوي
+  const openManualAssignModal = (lesson: any) => {
+    setLessonToAssign(lesson);
+    setManualAssignModalOpen(true);
+  };
+
+  const handleManualCellClick = (day: number, periodNum: number) => {
+    if (!lessonToAssign) return;
+
+    // الحصول على تفاصيل الوقت لهذه الحصة في هذه المرحلة
+    const pData = periods.find(p => p.stage === lessonToAssign.stage && p.period_number === periodNum);
+    if (!pData) return;
+
+    // التحقق من أن المعلم غير مشغول في هذا الوقت في مكان آخر
+    const isTeacherBusy = generatedSchedules.some(s => s.teacher_id === lessonToAssign.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
+    if (isTeacherBusy) {
+      alert("ممنوع ❌: المعلم مشغول في فصل آخر في هذا الوقت! لا يمكنك قسم المعلم نصفين.");
+      return;
+    }
+
+    // التحقق مما إذا كان الفصل مشغولاً بمادة أخرى
+    const occupantIndex = generatedSchedules.findIndex(s => s.section_id === lessonToAssign.section_id && s.day === day && s.period_number === periodNum);
+    
+    let newSchedules = [...generatedSchedules];
+    let newUnplaced = unplacedLessons.filter(l => l.id !== lessonToAssign.id);
+
+    if (occupantIndex !== -1) {
+      // 🚀 إزاحة المادة القديمة لسلة الانتظار (Swap)
+      const occupant = newSchedules[occupantIndex];
+      const confirmSwap = confirm(`هذه الحصة مشغولة بمادة (${occupant.subject_name}). هل تريد سحبها ووضعها في سلة الانتظار، وإدخال مادتك مكانها؟`);
+      if (!confirmSwap) return;
+      
+      newUnplaced.push({
+         id: crypto.randomUUID(),
+         section_id: occupant.section_id, section_name: occupant.section_name,
+         subject_id: occupant.subject_id, subject_name: occupant.subject_name,
+         teacher_id: occupant.teacher_id, teacher_name: occupant.teacher_name,
+         stage: occupant.stage
+      });
+      newSchedules.splice(occupantIndex, 1);
+    }
+
+    // إدخال المادة الجديدة
+    newSchedules.push({
+      id: crypto.randomUUID(),
+      section_id: lessonToAssign.section_id, section_name: lessonToAssign.section_name,
+      subject_id: lessonToAssign.subject_id, subject_name: lessonToAssign.subject_name,
+      teacher_id: lessonToAssign.teacher_id, teacher_name: lessonToAssign.teacher_name,
+      day: day, period_number: periodNum,
+      start_time: pData.start_time, end_time: pData.end_time, stage: lessonToAssign.stage
+    });
+
+    newSchedules.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
+    setGeneratedSchedules(newSchedules);
+    setUnplacedLessons(newUnplaced);
+    setManualAssignModalOpen(false);
+  };
+
+
   const savePlanToDatabase = async () => {
     if (generatedSchedules.length === 0) return;
+    if (unplacedLessons.length > 0) {
+      if (!confirm(`تحذير: لا يزال لديك ${unplacedLessons.length} حصص في سلة الانتظار لم يتم تسكينها! هل أنت متأكد من حفظ الجدول وهو غير مكتمل؟`)) return;
+    }
+    
     setGenerating(true);
     addLog("💾 جاري الحفظ...");
 
@@ -458,7 +515,7 @@ export default function AutoScheduleGenerator() {
       const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, classes(name)), teachers(users(full_name)), subjects(name)').eq('plan_id', id);
       const formatted = (slots || []).map(s => ({
         ...s, day: s.day_of_week, section_name: `${Array.isArray(s.sections?.classes) ? s.sections?.classes[0]?.name : s.sections?.classes?.name} - ${s.sections?.name}`,
-        teacher_name: s.teachers?.users?.full_name, subject_name: s.subjects?.name
+        teacher_name: s.teachers?.users?.full_name, subject_name: s.subjects?.name, id: crypto.randomUUID()
       }));
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       setGeneratedSchedules(formatted);
@@ -497,60 +554,84 @@ export default function AutoScheduleGenerator() {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
       
-      {/* Modal الإعدادات */}
+      {/* 🚀 Modal التسكين اليدوي */}
       <AnimatePresence>
-        {isTeacherModalOpen && selectedTeacherObj && (
+        {manualAssignModalOpen && lessonToAssign && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsTeacherModalOpen(false)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setManualAssignModalOpen(false)} />
             <motion.div 
-               initial={{ opacity: 0, y: 100 }} 
-               animate={{ opacity: 1, y: 0 }} 
-               exit={{ opacity: 0, y: 100 }} 
-               className="fixed bottom-0 left-0 w-full sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]" 
+               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+               animate={{ opacity: 1, scale: 1, y: 0 }} 
+               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]" 
                dir="rtl"
             >
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><UserCog className="w-5 h-5"/></div>
+                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><MousePointerClick className="w-5 h-5"/></div>
                   <div>
-                    <h3 className="font-black text-slate-800 text-base md:text-lg">قيود وتوفر المعلم</h3>
-                    <p className="text-[10px] md:text-xs font-bold text-slate-500 mt-0.5">المعلم: {selectedTeacherObj.name}</p>
+                    <h3 className="font-black text-slate-800 text-base md:text-lg">تسكين يدوي لحصة: {lessonToAssign.subject_name}</h3>
+                    <p className="text-[10px] md:text-xs font-bold text-slate-500 mt-0.5">{lessonToAssign.section_name} | المعلم: {lessonToAssign.teacher_name}</p>
                   </div>
                 </div>
-                <button onClick={() => setIsTeacherModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+                <button onClick={() => setManualAssignModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
               </div>
               
-              <div className="p-5 space-y-6 overflow-y-auto custom-scrollbar flex-1">
-                <div>
-                  <label className="block text-sm font-black text-indigo-900 mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-indigo-500"/> أيام الدوام المسموحة</label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {workingDays.map(day => (
-                      <label key={day} className={`flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all shadow-sm ${tempConstraints.days.includes(day) ? 'bg-indigo-50 border-indigo-400 text-indigo-800' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
-                        <input type="checkbox" checked={tempConstraints.days.includes(day)} onChange={() => toggleTempConstraint('days', day)} className="hidden" />
-                        <span className="font-bold text-sm">{getDayName(day)}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+              <div className="p-5 flex-1 overflow-auto bg-slate-50 custom-scrollbar">
+                 <p className="text-xs font-bold text-slate-500 mb-4 flex items-center gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                   <AlertOctagon className="w-5 h-5 text-amber-500" />
+                   الخانة الخضراء: متاحة كلياً | الخانة الصفراء: المعلم متوفر لكن الفصل لديه مادة أخرى (النقر سيقوم بتبديل المادة) | الحمراء: المعلم مشغول لا يمكن التسكين.
+                 </p>
+                 
+                 <div className="min-w-[700px] border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-center border-collapse">
+                      <thead>
+                        <tr className="bg-slate-800 text-white">
+                          <th className="p-3 text-xs font-black border-l border-white/10 w-24">اليوم</th>
+                          {allPeriods.map(p => <th key={p} className="p-3 text-xs font-black border-l border-white/10 last:border-l-0">حصة {p}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workingDays.map(day => (
+                          <tr key={day} className="border-b border-slate-200 last:border-b-0">
+                            <td className="p-3 text-xs font-black bg-slate-100 border-l border-slate-200">{getDayName(day)}</td>
+                            {allPeriods.map(p => {
+                               // الفحوصات
+                               const pData = periods.find(per => per.stage === lessonToAssign.stage && per.period_number === p);
+                               if (!pData) return <td key={p} className="bg-slate-50 p-2 border-l border-slate-200"></td>;
 
-                <div className="pt-4 border-t border-slate-100">
-                  <label className="block text-sm font-black text-indigo-900 mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-indigo-500"/> الحصص المسموحة للتدريس</label>
-                  <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                    {allPeriods.map(p => (
-                      <label key={p} className={`flex items-center justify-center gap-1 p-2.5 rounded-xl border cursor-pointer transition-all shadow-sm ${tempConstraints.periods.includes(p) ? 'bg-emerald-50 border-emerald-400 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
-                        <input type="checkbox" checked={tempConstraints.periods.includes(p)} onChange={() => toggleTempConstraint('periods', p)} className="hidden" />
-                        <span className="font-black text-xs md:text-sm">الحصة {p}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                               const isTeacherBusy = generatedSchedules.some(s => s.teacher_id === lessonToAssign.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
+                               const occupant = generatedSchedules.find(s => s.section_id === lessonToAssign.section_id && s.day === day && s.period_number === p);
+                               
+                               let statusClass = "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 cursor-pointer text-emerald-700";
+                               let statusText = "متاح ✔️";
+                               
+                               if (isTeacherBusy) {
+                                  statusClass = "bg-rose-50 border-rose-200 text-rose-400 cursor-not-allowed opacity-60";
+                                  statusText = "المعلم مشغول";
+                               } else if (occupant) {
+                                  statusClass = "bg-amber-50 hover:bg-amber-100 border-amber-200 cursor-pointer text-amber-700";
+                                  statusText = occupant.subject_name;
+                               }
 
-              <div className="p-5 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
-                <button onClick={() => setIsTeacherModalOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
-                <button onClick={saveTeacherConstraints} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 text-sm border border-indigo-500">
-                  <Save className="w-5 h-5" /> حفظ القيود
-                </button>
+                               return (
+                                 <td 
+                                   key={p} 
+                                   onClick={() => !isTeacherBusy && handleManualCellClick(day, p)}
+                                   className={`p-2 border-l border-b border-slate-200 last:border-l-0 transition-colors ${statusClass}`}
+                                 >
+                                   <div className="flex flex-col items-center justify-center h-12">
+                                     <span className="text-[10px] font-black">{statusText}</span>
+                                     {occupant && !isTeacherBusy && <span className="text-[8px] font-bold opacity-70 mt-1 flex items-center gap-1"><Repeat className="w-2.5 h-2.5"/> إزاحة</span>}
+                                   </div>
+                                 </td>
+                               );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                 </div>
               </div>
             </motion.div>
           </>
@@ -564,16 +645,37 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] md:text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> خوارزمية التعافي من الفراغات
+              <MousePointerClick className="w-4 h-4" /> نظام الإزاحة والتسكين اليدوي
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
-              <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الآلي
+              <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الآلي الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              تم تحديث الخوارزمية لتكون (مرنة جداً) في حالات الطوارئ. إذا لم تجد مكاناً لحصة، ستتجاهل بعض القيود من أجل سد الفراغ وإنقاذ الجدول!
+              تم إضافة سلة (الانتظار) للحصص التي تتعثر. يمكنك النقر عليها لاختيار أي خانة فارغة أو إزاحة مادة أخرى ووضع مادتك مكانها بالقوة الإدارية!
             </p>
           </div>
         </div>
+
+        {/* 🚀 سلة الحصص المنتظرة للتسكين اليدوي */}
+        {unplacedLessons.length > 0 && (
+          <div className="bg-rose-50 border border-rose-200 p-6 rounded-[2rem] shadow-sm">
+             <h3 className="text-rose-800 font-black text-lg mb-4 flex items-center gap-2"><AlertOctagon className="w-5 h-5"/> حصص تتطلب تسكيناً يدوياً ({unplacedLessons.length})</h3>
+             <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
+                {unplacedLessons.map((lesson, idx) => (
+                  <div key={lesson.id} className="bg-white border border-rose-100 rounded-2xl p-4 shadow-sm min-w-[250px] shrink-0 flex flex-col justify-between">
+                     <div>
+                       <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-md mb-2 inline-block">{lesson.section_name}</span>
+                       <h4 className="font-black text-slate-800">{lesson.subject_name}</h4>
+                       <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1"><Users className="w-3 h-3"/> {lesson.teacher_name}</p>
+                     </div>
+                     <button onClick={() => openManualAssignModal(lesson)} className="mt-4 w-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-200 py-2 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-2">
+                       <MousePointerClick className="w-4 h-4"/> تسكين يدوي
+                     </button>
+                  </div>
+                ))}
+             </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-1 space-y-6">
@@ -635,7 +737,7 @@ export default function AutoScheduleGenerator() {
 
             <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200">
               <h3 className="text-base md:text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
-                <Briefcase className="w-5 h-5 text-indigo-500" /> إعدادات المعلمين
+                <Briefcase className="w-5 h-5 text-indigo-500" /> إعدادات وأنصبة المعلمين
               </h3>
               
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
@@ -670,7 +772,7 @@ export default function AutoScheduleGenerator() {
                 <button onClick={generateSchedule} disabled={loadingData || generating || !isBudgetSaved} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                   {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />} توليد الجدول آلياً
                 </button>
-                {generatedSchedules.length > 0 && !activePlanId && (
+                {(generatedSchedules.length > 0 || unplacedLessons.length > 0) && !activePlanId && (
                   <button onClick={savePlanToDatabase} disabled={generating} className="w-full py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-black text-sm transition-all active:scale-95 flex justify-center items-center gap-2">
                     <Save className="w-4 h-4" /> حفظ الخطة للرجوع لها
                   </button>
@@ -688,7 +790,7 @@ export default function AutoScheduleGenerator() {
               <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
                  <div className="flex items-center gap-3">
                    <h2 className="text-lg font-black text-slate-800">عارض الجداول الذكي</h2>
-                   <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">{generatedSchedules.length} حصة</span>
+                   <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">{generatedSchedules.length} حصة مسكنة</span>
                  </div>
                  {generatedSchedules.length > 0 && (
                    <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm w-full md:w-fit">
