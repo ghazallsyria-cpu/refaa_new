@@ -10,13 +10,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
   Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay, ShieldAlert, Edit3,
-  Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft, Table as TableIcon, Calculator, ClipboardPaste
+  Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft, Table as TableIcon, Calculator, ClipboardPaste, PenTool, Image as ImageIcon, Eraser, Palette, Save as SaveIcon
 } from 'lucide-react';
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
+import ImageExtension from '@tiptap/extension-image';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
@@ -95,20 +96,224 @@ const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
   );
 };
 
+// 🚀 سبورة الرسم الذكية (Whiteboard)
+const WhiteboardModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: () => void, onSave: (dataUrl: string) => void }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [color, setColor] = useState('#1e293b'); // لون القلم (كحلي غامق)
+  const [lineWidth, setLineWidth] = useState(3);
+  const [isEraser, setIsEraser] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // تعبئة الخلفية باللون الأبيض لضمان وضوح الصورة عند تصديرها
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+      }
+    }
+  }, [isOpen]);
+
+  const startDrawing = (e: any) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // منع السحب الافتراضي للصفحة أثناء الرسم
+    e.preventDefault();
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const draw = (e: any) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    e.preventDefault();
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+
+    ctx.strokeStyle = isEraser ? '#ffffff' : color;
+    ctx.lineWidth = isEraser ? 15 : lineWidth;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (ctx && canvas) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+
+  const handleSave = () => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const dataUrl = canvas.toDataURL('image/png');
+      onSave(dataUrl);
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-slate-100 rounded-3xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="bg-white p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+               <button onClick={() => { setIsEraser(false); setColor('#1e293b'); }} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${!isEraser && color === '#1e293b' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'}`}>
+                 <div className="w-4 h-4 rounded-full bg-slate-800 border border-white/20"></div>
+               </button>
+               <button onClick={() => { setIsEraser(false); setColor('#3b82f6'); }} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${!isEraser && color === '#3b82f6' ? 'bg-blue-500 text-white shadow-md' : 'text-blue-600 hover:bg-blue-50'}`}>
+                 <div className="w-4 h-4 rounded-full bg-blue-500 border border-white/20"></div>
+               </button>
+               <button onClick={() => { setIsEraser(false); setColor('#ef4444'); }} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${!isEraser && color === '#ef4444' ? 'bg-rose-500 text-white shadow-md' : 'text-rose-600 hover:bg-rose-50'}`}>
+                 <div className="w-4 h-4 rounded-full bg-rose-500 border border-white/20"></div>
+               </button>
+            </div>
+            
+            <div className="w-px h-8 bg-slate-200 mx-1"></div>
+            
+            <button onClick={() => setIsEraser(true)} className={`px-3 py-1.5 rounded-xl font-black text-sm flex items-center gap-1.5 transition-all ${isEraser ? 'bg-rose-100 text-rose-700 border-2 border-rose-300' : 'bg-white border-2 border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+              <Eraser className="w-4 h-4" /> الممحاة
+            </button>
+            <button onClick={clearCanvas} className="px-3 py-1.5 rounded-xl font-black text-sm flex items-center gap-1.5 bg-white border-2 border-slate-200 text-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all">
+              <RefreshCcw className="w-4 h-4" /> مسح الكل
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 font-black text-sm text-slate-500 hover:bg-slate-100 rounded-xl transition-all">إلغاء</button>
+            <button onClick={handleSave} className="px-6 py-2 bg-indigo-600 text-white font-black text-sm flex items-center gap-2 rounded-xl hover:bg-indigo-700 shadow-md active:scale-95 transition-all">
+              <SaveIcon className="w-4 h-4" /> اعتماد الرسم وإدراجه بالحل
+            </button>
+          </div>
+        </div>
+        
+        <div className="flex-1 bg-slate-200 p-2 sm:p-4 overflow-hidden relative cursor-crosshair">
+          {/* Canvas بحجم ثابت لتجنب مشاكل الإحداثيات عند تصغير الشاشة */}
+          <div className="w-full h-full bg-white rounded-2xl shadow-sm border border-slate-300 overflow-hidden relative">
+            <canvas 
+              ref={canvasRef}
+              width={1200}
+              height={800}
+              className="w-full h-full touch-none"
+              style={{ objectFit: 'contain' }}
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // 🚀 محرر نصي غني لتمكين الطالب من الحل باحترافية
 const StudentTiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const editor = useEditor({
     extensions: [
       StarterKit, Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }),
+      ImageExtension.configure({ inline: true, allowBase64: true }),
       Table.configure({ resizable: true }), TableRow, TableHeader, TableCell, TextStyle, Color,
     ],
     content: content,
     onUpdate: ({ editor }) => { onChange(editor.getHTML()); },
     editorProps: {
       attributes: { class: 'prose prose-slate max-w-none focus:outline-none min-h-[150px] p-4 text-slate-800 font-bold leading-loose tiptap-content bg-white rounded-b-xl', dir: 'rtl' },
+      handlePaste: (view, event) => {
+        const items = Array.from(event.clipboardData?.items || []);
+        let imageItem = items.find(item => item.type.indexOf('image') === 0);
+
+        if (imageItem) {
+          const file = imageItem.getAsFile();
+          if (file) {
+            event.preventDefault(); 
+            handleImageUpload(file, view);
+            return true; 
+          }
+        }
+        return false; 
+      }
     }
   });
+
+  const handleImageUpload = async (file: File, view?: any) => {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      
+      if (data.secure_url) {
+        if (view) {
+          const node = view.state.schema.nodes.image.create({ src: data.secure_url });
+          const transaction = view.state.tr.replaceSelectionWith(node);
+          view.dispatch(transaction);
+        } else if (editor) {
+          editor.chain().focus().setImage({ src: data.secure_url }).run();
+        }
+      }
+    } catch (err: any) {
+      alert("حدث خطأ أثناء رفع الصورة.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleImageUpload(e.target.files[0]);
+    }
+  };
+
+  const handleSaveWhiteboard = (dataUrl: string) => {
+    if (editor) {
+      editor.chain().focus().setImage({ src: dataUrl }).run();
+    }
+  };
 
   if (!editor) return null;
   const insertMath = (symbol: string) => { editor.chain().focus().insertContent(` ${symbol} `).run(); };
@@ -125,18 +330,45 @@ const StudentTiptapEditor = ({ content, onChange, placeholder }: { content: stri
         <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'left' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignLeft className="w-4 h-4"/></button>
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
         <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200"><TableIcon className="w-4 h-4"/></button>
+        
+        {/* 🚀 أدوات الرسم ورفع الصور */}
+        <div className="w-px h-5 bg-slate-300 mx-1"></div>
+        <button onClick={() => setIsWhiteboardOpen(true)} className="px-2 py-1.5 rounded-lg text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 font-black text-[10px] sm:text-xs flex items-center gap-1 transition-colors">
+           <PenTool className="w-3.5 h-3.5" /> الحل بالسبورة
+        </button>
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+        <button onClick={() => fileInputRef.current?.click()} className="px-2 py-1.5 rounded-lg text-emerald-600 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 hover:border-emerald-200 font-black text-[10px] sm:text-xs flex items-center gap-1 transition-colors">
+           <ImageIcon className="w-3.5 h-3.5" /> إرفاق صورة الحل
+        </button>
       </div>
+
       <div className="bg-indigo-50 border-b border-indigo-100 p-2 flex flex-wrap gap-2 items-center overflow-x-auto hide-scrollbar">
         <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
         <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
         <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
       </div>
+
       <div className="flex-1 bg-white relative min-h-[150px]">
-        {!editor.getText() && !editor.isActive('table') && (
+        <AnimatePresence>
+          {isUploading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              <span className="text-xs font-black text-indigo-700">جاري إرفاق الصورة للإجابة...</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {!editor.getText() && !editor.isActive('table') && !editor.isActive('image') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">{placeholder}</div>
         )}
         <EditorContent editor={editor} />
       </div>
+
+      {/* 🚀 نافذة السبورة الذكية */}
+      <WhiteboardModal 
+        isOpen={isWhiteboardOpen} 
+        onClose={() => setIsWhiteboardOpen(false)} 
+        onSave={handleSaveWhiteboard} 
+      />
     </div>
   );
 };
@@ -608,7 +840,7 @@ export default function PracticeArena() {
                     <div className="mt-8">
                       {isOfficial ? (
                         <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm space-y-3">
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                             <label className="text-sm font-black text-indigo-900 flex items-center gap-2">
                               <Edit3 className="w-5 h-5 text-indigo-500" /> مساحة الإجابة والتنسيق:
                             </label>
@@ -631,7 +863,7 @@ export default function PracticeArena() {
                             key={editorKey}
                             content={essayAnswers[currentQ.id] || ''} 
                             onChange={(html) => setEssayAnswers({ ...essayAnswers, [currentQ.id]: html })} 
-                            placeholder="اكتب إجابتك العلمية هنا بالتفصيل. يمكنك استخدام الأدوات لكتابة القوانين أو إدراج الجداول..."
+                            placeholder="اكتب إجابتك العلمية هنا بالتفصيل. يمكنك استخدام الأدوات لكتابة القوانين أو إدراج الجداول والرسومات..."
                           />
                         </div>
                       ) : (
