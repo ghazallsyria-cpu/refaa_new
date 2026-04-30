@@ -9,7 +9,7 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
-  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay, ShieldAlert
+  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText, AlertTriangle, MonitorPlay, ShieldAlert, Edit3
 } from 'lucide-react';
 
 import katex from 'katex';
@@ -99,6 +99,9 @@ export default function PracticeArena() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   
+  // 🚀 حالة جديدة لحفظ الإجابات المقالية للطلاب
+  const [essayAnswers, setEssayAnswers] = useState<Record<string, string>>({});
+  
   const [attempts, setAttempts] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
   const [shake, setShake] = useState(false);
@@ -137,6 +140,8 @@ export default function PracticeArena() {
              setScore(parsedLocal.score || { correct: 0, wrong: 0, totalPoints: 0 });
              setStreak(parsedLocal.streak || 0);
              setFailedQuestionIds(new Set(parsedLocal.failedQuestionIds || []));
+             // 🚀 استرجاع الإجابات المقالية من الكاش
+             if (parsedLocal.essayAnswers) setEssayAnswers(parsedLocal.essayAnswers);
           } else if (progressData) {
             if (progressData.is_completed) {
               setIsFinished(true); 
@@ -157,9 +162,13 @@ export default function PracticeArena() {
   useEffect(() => {
     if (loading || isFinished || !user || isPreviewMode) return; 
     const localSaveKey = `arena_save_${user.id}_${id}`;
-    const saveData = { currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds) };
+    // 🚀 حفظ الإجابات المقالية في الكاش لضمان عدم ضياعها
+    const saveData = { currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds), essayAnswers };
     localStorage.setItem(localSaveKey, JSON.stringify(saveData));
-  }, [currentIndex, score, streak, failedQuestionIds, loading, isFinished, isPreviewMode]);
+  }, [currentIndex, score, streak, failedQuestionIds, essayAnswers, loading, isFinished, isPreviewMode]);
+
+  // التحقق مما إذا كان هذا الواجب رسمياً (امتحان) وليس تدريباً
+  const isOfficial = assignment && assignment.is_practice_mode === false && mode === 'normal';
 
   const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
     if (!user || isPreviewMode) return; 
@@ -168,6 +177,21 @@ export default function PracticeArena() {
         student_id: user.id, assignment_id: id, current_index: newIndex, correct_score: newScore.correct,
         wrong_score: newScore.wrong, is_completed: finished, updated_at: new Date().toISOString()
       }, { onConflict: 'student_id, assignment_id' });
+
+      // 🚀 إذا كان الواجب قد انتهى وهو رسمي، نقوم بإرسال الإجابات المقالية لقاعدة البيانات
+      if (finished && isOfficial && Object.keys(essayAnswers).length > 0) {
+        const answersToInsert = Object.entries(essayAnswers).map(([qId, text]) => ({
+          student_id: user.id,
+          assignment_id: id,
+          question_id: qId,
+          answer_text: text,
+          is_graded: false // بحاجة لتصحيح المعلم لاحقاً
+        }));
+        
+        // المحاولة في إدراج الإجابات (تم استخدام catch صامت لعدم إيقاف الواجهة إذا لم يكن الجدول مهيأ 100%)
+        await supabase.from('student_answers').upsert(answersToInsert, { onConflict: 'student_id, question_id' }).catch(err => console.log('Answers Table Pending Setup', err));
+      }
+
       if (finished) localStorage.removeItem(`arena_save_${user.id}_${id}`);
     } catch (err) {}
   };
@@ -186,7 +210,8 @@ export default function PracticeArena() {
     setIsFinished(true);
     if (startTime) setTimeSpentSeconds(Math.floor((Date.now() - startTime) / 1000));
     
-    if (finalScore.wrong === 0 || (finalScore.correct / (finalScore.correct + finalScore.wrong) > 0.8)) {
+    // في وضع الامتحان لا توجد احتفالات مبالغ فيها لتجنب الإحباط إذا كان الامتحان صعباً
+    if (!isOfficial && (finalScore.wrong === 0 || (finalScore.correct / (finalScore.correct + finalScore.wrong) > 0.8))) {
         triggerConfetti();
     }
     
@@ -208,17 +233,12 @@ export default function PracticeArena() {
   const currentQ = activeQuestions[currentIndex];
   const currentContextHeader = activeQuestions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
   
-  // 🚀 التحقق مما إذا كان هذا الواجب رسمياً (امتحان) وليس تدريباً
-  const isOfficial = assignment && assignment.is_practice_mode === false && mode === 'normal';
-
   const handleOptionClick = (opt: any) => {
-    // في وضع الامتحان، نسمح بتغيير الإجابة قبل الانتقال للتالي، ولا نظهر النتيجة فوراً
     if (isOfficial) {
       setSelectedOptionId(opt.id);
       return;
     }
 
-    // 🎮 منطق التدريب واللعب (التصحيح الفوري)
     if (isSuccess) return; 
     setSelectedOptionId(opt.id);
     
@@ -242,7 +262,6 @@ export default function PracticeArena() {
   const nextQuestion = () => {
     let currentNewScore = { ...score };
 
-    // 🚀 في وضع الامتحان، يتم التصحيح "في الخلفية" عند الانتقال للسؤال التالي
     if (isOfficial && (currentQ.type === 'multiple_choice' || currentQ.type === 'true_false')) {
       if (selectedOptionId) {
         const selectedOpt = currentQ.options.find((o:any) => o.id === selectedOptionId);
@@ -254,7 +273,6 @@ export default function PracticeArena() {
           setFailedQuestionIds(prev => new Set(prev).add(currentQ.id));
         }
       } else {
-        // إذا لم يختر إجابة وانتقل، تحسب خاطئة
         currentNewScore.wrong += 1;
         setFailedQuestionIds(prev => new Set(prev).add(currentQ.id));
       }
@@ -354,7 +372,6 @@ export default function PracticeArena() {
         </div>
       )}
 
-      {/* 🚀 تنبيه وضع الامتحان للطالب */}
       {isOfficial && !isFinished && (
         <div className="bg-slate-800 text-white px-4 py-2 flex items-center justify-center gap-3 font-bold shadow-md z-50 shrink-0 text-xs sm:text-sm">
           <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" /> 
@@ -419,7 +436,6 @@ export default function PracticeArena() {
                 </div>
             </div>
             
-            {/* 🚀 إخفاء النيران في وضع الامتحان الرسمي لعدم تشتيت الطالب */}
             <AnimatePresence>
                 {!isOfficial && streak >= 2 && (
                     <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0 }} className="flex items-center gap-1 bg-gradient-to-r from-orange-100 to-amber-100 px-3 py-1 rounded-full border border-orange-200 shadow-sm shrink-0">
@@ -430,7 +446,6 @@ export default function PracticeArena() {
             </AnimatePresence>
           </div>
           
-          {/* 🚀 إخفاء العداد الحي للأخطاء والصح في وضع الامتحان */}
           {!isOfficial && (
             <div className="flex items-center gap-3 text-sm font-black bg-slate-50 px-4 py-1.5 rounded-full border border-slate-200 shrink-0">
               <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4"/> {score.correct}</span>
@@ -482,7 +497,6 @@ export default function PracticeArena() {
                         const isSelected = selectedOptionId === opt.id; 
                         const isCorrect = opt.is_correct; 
                         
-                        // 🚀 تعديل ستايل الأزرار ليتناسب مع وضع الامتحان الرسمي أو التدريب
                         let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 hover:shadow-md";
                         
                         if (isOfficial) {
@@ -509,19 +523,28 @@ export default function PracticeArena() {
                   )}
 
                   {currentQ.type === 'essay' && !showHint && (
-                    <div className="mt-8 text-center bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed">
+                    <div className="mt-8">
                       {isOfficial ? (
-                        <p className="text-sm font-bold text-slate-600">✍️ يرجى حل هذا السؤال في ورقة خارجية لتتم مراجعته لاحقاً من قبل المعلم.</p>
+                        <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm space-y-3">
+                          <label className="text-sm font-black text-indigo-900 flex items-center gap-2">
+                            <Edit3 className="w-5 h-5 text-indigo-500" /> مساحة الإجابة:
+                          </label>
+                          <textarea 
+                            value={essayAnswers[currentQ.id] || ''} 
+                            onChange={(e) => setEssayAnswers({ ...essayAnswers, [currentQ.id]: e.target.value })} 
+                            placeholder="اكتب إجابتك العلمية هنا بالتفصيل (خطوات الحل والقوانين)..."
+                            className="w-full h-40 bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold text-slate-800 outline-none focus:border-indigo-500 resize-none shadow-inner leading-relaxed transition-all focus:bg-white custom-scrollbar"
+                          />
+                        </div>
                       ) : (
-                        <>
+                        <div className="text-center bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed">
                           <p className="text-sm font-bold text-slate-500 mb-4">✍️ فكر جيداً وحل المسألة في ورقة خارجية...</p>
                           <button onClick={() => setShowHint(true)} className="w-full bg-white text-indigo-600 border-2 border-indigo-200 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-50 hover:border-indigo-400 transition-all shadow-sm"><Lightbulb className="w-5 h-5" /> تأكدت من حلي، اكشف لي الجواب!</button>
-                        </>
+                        </div>
                       )}
                     </div>
                   )}
 
-                  {/* 🚀 إخفاء المساعد الذكي والشرح تماماً في وضع الامتحان */}
                   {!isOfficial && showHint && (() => {
                     let extractedImages = [];
                     if (typeof window !== 'undefined') {
@@ -548,18 +571,17 @@ export default function PracticeArena() {
                 </div>
 
                 <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
-                  {/* 🚀 شريط أزرار وضع الامتحان الرسمي */}
                   {isOfficial ? (
                     <button 
                       onClick={nextQuestion} 
-                      disabled={isMCQ && !selectedOptionId} 
+                      // 🚀 تعطيل زر الانتقال إذا لم يختر إجابة (في الـ MCQ) أو لم يكتب إجابة مقالية
+                      disabled={(isMCQ && !selectedOptionId) || (currentQ.type === 'essay' && !(essayAnswers[currentQ.id] || '').trim())} 
                       className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-md disabled:opacity-50 disabled:bg-slate-300 disabled:text-slate-500"
                     >
                       {currentIndex === activeQuestions.length - 1 ? 'تسليم الواجب وإنهاء الامتحان' : 'اعتماد الإجابة والانتقال للسؤال التالي'} 
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   ) : (
-                  /* 🎮 شريط أزرار وضع التدريب (كما هو سابقاً) */
                   isMCQ ? (
                     <AnimatePresence mode="wait">
                       {isSuccess ? (
@@ -584,15 +606,17 @@ export default function PracticeArena() {
                   {isOfficial ? <FileText className="w-14 h-14" /> : <Trophy className="w-14 h-14" />}
                 </div>
                 <h2 className="text-3xl font-black text-slate-800 mb-2">{isOfficial ? 'تم تسليم الواجب بنجاح!' : (mode === 'retake_errors' ? 'تم إنهاء المراجعة! 🛡️' : 'إنجاز رائع! 🚀')}</h2>
-                <p className="text-slate-500 font-bold mb-6">{isOfficial ? 'تم حفظ إجاباتك وإرسالها للمعلم.' : (mode === 'retake_errors' ? 'لقد واجهت نقاط ضعفك بقوة.' : 'لقد أكملت التدريب.')}</p>
+                <p className="text-slate-500 font-bold mb-6">{isOfficial ? 'تم حفظ إجاباتك وإرسالها للمعلم بنجاح.' : (mode === 'retake_errors' ? 'لقد واجهت نقاط ضعفك بقوة.' : 'لقد أكملت التدريب.')}</p>
                 
-                <div className="grid grid-cols-2 gap-4 mb-8 bg-slate-50 p-6 rounded-3xl border border-slate-100"><div className="text-center border-l border-slate-200"><div className="text-4xl font-black text-emerald-500 mb-1">{score.correct}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">نقاط القوة</div></div><div className="text-center"><div className="text-4xl font-black text-rose-500 mb-1">{score.wrong}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">تحتاج مراجعة</div></div><div className="col-span-2 mt-4 pt-4 border-t border-slate-200 text-center flex items-center justify-center gap-2 text-indigo-600 font-black"><Clock className="w-4 h-4" /> استغرقت: {formatTime(timeSpentSeconds)}</div></div>
+                {!isOfficial && (
+                  <div className="grid grid-cols-2 gap-4 mb-8 bg-slate-50 p-6 rounded-3xl border border-slate-100"><div className="text-center border-l border-slate-200"><div className="text-4xl font-black text-emerald-500 mb-1">{score.correct}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">نقاط القوة</div></div><div className="text-center"><div className="text-4xl font-black text-rose-500 mb-1">{score.wrong}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">تحتاج مراجعة</div></div><div className="col-span-2 mt-4 pt-4 border-t border-slate-200 text-center flex items-center justify-center gap-2 text-indigo-600 font-black"><Clock className="w-4 h-4" /> استغرقت: {formatTime(timeSpentSeconds)}</div></div>
+                )}
 
                 <div className="flex flex-col gap-3">
-                  {!isPreviewMode && failedQuestionIds.size > 0 && ( <button onClick={generatePDF} disabled={isGeneratingPDF} className="w-full bg-emerald-50 text-emerald-700 border-2 border-emerald-200 font-black py-4 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">{isGeneratingPDF ? <>جاري تجهيز الملف... <span className="animate-spin text-xl">⏳</span></> : <>تحميل ملخص أخطائي (مع الشرح PDF) <FileText className="w-5 h-5" /></>}</button> )}
+                  {!isPreviewMode && failedQuestionIds.size > 0 && !isOfficial && ( <button onClick={generatePDF} disabled={isGeneratingPDF} className="w-full bg-emerald-50 text-emerald-700 border-2 border-emerald-200 font-black py-4 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">{isGeneratingPDF ? <>جاري تجهيز الملف... <span className="animate-spin text-xl">⏳</span></> : <>تحميل ملخص أخطائي (مع الشرح PDF) <FileText className="w-5 h-5" /></>}</button> )}
                   {failedQuestionIds.size > 0 && mode === 'normal' && !isOfficial && ( <button onClick={handleRetakeErrorsOnly} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200">مراجعة الأخطاء فقط 🎯</button> )}
                   
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 mt-4">
                     {!isOfficial && <button onClick={handleRetakeFull} className="bg-slate-100 text-slate-700 border border-slate-200 font-black py-4 rounded-xl hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2">إعادة بالكامل <RefreshCcw className="w-5 h-5" /></button>}
                     <button onClick={() => router.back()} className={`${isOfficial ? 'col-span-2' : ''} bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200`}>إنهاء {isOfficial ? 'الواجب' : 'التدريب'} ومغادرة القاعة <Sparkles className="w-5 h-5" /></button>
                   </div>
