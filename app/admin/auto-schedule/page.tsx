@@ -47,7 +47,8 @@ export default function AutoScheduleGenerator() {
   const [rawTeacherAssignments, setRawTeacherAssignments] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   
-  const [uniqueSubjects, setUniqueSubjects] = useState<{id: string, name: string}[]>([]);
+  // 🚀 ميزانية الحصص مفصّلة (المادة + الصف)
+  const [uniqueSubjectLevels, setUniqueSubjectLevels] = useState<{subj_id: string, level: number, subj_name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
 
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]); 
@@ -68,7 +69,7 @@ export default function AutoScheduleGenerator() {
       
       const { data: sectionsData } = await supabase.from('sections').select('id, name, classes(id, name, level)');
       const formattedSections = (sectionsData || []).map(sec => {
-        const level = Array.isArray(sec.classes) ? sec.classes[0]?.level : sec.classes?.level;
+        const level = (Array.isArray(sec.classes) ? sec.classes[0]?.level : sec.classes?.level) || 0;
         const stage = level >= 10 ? 'high' : 'middle';
         return { ...sec, level, stage, full_name: `${Array.isArray(sec.classes) ? sec.classes[0]?.name : sec.classes?.name} - ${sec.name}` };
       });
@@ -78,28 +79,36 @@ export default function AutoScheduleGenerator() {
       setPeriods(periodsData || []);
 
       const { data: tsData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name)), subjects(name)');
-      
       setRawTeacherAssignments(tsData || []);
 
-      if (tsData) {
-        const subjMap = new Map();
+      if (tsData && formattedSections.length > 0) {
+        const subjLevelMap = new Map();
+        
         tsData.forEach(ts => {
-          if (ts.subject_id && ts.subjects?.name) {
-            subjMap.set(ts.subject_id, { id: ts.subject_id, name: ts.subjects.name });
+          const sec = formattedSections.find(s => s.id === ts.section_id);
+          if (sec && ts.subject_id && ts.subjects?.name) {
+            const key = `${ts.subject_id}_${sec.level}`;
+            if (!subjLevelMap.has(key)) {
+              subjLevelMap.set(key, { subj_id: ts.subject_id, level: sec.level, subj_name: ts.subjects.name });
+            }
           }
         });
-        const subjList = Array.from(subjMap.values());
-        setUniqueSubjects(subjList);
 
-        const savedQuotasStr = localStorage.getItem('auto_schedule_quotas');
+        const subjLevelList = Array.from(subjLevelMap.values());
+        // الترتيب أبجدياً ثم حسب الصف
+        subjLevelList.sort((a, b) => a.subj_name.localeCompare(b.subj_name) || a.level - b.level);
+        setUniqueSubjectLevels(subjLevelList);
+
+        const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v2');
         let initialQuotas: Record<string, number> = {};
         
         if (savedQuotasStr) {
           try { initialQuotas = JSON.parse(savedQuotasStr); } catch (e) {}
         }
         
-        subjList.forEach(s => {
-          if (initialQuotas[s.id] === undefined) initialQuotas[s.id] = 3;
+        subjLevelList.forEach(item => {
+          const key = `${item.subj_id}_${item.level}`;
+          if (initialQuotas[key] === undefined) initialQuotas[key] = 3;
         });
         setSubjectQuotas(initialQuotas);
       }
@@ -107,12 +116,12 @@ export default function AutoScheduleGenerator() {
     } catch (error) { console.error(error); } finally { setLoadingData(false); }
   };
 
-  const handleQuotaChange = (subjId: string, val: number) => {
+  const handleQuotaChange = (key: string, val: number) => {
     let newVal = isNaN(val) ? 1 : val;
     if (newVal < 1) newVal = 1;
-    const newQuotas = { ...subjectQuotas, [subjId]: newVal };
+    const newQuotas = { ...subjectQuotas, [key]: newVal };
     setSubjectQuotas(newQuotas);
-    localStorage.setItem('auto_schedule_quotas', JSON.stringify(newQuotas));
+    localStorage.setItem('auto_schedule_quotas_v2', JSON.stringify(newQuotas));
   };
 
   const fetchSavedPlans = async () => {
@@ -126,21 +135,29 @@ export default function AutoScheduleGenerator() {
 
   const generateSchedule = async () => {
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) {
-      alert('البيانات الأساسية غير مكتملة.'); return;
+      alert("البيانات الأساسية غير مكتملة."); return;
     }
 
     setGenerating(true); setGenerationLogs([]);
-    addLog('🚀 بدء تحليل قيود الوزارة الصارمة بناءً على الميزانية المحددة...');
+    addLog("🚀 بدء تحليل الميزانية المخصصة والقيود الصارمة...");
     
     let finalSchedule: any[] = [];
     await new Promise(r => setTimeout(r, 800)); 
 
-    const teacherAssignments = rawTeacherAssignments.map(ts => ({
-      ...ts,
-      weekly_quota: subjectQuotas[ts.subject_id] || 3,
-      teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
-      subject_name: ts.subjects?.name || 'مادة'
-    }));
+    // 🚀 حساب النصاب لكل معلم بناءً على (المادة + مستوى الفصل)
+    const teacherAssignments = rawTeacherAssignments.map(ts => {
+      const section = sections.find(s => s.id === ts.section_id);
+      const key = section ? `${ts.subject_id}_${section.level}` : '';
+      const quota = key ? (subjectQuotas[key] || 3) : 3;
+
+      return {
+        ...ts,
+        weekly_quota: quota,
+        teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
+        subject_name: ts.subjects?.name || 'مادة',
+        section_level: section?.level
+      };
+    });
 
     const sortedAssignments = [...teacherAssignments].sort((a, b) => b.weekly_quota - a.weekly_quota);
     
@@ -199,7 +216,7 @@ export default function AutoScheduleGenerator() {
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد! تم تسكين ${finalSchedule.length} حصة بنجاح مع احترام تباعد المواد.`);
+    addLog(`✅ اكتمل التوليد! تم تسكين ${finalSchedule.length} حصة بنجاح مع احترام اختلاف الأنصبة بين الصفوف.`);
     
     if (failedPlacements > 0) {
       addLog(`⚠️ تنبيه: تعذر تسكين ${failedPlacements} حصة بسبب اختناق الجداول. قد تحتاج لتقليل الأنصبة أو زيادة عدد المعلمين.`);
@@ -215,7 +232,7 @@ export default function AutoScheduleGenerator() {
     if (generatedSchedules.length === 0) return;
     
     setGenerating(true);
-    addLog('💾 جاري حفظ الخطة في قاعدة البيانات (البيئة التجريبية)...');
+    addLog("💾 جاري حفظ الخطة في قاعدة البيانات (البيئة التجريبية)...");
 
     try {
       const { data: planData, error: planErr } = await supabase.from('auto_schedule_plans')
@@ -241,7 +258,7 @@ export default function AutoScheduleGenerator() {
 
     } catch (err) {
       addLog(`❌ خطأ أثناء الحفظ: ${err.message}`);
-      alert('خطأ أثناء الحفظ');
+      alert("خطأ أثناء الحفظ");
     } finally { setGenerating(false); }
   };
 
@@ -284,13 +301,13 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> خوارزمية قيود الوزارة (الأنصبة الديناميكية)
+              <ShieldAlert className="w-4 h-4" /> خوارزمية قيود الوزارة المتقدمة
             </div>
             <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
-              <Wand2 className="w-8 h-8 text-amber-400" /> محرك الجدولة الآلي المتقدم
+              <Wand2 className="w-8 h-8 text-amber-400" /> محرك الجدولة الآلي المطور
             </h1>
             <p className="text-slate-300 font-bold max-w-xl">
-              النظام الآن يقرأ ميزانية الحصص التي تحددها، وينشر المواد على أيام الأسبوع دون تكرار (إلا للمواد ذات النصاب العالي)، مع منع التضارب الزمني بالدقائق للمشتركين!
+              يمكنك الآن إعداد ميزانية الحصص بناءً على (المادة + المرحلة/الصف). الخوارزمية ستقرأ نصاب كل مادة لكل صف بدقة وتطبق الانتشار اليومي وتمنع تضارب المعلمين بالدقيقة!
             </p>
           </div>
           <div className="flex flex-col gap-3 relative z-10 w-full md:w-auto shrink-0">
@@ -307,31 +324,36 @@ export default function AutoScheduleGenerator() {
             
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
-                <SlidersHorizontal className="w-5 h-5 text-indigo-500" /> ميزانية الحصص الأسبوعية
+                <SlidersHorizontal className="w-5 h-5 text-indigo-500" /> ميزانية الحصص الدقيقة
               </h3>
               <p className="text-xs font-bold text-slate-500 mb-4">
-                حدد نصاب الحصص الأسبوعي لكل مادة. سيتم حفظ الأرقام تلقائياً للعمليات القادمة.
+                حدد نصاب الحصص الأسبوعي لكل (مادة + صف). سيتم حفظ الإعدادات تلقائياً.
               </p>
               
-              <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                {uniqueSubjects.length === 0 && !loadingData && (
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                {uniqueSubjectLevels.length === 0 && !loadingData && (
                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">لم يتم إسناد مواد للمعلمين بعد.</p>
                 )}
-                {uniqueSubjects.map(subj => (
-                  <div key={subj.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="font-black text-sm text-slate-700 truncate ml-2" title={subj.name}>{subj.name}</span>
-                    <div className="flex items-center gap-2 shrink-0">
-                       <input 
-                         type="number" 
-                         min="1" 
-                         value={subjectQuotas[subj.id] || 3} 
-                         onChange={(e) => handleQuotaChange(subj.id, parseInt(e.target.value))}
-                         className="w-16 p-1.5 text-center font-black text-indigo-700 bg-white border border-indigo-200 rounded-lg outline-none focus:border-indigo-500 shadow-sm"
-                       />
-                       <span className="text-[10px] font-bold text-slate-500">حصص</span>
+                {uniqueSubjectLevels.map(item => {
+                  const key = `${item.subj_id}_${item.level}`;
+                  return (
+                    <div key={key} className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <span className="font-black text-sm text-slate-700 truncate ml-2">
+                        {item.subj_name} <span className="text-xs text-slate-500 font-bold bg-white px-2 py-0.5 rounded-md border border-slate-200 mr-1">الصف {item.level}</span>
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                         <input 
+                           type="number" 
+                           min="1" 
+                           value={subjectQuotas[key] || 3} 
+                           onChange={(e) => handleQuotaChange(key, parseInt(e.target.value))}
+                           className="w-16 p-1.5 text-center font-black text-indigo-700 bg-white border border-indigo-200 rounded-lg outline-none focus:border-indigo-500 shadow-sm"
+                         />
+                         <span className="text-[10px] font-bold text-slate-500">حصص</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -348,7 +370,7 @@ export default function AutoScheduleGenerator() {
                 
                 <button onClick={generateSchedule} disabled={loadingData || generating} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 disabled:opacity-50">
                   {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                  توليد الجدول مع تطبيق الميزانية
+                  توليد الجدول آلياً
                 </button>
 
                 {generatedSchedules.length > 0 && !activePlanId && (
@@ -405,7 +427,7 @@ export default function AutoScheduleGenerator() {
                   <div className="h-full flex flex-col items-center justify-center text-slate-400">
                     <CalendarDays className="w-16 h-16 mb-4 opacity-20" />
                     <p className="font-bold text-lg">اللوحة فارغة</p>
-                    <p className="text-sm mt-1 opacity-70">قم بتحديد الميزانية، والضغط على زر التوليد لتبدأ الخوارزمية.</p>
+                    <p className="text-sm mt-1 opacity-70">قم بتحديد الميزانية، والضغط على &quot;توليد الجدول&quot; لتبدأ الخوارزمية.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -446,4 +468,5 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
+
 
