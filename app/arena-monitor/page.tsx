@@ -1,3 +1,4 @@
+```tsx
 // @ts-nocheck
 'use client';
 
@@ -6,39 +7,14 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, Database
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, RotateCcw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
 
-// 🚀 دالة لمعالجة نصوص LaTeX والرياضيات للمعلم بدلاً من النص الخام
-const renderHTMLWithMath = (html: string) => {
-  if (!html) return '';
-  let parsed = html;
-  if (typeof window !== 'undefined') {
-    try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(parsed, 'text/html');
-      const images = doc.querySelectorAll('img');
-      images.forEach((img) => {
-        if (img.src && img.src.startsWith('http')) img.setAttribute('crossorigin', 'anonymous');
-      });
-      parsed = doc.body.innerHTML;
-    } catch (e) {}
-  }
-  const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
-    try {
-      let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
-      return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
-    } catch (e) { return match; }
-  };
-  parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
-  parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
-  return { __html: parsed };
+const createMarkup = (htmlString: string) => {
+  return { __html: htmlString };
 };
 
 export default function ArenaMonitorDashboard() {
@@ -52,15 +28,18 @@ export default function ArenaMonitorDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
+  // حالة فلتر الفصول
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
   const [availableClasses, setAvailableClasses] = useState<{id: string, name: string, count: number}[]>([]);
 
+  // Modal States
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [gradingModalOpen, setGradingModalOpen] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [feedbackText, setFeedbackText] = useState('');
   
+  // Grading States
   const [studentAnswers, setStudentAnswers] = useState<any[]>([]);
   const [assignmentQuestions, setAssignmentQuestions] = useState<any[]>([]);
   const [savingFeedback, setSavingFeedback] = useState(false);
@@ -145,6 +124,7 @@ export default function ArenaMonitorDashboard() {
 
       let targetStudents: any[] = [];
       if (sectionIds.length > 0) {
+        // 🚀 التأكد التام من استخراج اسم الفصل بشكل صحيح
         const { data: stData } = await supabase.from('students').select('id, user_id, section_id, sections(id, name, classes(name))').in('section_id', sectionIds);
         targetStudents = stData || [];
       }
@@ -175,17 +155,25 @@ export default function ArenaMonitorDashboard() {
         let percentage = progress ? (progress.is_completed ? 100 : Math.round((progress.current_index / assignment.total_questions) * 100)) : 0;
         if (isNaN(percentage)) percentage = 0;
 
+        // 🚀 معالجة استخراج الفصول بدقة
         let secName = 'فصل غير محدد';
         let secId = 'unknown';
+        
         if (student.sections) {
-          const className = Array.isArray(student.sections.classes) ? student.sections.classes[0]?.name : student.sections.classes?.name;
-          secName = className ? `${className} - ${student.sections.name}` : student.sections.name;
-          secId = student.sections.id;
-          
-          if (!uniqueClassesMap.has(secId)) {
-            uniqueClassesMap.set(secId, { id: secId, name: secName, count: 0 });
+          const sData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
+          if (sData) {
+              const cData = Array.isArray(sData.classes) ? sData.classes[0] : sData.classes;
+              const className = cData?.name || '';
+              secName = className ? `${className} - ${sData.name}` : sData.name;
+              secId = sData.id;
           }
-          uniqueClassesMap.get(secId).count++;
+        }
+        
+        if (secId !== 'unknown' && !uniqueClassesMap.has(secId)) {
+           uniqueClassesMap.set(secId, { id: secId, name: secName, count: 0 });
+        }
+        if (uniqueClassesMap.has(secId)) {
+           uniqueClassesMap.get(secId).count++;
         }
 
         return {
@@ -207,6 +195,7 @@ export default function ArenaMonitorDashboard() {
 
       const uniqueStudents = Array.from(new Map(studentsToDisplay.map(item => [item.student_id, item])).values());
       
+      // الفرز الأبجدي (الفصل ثم اسم الطالب)
       uniqueStudents.sort((a, b) => {
         const secCompare = a.section_name.localeCompare(b.section_name, 'ar');
         if (secCompare !== 0) return secCompare; 
@@ -219,6 +208,28 @@ export default function ArenaMonitorDashboard() {
       setAvailableClasses(sortedClasses);
 
     } catch (err) { console.error(err); } finally { setRefreshing(false); }
+  };
+
+  // 🚀 مسح إجابات طالب وإعادة فتح الواجب له
+  const handleResetStudentProgress = async (studentId: string, studentName: string) => {
+    if (!confirm(`هل أنت متأكد من مسح تسليم الطالب (${studentName}) وإعادة فتح الواجب له ليعيد المحاولة من الصفر؟\n(سيتم حذف درجاته وإجاباته السابقة)`)) return;
+    
+    setRefreshing(true);
+    try {
+      // حذف من student_progress_v2
+      await supabase.from('student_progress_v2').delete().eq('student_id', studentId).eq('assignment_id', selectedAssignment.id);
+      // حذف من grades
+      await supabase.from('grades').delete().eq('student_id', studentId).eq('exam_type', 'assignment').eq('title', selectedAssignment.title);
+      // حذف من student_answers_v2 (إن وجدت)
+      await supabase.from('student_answers_v2').delete().eq('student_id', studentId).eq('assignment_id', selectedAssignment.id);
+
+      alert('تم إعادة فتح الواجب للطالب بنجاح.');
+      fetchProgress(selectedAssignment); // إعادة جلب البيانات
+    } catch(err) {
+      alert('حدث خطأ أثناء محاولة إرجاع الواجب للطالب.');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const saveFeedback = async () => {
@@ -249,7 +260,6 @@ export default function ArenaMonitorDashboard() {
       const { data: questions } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', selectedAssignment.id).order('order_index', { ascending: true });
       setAssignmentQuestions(questions || []);
 
-      // 🚀 جلب الإجابات من الجدول الجديد V2
       const { data: answers } = await supabase.from('student_answers_v2').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
       setStudentAnswers(answers || []);
 
@@ -293,7 +303,7 @@ export default function ArenaMonitorDashboard() {
       }, { onConflict: 'student_id, assignment_id' });
 
       if (selectedAssignment.subject_id && selectedStudent.section_id && selectedStudent.section_id !== 'unknown') {
-         await supabase.from('grades').insert({
+         await supabase.from('grades').upsert({
             student_id: selectedStudent.student_id,
             subject_id: selectedAssignment.subject_id,
             section_id: selectedStudent.section_id,
@@ -303,12 +313,12 @@ export default function ArenaMonitorDashboard() {
             title: selectedAssignment.title,
             recorded_by: user.id,
             created_at: new Date().toISOString()
-         });
+         }, { onConflict: 'student_id, subject_id, section_id, title' });
       }
 
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, is_graded: true, teacher_feedback: newFeedback } : p));
       setGradingModalOpen(false);
-      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات (النظام الموحد)!');
+      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات!');
 
     } catch (err) { alert("حدث خطأ أثناء اعتماد الدرجات."); } finally { setSavingFeedback(false); }
   };
@@ -398,6 +408,10 @@ export default function ArenaMonitorDashboard() {
         .tiptap-content td, .tiptap-content th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
         .tiptap-content th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
         .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
+        .tiptap-content p { margin-bottom: 0.5em !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 10px; }
       `}} />
 
       <div className="max-w-6xl mx-auto space-y-6">
@@ -582,19 +596,37 @@ export default function ArenaMonitorDashboard() {
                           </td>
 
                           <td className="p-4 text-center">
-                            {isOfficialMode ? (
-                              <button 
-                                onClick={() => openGradingModal(student)} 
-                                disabled={!student.is_completed || isGrading || student.is_graded}
-                                className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed font-black text-xs flex items-center gap-2 w-full justify-center"
-                              >
-                                {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} {student.is_graded ? 'رُصدت درجته' : 'تصحيح الإجابة'}
-                              </button>
-                            ) : (
-                              <button onClick={() => { setSelectedStudent(student); setFeedbackText(student.teacher_feedback || ''); setFeedbackModalOpen(true); }} className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95">
-                                <MessageSquareHeart className="w-5 h-5" />
-                              </button>
-                            )}
+                            <div className="flex items-center justify-center gap-2">
+                              {/* 🚀 زر إعادة الفتح وحذف التسليم */}
+                              {student.has_started && (
+                                <button 
+                                  onClick={() => handleResetStudentProgress(student.student_id, student.student_name)}
+                                  className="bg-white border border-rose-200 hover:border-rose-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-xl text-rose-400 transition-all shadow-sm active:scale-95"
+                                  title="حذف التسليم وإعادة فتح الواجب"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                </button>
+                              )}
+
+                              {isOfficialMode ? (
+                                <button 
+                                  onClick={() => openGradingModal(student)} 
+                                  disabled={!student.is_completed || isGrading}
+                                  className={`bg-white border px-3 py-2 rounded-xl transition-all shadow-sm active:scale-95 font-black text-xs flex items-center gap-2 justify-center w-24 ${
+                                    !student.is_completed ? 'opacity-50 cursor-not-allowed border-slate-200 text-slate-400' :
+                                    student.is_graded ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' :
+                                    'border-amber-200 text-amber-600 hover:bg-amber-50'
+                                  }`}
+                                >
+                                  {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} 
+                                  {student.is_graded ? 'تعديل الدرجة' : 'تصحيح الإجابة'}
+                                </button>
+                              ) : (
+                                <button onClick={() => { setSelectedStudent(student); setFeedbackText(student.teacher_feedback || ''); setFeedbackModalOpen(true); }} className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95">
+                                  <MessageSquareHeart className="w-5 h-5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -607,6 +639,7 @@ export default function ArenaMonitorDashboard() {
         )}
       </div>
 
+      {/* مودال إرسال الملاحظات (لوضع التدريب) */}
       <AnimatePresence>
         {feedbackModalOpen && selectedStudent && !isOfficialMode && (
           <>
@@ -639,6 +672,7 @@ export default function ArenaMonitorDashboard() {
         )}
       </AnimatePresence>
 
+      {/* 🚀 مودال نظام التصحيح والتقييم (لوضع الواجبات الرسمية) */}
       <AnimatePresence>
         {gradingModalOpen && selectedStudent && isOfficialMode && (
           <>
@@ -671,21 +705,21 @@ export default function ArenaMonitorDashboard() {
                   
                   return (
                     <div key={q.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-6">
-                      <div className="flex-1 space-y-5">
+                      <div className="flex-1 space-y-5 min-w-0">
                         <div className="border-b border-slate-100 pb-4">
                           <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg mb-3 inline-block">السؤال المقالي {idx + 1}</span>
-                          <div className="font-bold text-slate-800 prose prose-sm max-w-none" dangerouslySetInnerHTML={renderHTMLWithMath(q.content_html)} />
+                          <div className="font-bold text-slate-800 prose prose-sm max-w-none break-words" dangerouslySetInnerHTML={createMarkup(q.content_html)} />
                         </div>
                         <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm relative">
                           <div className="absolute top-0 right-6 -mt-3 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">إجابة الطالب</div>
-                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar" dangerouslySetInnerHTML={renderHTMLWithMath(studentText)} />
+                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={createMarkup(studentText)} />
                         </div>
                       </div>
                       
                       <div className="xl:w-96 shrink-0 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 flex flex-col h-full shadow-inner">
-                        <div className="mb-6 flex-1">
+                        <div className="mb-6 flex-1 min-h-[200px]">
                            <p className="text-xs font-black text-indigo-500 mb-3 flex items-center gap-1.5"><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
-                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100" dangerouslySetInnerHTML={renderHTMLWithMath(q.model_answer_html)} />
+                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100 break-words" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
                         </div>
                         
                         <div className="mt-auto border-t border-indigo-200 pt-5">
@@ -723,3 +757,6 @@ export default function ArenaMonitorDashboard() {
     </div>
   );
 }
+
+
+```
