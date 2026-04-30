@@ -509,7 +509,7 @@ export default function ArenaMonitorDashboard() {
                         </div>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
                           <p className="text-xs font-black text-slate-500 mb-2 uppercase tracking-widest">إجابة الطالب:</p>
-                          <p className="font-bold text-slate-700 whitespace-pre-wrap">{studentText}</p>
+                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content" dangerouslySetInnerHTML={createMarkup(studentText)} />
                         </div>
                       </div>
                       
