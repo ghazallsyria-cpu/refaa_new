@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 /* eslint-disable react/no-unescaped-entities */
 /* eslint-disable @next/next/no-img-element */
@@ -110,7 +111,7 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
               try {
                 const formData = new FormData();
                 formData.append('file', file);
-                formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET);
+                formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
                 const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.secure_url) {
@@ -149,8 +150,6 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
         <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
         <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
-        <button onClick={() => insertMath('$\\mu_0$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\mu_0$</button>
-        <button onClick={() => insertMath('$\\pi$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\pi$</button>
       </div>
       <div className="flex-1 bg-white relative min-h-[120px]">
         <AnimatePresence>
@@ -187,7 +186,6 @@ export default function AssignmentBuilderV2() {
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
   const [isPracticeMode, setIsPracticeMode] = useState<boolean>(false);
   
-  // 🚀 إعدادات الواجب الرسمي
   const [dueDate, setDueDate] = useState('');
   const [timeLimit, setTimeLimit] = useState<number>(0);
   const [latePolicy, setLatePolicy] = useState<'allow' | 'block'>('allow');
@@ -197,7 +195,7 @@ export default function AssignmentBuilderV2() {
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [manualJson, setManualJson] = useState('');
-  const [manualJsonError, setManualJsonError] = useState<string | null>(null);
+  const [skippedLog, setSkippedLog] = useState<{question_hint: string, reason: string}[]>([]); // 🚀 مصفوفة لتخزين الأسئلة المتخطاة
   
   const [isSavingDB, setIsSavingDB] = useState(false);
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
@@ -212,7 +210,6 @@ export default function AssignmentBuilderV2() {
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewQ, setPreviewQ] = useState<Question | null>(null);
-  const [showPreviewHint, setShowPreviewHint] = useState(false);
 
   const handleResetBuilder = (force = false) => {
     if (!force && (questions.length > 0 || assignmentTitle !== 'واجب جديد')) {
@@ -220,6 +217,7 @@ export default function AssignmentBuilderV2() {
     }
     setEditingAssignmentId(null);
     setQuestions([]);
+    setSkippedLog([]);
     setAssignmentTitle('واجب جديد');
     setSelectedTeacher('');
     setSelectedSubject('');
@@ -227,7 +225,6 @@ export default function AssignmentBuilderV2() {
     setIsPracticeMode(false); 
     setAssignmentStatus('draft');
     
-    // Reset Settings
     const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1); tmrw.setHours(23, 59, 0, 0);
     setDueDate(tmrw.toISOString().slice(0, 16));
     setTimeLimit(0);
@@ -368,7 +365,6 @@ export default function AssignmentBuilderV2() {
       setIsPracticeMode(assign.is_practice_mode);
       setSelectedSections((sData || []).map((s:any) => s.section_id));
       
-      // 🚀 استخراج الإعدادات المتقدمة من description
       if (assign.due_date) {
         const d = new Date(assign.due_date);
         d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -399,45 +395,48 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
+  // 🚀 تطوير البرومبت ليشمل أسئلة الرسم وتوضيح أسباب التخطي
   const copyPrompt = () => { 
-    const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم الدقة. سأعطيك نصاً مقتطعاً من بنك أسئلة.
-المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي، ولا تقم بإضافة أي نصوص أخرى.
+    const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم الدقة. سأعطيك نصاً مقتطعاً من بنك أسئلة أو اختبار.
+المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي. 🚨 إياك أن تتخيل أسئلة أو صور غير موجودة.
 
-🚨 قوانين صارمة جداً (يُمنع الإخلال بها تحت أي ظرف):
-1. ممنوع التخطي (NO SKIPPING): استخرج جميع الأسئلة بلا استثناء من النص المرفق. لا تلخص.
-2. تصنيف الأسئلة ("type"):
-   - "multiple_choice": أسئلة الاختيار من متعدد (ضع الخيارات في مصفوفة "options").
-   - "true_false": الصح والخطأ (قم بتوليد خياري "صح" و "خطأ" وحدد الصحيح).
-   - "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، والمسائل.
-   - "section_header": العناوين الرئيسية (مثل: السؤال الأول، السؤال الثاني).
-3. 📊 أسئلة المقارنة (الجداول): إذا كان السؤال "قارن" أو معطى كجدول، **يجب** وضع جدول HTML كامل داخل "model_answer_html" أو "content_html" مع التنسيق (border='1' style='width:100%; text-align:center;').
-4. 📸 رادار الصور ("needs_image"): 
-   - اجعله true **فقط وحصراً** إذا كان نص السؤال يحتوي على كلمات صريحة مثل (الشكل المجاور، الرسم البياني، لاحظ الصورة، الدائرة الموضحة، الشكل المقابل).
-   - اجعله false في بقية الأسئلة. لا تتخيل وجود صورة من عندك أبدًا!
-5. 💡 حقل "model_answer_html": لا تكتب الإجابة النهائية فقط! اكتب التبرير وخطوات الحل. استخدم <b> و <br>.
-6. 📐 التنسيق الرياضي: استخدم صيغة LaTeX بين علامتي دولار $...$ للمعادلات (مثال: $\frac{1}{2}$).
+قوانين التصنيف "type":
+- "multiple_choice": أسئلة الاختيار من متعدد (ضع الخيارات في مصفوفة "options").
+- "true_false": الصح والخطأ (قم بتوليد خياري "صح" و "خطأ" وحدد الصحيح).
+- "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، والمسائل الرياضية المباشرة.
+- "section_header": العناوين الرئيسية فقط (مثل: السؤال الأول).
 
-هيكل JSON:
+🎨 قوانين أسئلة "الرسم" ("type": "essay"):
+- إذا كان السؤال يطلب من الطالب صراحة "الرسم" (مثل: ارسم المنحنيات البيانية، أكمل مسار الشعاع، ارسم الدائرة)، اجعل نوعه "essay"، وأضف جملة واضحة في نهايته: "(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)".
+
+📸 رادار الصور ("needs_image"): 
+- اجعله true **فقط وحصراً** إذا كان نص السؤال يشير لصورة يجب أن يراها الطالب ليحل (مثل: من الشكل المجاور، في الرسم البياني الموضح أدناه). لا تضعه true لأسئلة الرسم العادية التي يبدأ الطالب برسمها من ورقة بيضاء.
+
+🛑 الإبلاغ عن الأسئلة المتخطاة (إجباري):
+إذا واجهت سؤالاً معقداً لم تتمكن من تحويله (بسبب تداخل الجداول المعقدة جداً، أو رسومات لا يمكن فهمها من النص)، **لا تتجاهله بصمت**. بل أضف لمحة عنه في مصفوفة "skipped_questions" واذكر السبب بوضوح ليعلم المعلم.
+
+هيكل JSON المطلوب:
 {
   "title": "عنوان الدرس",
   "total_extracted_questions": 0,
+  "skipped_questions": [
+    { "question_hint": "السؤال الرابع فقرة ب", "reason": "السؤال عبارة عن خريطة مفاهيمية معقدة تحتاج لبرمجة خاصة." }
+  ],
   "questions": [
     {
-      "type": "multiple_choice",
-      "content": "نص السؤال هنا بصيغة HTML",
+      "type": "essay", 
+      "content": "ارسم العلاقة البيانية بين زاوية السقوط والانعكاس. <br><br> <i>(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)</i>",
       "needs_image": false, 
-      "model_answer_html": "<b>خطوات الحل:</b> <br> ...",
+      "model_answer_html": "<b>خطوات الحل:</b> <br> نرسم خط مستقيم يمر بنقطة الأصل وميله يساوي 1.",
       "points": 1,
-      "options": [
-         { "content": "خيار", "is_correct": true }
-      ]
+      "options": []
     }
   ]
 }
 
-إليك النص (استخرج جميع الأسئلة كاملة):`;
+إليك النص (استخرج جميع الأسئلة كاملة بدقة):`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الصارم! 🚨\n\nنصيحة ذهبية: لا تقم بنسخ أكثر من صفحة إلى صفحتين في كل محادثة لكي لا يمتلئ عقل الذكاء الاصطناعي ويتكاسل.'); 
+    alert('تم نسخ البرومبت الصارم المطور! 🚨\nلقد أضفنا ميزة التعامل مع أسئلة الرسم وإجبار الذكاء الاصطناعي على الاعتراف بالأسئلة التي عجز عنها لتتمكن من إضافتها يدوياً.'); 
   };
 
   const processManualJson = () => {
@@ -477,6 +476,13 @@ export default function AssignmentBuilderV2() {
           options: opts,
         };
       });
+
+      // 🚀 إعلام المعلم بالأسئلة المتخطاة
+      if (parsedData.skipped_questions && parsedData.skipped_questions.length > 0) {
+        setSkippedLog(parsedData.skipped_questions);
+      } else {
+        setSkippedLog([]);
+      }
 
       setAssignmentTitle(prev => prev === 'واجب جديد' || prev === 'بنك تدريب جديد' ? (parsedData.title || 'بنك مستورد بذكاء') : prev);
       setQuestions(prev => [...prev, ...newQuestions]); 
@@ -548,12 +554,8 @@ export default function AssignmentBuilderV2() {
     }
     setIsSavingDB(true);
     try {
-      // 🚀 تجهيز Payload الإعدادات המتقدمة للواجبات الرسمية
       const descriptionPayload = isPracticeMode ? 'بنك تدريب تفاعلي' : JSON.stringify({
-        text: "واجب رسمي",
-        timeLimit: timeLimit,
-        latePolicy: latePolicy,
-        maxScore: maxScore
+        text: "واجب رسمي", timeLimit: timeLimit, latePolicy: latePolicy, maxScore: maxScore
       });
 
       const finalDueDate = isPracticeMode ? new Date(new Date().setDate(new Date().getDate() + 7)).toISOString() : new Date(dueDate).toISOString();
@@ -580,12 +582,7 @@ export default function AssignmentBuilderV2() {
 
       if (editingAssignmentId) {
         const { error: assignErr } = await supabase.from('assignments_v2').update({ 
-          title: assignmentTitle, 
-          description: descriptionPayload, 
-          subject_id: selectedSubject, 
-          status: assignmentStatus,
-          is_practice_mode: isPracticeMode,
-          due_date: finalDueDate
+          title: assignmentTitle, description: descriptionPayload, subject_id: selectedSubject, status: assignmentStatus, is_practice_mode: isPracticeMode, due_date: finalDueDate
         }).eq('id', editingAssignmentId);
         
         if (assignErr) throw assignErr;
@@ -630,7 +627,7 @@ export default function AssignmentBuilderV2() {
   };
 
   const translateType = (t: string) => {
-    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' };
+    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / رسم / تفاعلي', 'section_header': 'ترويسة/نص عام' };
     return types[t] || t;
   };
 
@@ -753,6 +750,22 @@ export default function AssignmentBuilderV2() {
 
         {activeTab === 'import' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
+            
+            {skippedLog.length > 0 && (
+               <div className="bg-rose-50 border-2 border-rose-200 p-4 rounded-xl shadow-inner mb-4">
+                  <h3 className="text-rose-800 font-black flex items-center gap-2 mb-2"><AlertCircle className="w-5 h-5"/> تقرير الذكاء الاصطناعي: أسئلة لم يتم استخراجها</h3>
+                  <p className="text-xs font-bold text-rose-600 mb-3">هناك أسئلة في الملف المرفق عجز الذكاء الاصطناعي عن تحويلها بسبب التعقيد البصري. يرجى إضافتها يدوياً إذا رغبت:</p>
+                  <ul className="space-y-2">
+                     {skippedLog.map((log, idx) => (
+                        <li key={idx} className="bg-white p-3 rounded-lg border border-rose-100 flex flex-col sm:flex-row gap-2 justify-between">
+                           <span className="font-black text-slate-800 text-sm">{log.question_hint}</span>
+                           <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{log.reason}</span>
+                        </li>
+                     ))}
+                  </ul>
+               </div>
+            )}
+
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex gap-3 shadow-inner">
               <Info className="w-5 h-5 shrink-0 text-amber-500" />
               <div className="text-sm font-bold">
@@ -760,10 +773,10 @@ export default function AssignmentBuilderV2() {
                 لا تنسخ أكثر من (صفحة إلى صفحتين) من ملف الـ PDF في كل مرة تطلب فيها من ChatGPT توليد الكود. إذا نسخت نصوصاً طويلة جداً، سيتخيل الذكاء الاصطناعي ويتجاهل بعض الجداول والأسئلة بسبب نفاد ذاكرته المؤقتة. النظام هنا سيقوم بدمج جميع الدفعات التي تستوردها داخل نفس الدرس!
               </div>
             </div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 mt-4">
               <h2 className="font-black text-lg text-emerald-800">مطابقة الأسئلة والأجوبة بالـ AI</h2>
-              <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm">
-                <Copy className="w-4 h-4" /> انسخ البرومبت المتقدم
+              <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm active:scale-95">
+                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل الرسم)
               </button>
             </div>
             <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
@@ -835,7 +848,6 @@ export default function AssignmentBuilderV2() {
                 </div>
               </div>
 
-              {/* 🚀 إعدادات الواجب الرسمي המتقدمة */}
               {!isPracticeMode && (
                 <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 shadow-inner space-y-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -891,7 +903,7 @@ export default function AssignmentBuilderV2() {
                         <ImageIcon className="w-5 h-5 text-orange-500 shrink-0" />
                         <div>
                           <p className="text-xs font-black">الذكاء الاصطناعي يخبرك: هذا السؤال ينقصه صورة!</p>
-                          <p className="text-[10px] font-bold opacity-80">اضغط على زر (تعديل) وقم بإرفاق الصورة من جهازك داخل نص السؤال.</p>
+                          <p className="text-[10px] font-bold opacity-80">اضغط على زر (تعديل) وقم بإرفاق الصورة من جهازك داخل نص السؤال، أو اتركها إذا كان السؤال يعتمد على رسم الطالب.</p>
                         </div>
                       </div>
                     )}
@@ -920,7 +932,8 @@ export default function AssignmentBuilderV2() {
           </motion.div>
         )}
       </div>
-      {/* Modals omitted for brevity, logic preserved */}
     </div>
   );
 }
+
+
