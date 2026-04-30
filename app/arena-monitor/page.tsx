@@ -1,12 +1,12 @@
 // @ts-nocheck
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -27,9 +27,9 @@ export default function ArenaMonitorDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // 🚀 حالة فلتر الفصول
+  // 🚀 حالة فلتر الفصول والإحصائيات
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
-  const [availableClasses, setAvailableClasses] = useState<{id: string, name: string}[]>([]);
+  const [availableClasses, setAvailableClasses] = useState<{id: string, name: string, count: number}[]>([]);
 
   // Modal States
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -85,14 +85,13 @@ export default function ArenaMonitorDashboard() {
           const qsForThis = (questionsData || []).filter(q => q.assignment_id === d.id);
           const totalPoints = qsForThis.reduce((sum, q) => sum + (q.points || 1), 0);
           
-          // محاولة استخراج الإعدادات المتقدمة
           let maxScore = 100;
           try { if (d.description && d.description.startsWith('{')) maxScore = JSON.parse(d.description).maxScore || 100; } catch(e) {}
           
           return {
             ...d,
             total_questions: qsForThis.length > 0 ? qsForThis.length : 1,
-            max_points: maxScore // 🚀 استخدام الدرجة العظمى من الإعدادات أو 100
+            max_points: maxScore 
           };
         });
         
@@ -105,7 +104,7 @@ export default function ArenaMonitorDashboard() {
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
-    setSelectedClassFilter('all'); // تصفير الفلتر عند تغيير الواجب
+    setSelectedClassFilter('all'); // تصفير الفلتر عند اختيار واجب جديد
     
     try {
       let sectionIds: string[] = [];
@@ -160,7 +159,11 @@ export default function ArenaMonitorDashboard() {
           const className = Array.isArray(student.sections.classes) ? student.sections.classes[0]?.name : student.sections.classes?.name;
           secName = className ? `${className} - ${student.sections.name}` : student.sections.name;
           secId = student.sections.id;
-          uniqueClassesMap.set(secId, secName); // 🚀 تجميع الفصول المتاحة للفلتر
+          
+          if (!uniqueClassesMap.has(secId)) {
+            uniqueClassesMap.set(secId, { id: secId, name: secName, count: 0 });
+          }
+          uniqueClassesMap.get(secId).count++;
         }
 
         return {
@@ -181,6 +184,8 @@ export default function ArenaMonitorDashboard() {
       });
 
       const uniqueStudents = Array.from(new Map(studentsToDisplay.map(item => [item.student_id, item])).values());
+      
+      // 🚀 الفرز الأبجدي الدقيق (الفصل أولاً، ثم اسم الطالب)
       uniqueStudents.sort((a, b) => {
         const secCompare = a.section_name.localeCompare(b.section_name, 'ar');
         if (secCompare !== 0) return secCompare; 
@@ -188,7 +193,10 @@ export default function ArenaMonitorDashboard() {
       });
 
       setStudentsProgress(uniqueStudents);
-      setAvailableClasses(Array.from(uniqueClassesMap, ([id, name]) => ({ id, name })));
+      
+      // 🚀 تجهيز قائمة الفصول للفلتر مع ترتيبها أبجدياً
+      const sortedClasses = Array.from(uniqueClassesMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      setAvailableClasses(sortedClasses);
 
     } catch (err) { console.error(err); } finally { setRefreshing(false); }
   };
@@ -205,7 +213,7 @@ export default function ArenaMonitorDashboard() {
         }, { onConflict: 'student_id, assignment_id' });
 
       if (error) throw error;
-      setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText } : p));
+      setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText, has_started: true } : p));
       setFeedbackModalOpen(false);
     } catch (err) { alert("حدث خطأ أثناء حفظ الملاحظة."); } finally { setSavingFeedback(false); }
   };
@@ -253,7 +261,6 @@ export default function ArenaMonitorDashboard() {
       
       if (updates.length > 0) await Promise.all(updates);
 
-      // هنا الدرجة العظمى هي selectedAssignment.max_points المحددة في الإعدادات المتقدمة
       const finalScore = selectedStudent.correct_score + totalEssayPoints; 
       const newFeedback = `[تم رصد الدرجة] النتيجة المعتمدة: ${finalScore} / ${selectedAssignment.max_points}`;
 
@@ -264,7 +271,7 @@ export default function ArenaMonitorDashboard() {
            updated_at: new Date().toISOString() 
       }, { onConflict: 'student_id, assignment_id' });
 
-      if (selectedAssignment.subject_id && selectedStudent.section_id) {
+      if (selectedAssignment.subject_id && selectedStudent.section_id && selectedStudent.section_id !== 'unknown') {
          await supabase.from('grades').insert({
             student_id: selectedStudent.student_id,
             subject_id: selectedAssignment.subject_id,
@@ -280,25 +287,35 @@ export default function ArenaMonitorDashboard() {
 
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, is_graded: true, teacher_feedback: newFeedback } : p));
       setGradingModalOpen(false);
-      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات (النظام الموحد)!');
+      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات!');
 
     } catch (err) { alert("حدث خطأ أثناء اعتماد الدرجات."); } finally { setSavingFeedback(false); }
   };
 
-  // 🚀 الضربة القاضية: تصفير المتأخرين
+  // 🚀 تطبيق الفلتر على قائمة العرض
+  const displayedStudents = useMemo(() => {
+    if (selectedClassFilter === 'all') return studentsProgress;
+    return studentsProgress.filter(s => s.section_id === selectedClassFilter);
+  }, [studentsProgress, selectedClassFilter]);
+
+  // 🚀 الضربة القاضية: تصفير المتأخرين (يطبق على الفصل المحدد فقط)
   const handleZeroOutMissing = async () => {
-    const missingStudents = studentsProgress.filter(s => (!s.has_started || !s.is_completed) && !s.is_graded);
+    // نجلب الطلاب الذين يظهرون حالياً في الجدول فقط (حسب الفلتر) ولم يسلموا
+    const missingStudents = displayedStudents.filter(s => (!s.has_started || !s.is_completed) && !s.is_graded);
     
     if (missingStudents.length === 0) {
-      alert("لا يوجد طلاب غائبين أو متأخرين في هذا الواجب.");
+      alert("لا يوجد طلاب متأخرين عن التسليم في هذا الفصل/الواجب.");
       return;
     }
 
-    if (!confirm(`تحذير إداري: أنت على وشك رصد الدرجة (صفر) لعدد ${missingStudents.length} طلاب لعدم تسليمهم الواجب. هل أنت متأكد؟ هذا الإجراء سيرسل صفر لسجل الدرجات الرسمي.`)) return;
+    const classNameAlert = selectedClassFilter === 'all' ? 'جميع الفصول' : availableClasses.find(c => c.id === selectedClassFilter)?.name;
+
+    if (!confirm(`تحذير إداري: أنت على وشك رصد الدرجة (صفر) لعدد ${missingStudents.length} طلاب لعدم تسليمهم الواجب في (${classNameAlert}). هل أنت متأكد؟ هذا الإجراء سيرسل صفر لسجل الدرجات الرسمي ولن يتمكنوا من التعديل.`)) return;
 
     setRefreshing(true);
     try {
       const feedbackZero = `[تم رصد الدرجة] لم يقم بالتسليم. الدرجة: 0 / ${selectedAssignment.max_points}`;
+      
       const progressUpdates = missingStudents.map(s => ({
         student_id: s.student_id,
         assignment_id: selectedAssignment.id,
@@ -330,7 +347,7 @@ export default function ArenaMonitorDashboard() {
 
       setStudentsProgress(prev => prev.map(p => missingStudents.find(m => m.student_id === p.student_id) ? { ...p, is_graded: true, teacher_feedback: feedbackZero, has_started: true, is_completed: true } : p));
       
-      alert(`تم بنجاح تصفير ${missingStudents.length} طلاب وإغلاق الواجب لهم.`);
+      alert(`تم بنجاح تصفير وإغلاق الواجب لعدد ${missingStudents.length} طلاب في ${classNameAlert}.`);
     } catch (err) {
       alert("حدث خطأ أثناء تصفير الطلاب.");
     } finally {
@@ -340,8 +357,15 @@ export default function ArenaMonitorDashboard() {
 
   const isOfficialMode = selectedAssignment && selectedAssignment.is_practice_mode === false;
   
-  // 🚀 تطبيق الفلتر على قائمة العرض
-  const displayedStudents = selectedClassFilter === 'all' ? studentsProgress : studentsProgress.filter(s => s.section_id === selectedClassFilter);
+  // 🚀 إحصائيات سريعة للوحة بناءً على الفلتر
+  const statsCounts = useMemo(() => {
+    return {
+      total: displayedStudents.length,
+      completed: displayedStudents.filter(s => s.is_completed || s.percentage === 100).length,
+      graded: displayedStudents.filter(s => s.is_graded).length,
+      missing: displayedStudents.filter(s => !s.has_started || (!s.is_completed && !s.is_graded)).length
+    };
+  }, [displayedStudents]);
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center font-cairo font-bold">غير مصرح لك بالدخول.</div>;
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-indigo-500 font-bold flex flex-col items-center gap-2"><Activity className="w-8 h-8"/> جاري تهيئة الرادار...</div></div>;
@@ -392,7 +416,7 @@ export default function ArenaMonitorDashboard() {
                       {isOfficialMode ? 'واجب رسمي (يتطلب تصحيح)' : 'تدريب تفاعلي ذاتي'}
                     </span>
                     <span className="text-xs font-bold text-slate-500">يحتوي على {selectedAssignment.total_questions} سؤال</span>
-                    {isOfficialMode && <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">الدرجة العظمى: {selectedAssignment.max_points}</span>}
+                    {isOfficialMode && <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 shadow-sm">الدرجة العظمى: {selectedAssignment.max_points}</span>}
                   </div>
                </div>
                
@@ -404,36 +428,61 @@ export default function ArenaMonitorDashboard() {
                </button>
             </div>
 
+            {/* 🚀 إحصائيات سريعة للفصل المفلتر */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0"><Users className="w-5 h-5"/></div>
+                <div><div className="text-xl font-black text-slate-800 leading-none mb-1">{statsCounts.total}</div><div className="text-[10px] font-bold text-slate-500 uppercase">إجمالي الطلاب</div></div>
+              </div>
+              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center shrink-0"><CheckCircle2 className="w-5 h-5"/></div>
+                <div><div className="text-xl font-black text-slate-800 leading-none mb-1">{statsCounts.completed}</div><div className="text-[10px] font-bold text-slate-500 uppercase">أتموا التسليم</div></div>
+              </div>
+              {isOfficialMode && (
+                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center shrink-0"><CheckSquare className="w-5 h-5"/></div>
+                  <div><div className="text-xl font-black text-slate-800 leading-none mb-1">{statsCounts.graded}</div><div className="text-[10px] font-bold text-slate-500 uppercase">رُصدت درجاتهم</div></div>
+                </div>
+              )}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-3">
+                <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center shrink-0"><UserMinus className="w-5 h-5"/></div>
+                <div><div className="text-xl font-black text-slate-800 leading-none mb-1">{statsCounts.missing}</div><div className="text-[10px] font-bold text-slate-500 uppercase">لم يسلموا</div></div>
+              </div>
+            </div>
+
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <h3 className="font-black text-lg text-slate-800">سجل الإنجاز والتقييم</h3>
+              <div className="p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/50">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 shrink-0">
+                    <Database className="w-5 h-5 text-indigo-500" /> سجل الإنجاز
+                  </h3>
                   
                   {/* 🚀 فلتر الفصول للمدرس */}
                   {availableClasses.length > 0 && (
-                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                      <Filter className="w-4 h-4 text-slate-400" />
+                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm relative w-full sm:w-auto">
+                      <Filter className="w-4 h-4 text-slate-400 shrink-0" />
                       <select 
                         value={selectedClassFilter} 
                         onChange={e => setSelectedClassFilter(e.target.value)}
-                        className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+                        className="bg-transparent text-xs sm:text-sm font-black text-indigo-700 outline-none cursor-pointer w-full appearance-none pr-2"
                       >
-                        <option value="all">عرض جميع الفصول ({studentsProgress.length})</option>
+                        <option value="all">عرض جميع الفصول (كل الطلاب)</option>
                         {availableClasses.map(cls => (
-                          <option key={cls.id} value={cls.id}>{cls.name}</option>
+                          <option key={cls.id} value={cls.id}>{cls.name} ({cls.count})</option>
                         ))}
                       </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute left-3" />
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0 w-full lg:w-auto">
                   {isOfficialMode && (
-                    <button onClick={handleZeroOutMissing} disabled={refreshing} className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors active:scale-95">
+                    <button onClick={handleZeroOutMissing} disabled={refreshing} className="flex-1 lg:flex-none bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-colors active:scale-95 shadow-sm">
                       <UserMinus className="w-4 h-4" /> تصفير المتأخرين
                     </button>
                   )}
-                  <button onClick={() => fetchProgress(selectedAssignment)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors active:scale-95">
+                  <button onClick={() => fetchProgress(selectedAssignment)} className="flex-1 lg:flex-none text-indigo-600 bg-white hover:bg-indigo-50 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-colors active:scale-95 shadow-sm">
                     <RefreshCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> تحديث
                   </button>
                 </div>
@@ -442,11 +491,11 @@ export default function ArenaMonitorDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-right">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase">
+                    <tr className="bg-white border-b border-slate-100 text-slate-400 text-[11px] font-black uppercase tracking-wider">
                       <th className="p-4 rounded-tr-3xl">اسم الطالب / الفصل</th>
                       <th className="p-4">نسبة الإنجاز</th>
-                      {!isOfficialMode && <th className="p-4 text-center">الإجابات الآلية</th>}
-                      <th className="p-4">حالة التقييم</th>
+                      {!isOfficialMode && <th className="p-4 text-center">التقييم الآلي</th>}
+                      <th className="p-4">حالة الواجب / الدرجة</th>
                       <th className="p-4 text-center rounded-tl-3xl">إجراء</th>
                     </tr>
                   </thead>
@@ -455,15 +504,14 @@ export default function ArenaMonitorDashboard() {
                       <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold bg-slate-50/50">لا يوجد طلاب مطابقين للفرز في هذا الواجب.</td></tr>
                     ) : (
                       displayedStudents.map((student) => (
-                        <tr key={student.student_id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!student.has_started ? 'opacity-60' : ''}`}>
+                        <tr key={student.student_id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!student.has_started ? 'opacity-60 bg-slate-50/30' : ''}`}>
                           <td className="p-4 flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black shrink-0 shadow-inner ${student.percentage === 100 ? 'bg-emerald-100 text-emerald-700' : student.has_started ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black shrink-0 shadow-inner ${student.percentage === 100 ? 'bg-emerald-100 text-emerald-700' : student.has_started ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500 border border-slate-300'}`}>
                               {student.student_name.charAt(0)}
                             </div>
                             <div>
-                              <span className="truncate max-w-[150px] font-black block">{student.student_name}</span>
+                              <span className="truncate max-w-[150px] font-black block text-slate-800">{student.student_name}</span>
                               <span className="text-[10px] text-indigo-600 font-black block bg-indigo-50 px-2 py-0.5 rounded-md mt-1 w-fit border border-indigo-100 shadow-sm">{student.section_name}</span>
-                              {!student.has_started && <span className="text-[10px] text-slate-400 block mt-0.5">لم يبدأ بعد</span>}
                             </div>
                           </td>
                           
@@ -472,7 +520,7 @@ export default function ArenaMonitorDashboard() {
                               <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50">
                                 <div className={`h-full rounded-full ${student.percentage === 100 ? 'bg-emerald-500' : student.has_started ? 'bg-amber-400' : 'bg-transparent'}`} style={{ width: `${student.percentage}%` }}></div>
                               </div>
-                              <span className={`text-xs font-black w-8 ${student.percentage === 100 ? 'text-emerald-600' : student.has_started ? 'text-amber-600' : 'text-slate-400'}`}>{student.percentage}%</span>
+                              <span className={`text-[10px] font-black w-8 ${student.percentage === 100 ? 'text-emerald-600' : student.has_started ? 'text-amber-600' : 'text-slate-400'}`}>{student.percentage}%</span>
                             </div>
                           </td>
                           
@@ -480,11 +528,11 @@ export default function ArenaMonitorDashboard() {
                             <td className="p-4">
                               {student.has_started ? (
                                 <div className="flex items-center justify-center gap-2">
-                                  <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> {student.correct_score}</span>
-                                  <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 shadow-sm font-black"><XCircle className="w-3 h-3"/> {student.wrong_score}</span>
+                                  <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shadow-sm font-black text-[10px]"><CheckCircle2 className="w-3 h-3"/> {student.correct_score}</span>
+                                  <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 shadow-sm font-black text-[10px]"><XCircle className="w-3 h-3"/> {student.wrong_score}</span>
                                 </div>
                               ) : (
-                                <div className="text-center text-slate-400">-</div>
+                                <div className="text-center text-slate-400 font-black">-</div>
                               )}
                             </td>
                           )}
@@ -492,11 +540,11 @@ export default function ArenaMonitorDashboard() {
                           <td className="p-4">
                             {isOfficialMode ? (
                                student.is_graded ? (
-                                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> {student.teacher_feedback || 'تم التصحيح'}</span>
+                                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit shadow-sm font-black"><CheckCircle2 className="w-3.5 h-3.5"/> {student.teacher_feedback?.replace('[تم رصد الدرجة]', '') || 'تم التصحيح'}</span>
                                ) : student.is_completed ? (
-                                  <span className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 px-2 py-1 rounded-lg flex items-center gap-1 w-fit shadow-sm font-black"><Activity className="w-3 h-3 animate-pulse"/> بانتظار تصحيح المعلم</span>
+                                  <span className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit shadow-sm font-black"><Activity className="w-3.5 h-3.5 animate-pulse"/> بانتظار التصحيح</span>
                                ) : (
-                                  <span className="text-[10px] text-slate-400 border border-slate-200 px-2 py-1 rounded-lg bg-white shadow-sm font-bold">لم يسلم الواجب بعد</span>
+                                  <span className="text-[10px] text-slate-500 border border-slate-200 px-2.5 py-1 rounded-lg bg-slate-100 shadow-sm font-black">لم يسلم الواجب</span>
                                )
                             ) : (
                               student.teacher_feedback ? (
@@ -514,7 +562,7 @@ export default function ArenaMonitorDashboard() {
                                 disabled={!student.is_completed || isGrading || student.is_graded}
                                 className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed font-black text-xs flex items-center gap-2 w-full justify-center"
                               >
-                                {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} {student.is_graded ? 'رُصدت' : 'تصحيح'}
+                                {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} {student.is_graded ? 'رُصدت درجته' : 'تصحيح الإجابة'}
                               </button>
                             ) : (
                               <button onClick={() => { setSelectedStudent(student); setFeedbackText(student.teacher_feedback || ''); setFeedbackModalOpen(true); }} className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95">
@@ -577,14 +625,14 @@ export default function ArenaMonitorDashboard() {
                 <button onClick={() => setGradingModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 rounded-full shadow-sm"><X className="w-5 h-5" /></button>
                 <div className="text-center">
                    <h3 className="font-black text-slate-800 text-lg">تصحيح واجب: {selectedStudent.student_name}</h3>
-                   <p className="text-xs font-bold text-slate-500">مجموع نقاط الاختياري التلقائية: {selectedStudent.correct_score}</p>
+                   <p className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 inline-block mt-1">النقاط الآلية: {selectedStudent.correct_score}</p>
                 </div>
-                <button onClick={submitFinalGrades} disabled={savingFeedback} className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm shadow-md active:scale-95 transition-all flex items-center gap-2">
+                <button onClick={submitFinalGrades} disabled={savingFeedback} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center gap-2 border border-indigo-500">
                   {savingFeedback ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4"/>} اعتماد ورصد الدرجة
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-32 space-y-6">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-32 space-y-6 bg-slate-100/50 custom-scrollbar">
                 
                 {assignmentQuestions.filter(q => q.question_type === 'essay').length === 0 && (
                    <div className="text-center p-10 bg-white rounded-2xl border border-slate-200 shadow-sm font-bold text-slate-500">
@@ -598,38 +646,44 @@ export default function ArenaMonitorDashboard() {
                   const maxPts = q.points || 1;
                   
                   return (
-                    <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-6">
-                      <div className="flex-1 space-y-4">
-                        <div className="border-b border-slate-100 pb-3">
-                          <span className="text-xs font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md mb-2 inline-block">السؤال المقالي {idx + 1}</span>
+                    <div key={q.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-6">
+                      <div className="flex-1 space-y-5">
+                        <div className="border-b border-slate-100 pb-4">
+                          <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg mb-3 inline-block">السؤال المقالي {idx + 1}</span>
                           <div className="font-bold text-slate-800 prose prose-sm max-w-none" dangerouslySetInnerHTML={createMarkup(q.content_html)} />
                         </div>
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
-                          <p className="text-xs font-black text-slate-500 mb-2 uppercase tracking-widest">إجابة الطالب:</p>
-                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content" dangerouslySetInnerHTML={createMarkup(studentText)} />
+                        <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm relative">
+                          <div className="absolute top-0 right-6 -mt-3 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">إجابة الطالب</div>
+                          <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar" dangerouslySetInnerHTML={createMarkup(studentText)} />
                         </div>
                       </div>
                       
-                      <div className="md:w-80 shrink-0 bg-indigo-50/50 p-5 rounded-xl border border-indigo-100 flex flex-col h-full">
-                        <div className="mb-4">
-                           <p className="text-xs font-black text-indigo-500 mb-2 flex items-center gap-1"><BrainCircuit className="w-3 h-3"/> الإجابة النموذجية كمرجع:</p>
-                           <div className="font-bold text-indigo-900 text-sm max-h-32 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
+                      <div className="xl:w-96 shrink-0 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 flex flex-col h-full shadow-inner">
+                        <div className="mb-6 flex-1">
+                           <p className="text-xs font-black text-indigo-500 mb-3 flex items-center gap-1.5"><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
+                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100" dangerouslySetInnerHTML={createMarkup(q.model_answer_html)} />
                         </div>
                         
-                        <div className="mt-auto border-t border-indigo-100 pt-4">
-                           <label className="block text-xs font-black text-slate-600 mb-2">رصد الدرجة (من {maxPts})</label>
-                           <input 
-                             type="number" 
-                             min="0" max={maxPts} 
-                             value={manualGrades[q.id] !== undefined ? manualGrades[q.id] : 0} 
-                             onChange={(e) => {
-                               let val = Number(e.target.value);
-                               if (val > maxPts) val = maxPts;
-                               if (val < 0) val = 0;
-                               setManualGrades(prev => ({...prev, [q.id]: val}));
-                             }}
-                             className="w-full bg-white border border-indigo-200 text-center font-black text-lg p-3 rounded-xl shadow-inner focus:border-indigo-500 outline-none text-indigo-700" 
-                           />
+                        <div className="mt-auto border-t border-indigo-200 pt-5">
+                           <label className="block text-xs font-black text-slate-600 mb-2 flex items-center justify-between">
+                             <span>رصد الدرجة لهذا السؤال</span>
+                             <span className="text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-md">من {maxPts}</span>
+                           </label>
+                           <div className="relative">
+                             <input 
+                               type="number" 
+                               min="0" max={maxPts} 
+                               value={manualGrades[q.id] !== undefined ? manualGrades[q.id] : 0} 
+                               onChange={(e) => {
+                                 let val = Number(e.target.value);
+                                 if (val > maxPts) val = maxPts;
+                                 if (val < 0) val = 0;
+                                 setManualGrades(prev => ({...prev, [q.id]: val}));
+                               }}
+                               className="w-full bg-white border-2 border-indigo-200 text-center font-black text-2xl p-3 rounded-xl shadow-sm focus:border-indigo-500 outline-none text-indigo-700 pr-10" 
+                             />
+                             <CheckCircle2 className="w-5 h-5 text-indigo-300 absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
+                           </div>
                         </div>
                       </div>
                     </div>
