@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, RefreshCcw
+  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, RefreshCcw, BarChart3, Activity, XCircle, CheckCircle
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -82,6 +82,10 @@ export default function AutoScheduleGenerator() {
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
   const [isBatchPrinting, setIsBatchPrinting] = useState(false); 
+
+  // 🚀 حالات تقرير فحص الجودة (Audit)
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditReport, setAuditReport] = useState<any>(null);
 
   useEffect(() => {
     if (currentRole !== 'admin' && currentRole !== 'management') return;
@@ -253,7 +257,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE DEEP SPREAD ENGINE V12 (Strict Daily Dist.)
+  // 🧠 THE CORE ALGORITHM 
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -322,7 +326,6 @@ export default function AutoScheduleGenerator() {
           const restrictA = a.available_days.length < 5 ? 1 : 0;
           const restrictB = b.available_days.length < 5 ? 1 : 0;
           if (restrictA !== restrictB) return restrictB - restrictA;
-          
           if (a.weekly_quota === b.weekly_quota) return Math.random() - 0.5;
           return b.weekly_quota - a.weekly_quota; 
         });
@@ -340,12 +343,10 @@ export default function AutoScheduleGenerator() {
           teacherDailyLoad[assignment.teacher_id][day]++; 
         };
 
-        // 🚀 قلب التباعد اليومي الصارم 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay) => {
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
-          // 🚀 فحص التباعد (منع وضع علوم 3 مرات في اليوم مهما كان السبب)
           const subjectCountToday = finalSchedule.filter(s => s.section_id === sectionId && s.day === day && s.subject_id === subjectId).length;
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
@@ -365,11 +366,10 @@ export default function AutoScheduleGenerator() {
           let allowedDaysForTeacher = workingDays.filter(d => assignment.available_days.includes(d));
           if(allowedDaysForTeacher.length === 0) continue;
 
-          // 🚀 الحساب الدقيق لقانون التباعد اليومي
           let maxPerDay = 1; 
-          if (assignment.weekly_quota >= 5) maxPerDay = 2; // عربي رياضيات
+          if (assignment.weekly_quota >= 5) maxPerDay = 2; 
           const forcedMax = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length);
-          if (forcedMax > maxPerDay) maxPerDay = forcedMax; // لو المدرس بيجي يوم واحد وعنده حصتين إجبار
+          if (forcedMax > maxPerDay) maxPerDay = forcedMax; 
           if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
           for (let i = 0; i < remainingLessons; i++) {
@@ -383,14 +383,15 @@ export default function AutoScheduleGenerator() {
 
             let isPlaced = false;
 
-            // 1. التسكين المثالي
             for (const day of preferredDays) {
+              const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
+              if (subjectCountToday >= maxPerDay) continue;
+
               let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
               
               let orderedPeriods = shuffleArray(availablePeriods);
               for (const period of orderedPeriods) {
-                // تمرير maxPerDay للتأكد من التباعد
                 if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay)) {
                   commitPlacement(section, assignment, day, period);
                   isPlaced = true; break; 
@@ -399,7 +400,6 @@ export default function AutoScheduleGenerator() {
               if (isPlaced) break;
             }
 
-            // 2. Fallback (الأيام الأخرى المسموحة) - مع احترام התباعد
             if (!isPlaced) {
                for (const day of shuffleArray([...allowedDaysForTeacher])) {
                  const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
@@ -413,14 +413,12 @@ export default function AutoScheduleGenerator() {
                }
             }
 
-            // 3. Deep Swapping مع احترام التباعد للمادة المزاحة والمادة الجديدة
             if (!isPlaced && !assignment.isVIP) {
               for (const day of shuffleArray([...allowedDaysForTeacher])) {
                 if (isPlaced) break;
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                 
                 for (const period of dayPeriods) {
-                  // نتأكد أننا نقدر نحط המادة الجديدة هنا بدون كسر حدها اليومي
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
@@ -431,14 +429,12 @@ export default function AutoScheduleGenerator() {
                     if (blockingSlot.isVIP) continue; 
                     
                     const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-
                     const allowedDaysZ = shuffleArray(workingDays.filter(d => teacherZConstraints.days.includes(d)));
                     
                     let swapped = false;
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
-                       // 🚀 حماية التباعد اليومي للمادة المزاحة (Z) في يومها الجديد
                        const isHeavyZ = blockingSlot.subject_name.includes('عربي') || blockingSlot.subject_name.includes('رياضيات');
                        const zMaxPerDay = isHeavyZ ? 2 : 1; 
                        const blockingSubjCountAltDay = finalSchedule.filter(s => s.section_id === section.id && s.day === altDay && s.subject_id === blockingSlot.subject_id).length;
@@ -512,6 +508,91 @@ export default function AutoScheduleGenerator() {
     
     setGenerating(false);
   };
+
+  // ==========================================
+  // 📊 THE AUDIT & VALIDATION ENGINE (محرك الفحص الشامل)
+  // ==========================================
+  const generateAuditReport = () => {
+    let errors: string[] = [];
+    let warnings: string[] = [];
+    
+    // 1. إحصائيات عامة
+    let stats = {
+      totalAssigned: generatedSchedules.length,
+      unplaced: unplacedLessons.length,
+      teachersCount: new Set(generatedSchedules.map(s => s.teacher_id)).size,
+      sectionsCount: new Set(generatedSchedules.map(s => s.section_id)).size,
+    };
+
+    if (stats.unplaced > 0) {
+       errors.push(`فشل الاكتمال: يوجد ${stats.unplaced} حصص في سلة الانتظار لم يتم تسكينها.`);
+    }
+
+    // 2. فحص التضارب الزمني (Double Booking) للمدارس والفصول
+    const teacherTimeMap = new Map();
+    const sectionTimeMap = new Map();
+
+    generatedSchedules.forEach(slot => {
+       const tKey = `${slot.teacher_id}_${slot.day}_${slot.start_time}`;
+       const sKey = `${slot.section_id}_${slot.day}_${slot.start_time}`;
+
+       if (teacherTimeMap.has(tKey)) {
+         errors.push(`تضارب خطير ❌: المعلم (${slot.teacher_name}) لديه حصتين في نفس الوقت يوم ${getDayName(slot.day)}!`);
+       } else {
+         teacherTimeMap.set(tKey, true);
+       }
+
+       if (sectionTimeMap.has(sKey)) {
+         errors.push(`تضارب خطير ❌: الفصل (${slot.section_name}) لديه مادتين في نفس الوقت يوم ${getDayName(slot.day)}!`);
+       } else {
+         sectionTimeMap.set(sKey, true);
+       }
+    });
+
+    // 3. فحص التباعد اليومي (تكرار المواد)
+    const dailySpreadMap = new Map(); // key: section_day_subject -> count
+    generatedSchedules.forEach(slot => {
+       const key = `${slot.section_id}_${slot.day}_${slot.subject_id}`;
+       dailySpreadMap.set(key, (dailySpreadMap.get(key) || 0) + 1);
+    });
+
+    dailySpreadMap.forEach((count, key) => {
+       if (count > 1) {
+          const [secId, day, subjId] = key.split('_');
+          const slotData = generatedSchedules.find(s => s.section_id === secId && s.subject_id === subjId);
+          
+          // البحث عن نصاب هذه المادة لهذا الفصل
+          const classId = sections.find(s => s.id === secId)?.class_id;
+          const quotaKey = `${subjId}_${classId}`;
+          const quota = subjectQuotas[quotaKey] || 3;
+
+          let maxAllowed = 1;
+          if (quota >= 5) maxAllowed = 2; // مسموح للرياضيات والعربي
+          if (slotData?.isVIP) maxAllowed = Math.ceil(quota / 2); // استثناء للفيزياء
+
+          if (count > maxAllowed) {
+             errors.push(`تكدس دراسي ⚠️: الفصل (${slotData?.section_name}) لديه ${count} حصص (${slotData?.subject_name}) يوم ${getDayName(Number(day))} (الحد المسموح هو ${maxAllowed}).`);
+          }
+       }
+    });
+
+    // 4. فحص اختراق قيود المعلمين
+    generatedSchedules.forEach(slot => {
+       const tConst = teacherConstraints[slot.teacher_id];
+       if (tConst) {
+          if (!tConst.days.includes(slot.day)) {
+             errors.push(`اختراق قيد الأيام 🚨: تم وضع المعلم (${slot.teacher_name}) في يوم (${getDayName(slot.day)}) وهو غير مسموح له!`);
+          }
+          if (!tConst.periods.includes(slot.period_number)) {
+             errors.push(`اختراق قيد الحصص 🚨: تم وضع المعلم (${slot.teacher_name}) في الحصة (${slot.period_number}) وهي ممنوعة عليه!`);
+          }
+       }
+    });
+
+    setAuditReport({ errors, warnings, stats });
+    setIsAuditModalOpen(true);
+  };
+
 
   const openManualAssignModal = (lesson: any) => {
     setLessonToAssign(lesson);
@@ -701,7 +782,98 @@ export default function AutoScheduleGenerator() {
         }
       `}} />
 
-      {/* Modal مركز الطباعة המجمعة */}
+      {/* 🚀 Modal تقرير التدقيق والإحصائيات */}
+      <AnimatePresence>
+        {isAuditModalOpen && auditReport && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 print-hide" onClick={() => setIsAuditModalOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+               animate={{ opacity: 1, scale: 1, y: 0 }} 
+               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh] print-hide" 
+               dir="rtl"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500 text-white rounded-xl shadow-inner border border-indigo-400"><Activity className="w-6 h-6"/></div>
+                  <div>
+                    <h3 className="font-black text-white text-lg">تقرير جودة وإحصائيات الجدول</h3>
+                    <p className="text-xs font-bold text-slate-300 mt-0.5">فحص دقيق لتطابق الجدول مع جميع القواعد الإدارية والرياضية</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsAuditModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 bg-slate-800 rounded-full transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="p-6 flex-1 overflow-auto bg-slate-50 custom-scrollbar space-y-6">
+                 
+                 {/* 1. Score Card */}
+                 <div className="flex items-center justify-center p-6 bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="text-center">
+                       <h4 className="text-sm font-bold text-slate-500 mb-2">الحالة الصحية للجدول</h4>
+                       {auditReport.errors.length === 0 ? (
+                          <div className="inline-flex items-center gap-2 text-emerald-600 bg-emerald-50 px-6 py-3 rounded-full border border-emerald-200">
+                             <CheckCircle className="w-8 h-8" />
+                             <span className="text-2xl font-black">100% ممتاز ومطابق</span>
+                          </div>
+                       ) : (
+                          <div className="inline-flex items-center gap-2 text-rose-600 bg-rose-50 px-6 py-3 rounded-full border border-rose-200">
+                             <XCircle className="w-8 h-8" />
+                             <span className="text-2xl font-black">يوجد {auditReport.errors.length} أخطاء</span>
+                          </div>
+                       )}
+                    </div>
+                 </div>
+
+                 {/* 2. Stats Grid */}
+                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                       <p className="text-xl font-black text-indigo-600">{auditReport.stats.totalAssigned}</p>
+                       <p className="text-xs font-bold text-slate-500 mt-1">حصة مُسكنة</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                       <p className={`text-xl font-black ${auditReport.stats.unplaced === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{auditReport.stats.unplaced}</p>
+                       <p className="text-xs font-bold text-slate-500 mt-1">في الانتظار</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                       <p className="text-xl font-black text-slate-700">{auditReport.stats.teachersCount}</p>
+                       <p className="text-xs font-bold text-slate-500 mt-1">معلم مسجل</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                       <p className="text-xl font-black text-slate-700">{auditReport.stats.sectionsCount}</p>
+                       <p className="text-xs font-bold text-slate-500 mt-1">فصل مسجل</p>
+                    </div>
+                 </div>
+
+                 {/* 3. Errors List */}
+                 <div>
+                    <h4 className="text-sm font-black text-slate-800 mb-3 flex items-center gap-2"><List className="w-4 h-4"/> تفاصيل الأخطاء المرصودة:</h4>
+                    {auditReport.errors.length === 0 ? (
+                       <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-emerald-700 text-sm font-bold flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5"/> لا يوجد أي تضارب زمني، لا يوجد كسر لقيود المعلمين، التباعد اليومي سليم.
+                       </div>
+                    ) : (
+                       <div className="space-y-2">
+                          {auditReport.errors.map((err, idx) => (
+                             <div key={idx} className="bg-rose-50 border border-rose-200 p-3 rounded-xl text-rose-700 text-xs font-bold flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/> {err}
+                             </div>
+                          ))}
+                       </div>
+                    )}
+                 </div>
+
+              </div>
+
+              <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
+                <button onClick={() => setIsAuditModalOpen(false)} className="w-full py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 transition-colors active:scale-95 text-sm shadow-sm">إغلاق التقرير</button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Modal مركز الطباعة المجمعة */}
       <AnimatePresence>
         {isPrintCenterOpen && (
           <>
@@ -763,7 +935,6 @@ export default function AutoScheduleGenerator() {
           </>
         )}
       </AnimatePresence>
-
 
       {/* Modal التسكين اليدوي */}
       <AnimatePresence>
@@ -931,13 +1102,13 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/20 border border-rose-400/30 text-[10px] md:text-xs font-black text-rose-300 mb-3 uppercase tracking-widest">
-              <RefreshCcw className="w-4 h-4" /> قانون الانتشار اليومي الصارم
+              <BarChart3 className="w-4 h-4" /> نظام تقييم الجودة الإحصائي
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              الآن يُمنع وضع المواد في نفس اليوم لنفس الفصل (إلا المواد الكبيرة كالرياضيات). وتم إصلاح التفاف النصوص لكي لا يختفي اسم الفصل!
+              تمت إضافة (لوحة التدقيق والمصادقة). بعد التوليد، اضغط على زر "فحص الجودة" وسيقوم النظام بمسح الجدول بالكامل للبحث عن أي تضارب زمني أو كسر للقيود وإعطائك تقريراً دقيقاً!
             </p>
           </div>
         </div>
@@ -945,7 +1116,7 @@ export default function AutoScheduleGenerator() {
         {/* سلة الانتظار */}
         {unplacedLessons.length > 0 && (
           <div className="bg-rose-50 border border-rose-200 p-6 rounded-[2rem] shadow-sm">
-             <h3 className="text-rose-800 font-black text-lg mb-4 flex items-center gap-2"><AlertOctagon className="w-5 h-5"/> حصص بالانتظار ({unplacedLessons.length}) <span className="text-xs text-rose-500">(تذكر الضغط على "حفظ الجدول سحابياً" بعد التسكين)</span></h3>
+             <h3 className="text-rose-800 font-black text-lg mb-4 flex items-center gap-2"><AlertOctagon className="w-5 h-5"/> حصص بالانتظار ({unplacedLessons.length})</h3>
              <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
                 {unplacedLessons.map((lesson) => (
                   <div key={lesson.id} className="bg-white border border-rose-100 rounded-2xl p-4 shadow-sm min-w-[250px] shrink-0 flex flex-col justify-between">
@@ -1092,11 +1263,16 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      {displayMode === 'grid' && (
                        <>
+                         {/* 🚀 الزر الجديد: فحص الجودة */}
+                         <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
+                           <Activity className="w-4 h-4" /> فحص الجودة
+                         </button>
+
                          <button onClick={() => window.print()} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
                            <Printer className="w-4 h-4" /> طباعة
                          </button>
                          <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
-                           <Layers className="w-4 h-4" /> تجميع
+                           <Layers className="w-4 h-4" /> תجميع
                          </button>
                        </>
                      )}
@@ -1161,10 +1337,8 @@ export default function AutoScheduleGenerator() {
                                       <td key={p} className="p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7rem] align-top hover:bg-indigo-50/50 transition-colors">
                                         {slot ? (
                                           <div className="bg-white border border-indigo-200 shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative">
-                                            {/* 🚀 إزالة القص (truncate) لجعل النص يتمدد بالكامل */}
                                             <div className="font-black text-indigo-900 text-xs leading-tight mb-1 w-full whitespace-normal break-words" title={slot.subject_name}>{slot.subject_name}</div>
                                             <div className="font-bold text-[9px] sm:text-[10px] text-slate-800 bg-slate-50 px-1.5 py-1 rounded-md w-full whitespace-normal break-words leading-tight border border-slate-200" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
-                                            
                                             {showZoom && (
                                               <a href={slot.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-1.5 w-full flex items-center justify-center gap-1 text-[9px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md py-1 border border-blue-200 transition-colors" title="دخول لبث الزووم"><Video className="w-3 h-3"/> دخول للبث</a>
                                             )}
@@ -1189,7 +1363,7 @@ export default function AutoScheduleGenerator() {
         </div>
       </div>
 
-      {/* 🚀 الحاوية الخاصة بالطباعة המجمعة فقط */}
+      {/* الحاوية الخاصة بالطباعة המجمعة فقط */}
       <div className="hidden print:block w-full print:m-0 print:p-0">
          {idsToRender.map((renderId, index) => {
             const printName = getPrintNameById(renderId, activePrintType);
