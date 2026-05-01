@@ -129,16 +129,12 @@ export default function PublicSchedulesViewPage() {
          isUserRestricted = true;
 
          if (resolvedRole === 'student') {
-            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('id', user.id);
-            if (stuErr) console.error("Student Fetch Error:", stuErr);
-
+            const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('id', user.id);
             if (studentProfiles && studentProfiles.length > 0) {
                allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean) as string[];
                if (allowedIds.length === 0) setNoSectionAssigned(true);
             } else {
-               setNoSectionAssigned(true);
-               setLoading(false);
-               return; 
+               setNoSectionAssigned(true); setLoading(false); return; 
             }
          } 
          else if (resolvedRole === 'teacher') {
@@ -161,9 +157,7 @@ export default function PublicSchedulesViewPage() {
                    allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean) as string[];
                    if (allowedIds.length === 0) setNoSectionAssigned(true);
                 } else {
-                   setNoSectionAssigned(true);
-                   setLoading(false);
-                   return;
+                   setNoSectionAssigned(true); setLoading(false); return;
                 }
              }
          }
@@ -175,48 +169,43 @@ export default function PublicSchedulesViewPage() {
       setRestrictedName(displayName);
 
       if (isUserRestricted && resolvedRole === 'student' && allowedIds.length === 0) {
-         setLoading(false);
-         return;
+         setLoading(false); return;
       }
 
-      const [slotsRes, sectionsRes, subjectsRes, teachersRes, periodsRes] = await Promise.all([
-         supabase.from('auto_schedules').select('*').eq('plan_id', planRes.data.id),
-         supabase.from('sections').select('id, name, class_id, classes(name, level)'),
-         supabase.from('subjects').select('id, name'),
-         supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)'),
+      // 🚀 استعلام الـ Deep Join القوي (يجلب كل البيانات مدمجة من الخادم مباشرة)
+      const [slotsRes, periodsRes] = await Promise.all([
+         supabase
+           .from('auto_schedules')
+           .select(`
+              id, day_of_week, period_number, start_time, end_time, stage,
+              section_id, subject_id, teacher_id,
+              sections ( id, name, classes ( name, level ) ),
+              subjects ( id, name ),
+              teachers ( id, zoom_link, users ( full_name, zoom_link ) )
+           `)
+           .eq('plan_id', planRes.data.id),
          supabase.from('auto_class_periods').select('*').order('period_number')
       ]);
 
       if (slotsRes.error) throw slotsRes.error;
-
-      let safeTeachersData = teachersRes.data || [];
-      // 🚀 التحصين: التأكد أن الكود البديل يجلب رابط الزووم في حال فشل الطلب الأول
-      if (teachersRes.error) {
-         const fallbackTeachers = await supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)');
-         safeTeachersData = fallbackTeachers.data || [];
-      }
-
       setPeriods(periodsRes.data || []);
 
-      const slots = slotsRes.data || [];
-      const sectionsData = sectionsRes.data || [];
-      const subjectsData = subjectsRes.data || [];
-
-      const formattedSchedules = slots.map(slot => {
-        const sec = sectionsData.find(s => String(s.id) === String(slot.section_id));
-        const subj = subjectsData.find(s => String(s.id) === String(slot.subject_id));
-        const teach = safeTeachersData.find(t => String(t.id) === String(slot.teacher_id));
-
+      const formattedSchedules = (slotsRes.data || []).map(slot => {
+        // فك تشفير البيانات المدمجة بأمان
+        const sec = Array.isArray(slot.sections) ? slot.sections[0] : slot.sections;
         const cData = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
-        const level = cData?.level || 0;
-        const stage = level >= 10 ? 'high' : 'middle';
+        const stage = (cData?.level >= 10) ? 'high' : 'middle';
         
         const classNameStr = safeString(cData?.name, '');
         const secNameStr = safeString(sec?.name, '');
         const sectionFullName = sec ? `${classNameStr} - شعبة ${secNameStr}` : 'شعبة غير معروفة';
         
-        // 🚀 محرك جلب الرابط الذكي (يبحث في المعلم ثم يبحث في المستخدم)
-        let zoomLink = teach?.users?.zoom_link || teach?.zoom_link || null;
+        const subj = Array.isArray(slot.subjects) ? slot.subjects[0] : slot.subjects;
+        
+        const teach = Array.isArray(slot.teachers) ? slot.teachers[0] : slot.teachers;
+        const teachUser = Array.isArray(teach?.users) ? teach?.users[0] : teach?.users;
+
+        let zoomLink = teachUser?.zoom_link || teach?.zoom_link || null;
         if (typeof zoomLink !== 'string' || zoomLink.trim() === '') zoomLink = null;
 
         return {
@@ -230,7 +219,7 @@ export default function PublicSchedulesViewPage() {
           section_name: sectionFullName,
           subject_name: safeString(subj?.name, 'مادة محذوفة'),
           teacher_id: String(slot.teacher_id),
-          teacher_name: safeString(teach?.users?.full_name, 'معلم غير محدد'),
+          teacher_name: safeString(teachUser?.full_name, 'معلم غير محدد'),
           zoom_link: zoomLink
         };
       });
