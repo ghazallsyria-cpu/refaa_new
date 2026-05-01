@@ -212,7 +212,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE HYBRID ALGORITHM V7 (Rocks First + Maximum Overdrive Fallback)
+  // 🧠 THE HYBRID ALGORITHM V7
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -258,18 +258,12 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.weekly_quota > 0); 
 
-    // 🚀 الفرز الهجين (العودة لـ: الكبار أولاً لضمان عدم اختناق الرياضيات والعربي)
     const sortedAssignments = [...teacherAssignments].sort((a, b) => {
-      // 1. إيهاب (VIP) دائماً أولاً
       if (a.isVIP && !b.isVIP) return -1;
       if (!a.isVIP && b.isVIP) return 1;
-      
-      // 2. المعلمون ذوو الأيام المحدودة ثانياً
       const restrictA = a.available_days.length < 5 ? 1 : 0;
       const restrictB = b.available_days.length < 5 ? 1 : 0;
       if (restrictA !== restrictB) return restrictB - restrictA;
-
-      // 3. ⭐️ المواد ذات النصاب الأكبر (رياضيات، عربي) ثالثاً! الصخور قبل الرمل.
       return b.weekly_quota - a.weekly_quota; 
     });
     
@@ -312,13 +306,11 @@ export default function AutoScheduleGenerator() {
 
       let remainingLessons = assignment.weekly_quota;
       
-      // تحديد الحد الأقصى المثالي للمادة في اليوم
       let maxPerDay = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length); 
       if (assignment.weekly_quota >= 5) maxPerDay = 2; 
       if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
       for (let i = 0; i < remainingLessons; i++) {
-        
         let preferredDays = shuffleArray([...allowedDaysForTeacher]);
         preferredDays.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
         
@@ -331,11 +323,10 @@ export default function AutoScheduleGenerator() {
 
         let isPlaced = false;
 
-        // 🟢 المحاولة 1: التسكين المثالي (تطبيق قاعدة maxPerDay)
         for (const day of preferredDays) {
           const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
           
-          if (subjectCountToday >= maxPerDay) continue; // رفض إذا تجاوزنا الحد المثالي
+          if (subjectCountToday >= maxPerDay) continue;
 
           let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
           
@@ -364,12 +355,9 @@ export default function AutoScheduleGenerator() {
           if (isPlaced) break;
         }
 
-        // 🟡 المحاولة 2: صلاحيات الطوارئ القصوى (تجاهل maxPerDay تماماً!)
-        // إذا لم نجد مكاناً يحترم الشروط، سنضع الحصة في أي فراغ متاح حتى لو كانت الحصة الثالثة للمادة في نفس اليوم!
         if (!isPlaced) {
            const fallbackDays = assignment.isVIP ? shuffleArray([...allowedDaysForTeacher]) : shuffleArray([...allowedDaysForTeacher]);
            for (const day of fallbackDays) {
-             // 🚀 نسينا قيد subjectCountToday >= maxPerDay هنا متعمّدين!
              const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
              for (const period of fallbackPeriods) {
                if (canPlace(assignment.teacher_id, section.id, day, period)) {
@@ -381,7 +369,6 @@ export default function AutoScheduleGenerator() {
            }
         }
 
-        // 🔴 المحاولة 3: Bulldozer Swapping (الإزاحة)
         if (!isPlaced && !assignment.isVIP) {
           for (const day of shuffleArray([...allowedDaysForTeacher])) {
             if (isPlaced) break;
@@ -395,14 +382,11 @@ export default function AutoScheduleGenerator() {
               
               if (blockingSlotIndex !== -1) {
                 const blockingSlot = finalSchedule[blockingSlotIndex];
-                
                 if (blockingSlot.isVIP) continue;
-                
                 const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...allPeriods] };
 
                 for (const altPeriod of shuffleArray(dayPeriods)) {
                   if (altPeriod.period_number === period.period_number) continue;
-                  
                   if (!teacherZConstraints.periods.includes(altPeriod.period_number) || !teacherZConstraints.days.includes(day)) continue;
 
                   const secFreeAtAlt = !finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === altPeriod.period_number);
@@ -467,9 +451,11 @@ export default function AutoScheduleGenerator() {
     const pData = periods.find(p => p.stage === lessonToAssign.stage && p.period_number === periodNum);
     if (!pData) return;
 
-    const isTeacherBusy = generatedSchedules.some(s => s.teacher_id === lessonToAssign.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
-    if (isTeacherBusy) {
-      alert("ممنوع ❌: المعلم مشغول في فصل آخر في هذا الوقت!");
+    // 🚀 تحديث: البحث عن החصة التي تشغل المعلم حالياً
+    const busySlot = generatedSchedules.find(s => s.teacher_id === lessonToAssign.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
+    
+    if (busySlot) {
+      alert(`ممنوع ❌: المعلم مشغول بتدريس فصل (${busySlot.section_name}) في هذا الوقت!`);
       return;
     }
 
@@ -589,7 +575,7 @@ export default function AutoScheduleGenerator() {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
       
-      {/* Modal التسكين اليدوي */}
+      {/* 🚀 Modal التسكين اليدوي */}
       <AnimatePresence>
         {manualAssignModalOpen && lessonToAssign && (
           <>
@@ -614,8 +600,8 @@ export default function AutoScheduleGenerator() {
               
               <div className="p-5 flex-1 overflow-auto bg-slate-50 custom-scrollbar">
                  <p className="text-xs font-bold text-slate-500 mb-4 flex items-center gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                   <AlertOctagon className="w-5 h-5 text-amber-500" />
-                   الخانة الخضراء: متاحة | الصفراء: المعلم متوفر لكن الفصل مشغول (النقر للتبديل) | الحمراء: المعلم مشغول أو الوقت ممنوع.
+                   <AlertOctagon className="w-5 h-5 text-amber-500 shrink-0" />
+                   الخانة الخضراء: متاحة | الصفراء: المعلم متوفر لكن الفصل مشغول (النقر للتبديل) | الحمراء: يظهر لك اسم الفصل الذي يتواجد فيه المعلم حالياً لمنع التضارب.
                  </p>
                  
                  <div className="min-w-[700px] border border-slate-200 rounded-xl overflow-hidden bg-white">
@@ -634,7 +620,9 @@ export default function AutoScheduleGenerator() {
                                const pData = periods.find(per => per.stage === lessonToAssign.stage && per.period_number === p);
                                if (!pData) return <td key={p} className="bg-slate-50 p-2 border-l border-slate-200"></td>;
 
-                               const isTeacherBusy = generatedSchedules.some(s => s.teacher_id === lessonToAssign.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
+                               // 🚀 تحديث: جلب معلومات الحصة التي ينشغل بها المعلم
+                               const busySlot = generatedSchedules.find(s => s.teacher_id === lessonToAssign.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
+                               
                                const occupant = generatedSchedules.find(s => s.section_id === lessonToAssign.section_id && s.day === day && s.period_number === p);
                                
                                const tConst = teacherConstraints[lessonToAssign.teacher_id] || { days: [...workingDays], periods: [...allPeriods] };
@@ -646,9 +634,8 @@ export default function AutoScheduleGenerator() {
                                if (!isAllowedTime) {
                                   statusClass = "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60";
                                   statusText = "وقت ممنوع";
-                               } else if (isTeacherBusy) {
-                                  statusClass = "bg-rose-50 border-rose-200 text-rose-400 cursor-not-allowed opacity-60";
-                                  statusText = "المعلم مشغول";
+                               } else if (busySlot) {
+                                  statusClass = "bg-rose-50 border-rose-200 text-rose-500 cursor-not-allowed"; // إزالة الشفافية ليكون الخط واضحاً
                                } else if (occupant) {
                                   statusClass = "bg-amber-50 hover:bg-amber-100 border-amber-200 cursor-pointer text-amber-700";
                                   statusText = occupant.subject_name;
@@ -657,12 +644,23 @@ export default function AutoScheduleGenerator() {
                                return (
                                  <td 
                                    key={p} 
-                                   onClick={() => !isTeacherBusy && isAllowedTime && handleManualCellClick(day, p)}
-                                   className={`p-2 border-l border-b border-slate-200 last:border-l-0 transition-colors ${statusClass}`}
+                                   onClick={() => !busySlot && isAllowedTime && handleManualCellClick(day, p)}
+                                   className={`p-1 border-l border-b border-slate-200 last:border-l-0 transition-colors ${statusClass}`}
                                  >
-                                   <div className="flex flex-col items-center justify-center h-12">
-                                     <span className="text-[10px] font-black">{statusText}</span>
-                                     {occupant && !isTeacherBusy && isAllowedTime && <span className="text-[8px] font-bold opacity-70 mt-1 flex items-center gap-1"><Repeat className="w-2.5 h-2.5"/> إزاحة</span>}
+                                   <div className="flex flex-col items-center justify-center h-14 overflow-hidden text-center px-0.5">
+                                     {!isAllowedTime ? (
+                                        <span className="text-[10px] font-black">{statusText}</span>
+                                     ) : busySlot ? (
+                                        <>
+                                          <span className="text-[8px] font-black text-rose-600 bg-rose-100 px-1 rounded mb-0.5 w-full truncate">مشغول بـ:</span>
+                                          <span className="text-[8px] font-bold leading-tight line-clamp-2 w-full" title={busySlot.section_name}>{busySlot.section_name}</span>
+                                        </>
+                                     ) : (
+                                        <>
+                                          <span className="text-[10px] font-black">{statusText}</span>
+                                          {occupant && <span className="text-[8px] font-bold opacity-70 mt-1 flex items-center gap-1"><Repeat className="w-2.5 h-2.5"/> إزاحة</span>}
+                                        </>
+                                     )}
                                    </div>
                                  </td>
                                );
@@ -745,13 +743,13 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] md:text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> خوارزمية (الاستراتيجية الهجينة) لمنع الاختناق
+              <ShieldAlert className="w-4 h-4" /> عرض تفاصيل انشغال المعلم
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              يتم الآن توزيع (المواد الكبيرة) أولاً مع تفعيل قانون الطوارئ، لتسمح الخوارزمية بوضع الحصص الزائدة في أي فراغ متاح وتمنع تحولها لسلة الانتظار!
+              الآن في شاشة "التسكين اليدوي" سترى بالضبط اسم (الفصل) الذي يتواجد فيه المعلم المشغول بدلاً من مجرد إخبارك بأنه مشغول.
             </p>
           </div>
         </div>
@@ -981,4 +979,5 @@ export default function AutoScheduleGenerator() {
   );
 }
 
-```
+
+
