@@ -212,14 +212,14 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE ULTIMATE ALGORITHM V5 (ABSOLUTE VIP PRIORITY)
+  // 🧠 THE ULTIMATE ALGORITHM V6 (Small Quotas First + Double Periods)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]);
-    addLog("🚀 بدء التوليد الاستباقي (مع الأولوية المطلقة)...");
+    addLog("🚀 بدء التوليد الاستباقي المتقدم...");
     
     let finalSchedule: any[] = [];
     let unplacedQueue: any[] = []; 
@@ -246,23 +246,23 @@ export default function AutoScheduleGenerator() {
       if (!teacherDailyLoad[ts.teacher_id]) teacherDailyLoad[ts.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
       
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...allPeriods] };
-      const availableSlotsCount = tConst.days.length * tConst.periods.length;
       
-      // تحديد إيهاب لجعله VIP
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
-
-      const difficultyScore = (quota / (availableSlotsCount || 1)) + (sharedTeachers.has(ts.teacher_id) ? 2 : 0);
 
       return {
         ...ts, weekly_quota: quota, teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
         subject_name: ts.subjects?.name || 'مادة', class_name: section?.class_name, section_level: section?.level,
-        stage: section?.stage, difficulty: difficultyScore, available_days: tConst.days, available_periods: tConst.periods,
-        isVIP: isEhabPhysics // 🚀 الختم الرئاسي
+        stage: section?.stage, available_days: tConst.days, available_periods: tConst.periods,
+        isVIP: isEhabPhysics 
       };
     }).filter(ta => ta.weekly_quota > 0); 
 
-    // 🚀 الفرز الديكتاتوري: الـ VIP أولاً، ثم قيود الأيام، ثم الصعوبة
+    // 🚀 الفرز الجديد (العبقري):
+    // 1. VIP (الفيزياء) أولاً.
+    // 2. المعلمون ذوو الأيام المحدودة ثانياً.
+    // 3. ⭐️ المواد ذات النصاب الأقل (حاسوب، دستور) ثالثاً!
+    // 4. المواد الدسمة (عربي، رياضيات) في النهاية لتملأ الفراغات.
     const sortedAssignments = [...teacherAssignments].sort((a, b) => {
       if (a.isVIP && !b.isVIP) return -1;
       if (!a.isVIP && b.isVIP) return 1;
@@ -271,8 +271,10 @@ export default function AutoScheduleGenerator() {
       const restrictB = b.available_days.length < 5 ? 1 : 0;
       if (restrictA !== restrictB) return restrictB - restrictA;
 
-      return b.difficulty - a.difficulty;
+      return a.weekly_quota - b.weekly_quota; // 🚀 تصاعدي: الأقل حصصاً أولاً!
     });
+    
+    addLog(`📈 تم قلب استراتيجية التوزيع: تسكين المواد الأقل حصصاً (كالحاسوب) أولاً لتجنب الاختناق.`);
     
     let failedPlacements = 0;
     await new Promise(r => setTimeout(r, 500));
@@ -285,7 +287,7 @@ export default function AutoScheduleGenerator() {
         teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name,
         day: day, period_number: period.period_number,
         start_time: period.start_time, end_time: period.end_time, stage: section.stage,
-        isVIP: assignment.isVIP // لحمايته من الإزاحة
+        isVIP: assignment.isVIP
       });
       teacherDailyLoad[assignment.teacher_id][day]++; 
     };
@@ -311,30 +313,41 @@ export default function AutoScheduleGenerator() {
 
       let remainingLessons = assignment.weekly_quota;
       
-      let maxPerDay = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length); 
-      if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); // مسموح تكرارها في نفس اليوم للـ VIP لسد الـ 6 خانات
+      // 🚀 تشريع الحصص المزدوجة (Double Periods)
+      // إذا كانت المادة 5 حصص أو أكثر، نسمح بحصتين في اليوم كحد أقصى.
+      let maxPerDay = 1; 
+      if (assignment.weekly_quota >= 5) {
+         maxPerDay = 2; // مسموح للرياضيات والعربي التكرار لمرتين في اليوم كوضع طبيعي
+      }
+      if (assignment.isVIP) {
+         maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
+      }
 
       for (let i = 0; i < remainingLessons; i++) {
         
         let preferredDays = shuffleArray([...allowedDaysForTeacher]);
         preferredDays.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
         
-        // 🚀 الالتزام الصارم بقاعدة إيهاب دون الطوارئ (حصراً الأحد والإثنين)
+        let isEmergencyEhab = false;
         if (assignment.isVIP) {
-           preferredDays = [1, 2]; // 1 الأحد، 2 الإثنين
+           const vipDays = preferredDays.filter(d => d === 1 || d === 2);
+           if (vipDays.length > 0) preferredDays = vipDays;
+           else isEmergencyEhab = true; 
         }
 
         let isPlaced = false;
 
-        // 🟢 المحاولة 1: التسكين الأساسي
+        // 🟢 المحاولة 1: التسكين الأساسي (مع السماح بالحصص المزدوجة للمواد الثقيلة)
         for (const day of preferredDays) {
           const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
+          
           if (subjectCountToday >= maxPerDay) continue;
 
           let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
           
-          if (assignment.isVIP) {
-             availablePeriods = availablePeriods.filter(p => p.period_number <= 3); // حصراً 1 و 2 و 3
+          if (assignment.isVIP && !isEmergencyEhab) {
+             const morningPeriods = availablePeriods.filter(p => p.period_number <= 3);
+             if (morningPeriods.length > 0) availablePeriods = morningPeriods;
           }
           
           let orderedPeriods = [];
@@ -357,9 +370,10 @@ export default function AutoScheduleGenerator() {
           if (isPlaced) break;
         }
 
-        // 🟡 المحاولة 2: Fallback لتجاوز حاجز التكرار اليومي (لغير الـ VIP)
-        if (!isPlaced && !assignment.isVIP) {
-           for (const day of shuffleArray([...allowedDaysForTeacher])) {
+        // 🟡 المحاولة 2: Fallback (التغاضي عن الحد الأقصى للمادة في اليوم وفتح أيام الطوارئ)
+        if (!isPlaced) {
+           const fallbackDays = assignment.isVIP ? shuffleArray([...allowedDaysForTeacher]) : shuffleArray([...allowedDaysForTeacher]);
+           for (const day of fallbackDays) {
              const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
              for (const period of fallbackPeriods) {
                if (canPlace(assignment.teacher_id, section.id, day, period)) {
@@ -371,7 +385,7 @@ export default function AutoScheduleGenerator() {
            }
         }
 
-        // 🔴 المحاولة 3: Bulldozer Swapping (للجميع عدا الـ VIP)
+        // 🔴 المحاولة 3: Bulldozer Swapping (الإزاحة لسد الفراغات)
         if (!isPlaced && !assignment.isVIP) {
           for (const day of shuffleArray([...allowedDaysForTeacher])) {
             if (isPlaced) break;
@@ -386,7 +400,6 @@ export default function AutoScheduleGenerator() {
               if (blockingSlotIndex !== -1) {
                 const blockingSlot = finalSchedule[blockingSlotIndex];
                 
-                // 🚀 حماية الـ VIP من الإزاحة! لا تزح الأستاذ إيهاب
                 if (blockingSlot.isVIP) continue;
                 
                 const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...allPeriods] };
@@ -431,13 +444,13 @@ export default function AutoScheduleGenerator() {
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد باستخدام الفرز بالصعوبة المطلقة!`);
+    addLog(`✅ اكتمل التوليد بنجاح! تم السماح بحصص مزدوجة للمواد الثقيلة.`);
     if (failedPlacements > 0) {
       addLog(`⚠️ تحذير: ${failedPlacements} حصة انتقلت لسلة الانتظار لتعذر تسكينها.`);
       const uniqueFails = [...new Set(failedDetailsLog)];
       uniqueFails.forEach(f => addLog(`❌ في الانتظار: ${f}`));
     } else {
-      addLog(`🎉 نجاح تام! 0 حصص في الانتظار. تم تسكين الجدول بالكامل.`);
+      addLog(`🎉 إنجاز أسطوري! 0 حصص في الانتظار. الجدول مكتمل.`);
     }
 
     finalSchedule.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
@@ -736,13 +749,13 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] md:text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> قانون الأولوية المطلقة للترتيب الرياضي
+              <ShieldAlert className="w-4 h-4" /> خوارزمية الفرز العكسي للمواد (Smallest First)
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              الخوارزمية الآن ترتب المعلمين ذوي القيود المستحيلة أولاً! (حصص الأستاذ إيهاب للفيزياء ستنزل أولاً على جدول فارغ تماماً لحماية أيام الأحد والإثنين).
+              النظام يوزع المواد القليلة أولاً! كما تم تشريع (الحصص المزدوجة) للمواد الثقيلة كالرياضيات لتخفيف الضغط ومنع الفشل.
             </p>
           </div>
         </div>
@@ -971,6 +984,5 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
-
 
 
