@@ -60,10 +60,13 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('');
   const [userFullName, setUserFullName] = useState<string>('');
 
+  // 🚀 حل مشكلة تضارب التوقيت (Hydration Mismatch)
+  const [mounted, setMounted] = useState(false);
   const hasFetched = useRef(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   useEffect(() => {
+    setMounted(true);
     const timer = setInterval(() => setCurrentDateTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
@@ -206,8 +209,8 @@ export default function PublicSchedulesViewPage() {
           id: String(slot.id),
           day: slot.day_of_week,
           period_number: slot.period_number,
-          start_time: slot.start_time,
-          end_time: slot.end_time,
+          start_time: slot.start_time || '',
+          end_time: slot.end_time || '',
           stage: stage,
           section_id: String(slot.section_id),
           section_name: sectionFullName,
@@ -275,6 +278,26 @@ export default function PublicSchedulesViewPage() {
      });
   }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
+  // 🚀 محرك آمن لاستخراج اسم المعلم أو الفصل لتجنب أي أعطال
+  const getEntityName = () => {
+    if (isRestricted) {
+       if (activeRole === 'student') {
+          if (currentViewSchedules.length > 0 && currentViewSchedules[0].section_name) {
+             return currentViewSchedules[0].section_name;
+          }
+       }
+       return restrictedName;
+    } else {
+       if (filterType === 'section') {
+          const sec = sections.find(s => String(s.id) === String(filterId));
+          return sec ? sec.name : 'غير محدد';
+       } else {
+          const t = uniqueTeachers.find(t => String(t.id) === String(filterId));
+          return t ? t.name : 'غير محدد';
+       }
+    }
+  };
+
   if (isChecking || loading) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
@@ -313,7 +336,6 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
-  // 🚀 تحديد هوية العرض بدقة (لتلوين البطاقات بشكل مختلف للطالب والمعلم)
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
   return (
@@ -420,13 +442,13 @@ export default function PublicSchedulesViewPage() {
                          <Lock className="w-3 h-3"/> {activeRole === 'student' ? 'جدول فصلك الحالي' : 'الجدول المخصص لك'}
                       </p>
                       <p className="text-base font-black text-white mt-0.5">
-                         {activeRole === 'student' && sections.find(s => String(s.id) === String(restrictedIds[0]))?.name || restrictedName}
+                         {getEntityName()}
                       </p>
                    </div>
                    <div className="hidden sm:flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-white/5">
                       <Clock className="w-4 h-4 text-amber-400" />
                       <span className="text-sm font-black text-amber-400" dir="ltr">
-                        {currentDateTime.toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                        {mounted ? currentDateTime.toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
                       </span>
                    </div>
                 </div>
@@ -571,7 +593,7 @@ export default function PublicSchedulesViewPage() {
                   <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
                   <h2 className="text-xl font-bold text-slate-700">
                      {isStudentView ? 'الفصل: ' : 'المعلم: '} 
-                     {isStudentView ? (sections.find(s => String(s.id) === String(isRestricted ? restrictedIds[0] : filterId))?.name || restrictedName) : restrictedName}
+                     {getEntityName()}
                   </h2>
                </div>
 
