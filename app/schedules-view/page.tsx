@@ -37,7 +37,6 @@ export default function PublicSchedulesViewPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [latestPlanName, setLatestPlanName] = useState<string>('');
 
-  // فلاتر العرض
   const [filterType, setFilterType] = useState<'section' | 'teacher'>('section');
   const [filterId, setFilterId] = useState<string>('');
 
@@ -64,75 +63,60 @@ export default function PublicSchedulesViewPage() {
 
       if (planError || !latestPlan) {
         setLoading(false);
-        return; // لا توجد خطة
+        return; 
       }
 
       setLatestPlanName(latestPlan.name);
 
-      // 2. 🚀 الاستعلام المضاد للأعطال (Fallback Query) لحل مشكلة الشاشة الفارغة
-      let slots = [];
-      const { data: slotsWithZoom, error: zoomError } = await supabase
+      // 2. 🚀 الاستعلام المسطح (Flat Fetch): نجلب الجداول بشكل منفصل لتجنب أخطاء العلاقات والصلاحيات
+      const { data: slots, error: slotsError } = await supabase
         .from('auto_schedules')
-        .select(`
-          *,
-          sections (id, name, class_id, classes(name, level)),
-          subjects (name),
-          teachers (id, zoom_link, users(full_name, zoom_link))
-        `)
+        .select('*')
         .eq('plan_id', latestPlan.id);
 
+      if (slotsError) throw slotsError;
+
+      // 3. جلب البيانات الأساسية
+      const { data: sectionsData } = await supabase.from('sections').select('id, name, class_id, classes(name, level)');
+      const { data: subjectsData } = await supabase.from('subjects').select('id, name');
+      
+      let teachersData = [];
+      const { data: teachersWithZoom, error: zoomError } = await supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)');
       if (zoomError) {
-         console.warn("Zoom relation missing, falling back to safe query...");
-         // استعلام آمن في حال عدم وجود حقل zoom_link
-         const { data: safeSlots, error: safeError } = await supabase
-          .from('auto_schedules')
-          .select(`
-            *,
-            sections (id, name, class_id, classes(name, level)),
-            subjects (name),
-            teachers (id, users(full_name))
-          `)
-          .eq('plan_id', latestPlan.id);
-
-          if (safeError) {
-             console.error("Data Fetch Error:", safeError);
-             setFetchError(safeError.message);
-          }
-          slots = safeSlots || [];
+         const { data: safeTeachers } = await supabase.from('teachers').select('id, users(full_name)');
+         teachersData = safeTeachers || [];
       } else {
-         slots = slotsWithZoom || [];
+         teachersData = teachersWithZoom || [];
       }
 
-      if (slots.length === 0 && !fetchError) {
-          // إذا كانت المصفوفة فارغة، فهذا يعني غالباً مشكلة في صلاحيات RLS للطلاب
-          console.warn("No slots found for this plan. Might be an RLS issue.");
-      }
-
-      // 3. جلب أوقات الحصص
       const { data: periodsData } = await supabase.from('auto_class_periods').select('*').order('period_number');
       setPeriods(periodsData || []);
 
-      // 4. تنسيق البيانات
-      const formattedSchedules = (slots || []).map(s => {
-        const cData = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
+      // 4. 🚀 الربط اليدوي الآمن (Manual Mapping)
+      const formattedSchedules = (slots || []).map(slot => {
+        const sec = sectionsData?.find(s => s.id === slot.section_id);
+        const subj = subjectsData?.find(s => s.id === slot.subject_id);
+        const teach = teachersData?.find(t => t.id === slot.teacher_id);
+
+        const cData = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
         const level = cData?.level || 0;
         const stage = level >= 10 ? 'high' : 'middle';
-        const sectionFullName = `${cData?.name || ''} - شعبة ${s.sections?.name || ''}`;
+        const sectionFullName = sec ? `${cData?.name || ''} - شعبة ${sec.name || ''}` : 'شعبة غير معروفة';
         
-        const zoomLink = s.teachers?.users?.zoom_link || s.teachers?.zoom_link || null;
+        const zoomLink = teach?.users?.zoom_link || teach?.zoom_link || null;
 
         return {
-          id: s.id,
-          day: s.day_of_week,
-          period_number: s.period_number,
-          start_time: s.start_time,
-          end_time: s.end_time,
+          id: slot.id,
+          day: slot.day_of_week,
+          period_number: slot.period_number,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
           stage: stage,
-          section_id: s.section_id,
+          section_id: slot.section_id,
           section_name: sectionFullName,
-          subject_name: s.subjects?.name || 'مادة',
-          teacher_id: s.teacher_id,
-          teacher_name: s.teachers?.users?.full_name || 'معلم',
+          subject_name: subj?.name || 'مادة محذوفة',
+          teacher_id: slot.teacher_id,
+          teacher_name: teach?.users?.full_name || 'معلم غير محدد',
           zoom_link: zoomLink
         };
       });
@@ -192,7 +176,7 @@ export default function PublicSchedulesViewPage() {
            <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg max-w-md w-full">
               <Users className="w-16 h-16 text-indigo-400 mx-auto mb-4 opacity-80" />
               <h2 className="text-xl font-black text-white mb-2">يرجى تسجيل الدخول</h2>
-              <p className="text-slate-400 font-bold text-sm">عذراً، يجب عليك تسجيل الدخول بحسابك (طالب أو معلم) لرؤية الجدول الدراسي الخاص بك.</p>
+              <p className="text-slate-400 font-bold text-sm">عذراً، يجب عليك تسجيل الدخول بحسابك لرؤية الجدول الدراسي.</p>
            </div>
        </div>
     );
@@ -226,7 +210,7 @@ export default function PublicSchedulesViewPage() {
         {fetchError && (
            <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
               <AlertTriangle className="w-5 h-5 shrink-0" />
-              <p className="text-sm">حدث خطأ أثناء جلب البيانات: {fetchError}</p>
+              <p className="text-sm">حدث خطأ أثناء جلب البيانات: {fetchError}. يرجى مراجعة صلاحيات قاعدة البيانات.</p>
            </div>
         )}
 
@@ -234,7 +218,7 @@ export default function PublicSchedulesViewPage() {
            <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg">
               <CalendarDays className="w-20 h-20 text-slate-600 mx-auto mb-4 opacity-50" />
               <h2 className="text-2xl font-black text-white mb-2">لا توجد جداول معتمدة بعد</h2>
-              <p className="text-slate-400 font-bold">لم تقم الإدارة بنشر الجدول النهائي حتى الآن، أو أن حسابك لا يملك صلاحية رؤيته حالياً.</p>
+              <p className="text-slate-400 font-bold">لم تقم الإدارة بنشر الجدول النهائي حتى الآن.</p>
            </div>
         ) : schedules.length > 0 ? (
           <>
@@ -303,6 +287,8 @@ export default function PublicSchedulesViewPage() {
                         </td>
                         {dynamicPeriods.map(p => {
                           const slot = schedules.find(s => s.day === day.id && s.period_number === p && (filterType === 'section' ? s.section_id === filterId : s.teacher_id === filterId));
+                          
+                          // إظهار رابط زووم
                           const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
 
                           return (
@@ -310,14 +296,22 @@ export default function PublicSchedulesViewPage() {
                               {slot ? (
                                 <motion.div whileHover={{ scale: 1.02 }} className="h-full flex flex-col justify-center bg-[#02040a]/60 rounded-xl p-3 border border-white/10 shadow-inner relative overflow-hidden group">
                                   <div className={`absolute top-0 right-0 w-1.5 h-full ${filterType === 'section' ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
+                                  
                                   <div className="font-black text-white text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2">
                                     {slot.subject_name}
                                   </div>
+                                  
                                   <div className="text-[10px] sm:text-xs font-bold text-slate-400 pr-2 leading-tight">
                                     {filterType === 'section' ? `أ. ${slot.teacher_name}` : slot.section_name}
                                   </div>
+
                                   {showZoom && (
-                                    <a href={slot.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-2 w-full flex items-center justify-center gap-1.5 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-500 rounded-lg py-1.5 transition-colors shadow-[0_0_10px_rgba(37,99,235,0.4)]">
+                                    <a 
+                                      href={slot.zoom_link} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="mt-2 w-full flex items-center justify-center gap-1.5 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-500 rounded-lg py-1.5 transition-colors shadow-[0_0_10px_rgba(37,99,235,0.4)]"
+                                    >
                                       <Video className="w-3.5 h-3.5"/> دخول للبث
                                     </a>
                                   )}
