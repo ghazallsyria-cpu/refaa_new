@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
-// 🚀 استيراد مكتبات توليد الـ PDF الذكية (نفس المستخدمة في الإدارة)
+// 🚀 استيراد مكتبات توليد الـ PDF
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
 
@@ -54,7 +54,7 @@ const getKuwaitDayId = (date: Date) => {
   return jsDay + 1;
 };
 
-// 🚀 دالة تنظيف الروابط لتعمل في الـ PDF
+// 🚀 تنظيف الرابط ليعمل بشكل صحيح في PDF
 const normalizeUrl = (url?: string) => {
   if (!url) return '';
   const clean = url.trim();
@@ -85,7 +85,6 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
-  // 🚀 حالة توليد الـ PDF
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const hasFetched = useRef(false);
@@ -326,47 +325,58 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
-  // 🚀 محرك الطباعة الأسطوري (يطبع الـ PDF ويزرع الروابط بداخله)
+  // 🚀 محرك الطباعة المحصن (لا يعتمد على تفاعلات React لمنع الانهيار)
   const executePDF = async () => {
     try {
       setIsGeneratingPDF(true);
       
-      // ننتظر قليلاً حتى تكتمل عملية رسم الشاشة الوهمية
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // إعطاء واجهة التحميل فرصة صغيرة للظهور بسلاسة
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      const containers = document.querySelectorAll('.pdf-page-container');
-      if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جدول.');
+      // البحث عن الحاوية الخفية الدائمة (الموجودة في أسفل الكود)
+      const container = document.getElementById('pdf-export-container');
+      if (!container) throw new Error('الجدول غير جاهز للطباعة.');
 
       const pdf = new jsPDF('landscape', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       
-      const el = containers[0] as HTMLElement;
+      // التقاط الصورة للجدول المخفي
+      const canvas = await html2canvas(container, { 
+        scale: 2, 
+        useCORS: true, 
+        backgroundColor: '#ffffff', 
+        logging: false 
+      });
       
-      // تحويل الشاشة الوهمية إلى صورة فائقة الدقة
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
       const imgData = canvas.toDataURL('image/png');
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
-      // 🚀 السحر هنا: زراعة الروابط فوق الـ PDF بناءً على إحداثياتها في الشاشة
-      const links = el.querySelectorAll('a.zoom-link');
-      const elementRect = el.getBoundingClientRect();
+      // 🚀 برمجة الروابط النشطة فوق الصورة داخل الـ PDF
+      const links = container.querySelectorAll('a.zoom-link');
+      const elementRect = container.getBoundingClientRect();
       
       links.forEach((link: any) => {
         const rect = link.getBoundingClientRect();
-        const relativeX = (rect.left - elementRect.left) / elementRect.width;
-        const relativeY = (rect.top - elementRect.top) / elementRect.height;
-        const pdfX = relativeX * pdfWidth; 
-        const pdfY = relativeY * pdfHeight;
-        const finalUrl = normalizeUrl(link.href);
-        if (finalUrl) {
-           pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+        // حماية ضد القسمة على الصفر
+        if (elementRect.width > 0 && elementRect.height > 0) {
+          const relativeX = (rect.left - elementRect.left) / elementRect.width;
+          const relativeY = (rect.top - elementRect.top) / elementRect.height;
+          const pdfX = relativeX * pdfWidth; 
+          const pdfY = relativeY * pdfHeight;
+          const finalUrl = normalizeUrl(link.href);
+          
+          if (finalUrl) {
+             pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+          }
         }
       });
       
       let safeName = getEntityName().replace(/\s+/g, '_');
       pdf.save(`جدول_${safeName}.pdf`);
+
     } catch (error: any) { 
+      console.error(error);
       alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
     } finally { 
       setIsGeneratingPDF(false); 
@@ -414,7 +424,7 @@ export default function PublicSchedulesViewPage() {
   return (
     <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden" dir="rtl">
       
-      {/* 🚀 إخفاء الطباعة العادية للمتصفح لأننا نستخدم الـ PDF الذكي */}
+      {/* 🚀 إخفاء الطباعة العادية للمتصفح تماماً */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
            body { display: none !important; }
@@ -428,7 +438,7 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 شاشة التحميل الرائعة للـ PDF */}
+      {/* شاشة تحميل الـ PDF */}
       <AnimatePresence>
         {isGeneratingPDF && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#090b14]/90 backdrop-blur-xl text-white">
@@ -457,7 +467,6 @@ export default function PublicSchedulesViewPage() {
                 </p>
               </div>
             </div>
-            {/* 🚀 تم تغيير زر الطباعة ليستدعي دالة PDF */}
             <button onClick={executePDF} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2">
                <FileDown className="w-5 h-5" /> تحميل الجدول PDF
             </button>
@@ -538,7 +547,7 @@ export default function PublicSchedulesViewPage() {
               )}
             </div>
 
-            {/* عارض الشاشة */}
+            {/* عارض الشاشة للمستخدم */}
             <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
@@ -666,69 +675,73 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 منطقة الطباعة الخفية والمطابقة تماماً لتصميم الإدارة الفخم */}
-            <div className="fixed top-[20000px] left-[20000px] opacity-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
-              {isGeneratingPDF && (
-                <div className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
-                    <div>
-                      <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
-                      <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
-                         {isStudentView ? `الفصل: ${getEntityName()}` : `المعلم: ${getEntityName()}`}
-                      </h2>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
-                    </div>
+            {/* 🚀 منطقة الطباعة الخفية (موجودة دائماً في الخلفية لتجنب تأخيرات وأخطاء React) */}
+            <div style={{ position: 'fixed', top: '-10000px', left: '-10000px', pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+              <div id="pdf-export-container" className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
+                  <div>
+                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                    <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
+                       {isStudentView ? `الفصل: ${getEntityName()}` : `المعلم: ${getEntityName()}`}
+                    </h2>
                   </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
-                        {dynamicPeriods.map(p => (
-                          <th key={p.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
-                            <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p.period_number}</div>
-                            <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}</div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {DAYS.map((day, index) => (
-                        <tr key={day.id}>
-                          <td style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
-                          {dynamicPeriods.map((p) => {
-                            const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
-                            return (
-                              <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                {slot ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
-                                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isStudentView ? slot.subject_name : slot.section_name}</div>
-                                    <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
-                                      {isStudentView ? `أ. ${slot.teacher_name}` : slot.subject_name}
-                                    </div>
-                                    {/* 🚀 رابط الزووم مزروع بكلاس zoom-link ليتم صيده في محرك الـ PDF */}
-                                    {slot.zoom_link && (
-                                      <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
-                                        رابط البث
-                                      </a>
-                                    )}
-                                  </div>
-                                ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
-                    <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
                   </div>
                 </div>
-              )}
+                <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
+                      {dynamicPeriods.map(p => (
+                        <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p}</div>
+                          {(() => {
+                            const slotForTime = currentViewSchedules.find(s => s.period_number === p);
+                            if (slotForTime) {
+                              return <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{formatTime(slotForTime.start_time)} - {formatTime(slotForTime.end_time)}</div>;
+                            }
+                            return null;
+                          })()}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DAYS.map((day, index) => (
+                      <tr key={day.id}>
+                        <td style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
+                        {dynamicPeriods.map((p) => {
+                          const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
+                          return (
+                            <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              {slot ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isStudentView ? slot.subject_name : slot.section_name}</div>
+                                  <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
+                                    {isStudentView ? `أ. ${slot.teacher_name}` : slot.subject_name}
+                                  </div>
+                                  {/* 🚀 رابط الزووم مزروع بكلاس zoom-link ليتم صيده في محرك الـ PDF */}
+                                  {slot.zoom_link && (
+                                    <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
+                                      رابط البث
+                                    </a>
+                                  )}
+                                </div>
+                              ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
+                  <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
+                </div>
+              </div>
             </div>
 
           </>
