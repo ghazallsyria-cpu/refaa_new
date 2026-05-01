@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer
+  Loader2, Save, X, CalendarDays, Clock, Users, BookOpen, Trash2, ShieldAlert, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -41,10 +41,8 @@ export default function AutoScheduleGenerator() {
   const [loadingData, setLoadingData] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generationLogs, setGenerationLogs] = useState<string[]>([]);
-  
-  // 🚀 سجل جديد لتتبع القيود المخترقة
   const [violationLogs, setViolationLogs] = useState<string[]>([]);
-
+  
   const [sections, setSections] = useState<any[]>([]);
   const [rawTeacherAssignments, setRawTeacherAssignments] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
@@ -80,6 +78,12 @@ export default function AutoScheduleGenerator() {
   const [gridFilterType, setGridFilterType] = useState<'section' | 'teacher'>('section');
   const [gridFilterId, setGridFilterId] = useState<string>('');
 
+  // 🚀 حالات الطباعة المجمعة
+  const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
+  const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
+  const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
+  const [isBatchPrinting, setIsBatchPrinting] = useState(false); // حالة نشطة أثناء الطباعة للتحكم بالريندر
+
   useEffect(() => {
     if (currentRole !== 'admin' && currentRole !== 'management') return;
     fetchMasterData();
@@ -87,7 +91,7 @@ export default function AutoScheduleGenerator() {
   }, [currentRole]);
 
   useEffect(() => {
-    if (generatedSchedules.length > 0 && !gridFilterId) {
+    if (generatedSchedules.length > 0 && !gridFilterId && !isBatchPrinting) {
       if (gridFilterType === 'section') {
         const firstSection = sections.find(s => generatedSchedules.some(gs => gs.section_id === s.id));
         if (firstSection) setGridFilterId(firstSection.id);
@@ -96,7 +100,7 @@ export default function AutoScheduleGenerator() {
         if (firstTeacherId) setGridFilterId(firstTeacherId);
       }
     }
-  }, [generatedSchedules, gridFilterType, sections, gridFilterId]);
+  }, [generatedSchedules, gridFilterType, sections, gridFilterId, isBatchPrinting]);
 
   const fetchMasterData = async () => {
     try {
@@ -117,8 +121,20 @@ export default function AutoScheduleGenerator() {
       const { data: periodsData } = await supabase.from('auto_class_periods').select('*').order('period_number');
       setPeriods(periodsData || []);
 
-      const { data: tsData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name)), subjects(name)');
-      setRawTeacherAssignments(tsData || []);
+      // 🚀 استعلام آمن للزوم: نحاول جلبه، وإذا فشل نجلب البيانات بدونه
+      let tsData = [];
+      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections')
+         .select('teacher_id, section_id, subject_id, teachers(users(full_name, zoom_link)), subjects(name)');
+      
+      if (zoomError) {
+         const { data: safeData } = await supabase.from('teacher_sections')
+           .select('teacher_id, section_id, subject_id, teachers(users(full_name)), subjects(name)');
+         tsData = safeData || [];
+      } else {
+         tsData = tsDataWithZoom || [];
+      }
+
+      setRawTeacherAssignments(tsData);
 
       if (tsData && formattedSections.length > 0) {
         const subjClassMap = new Map();
@@ -220,14 +236,15 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE ULTIMATE ALGORITHM V8 (Constraint Breaker Engine)
+  // 🧠 THE ULTIMATE ALGORITHM V9 (With Zoom Links support)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setViolationLogs([]);
-    addLog("🚀 بدء التوليد بمحرك الاختراق (5 مستويات من الذكاء)...");
+    setIsBatchPrinting(false);
+    addLog("🚀 بدء التوليد بمحرك الاختراق...");
     
     let finalSchedule: any[] = [];
     let unplacedQueue: any[] = []; 
@@ -257,12 +274,15 @@ export default function AutoScheduleGenerator() {
       
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
+      
+      // 🚀 استخراج رابط الزووم إن وجد
+      const zoomLink = ts.teachers?.users?.zoom_link || ts.teachers?.zoom_link || null;
 
       return {
         ...ts, weekly_quota: quota, teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
         subject_name: ts.subjects?.name || 'مادة', class_name: section?.class_name, section_level: section?.level,
         stage: section?.stage, available_days: tConst.days, available_periods: tConst.periods,
-        isVIP: isEhabPhysics 
+        isVIP: isEhabPhysics, zoom_link: zoomLink
       };
     }).filter(ta => ta.weekly_quota > 0); 
 
@@ -272,7 +292,7 @@ export default function AutoScheduleGenerator() {
       const restrictA = a.available_days.length < 5 ? 1 : 0;
       const restrictB = b.available_days.length < 5 ? 1 : 0;
       if (restrictA !== restrictB) return restrictB - restrictA;
-      return b.weekly_quota - a.weekly_quota; 
+      return a.weekly_quota - b.weekly_quota; 
     });
     
     let failedPlacements = 0;
@@ -287,7 +307,8 @@ export default function AutoScheduleGenerator() {
         day: day, period_number: period.period_number,
         start_time: period.start_time, end_time: period.end_time, stage: section.stage,
         isVIP: assignment.isVIP,
-        violation: violationReason // 🚀 حفظ نوع المخالفة لتمييزها في الجدول
+        violation: violationReason,
+        zoom_link: assignment.zoom_link // 🚀 حفظ رابط الزووم في الحصة
       });
       teacherDailyLoad[assignment.teacher_id][day]++; 
       if (violationReason) {
@@ -295,7 +316,6 @@ export default function AutoScheduleGenerator() {
       }
     };
 
-    // القاعدة الذهبية التي لا تكسر أبداً: هل المعلم او الفصل مشغولان فعلياً في هذه الدقيقة؟
     const canPlaceAbsolute = (teacherId, sectionId, day, period) => {
       if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
       if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
@@ -309,7 +329,7 @@ export default function AutoScheduleGenerator() {
       let allowedDaysForTeacher = workingDays.filter(d => assignment.available_days.includes(d));
 
       if (allowedDaysForTeacher.length === 0) {
-        allowedDaysForTeacher = [...workingDays]; // إذا لم يحدد يوماً، نفتح له كل الأيام كطوارئ!
+        allowedDaysForTeacher = [...workingDays]; 
         addViolation(`⚠️ المعلم ${assignment.teacher_name} لم يحدد أيام دوام، تم فرض دوام كامل له.`);
       }
 
@@ -330,7 +350,7 @@ export default function AutoScheduleGenerator() {
 
         let isPlaced = false;
 
-        // 🟢 المستوى 1: المثالي
+        // المستوى 1
         for (const day of preferredDays) {
           const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
           if (subjectCountToday >= maxPerDay) continue;
@@ -349,7 +369,7 @@ export default function AutoScheduleGenerator() {
           if (isPlaced) break;
         }
 
-        // 🟡 المستوى 2: تجاهل الحد الأقصى اليومي للمادة
+        // المستوى 2
         if (!isPlaced) {
            for (const day of shuffleArray([...allowedDaysForTeacher])) {
              const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
@@ -363,7 +383,7 @@ export default function AutoScheduleGenerator() {
            }
         }
 
-        // 🟠 المستوى 3: الإزاحة الذكية (مع احترام قيود المزاح)
+        // المستوى 3
         if (!isPlaced && !assignment.isVIP) {
           for (const day of shuffleArray([...allowedDaysForTeacher])) {
             if (isPlaced) break;
@@ -404,10 +424,9 @@ export default function AutoScheduleGenerator() {
           }
         }
 
-        // 🚨 المستوى 4: اختراق قيود الحصص (نفس اليوم المسموح، ولكن حصة كان المعلم يرفضها)
+        // المستوى 4
         if (!isPlaced && !assignment.isVIP) {
            for (const day of shuffleArray([...allowedDaysForTeacher])) {
-             // 🚀 نستخدم كل الحصص، وليس المسموحة فقط
              const allValidPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break));
              for (const period of allValidPeriods) {
                if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period)) {
@@ -419,14 +438,14 @@ export default function AutoScheduleGenerator() {
            }
         }
 
-        // 🚨🚨 المستوى 5: اختراق قيود الأيام (المعلم لا يداوم في هذا اليوم، سنجلبه إجبارياً)
+        // المستوى 5
         if (!isPlaced && !assignment.isVIP) {
            const forbiddenDays = workingDays.filter(d => !allowedDaysForTeacher.includes(d));
            for (const day of shuffleArray(forbiddenDays)) {
              const allValidPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break));
              for (const period of allValidPeriods) {
                if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period)) {
-                 commitPlacement(section, assignment, day, period, `تم التسكين في يوم غير مخصص لدوام المعلم (${getDayName(day)})`);
+                 commitPlacement(section, assignment, day, period, `تم التسكين إجبارياً في يوم غير مخصص للدوام (${getDayName(day)})`);
                  isPlaced = true; break; 
                }
              }
@@ -442,7 +461,7 @@ export default function AutoScheduleGenerator() {
              section_id: section.id, section_name: section.full_name,
              subject_id: assignment.subject_id, subject_name: assignment.subject_name,
              teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name,
-             stage: section.stage
+             stage: section.stage, zoom_link: assignment.zoom_link
           });
         }
       }
@@ -498,7 +517,7 @@ export default function AutoScheduleGenerator() {
          section_id: occupant.section_id, section_name: occupant.section_name,
          subject_id: occupant.subject_id, subject_name: occupant.subject_name,
          teacher_id: occupant.teacher_id, teacher_name: occupant.teacher_name,
-         stage: occupant.stage
+         stage: occupant.stage, zoom_link: occupant.zoom_link
       });
       newSchedules.splice(occupantIndex, 1);
     }
@@ -509,7 +528,8 @@ export default function AutoScheduleGenerator() {
       subject_id: lessonToAssign.subject_id, subject_name: lessonToAssign.subject_name,
       teacher_id: lessonToAssign.teacher_id, teacher_name: lessonToAssign.teacher_name,
       day: day, period_number: periodNum,
-      start_time: pData.start_time, end_time: pData.end_time, stage: lessonToAssign.stage
+      start_time: pData.start_time, end_time: pData.end_time, stage: lessonToAssign.stage,
+      zoom_link: lessonToAssign.zoom_link
     });
 
     newSchedules.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
@@ -569,6 +589,34 @@ export default function AutoScheduleGenerator() {
     } catch(e) {} finally { setGenerating(false); }
   };
 
+  // 🚀 دوال الطباعة المجمعة (Batch Printing)
+  const handleBatchPrint = () => {
+    if (batchPrintIds.length === 0) {
+       alert('يرجى تحديد جدول واحد على الأقل للطباعة!'); return;
+    }
+    setIsBatchPrinting(true);
+    setIsPrintCenterOpen(false);
+    
+    // إعطاء فرصة للـ React لترسم الجداول الكثيرة قبل فتح نافذة الطباعة
+    setTimeout(() => {
+       window.print();
+       setIsBatchPrinting(false);
+    }, 800);
+  };
+
+  const toggleBatchPrintId = (id: string) => {
+    setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const selectAllBatchIds = () => {
+    if (batchPrintType === 'section') {
+      const availableSecs = sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id)).map(s=>s.id);
+      setBatchPrintIds(availableSecs);
+    } else {
+      setBatchPrintIds(uniqueTeachersInSchedule.map(t=>t.id));
+    }
+  };
+
   const groupedSubjectsByClass = useMemo(() => {
     const groups: Record<string, typeof uniqueSubjectClasses> = {};
     uniqueSubjectClasses.forEach(item => {
@@ -594,28 +642,97 @@ export default function AutoScheduleGenerator() {
     return Array.from(tMap.values()).sort((a,b) => a.name.localeCompare(b.name));
   }, [generatedSchedules]);
 
-  const getSelectedPrintName = () => {
-     if (gridFilterType === 'section') {
-       const sec = sections.find(s => s.id === gridFilterId);
+  const getPrintNameById = (id: string, type: 'section'|'teacher') => {
+     if (type === 'section') {
+       const sec = sections.find(s => s.id === id);
        return sec ? sec.full_name : 'غير محدد';
      } else {
-       const t = uniqueTeachersInSchedule.find(t => t.id === gridFilterId);
+       const t = uniqueTeachersInSchedule.find(t => t.id === id);
        return t ? t.name : 'غير محدد';
      }
   };
 
+  // قائمة الجداول المراد رسمها
+  const idsToRender = isBatchPrinting ? batchPrintIds : (gridFilterId ? [gridFilterId] : []);
+  const activePrintType = isBatchPrinting ? batchPrintType : gridFilterType;
+
   if (currentRole !== 'admin' && currentRole !== 'management') return <div className="p-10 text-center font-bold">غير مصرح لك.</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
+    <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo print:bg-white print:m-0 print:p-0 print:min-h-0" dir="rtl">
       
+      {/* CSS للطباعة السليمة المجمعة وفواصل الصفحات */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
            @page { size: landscape; margin: 10mm; }
-           body { background-color: white !important; }
-           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background-color: white !important; }
+           .page-break { page-break-after: always; break-after: page; }
         }
       `}} />
+
+      {/* 🚀 Modal مركز الطباعة المجمعة */}
+      <AnimatePresence>
+        {isPrintCenterOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 print:hidden" onClick={() => setIsPrintCenterOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+               animate={{ opacity: 1, scale: 1, y: 0 }} 
+               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh] print:hidden" 
+               dir="rtl"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><Printer className="w-6 h-6"/></div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-lg">مركز الطباعة المجمعة</h3>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">اختر مجموعة من الجداول لطباعتها معاً بضغطة زر</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsPrintCenterOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="p-6 flex-1 overflow-auto bg-slate-50 custom-scrollbar">
+                 <div className="flex gap-2 mb-4 bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+                    <button onClick={() => {setBatchPrintType('section'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'section' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة فصول</button>
+                    <button onClick={() => {setBatchPrintType('teacher'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'teacher' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة معلمين</button>
+                 </div>
+                 
+                 <div className="flex justify-between items-center mb-3 px-1">
+                    <span className="text-xs font-bold text-slate-500">تم تحديد: {batchPrintIds.length}</span>
+                    <button onClick={selectAllBatchIds} className="text-xs font-black text-indigo-600 hover:underline">تحديد الكل</button>
+                 </div>
+
+                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {batchPrintType === 'section' 
+                      ? sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id)).map(s => (
+                          <div key={s.id} onClick={() => toggleBatchPrintId(s.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(s.id) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                             {batchPrintIds.includes(s.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{s.full_name}</span>
+                          </div>
+                      ))
+                      : uniqueTeachersInSchedule.map(t => (
+                          <div key={t.id} onClick={() => toggleBatchPrintId(t.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(t.id) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                             {batchPrintIds.includes(t.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{t.name}</span>
+                          </div>
+                      ))
+                    }
+                 </div>
+              </div>
+
+              <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
+                <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
+                <button onClick={handleBatchPrint} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                  <Printer className="w-5 h-5" /> طباعة الجداول المحددة ({batchPrintIds.length})
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
 
       {/* Modal التسكين اليدوي */}
       <AnimatePresence>
@@ -783,18 +900,17 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/20 border border-rose-400/30 text-[10px] md:text-xs font-black text-rose-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> محرك اختراق القيود لإنقاذ الجدول
+              <Printer className="w-4 h-4" /> مركز الطباعة المجمعة & زووم
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              تم تفعيل صلاحيات الطوارئ القصوى. إذا استحال تسكين المعلم، سيقوم النظام بوضعه في يوم أو حصة غير مخصصة له بدلاً من حذفه، وسيطبع لك السبب!
+              تم إصلاح الطباعة وإضافة ميزة (الطباعة المجمعة) للفصول. كما تم تفعيل روابط البث المباشر (زووم) لطلاب المتوسط داخل الجدول!
             </p>
           </div>
         </div>
 
-        {/* 🚀 سجل القيود التي تم اختراقها */}
         {violationLogs.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] shadow-sm">
              <h3 className="text-amber-800 font-black text-sm mb-3 flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> سجل قيود تم اختراقها إجبارياً لمنع الفراغات:</h3>
@@ -806,7 +922,6 @@ export default function AutoScheduleGenerator() {
           </div>
         )}
 
-        {/* سلة الانتظار */}
         {unplacedLessons.length > 0 && (
           <div className="bg-rose-50 border border-rose-200 p-6 rounded-[2rem] shadow-sm">
              <h3 className="text-rose-800 font-black text-lg mb-4 flex items-center gap-2"><AlertOctagon className="w-5 h-5"/> حصص بالانتظار ({unplacedLessons.length})</h3>
@@ -928,50 +1043,47 @@ export default function AutoScheduleGenerator() {
                   </button>
                 )}
               </div>
-              <div className="mt-6 bg-slate-900 rounded-2xl p-4 h-40 overflow-y-auto font-mono text-[10px] text-slate-300 shadow-inner flex flex-col-reverse custom-scrollbar">
+              <div className="mt-6 bg-slate-900 rounded-2xl p-4 h-60 overflow-y-auto font-mono text-[10px] text-slate-300 shadow-inner flex flex-col-reverse custom-scrollbar">
                 {generationLogs.length === 0 ? <span className="text-center opacity-50 m-auto">محرك الذكاء بانتظار الإطلاق...</span> : generationLogs.map((log, i) => <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('❌') || log.includes('⚠️') ? 'text-rose-400' : log.includes('✅') || log.includes('🎉') ? 'text-emerald-400' : ''}`}>{'>'} {log}</div>)}
               </div>
             </div>
             
           </div>
 
-          <div className="xl:col-span-2 print:w-full">
-            <div id="printable-grid" className="bg-white rounded-3xl shadow-sm border border-slate-200 h-full flex flex-col min-h-[600px] overflow-visible print:border-none print:shadow-none print:h-auto print:min-h-0">
+          <div className="xl:col-span-2 print:hidden">
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 h-full flex flex-col min-h-[600px] overflow-visible">
               
-              <div className="hidden print:block text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
-                 <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
-                 <h2 className="text-xl font-bold text-slate-700">
-                    {gridFilterType === 'section' ? 'الفصل: ' : 'المعلم: '} 
-                    {getSelectedPrintName()}
-                 </h2>
-              </div>
-
-              <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50 print:hidden">
+              <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
                  <div className="flex items-center gap-3">
                    <h2 className="text-lg font-black text-slate-800">عارض الجداول الذكي</h2>
                    <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">{generatedSchedules.length} حصة مسكنة</span>
                  </div>
                  {generatedSchedules.length > 0 && (
-                   <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm w-full md:w-fit gap-1">
+                   <div className="flex flex-wrap bg-white p-1 rounded-xl border border-slate-200 shadow-sm w-full md:w-fit gap-1">
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      {displayMode === 'grid' && (
-                       <button onClick={() => window.print()} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-700 shadow-md ml-2">
-                         <Printer className="w-4 h-4" /> طباعة
-                       </button>
+                       <>
+                         <button onClick={() => window.print()} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
+                           <Printer className="w-4 h-4" /> طباعة هذا الجدول
+                         </button>
+                         <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
+                           <Layers className="w-4 h-4" /> طباعة مجمعة
+                         </button>
+                       </>
                      )}
                    </div>
                  )}
               </div>
               
-              <div className="flex-1 bg-slate-50/30 print:bg-white print:p-0">
+              <div className="flex-1 bg-slate-50/30 relative">
                 {generatedSchedules.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center text-slate-400 h-full min-h-[300px] print:hidden">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
                     <CalendarDays className="w-16 h-16 mb-4 opacity-20" />
                     <p className="font-bold text-lg">لا يوجد جدول للعرض</p>
                   </div>
                 ) : displayMode === 'raw' ? (
-                  <div className="p-5 h-[600px] overflow-y-auto custom-scrollbar space-y-3 print:hidden">
+                  <div className="p-5 overflow-y-auto absolute inset-0 custom-scrollbar space-y-3">
                      {generatedSchedules.slice(0, 150).map((slot, i) => (
                        <div key={i} className={`bg-white p-3 rounded-2xl border shadow-sm flex items-center justify-between gap-3 ${slot.violation ? 'border-amber-400 bg-amber-50/20' : 'border-slate-200'}`}>
                           <div className="flex items-center gap-3">
@@ -989,51 +1101,58 @@ export default function AutoScheduleGenerator() {
                      ))}
                   </div>
                 ) : (
-                  <div className="flex flex-col h-full w-full relative">
-                    <div className="p-4 bg-white border-b border-slate-200 flex flex-col sm:flex-row gap-3 shrink-0 print:hidden">
+                  <div className="absolute inset-0 flex flex-col w-full h-full relative">
+                    <div className="p-4 bg-white border-b border-slate-200 flex flex-col sm:flex-row gap-3 shrink-0">
                       <select value={gridFilterType} onChange={(e) => { setGridFilterType(e.target.value as any); setGridFilterId(''); }} className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-sm text-slate-900 outline-none focus:border-indigo-500">
                         <option value="section">عرض جدول (فصل محدد)</option><option value="teacher">عرض جدول (معلم محدد)</option>
                       </select>
                       <select value={gridFilterId} onChange={(e) => setGridFilterId(e.target.value)} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 outline-none focus:border-indigo-500">
-                        <option value="" disabled>-- اختر للطباعة والعرض --</option>
+                        <option value="" disabled>-- اختر للعرض --</option>
                         {gridFilterType === 'section' ? sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id)).map(s => <option key={s.id} value={s.id}>{s.full_name}</option>) : uniqueTeachersInSchedule.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                     </div>
 
-                    <div className="flex-1 overflow-auto bg-slate-50 p-4 custom-scrollbar print:p-0 w-full print:overflow-visible relative">
-                      {/* علامة مائية لتمييز الاختراقات في العرض الشبكي */}
-                      {violationLogs.length > 0 && <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[10px] text-amber-500 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 print:hidden z-10 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> يوجد حصص تم تسكينها باختراق قيود المعلمين (محددة بإطار برتقالي متقطع)</div>}
+                    <div className="flex-1 overflow-auto bg-slate-50 p-4 custom-scrollbar w-full">
+                      {violationLogs.length > 0 && <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[10px] text-amber-500 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 z-10 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> يوجد حصص تم تسكينها باختراق قيود المعلمين (محددة بإطار برتقالي متقطع)</div>}
                       
                       {!gridFilterId ? (
-                        <div className="flex items-center justify-center h-[400px] text-slate-400 font-bold print:hidden">يرجى اختيار معلم أو فصل לעرض جدوله أو طباعته</div>
+                        <div className="flex items-center justify-center h-[400px] text-slate-400 font-bold">يرجى اختيار معلم أو فصل לעرض جدوله</div>
                       ) : (
-                        <div className="min-w-[800px] print:min-w-0 w-full border-2 border-slate-300 print:border-black rounded-2xl print:rounded-none overflow-hidden bg-white shadow-sm print:shadow-none mt-4 print:mt-0">
-                          <table className="w-full text-center border-collapse table-fixed print:border-black">
+                        <div className="min-w-[800px] w-full border-2 border-slate-300 rounded-2xl overflow-hidden bg-white shadow-sm mt-4">
+                          <table className="w-full text-center border-collapse table-fixed">
                             <thead>
-                              <tr className="bg-slate-800 print:bg-white text-white print:text-black">
-                                <th className="p-4 font-black w-24 border-b-2 border-slate-900 print:border-black border-l border-white/10 print:border-black">اليوم</th>
-                                {dynamicPeriods.map(p => <th key={p} className="p-3 font-black border-b-2 border-slate-900 print:border-black border-l border-white/10 print:border-black last:border-l-0">الحصة {p}</th>)}
+                              <tr className="bg-slate-800 text-white">
+                                <th className="p-4 font-black w-24 border-b-2 border-slate-900 border-l border-white/10">اليوم</th>
+                                {dynamicPeriods.map(p => <th key={p} className="p-3 font-black border-b-2 border-slate-900 border-l border-white/10 last:border-l-0">الحصة {p}</th>)}
                               </tr>
                             </thead>
                             <tbody>
                               {workingDays.map((day) => (
-                                <tr key={day} className="border-b border-slate-300 print:border-black last:border-b-0 break-inside-avoid">
-                                  <td className="p-4 font-black text-slate-900 bg-slate-100 print:bg-white border-l border-slate-300 print:border-black">{getDayName(day)}</td>
+                                <tr key={day} className="border-b border-slate-300 last:border-b-0 break-inside-avoid">
+                                  <td className="p-4 font-black text-slate-900 bg-slate-100 border-l border-slate-300">{getDayName(day)}</td>
                                   {dynamicPeriods.map(p => {
                                     const slot = generatedSchedules.find(s => s.day === day && s.period_number === p && (gridFilterType === 'section' ? s.section_id === gridFilterId : s.teacher_id === gridFilterId));
-                                    
-                                    // 🚀 تمييز החصص المخترقة
                                     const isViolation = slot?.violation ? true : false;
+                                    
+                                    // 🚀 إظهار رابط الزووم للمتوسط فقط
+                                    const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
 
                                     return (
-                                      <td key={p} className="p-2 border-l border-slate-300 print:border-black last:border-l-0 relative h-24 align-top hover:bg-indigo-50/50 print:hover:bg-white transition-colors">
+                                      <td key={p} className="p-2 border-l border-slate-300 last:border-l-0 relative h-28 align-top hover:bg-indigo-50/50 transition-colors">
                                         {slot ? (
-                                          <div className={`bg-white shadow-sm print:shadow-none p-2 h-full flex flex-col justify-center overflow-hidden relative ${isViolation ? 'border-2 border-dashed border-amber-400 bg-amber-50/30 print:border-solid print:border-black print:bg-white rounded-xl print:rounded-none' : 'border border-indigo-200 print:border-none rounded-xl print:rounded-none'}`} title={slot.violation || ''}>
-                                            {isViolation && <AlertTriangle className="w-3 h-3 text-amber-500 absolute top-1 left-1 print:hidden" />}
-                                            <div className={`font-black text-xs leading-tight mb-1 truncate ${isViolation ? 'text-amber-900' : 'text-indigo-900'} print:text-black`} title={slot.subject_name}>{slot.subject_name}</div>
-                                            <div className="font-bold text-[10px] text-slate-800 print:text-black bg-slate-50 print:bg-white px-1.5 py-1 rounded-md truncate border border-slate-200 print:border-none" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
+                                          <div className={`bg-white shadow-sm p-2 h-full flex flex-col justify-center items-center overflow-hidden relative ${isViolation ? 'border-2 border-dashed border-amber-400 bg-amber-50/30 rounded-xl' : 'border border-indigo-200 rounded-xl'}`} title={slot.violation || ''}>
+                                            {isViolation && <AlertTriangle className="w-3 h-3 text-amber-500 absolute top-1 right-1" />}
+                                            <div className={`font-black text-xs leading-tight mb-1 truncate w-full ${isViolation ? 'text-amber-900' : 'text-indigo-900'}`} title={slot.subject_name}>{slot.subject_name}</div>
+                                            <div className="font-bold text-[10px] text-slate-800 bg-slate-50 px-1.5 py-1 rounded-md w-full truncate border border-slate-200" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
+                                            
+                                            {/* 🚀 زر البث المباشر الأنيق لزووم */}
+                                            {showZoom && (
+                                              <a href={slot.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-1.5 w-full flex items-center justify-center gap-1 text-[9px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md py-1 border border-blue-200 transition-colors" title="دخول لبث الزووم">
+                                                <Video className="w-3 h-3"/> دخول للبث
+                                              </a>
+                                            )}
                                           </div>
-                                        ) : (<div className="flex items-center justify-center h-full text-slate-300 print:text-transparent"><span className="text-xl opacity-50">-</span></div>)}
+                                        ) : (<div className="flex items-center justify-center h-full text-slate-300"><span className="text-xl opacity-50">-</span></div>)}
                                       </td>
                                     );
                                   })}
@@ -1049,9 +1168,60 @@ export default function AutoScheduleGenerator() {
               </div>
             </div>
           </div>
-
         </div>
       </div>
+
+      {/* 🚀 الحاوية الخاصة بالطباعة فقط (تظهر فقط عند ضغط أمر الطباعة) */}
+      <div className="hidden print:block w-full">
+         {idsToRender.map((renderId, index) => {
+            const printName = getPrintNameById(renderId, activePrintType);
+            return (
+              <div key={renderId} className="page-break w-full bg-white mb-8 print:mb-0">
+                 <div className="text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
+                    <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
+                    <h2 className="text-xl font-bold text-slate-700">
+                       {activePrintType === 'section' ? 'الفصل: ' : 'المعلم: '} 
+                       {printName}
+                    </h2>
+                 </div>
+
+                 <div className="w-full border-2 border-black rounded-none bg-white">
+                    <table className="w-full text-center border-collapse table-fixed border-black">
+                      <thead>
+                        <tr className="bg-white text-black">
+                          <th className="p-3 font-black w-24 border-b-2 border-black border-l border-black">اليوم</th>
+                          {dynamicPeriods.map(p => <th key={p} className="p-3 font-black border-b-2 border-black border-l border-black last:border-l-0">الحصة {p}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workingDays.map((day) => (
+                          <tr key={day} className="border-b border-black last:border-b-0 break-inside-avoid">
+                            <td className="p-3 font-black text-black bg-white border-l border-black">{getDayName(day)}</td>
+                            {dynamicPeriods.map(p => {
+                              const slot = generatedSchedules.find(s => s.day === day && s.period_number === p && (activePrintType === 'section' ? s.section_id === renderId : s.teacher_id === renderId));
+                              return (
+                                <td key={p} className="p-2 border-l border-black last:border-l-0 h-24 align-middle">
+                                  {slot ? (
+                                    <div className="p-1 flex flex-col justify-center items-center h-full">
+                                      <div className="font-black text-sm text-black mb-1">{slot.subject_name}</div>
+                                      <div className="font-bold text-xs text-black">{activePrintType === 'section' ? slot.teacher_name : slot.section_name}</div>
+                                    </div>
+                                  ) : (<div className="flex items-center justify-center h-full text-transparent">-</div>)}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                 </div>
+              </div>
+            );
+         })}
+      </div>
+
     </div>
   );
 }
+
+
