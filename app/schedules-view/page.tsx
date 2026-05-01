@@ -27,7 +27,6 @@ const DAYS = [
 ];
 
 export default function PublicSchedulesViewPage() {
-  // 🚀 جلب صلاحيات المستخدم (طالب، معلم، أو إدارة)
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
@@ -39,11 +38,12 @@ export default function PublicSchedulesViewPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [latestPlanName, setLatestPlanName] = useState<string>('');
 
-  // 🚀 إعدادات الفلتر والقيود
+  // 🚀 إعدادات الفلتر والقيود الصارمة
   const [filterType, setFilterType] = useState<'section' | 'teacher'>('section');
   const [filterId, setFilterId] = useState<string>('');
   const [isRestricted, setIsRestricted] = useState(false);
   const [noSectionAssigned, setNoSectionAssigned] = useState(false);
+  const [activeRole, setActiveRole] = useState<string>('');
 
   useEffect(() => {
     if (!isChecking && user) {
@@ -59,45 +59,53 @@ export default function PublicSchedulesViewPage() {
       setFetchError(null);
       setNoSectionAssigned(false);
 
-      // 1. تحديد قيود المستخدم قبل عرض أي شيء
-      let forcedFilterType = 'section';
-      let forcedFilterId = '';
+      // 1. 🚀 التحقيق الصارم: تجاهل مسميات المتصفح والبحث المباشر في قاعدة البيانات!
       let isUserRestricted = false;
+      let forcedType = 'section';
+      let forcedId = '';
+      let resolvedRole = (currentRole || '').toLowerCase();
 
-      if (currentRole === 'student') {
+      // إذا لم يكن مديراً صريحاً، نطبق القيود الإجبارية
+      if (resolvedRole !== 'admin' && resolvedRole !== 'management') {
          isUserRestricted = true;
-         // جلب رقم فصل الطالب
-         const { data: studentData, error: studentError } = await supabase
-            .from('students')
-            .select('section_id')
-            .eq('user_id', user.id)
-            .single();
-         
-         if (studentData && studentData.section_id) {
-            forcedFilterType = 'section';
-            forcedFilterId = studentData.section_id;
-         } else {
-            setNoSectionAssigned(true);
-         }
-      } else if (currentRole === 'teacher') {
-         isUserRestricted = true;
-         // جلب رقم المعلم
-         const { data: teacherData, error: teacherError } = await supabase
+
+         // 🔍 البحث القاطع في جدول المعلمين (يحل مشكلة رؤية المعلم لكل شيء)
+         const { data: teacherData } = await supabase
             .from('teachers')
             .select('id')
             .eq('user_id', user.id)
-            .single();
-         
-         if (teacherData && teacherData.id) {
-            forcedFilterType = 'teacher';
-            forcedFilterId = teacherData.id;
+            .limit(1)
+            .maybeSingle();
+
+         if (teacherData) {
+            forcedType = 'teacher';
+            forcedId = teacherData.id;
+            resolvedRole = 'teacher'; // تأكيد قاطع أنه معلم
+         } else {
+            // 🔍 البحث القاطع في جدول الطلاب
+            const { data: studentData } = await supabase
+               .from('students')
+               .select('section_id')
+               .eq('user_id', user.id)
+               .limit(1)
+               .maybeSingle();
+
+            if (studentData) {
+               forcedType = 'section';
+               forcedId = studentData.section_id || '';
+               resolvedRole = 'student'; // تأكيد قاطع أنه طالب
+               if (!studentData.section_id) {
+                  setNoSectionAssigned(true);
+               }
+            }
          }
       }
 
       setIsRestricted(isUserRestricted);
+      setActiveRole(resolvedRole);
 
-      // إذا كان طالباً بلا فصل، لا داعي لإكمال جلب الجدول
-      if (isUserRestricted && currentRole === 'student' && !forcedFilterId) {
+      // إذا كان طالباً بلا فصل، لا داعي لإكمال الجلب
+      if (isUserRestricted && resolvedRole === 'student' && !forcedId) {
          setLoading(false);
          return;
       }
@@ -125,7 +133,7 @@ export default function PublicSchedulesViewPage() {
 
       if (slotsError) throw slotsError;
 
-      // 4. جلب البيانات الأساسية
+      // 4. جلب البيانات الأساسية للربط
       const { data: sectionsData } = await supabase.from('sections').select('id, name, class_id, classes(name, level)');
       const { data: subjectsData } = await supabase.from('subjects').select('id, name');
       
@@ -192,13 +200,15 @@ export default function PublicSchedulesViewPage() {
       setSections(secsArray);
       setUniqueTeachers(teachArray);
 
-      // 🚀 7. تطبيق القيود النهائية للفلتر
+      // 🚀 7. تطبيق القيود الإجبارية وإغلاق הפלتر
       if (isUserRestricted) {
-         setFilterType(forcedFilterType as any);
-         setFilterId(forcedFilterId);
+         setFilterType(forcedType as any);
+         setFilterId(forcedId);
       } else {
-         // إذا كان مديراً، نضع الفصل الأول كافتراضي
-         if (secsArray.length > 0) setFilterId(secsArray[0].id);
+         if (secsArray.length > 0) {
+            setFilterType('section');
+            setFilterId(secsArray[0].id);
+         }
       }
 
     } catch (error: any) {
@@ -220,7 +230,7 @@ export default function PublicSchedulesViewPage() {
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
         <div className="flex flex-col items-center gap-5">
           <div className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.4)]"></div>
-          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تحميل الجداول المعتمدة...</p>
+          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تحميل الجدول...</p>
         </div>
       </div>
     );
@@ -232,7 +242,7 @@ export default function PublicSchedulesViewPage() {
            <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg max-w-md w-full">
               <Users className="w-16 h-16 text-indigo-400 mx-auto mb-4 opacity-80" />
               <h2 className="text-xl font-black text-white mb-2">يرجى تسجيل الدخول</h2>
-              <p className="text-slate-400 font-bold text-sm">عذراً، يجب عليك تسجيل الدخول بحسابك لرؤية الجدول الدراسي.</p>
+              <p className="text-slate-400 font-bold text-sm">عذراً، يجب عليك تسجيل الدخول بحسابك لرؤية الجدول الدراسي الخاص بك.</p>
            </div>
        </div>
     );
@@ -250,12 +260,12 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
-  // 🚀 تحديد اسم المستخدم لعرضه في البطاقة الثابتة (للمقيدين)
+  // تحديد اسم المستخدم لعرضه في البطاقة المقفلة
   let restrictedDisplayName = '';
   if (isRestricted) {
-     if (currentRole === 'student') {
+     if (activeRole === 'student') {
         restrictedDisplayName = sections.find(s => s.id === filterId)?.name || 'فصلك';
-     } else {
+     } else if (activeRole === 'teacher') {
         restrictedDisplayName = uniqueTeachers.find(t => t.id === filterId)?.name || 'جدولك';
      }
   }
@@ -300,7 +310,7 @@ export default function PublicSchedulesViewPage() {
            </div>
         ) : schedules.length > 0 ? (
           <>
-            {/* 🚀 Filters - ديناميكية حسب الصلاحية */}
+            {/* 🚀 فلاتر العرض - قفل قوي للمعلمين والطلاب */}
             <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
               
               {!isRestricted ? (
@@ -339,14 +349,14 @@ export default function PublicSchedulesViewPage() {
                   </div>
                 </>
               ) : (
-                // 🔴 عرض الطلاب والمعلمين: بطاقة هوية ثابتة للقراءة فقط
+                // 🔴 عرض المعلم أو الطالب: بطاقة ثابتة تظهر الاسم وتقفل الجدول عليه فقط
                 <div className="flex items-center gap-4 w-full bg-[#02040a]/40 p-3 rounded-xl border border-white/5">
-                   <div className={`p-2 rounded-lg ${currentRole === 'student' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                      {currentRole === 'student' ? <Layers className="w-6 h-6"/> : <UserCircle className="w-6 h-6"/>}
+                   <div className={`p-2 rounded-lg ${activeRole === 'student' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                      {activeRole === 'student' ? <Layers className="w-6 h-6"/> : <UserCircle className="w-6 h-6"/>}
                    </div>
                    <div className="flex-1">
                       <p className="text-xs text-slate-400 font-bold flex items-center gap-1">
-                         <Lock className="w-3 h-3"/> {currentRole === 'student' ? 'جدول فصلك الحالي' : 'الجدول الخاص بك'}
+                         <Lock className="w-3 h-3"/> {activeRole === 'student' ? 'جدول فصلك الحالي' : 'الجدول المخصص لك'}
                       </p>
                       <p className="text-base font-black text-white mt-0.5">{restrictedDisplayName}</p>
                    </div>
@@ -385,11 +395,10 @@ export default function PublicSchedulesViewPage() {
                         {dynamicPeriods.map(p => {
                           const slot = schedules.find(s => s.day === day.id && s.period_number === p && (filterType === 'section' ? s.section_id === filterId : s.teacher_id === filterId));
                           
-                          // شروط إظهار رابط زووم
                           const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
 
                           return (
-                            <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-28 align-top">
+                            <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-32 align-top">
                               {slot ? (
                                 <motion.div whileHover={{ scale: 1.02 }} className="h-full flex flex-col justify-center bg-[#02040a]/60 rounded-xl p-3 border border-white/10 shadow-inner relative overflow-hidden group">
                                   <div className={`absolute top-0 right-0 w-1.5 h-full ${filterType === 'section' ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
@@ -402,7 +411,6 @@ export default function PublicSchedulesViewPage() {
                                     {filterType === 'section' ? `أ. ${slot.teacher_name}` : slot.section_name}
                                   </div>
 
-                                  {/* 🚀 رابط البث المباشر (Zoom) */}
                                   {showZoom && (
                                     <a 
                                       href={slot.zoom_link} 
@@ -429,7 +437,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
           </>
-        ) : null}
+        )}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
