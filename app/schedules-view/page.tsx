@@ -115,9 +115,7 @@ export default function PublicSchedulesViewPage() {
          isUserRestricted = true;
 
          if (resolvedRole === 'student') {
-            // 🚀 التعديل الهام: استخدمنا id بدلاً من user_id لجدول الطلاب بناءً على خطأ SQL
             const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('id', user.id);
-            
             if (stuErr) console.error("Student Fetch Error:", stuErr);
 
             if (studentProfiles && studentProfiles.length > 0) {
@@ -139,14 +137,12 @@ export default function PublicSchedulesViewPage() {
             }
          }
          else {
-             // حالة احتياطية لو الصلاحية غير واضحة
              const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
              if (teacherProfiles && teacherProfiles.length > 0) {
                 resolvedRole = 'teacher';
                 allowedIds = teacherProfiles.map(t => String(t.id));
                 if (fetchedName) displayName = `أ. ${fetchedName}`;
              } else {
-                // 🚀 التعديل الهام هنا أيضاً (استخدام id للطلاب)
                 const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('id', user.id);
                 if (studentProfiles && studentProfiles.length > 0) {
                    resolvedRole = 'student';
@@ -246,7 +242,7 @@ export default function PublicSchedulesViewPage() {
 
           if (secsArray.length > 0) {
              setFilterType('section');
-             setFilterId(secsArray[0].id);
+             setFilterId(String(secsArray[0].id));
           }
       }
 
@@ -317,15 +313,32 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
-  return (
-    <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden" dir="rtl">
-      <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
+  // 🚀 تحديد هوية العرض بدقة (لتلوين البطاقات بشكل مختلف للطالب والمعلم)
+  const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
+  return (
+    <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden print:bg-white print:text-black print:p-0" dir="rtl">
+      
+      {/* 🚀 إعدادات الطباعة الفاخرة للورق */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+           @page { size: landscape; margin: 10mm; }
+           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background-color: #f8fafc !important; }
+           .print-hide { display: none !important; }
+        }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; border: 1px solid #02040a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
+      `}} />
+
+      <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0 print-hide" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0 print-hide" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10 print:w-full print:max-w-none print:px-0">
         
         {/* Header */}
-        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] print-hide">
           <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
@@ -340,25 +353,28 @@ export default function PublicSchedulesViewPage() {
                 </p>
               </div>
             </div>
+            <button onClick={() => window.print()} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+               طباعة الجدول الآن
+            </button>
           </div>
         </div>
 
         {fetchError && (
-           <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
+           <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold print-hide">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <p className="text-sm">تنبيه تقني: {fetchError}</p>
            </div>
         )}
 
         {schedules.length === 0 && !fetchError ? (
-           <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg">
+           <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg print-hide">
               <CalendarDays className="w-20 h-20 text-slate-600 mx-auto mb-4 opacity-50" />
               <h2 className="text-2xl font-black text-white mb-2">لا توجد جداول معتمدة بعد</h2>
               <p className="text-slate-400 font-bold">لم تقم الإدارة بنشر الجدول النهائي حتى الآن.</p>
            </div>
         ) : schedules.length > 0 ? (
           <>
-            <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between print-hide">
               
               {!isRestricted ? (
                 <>
@@ -417,7 +433,8 @@ export default function PublicSchedulesViewPage() {
               )}
             </div>
 
-            <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
+            {/* 🚀 عارض الشاشة الرئيسي */}
+            <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden print-hide">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
                   <thead className="bg-[#02040a]/80">
@@ -447,7 +464,6 @@ export default function PublicSchedulesViewPage() {
                           </td>
                           {dynamicPeriods.map(p => {
                             const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
-                            
                             const showZoom = slot && slot.zoom_link;
 
                             let isNow = false;
@@ -482,10 +498,11 @@ export default function PublicSchedulesViewPage() {
                                       }
                                     `}
                                   >
-                                    <div className={`absolute top-0 right-0 w-1.5 h-full ${isRestricted ? (activeRole === 'student' ? 'bg-indigo-500' : 'bg-emerald-500') : (filterType === 'section' ? 'bg-indigo-500' : 'bg-emerald-500')} ${isPast ? 'opacity-30' : ''}`}></div>
+                                    <div className={`absolute top-0 right-0 w-1.5 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'} ${isPast ? 'opacity-30' : ''}`}></div>
                                     
+                                    {/* 🚀 التوقيت باللون الذهبي الواضح */}
                                     <div className="flex justify-between items-start mb-2 w-full pr-1.5">
-                                      <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-white/10 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
+                                      <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-amber-500/30 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
                                          {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
                                       </div>
                                       {isNow && (
@@ -497,24 +514,35 @@ export default function PublicSchedulesViewPage() {
                                       {isPast && <CheckCircle2 className="w-4 h-4 text-slate-500" />}
                                     </div>
 
-                                    <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-white'}`}>
-                                      {slot.subject_name}
-                                    </div>
-                                    
-                                    <div className="text-[10px] sm:text-xs font-bold text-slate-400 pr-2 leading-tight">
-                                      {isRestricted 
-                                        ? (activeRole === 'student' ? `أ. ${slot.teacher_name}` : slot.section_name)
-                                        : (filterType === 'section' ? `أ. ${slot.teacher_name}` : slot.section_name)
-                                      }
-                                    </div>
+                                    {/* 🚀 التمييز بين عرض الطالب (يركز على المادة) وعرض المعلم (يركز على الفصل) */}
+                                    {isStudentView ? (
+                                      <>
+                                        <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-indigo-300'}`}>
+                                          {slot.subject_name}
+                                        </div>
+                                        <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
+                                          أ. {slot.teacher_name}
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-emerald-300'}`}>
+                                          {slot.section_name}
+                                        </div>
+                                        <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
+                                          {slot.subject_name}
+                                        </div>
+                                      </>
+                                    )}
 
+                                    {/* 🚀 زر الزووم بارز ومضمون ظهوره إذا وجد */}
                                     {showZoom && (
                                       <div className="mt-auto pt-2 w-full">
                                          <a 
                                            href={slot.zoom_link} 
                                            target="_blank" 
                                            rel="noopener noreferrer" 
-                                           className={`w-full flex items-center justify-center gap-1.5 text-[10px] font-black rounded-lg py-1.5 transition-colors ${isPast ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]'}`}
+                                           className={`w-full flex items-center justify-center gap-1.5 text-[10px] font-black rounded-lg py-1.5 transition-colors relative z-20 ${isPast ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]'}`}
                                          >
                                            <Video className="w-3.5 h-3.5"/> دخول للبث
                                          </a>
@@ -536,16 +564,70 @@ export default function PublicSchedulesViewPage() {
                 </table>
               </div>
             </div>
+
+            {/* 🚀 عارض الطباعة الفاخر للورق (ملون وأنيق يشبه الشاشة) */}
+            <div className="hidden print:block w-full">
+               <div className="text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
+                  <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
+                  <h2 className="text-xl font-bold text-slate-700">
+                     {isStudentView ? 'الفصل: ' : 'المعلم: '} 
+                     {isStudentView ? (sections.find(s => String(s.id) === String(isRestricted ? restrictedIds[0] : filterId))?.name || restrictedName) : restrictedName}
+                  </h2>
+               </div>
+
+               <div className="w-full bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-200">
+                  <table className="w-full text-center border-collapse table-fixed">
+                    <thead>
+                      <tr className="bg-slate-800 text-white">
+                        <th className="p-3 font-black w-24 border border-slate-700">اليوم</th>
+                        {dynamicPeriods.map(p => <th key={p} className="p-3 font-black border border-slate-700">الحصة {p}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workingDays.map((day) => (
+                        <tr key={day} className="border-b border-slate-200 break-inside-avoid">
+                          <td className="p-3 font-black text-slate-800 bg-slate-100 border border-slate-200">{getDayName(day)}</td>
+                          {dynamicPeriods.map(p => {
+                            const slot = currentViewSchedules.find(s => s.day === day && s.period_number === p);
+                            return (
+                              <td key={p} className="p-2 border border-slate-200 h-auto min-h-[7rem] align-middle bg-white">
+                                {slot ? (
+                                  <div className="p-2 flex flex-col justify-center items-center h-full bg-slate-50 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                                    <div className={`absolute top-0 right-0 w-1.5 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
+                                    
+                                    {/* التوقيت باللون الذهبي في الطباعة */}
+                                    <div className="font-mono text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mb-1.5" dir="ltr">
+                                       {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
+                                    </div>
+
+                                    {/* التركيز اللوني في الطباعة */}
+                                    {isStudentView ? (
+                                      <>
+                                        <div className="font-black text-xs text-indigo-700 mb-1 leading-tight whitespace-normal break-words w-full px-1">{slot.subject_name}</div>
+                                        <div className="font-bold text-[10px] text-slate-600 whitespace-normal break-words w-full px-1">أ. {slot.teacher_name}</div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="font-black text-xs text-emerald-700 mb-1 leading-tight whitespace-normal break-words w-full px-1">{slot.section_name}</div>
+                                        <div className="font-bold text-[10px] text-slate-600 whitespace-normal break-words w-full px-1">{slot.subject_name}</div>
+                                      </>
+                                    )}
+                                  </div>
+                                ) : (<div className="flex items-center justify-center h-full text-slate-300">-</div>)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+               </div>
+            </div>
           </>
         ) : null}
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; border: 1px solid #02040a; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
-      `}} />
     </div>
   );
 }
+
+
