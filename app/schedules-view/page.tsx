@@ -172,38 +172,47 @@ export default function PublicSchedulesViewPage() {
          setLoading(false); return;
       }
 
-      // 🚀 استعلام الـ Deep Join القوي (يجلب كل البيانات مدمجة من الخادم مباشرة)
-      const [slotsRes, periodsRes] = await Promise.all([
-         supabase
-           .from('auto_schedules')
-           .select(`
-              id, day_of_week, period_number, start_time, end_time, stage,
-              section_id, subject_id, teacher_id,
-              sections ( id, name, classes ( name, level ) ),
-              subjects ( id, name ),
-              teachers ( id, zoom_link, users ( full_name, zoom_link ) )
-           `)
-           .eq('plan_id', planRes.data.id),
+      // 🚀 العودة لطريقة الجلب الموازي الآمنة 100% (تتجنب خطأ الـ Relationship)
+      const [slotsRes, sectionsRes, subjectsRes, teachersRes, periodsRes] = await Promise.all([
+         supabase.from('auto_schedules').select('*').eq('plan_id', planRes.data.id),
+         supabase.from('sections').select('id, name, class_id, classes(name, level)'),
+         supabase.from('subjects').select('id, name'),
+         // جلب بيانات المعلم واليوزر (بما أن الـ RLS تم حله، ستعمل هذه بكل سلاسة)
+         supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)'),
          supabase.from('auto_class_periods').select('*').order('period_number')
       ]);
 
       if (slotsRes.error) throw slotsRes.error;
+
+      let safeTeachersData = teachersRes.data || [];
+      if (teachersRes.error) {
+         // مسار احتياطي أخير
+         const fallbackTeachers = await supabase.from('teachers').select('*');
+         safeTeachersData = fallbackTeachers.data || [];
+      }
+
       setPeriods(periodsRes.data || []);
 
-      const formattedSchedules = (slotsRes.data || []).map(slot => {
-        // فك تشفير البيانات المدمجة بأمان
-        const sec = Array.isArray(slot.sections) ? slot.sections[0] : slot.sections;
+      const slots = slotsRes.data || [];
+      const sectionsData = sectionsRes.data || [];
+      const subjectsData = subjectsRes.data || [];
+
+      const formattedSchedules = slots.map(slot => {
+        const sec = sectionsData.find(s => String(s.id) === String(slot.section_id));
+        const subj = subjectsData.find(s => String(s.id) === String(slot.subject_id));
+        const teach = safeTeachersData.find(t => String(t.id) === String(slot.teacher_id));
+
         const cData = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
-        const stage = (cData?.level >= 10) ? 'high' : 'middle';
+        const level = cData?.level || 0;
+        const stage = level >= 10 ? 'high' : 'middle';
         
         const classNameStr = safeString(cData?.name, '');
         const secNameStr = safeString(sec?.name, '');
         const sectionFullName = sec ? `${classNameStr} - شعبة ${secNameStr}` : 'شعبة غير معروفة';
         
-        const subj = Array.isArray(slot.subjects) ? slot.subjects[0] : slot.subjects;
-        
-        const teach = Array.isArray(slot.teachers) ? slot.teachers[0] : slot.teachers;
+        // استخراج اسم المعلم والزووم بأمان
         const teachUser = Array.isArray(teach?.users) ? teach?.users[0] : teach?.users;
+        const finalTeacherName = safeString(teachUser?.full_name || teach?.full_name, 'معلم غير محدد');
 
         let zoomLink = teachUser?.zoom_link || teach?.zoom_link || null;
         if (typeof zoomLink !== 'string' || zoomLink.trim() === '') zoomLink = null;
@@ -219,7 +228,7 @@ export default function PublicSchedulesViewPage() {
           section_name: sectionFullName,
           subject_name: safeString(subj?.name, 'مادة محذوفة'),
           teacher_id: String(slot.teacher_id),
-          teacher_name: safeString(teachUser?.full_name, 'معلم غير محدد'),
+          teacher_name: finalTeacherName,
           zoom_link: zoomLink
         };
       });
@@ -615,7 +624,7 @@ export default function PublicSchedulesViewPage() {
                         <tr key={day.id} className="border-b border-slate-200 break-inside-avoid">
                           <td className="p-3 font-black text-slate-800 bg-slate-100 border border-slate-200">{safeString(day.name)}</td>
                           {dynamicPeriods.map(p => {
-                            const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
+                            const slot = currentViewSchedules.find(s => s.day === day && s.period_number === p);
                             return (
                               <td key={p} className="p-2 border border-slate-200 h-auto min-h-[7rem] align-middle bg-white">
                                 {slot ? (
