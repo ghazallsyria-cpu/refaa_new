@@ -58,8 +58,6 @@ export default function PublicSchedulesViewPage() {
   const [activeRole, setActiveRole] = useState<string>('');
   const [restrictedIds, setRestrictedIds] = useState<string[]>([]);
   const [restrictedName, setRestrictedName] = useState<string>('');
-  
-  // 🚀 حفظ الاسم الصريح للمستخدم لاستخدامه في الفلترة كخطة بديلة (Fallback)
   const [userFullName, setUserFullName] = useState<string>('');
 
   const hasFetched = useRef(false);
@@ -102,8 +100,12 @@ export default function PublicSchedulesViewPage() {
          setUserFullName(fetchedName);
       }
 
+      // 🚀 إذا كانت الخطة فارغة، قد يكون بسبب RLS وليس لعدم وجود خطة فعلياً!
       if (!planRes.data) {
         setLoading(false);
+        if (resolvedRole === 'student') {
+            setFetchError("لم يتم العثور على خطة معتمدة، أو أن صلاحيات حسابك (RLS) تمنعك من قراءة الجدول. يرجى مراجعة إدارة المدرسة.");
+        }
         return; 
       }
       
@@ -117,16 +119,28 @@ export default function PublicSchedulesViewPage() {
          
          if (teacherProfiles && teacherProfiles.length > 0) {
             resolvedRole = 'teacher';
-            // 🚀 تحويل المعرفات إلى String لضمان عدم حدوث خطأ Type Mismatch
             allowedIds = teacherProfiles.map(t => String(t.id));
             if (fetchedName) displayName = `أ. ${fetchedName}`;
          } else {
+            // 🚀 البحث القاطع عن الطالب
             const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
             
             if (studentProfiles && studentProfiles.length > 0) {
                resolvedRole = 'student';
-               allowedIds = studentProfiles.map(s => String(s.section_id)).filter(Boolean);
-               if (allowedIds.length === 0) setNoSectionAssigned(true);
+               // تأمين الفلترة من الـ String(null)
+               allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
+               
+               if (allowedIds.length === 0) {
+                   setNoSectionAssigned(true);
+                   setLoading(false);
+                   return; // الخروج مبكراً لأن الطالب بلا فصل
+               }
+            } else {
+               // إذا لم يجد سجل الطالب أبداً (ربما بسبب RLS أو غير مسجل)
+               resolvedRole = 'student';
+               setNoSectionAssigned(true);
+               setLoading(false);
+               return;
             }
          }
       }
@@ -135,11 +149,6 @@ export default function PublicSchedulesViewPage() {
       setActiveRole(resolvedRole);
       setRestrictedIds(allowedIds);
       setRestrictedName(displayName);
-
-      if (isUserRestricted && resolvedRole === 'student' && allowedIds.length === 0) {
-         setLoading(false);
-         return;
-      }
 
       const [slotsRes, sectionsRes, subjectsRes, teachersRes, periodsRes] = await Promise.all([
          supabase.from('auto_schedules').select('*').eq('plan_id', latestPlan.id),
@@ -234,17 +243,12 @@ export default function PublicSchedulesViewPage() {
     return Array.from({length: maxPeriod}, (_, i) => i + 1);
   }, [periods]);
 
-  // 🚀 فلترة الجداول بقوة الذكاء الاصطناعي (مضادة للأعطال)
   const currentViewSchedules = useMemo(() => {
      return schedules.filter(s => {
         if (isRestricted) {
            if (activeRole === 'teacher') {
-              // الخطة أ: المطابقة عبر الـ ID (بعد تحويله لنص لضمان المساواة)
               const matchById = restrictedIds.some(id => String(id) === String(s.teacher_id));
-              
-              // الخطة ب (السرية): المطابقة عبر الاسم الحرفي! (تُنقذ الموقف إذا كان الـ ID مفقوداً من قاعدة البيانات)
               const matchByName = userFullName && s.teacher_name && s.teacher_name.trim() === userFullName.trim();
-              
               return matchById || matchByName;
            } else {
               return restrictedIds.some(id => String(id) === String(s.section_id));
@@ -277,13 +281,14 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
+  // 🚀 شاشة الخطأ الواضحة إذا لم يكن الطالب مسجلاً في فصل
   if (noSectionAssigned) {
     return (
        <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4">
            <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg max-w-md w-full">
               <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto mb-4 opacity-80" />
               <h2 className="text-xl font-black text-white mb-2">غير مسجل في فصل</h2>
-              <p className="text-slate-400 font-bold text-sm">لم يتم تعيينك في أي فصل دراسي حتى الآن. يرجى مراجعة إدارة المدرسة.</p>
+              <p className="text-slate-400 font-bold text-sm">لم يتم تعيينك في أي فصل دراسي حتى الآن، أو أن صلاحيات الحساب (RLS) تمنع قراءة بياناتك. يرجى مراجعة إدارة المدرسة.</p>
            </div>
        </div>
     );
@@ -296,7 +301,6 @@ export default function PublicSchedulesViewPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
         
-        {/* Header */}
         <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -315,6 +319,7 @@ export default function PublicSchedulesViewPage() {
           </div>
         </div>
 
+        {/* 🚀 إظهار خطأ الـ RLS بوضوح للطالب */}
         {fetchError && (
            <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
               <AlertTriangle className="w-5 h-5 shrink-0" />
@@ -330,7 +335,6 @@ export default function PublicSchedulesViewPage() {
            </div>
         ) : schedules.length > 0 ? (
           <>
-            {/* Filters / Restricted Card */}
             <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
               
               {!isRestricted ? (
@@ -388,7 +392,6 @@ export default function PublicSchedulesViewPage() {
               )}
             </div>
 
-            {/* Grid */}
             <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
