@@ -4,10 +4,15 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
+
+// 🚀 استيراد مكتبات توليد الـ PDF الذكية (نفس المستخدمة في الإدارة)
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
 
 type Period = {
   id: string;
@@ -49,6 +54,13 @@ const getKuwaitDayId = (date: Date) => {
   return jsDay + 1;
 };
 
+// 🚀 دالة تنظيف الروابط لتعمل في الـ PDF
+const normalizeUrl = (url?: string) => {
+  if (!url) return '';
+  const clean = url.trim();
+  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+};
+
 export default function PublicSchedulesViewPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
@@ -72,6 +84,9 @@ export default function PublicSchedulesViewPage() {
   const [restrictedIds, setRestrictedIds] = useState<string[]>([]);
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
+
+  // 🚀 حالة توليد الـ PDF
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const hasFetched = useRef(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
@@ -202,9 +217,9 @@ export default function PublicSchedulesViewPage() {
         const level = cData?.level || 0;
         const stage = level >= 10 ? 'high' : 'middle';
         
-        const classNameStr = safeString(cData?.name, '');
+        const classNameStr = safeString(cData?.name, '').replace('الصف ', '').trim();
         const secNameStr = safeString(sec?.name, '');
-        const sectionFullName = sec ? `${classNameStr} - شعبة ${secNameStr}` : 'شعبة غير معروفة';
+        const sectionFullName = sec ? `${classNameStr} - ${secNameStr}` : 'شعبة غير معروفة';
         
         let finalTeacherName = safeString(userRec?.full_name, 'معلم غير محدد');
         if (finalTeacherName === 'undefined') finalTeacherName = 'معلم غير محدد';
@@ -309,6 +324,55 @@ export default function PublicSchedulesViewPage() {
     }
   };
 
+  const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
+
+  // 🚀 محرك الطباعة الأسطوري (يطبع الـ PDF ويزرع الروابط بداخله)
+  const executePDF = async () => {
+    try {
+      setIsGeneratingPDF(true);
+      
+      // ننتظر قليلاً حتى تكتمل عملية رسم الشاشة الوهمية
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const containers = document.querySelectorAll('.pdf-page-container');
+      if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جدول.');
+
+      const pdf = new jsPDF('landscape', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const el = containers[0] as HTMLElement;
+      
+      // تحويل الشاشة الوهمية إلى صورة فائقة الدقة
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      // 🚀 السحر هنا: زراعة الروابط فوق الـ PDF بناءً على إحداثياتها في الشاشة
+      const links = el.querySelectorAll('a.zoom-link');
+      const elementRect = el.getBoundingClientRect();
+      
+      links.forEach((link: any) => {
+        const rect = link.getBoundingClientRect();
+        const relativeX = (rect.left - elementRect.left) / elementRect.width;
+        const relativeY = (rect.top - elementRect.top) / elementRect.height;
+        const pdfX = relativeX * pdfWidth; 
+        const pdfY = relativeY * pdfHeight;
+        const finalUrl = normalizeUrl(link.href);
+        if (finalUrl) {
+           pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+        }
+      });
+      
+      let safeName = getEntityName().replace(/\s+/g, '_');
+      pdf.save(`جدول_${safeName}.pdf`);
+    } catch (error: any) { 
+      alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
+    } finally { 
+      setIsGeneratingPDF(false); 
+    }
+  };
+
   if (!mounted || isChecking || loading) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
@@ -347,46 +411,13 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
-  const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
-
   return (
-    <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden print:bg-white print:text-black print:p-0" dir="rtl">
+    <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden" dir="rtl">
       
-      {/* 🚀 إعدادات طباعة صارمة جداً (لإجبار المتصفح على صفحة واحدة وتفعيل الروابط) */}
+      {/* 🚀 إخفاء الطباعة العادية للمتصفح لأننا نستخدم الـ PDF الذكي */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-           @page { size: A4 landscape; margin: 0.5cm; }
-           body { 
-              -webkit-print-color-adjust: exact !important; 
-              print-color-adjust: exact !important; 
-              background-color: #ffffff !important; 
-              margin: 0 !important;
-              padding: 0 !important;
-           }
-           .print-hide { display: none !important; }
-           
-           /* القوة الغاشمة لمنع الصفحة الثانية */
-           .print-container {
-               height: 96vh !important;
-               max-height: 96vh !important;
-               display: flex !important;
-               flex-direction: column !important;
-               overflow: hidden !important;
-               page-break-after: avoid !important;
-           }
-           
-           table { 
-               height: 100% !important; 
-               page-break-inside: avoid !important; 
-           }
-           tr { 
-               page-break-inside: avoid !important; 
-               page-break-after: avoid !important; 
-           }
-           td, th { padding: 2px !important; }
-           
-           /* تحسين الروابط للـ PDF */
-           a { text-decoration: underline !important; color: #2563eb !important; }
+           body { display: none !important; }
         }
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; border-radius: 10px; }
@@ -394,13 +425,24 @@ export default function PublicSchedulesViewPage() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
       `}} />
 
-      <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0 print-hide" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0 print-hide" />
+      <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10 print:w-full print:max-w-none print:px-0 print:space-y-0">
+      {/* 🚀 شاشة التحميل الرائعة للـ PDF */}
+      <AnimatePresence>
+        {isGeneratingPDF && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#090b14]/90 backdrop-blur-xl text-white">
+            <Loader2 className="w-20 h-20 animate-spin text-emerald-400 mb-6 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
+            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثيقة الـ PDF الذكية...</h2>
+            <p className="text-slate-300 font-bold mt-3 text-lg">يتم الآن تجهيز الجدول وروابط البث המباشر.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
         
         {/* Header - Screen View */}
-        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] print-hide">
+        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
@@ -415,28 +457,29 @@ export default function PublicSchedulesViewPage() {
                 </p>
               </div>
             </div>
-            <button onClick={() => window.print()} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
-               طباعة الجدول الآن
+            {/* 🚀 تم تغيير زر الطباعة ليستدعي دالة PDF */}
+            <button onClick={executePDF} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2">
+               <FileDown className="w-5 h-5" /> تحميل الجدول PDF
             </button>
           </div>
         </div>
 
         {fetchError && (
-           <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold print-hide">
+           <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <p className="text-sm">تنبيه تقني: {safeString(fetchError)}</p>
            </div>
         )}
 
         {schedules.length === 0 && !fetchError ? (
-           <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg print-hide">
+           <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg">
               <CalendarDays className="w-20 h-20 text-slate-600 mx-auto mb-4 opacity-50" />
               <h2 className="text-2xl font-black text-white mb-2">لا توجد جداول معتمدة بعد</h2>
               <p className="text-slate-400 font-bold">لم تقم الإدارة بنشر الجدول النهائي حتى الآن.</p>
            </div>
         ) : schedules.length > 0 ? (
           <>
-            <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between print-hide">
+            <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
               
               {!isRestricted ? (
                 <>
@@ -496,7 +539,7 @@ export default function PublicSchedulesViewPage() {
             </div>
 
             {/* عارض الشاشة */}
-            <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden print-hide">
+            <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
                   <thead className="bg-[#02040a]/80">
@@ -623,67 +666,56 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 عارض الطباعة المُحكم (يستحيل أن ينقسم لصفحتين) */}
-            <div className="hidden print:flex print-container w-full max-w-full m-0 p-0 flex-col">
-               <div className="text-center mb-1 border-b-2 border-slate-800 pb-1 w-full shrink-0">
-                  <h1 className="text-xl font-black text-slate-900 mb-0.5">جدول الحصص الأسبوعي المعتمد</h1>
-                  <h2 className="text-sm font-bold text-slate-700">
-                     {isStudentView ? 'الفصل: ' : 'المعلم: '} 
-                     {getEntityName()}
-                  </h2>
-               </div>
-
-               <div className="w-full bg-white rounded-lg overflow-hidden border border-slate-200 flex-grow flex">
-                  <table className="w-full h-full text-center border-collapse table-fixed table-layout-fixed">
+            {/* 🚀 منطقة الطباعة الخفية والمطابقة تماماً لتصميم الإدارة الفخم */}
+            <div className="fixed top-[20000px] left-[20000px] opacity-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
+              {isGeneratingPDF && (
+                <div className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
+                    <div>
+                      <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                      <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
+                         {isStudentView ? `الفصل: ${getEntityName()}` : `المعلم: ${getEntityName()}`}
+                      </h2>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+                    </div>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
                     <thead>
-                      <tr className="bg-slate-800 text-white h-6">
-                        <th className="p-1 font-black text-xs w-16 border border-slate-700">اليوم</th>
-                        {dynamicPeriods.map(p => <th key={p} className="p-1 font-black text-xs border border-slate-700">الحصة {p}</th>)}
+                      <tr>
+                        <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
+                        {dynamicPeriods.map(p => (
+                          <th key={p.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
+                            <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p.period_number}</div>
+                            <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}</div>
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {DAYS.map((day) => (
-                        <tr key={day.id} className="border-b border-slate-200">
-                          <td className="p-1 font-black text-sm text-slate-800 bg-slate-100 border border-slate-200">{safeString(day.name)}</td>
-                          {dynamicPeriods.map(p => {
+                      {DAYS.map((day, index) => (
+                        <tr key={day.id}>
+                          <td style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
+                          {dynamicPeriods.map((p) => {
                             const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
-                            const showZoom = slot && slot.zoom_link;
-                            
                             return (
-                              <td key={p} className="p-1 border border-slate-200 align-middle bg-white">
+                              <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 {slot ? (
-                                  <div className="p-1 flex flex-col justify-center items-center h-full bg-slate-50 rounded border border-slate-200 relative overflow-hidden">
-                                    <div className={`absolute top-0 right-0 w-1 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
-                                    
-                                    <div className="font-mono text-[8px] font-black text-amber-600 bg-amber-50 px-1 rounded border border-amber-200 mb-0.5" dir="ltr">
-                                       {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isStudentView ? slot.subject_name : slot.section_name}</div>
+                                    <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
+                                      {isStudentView ? `أ. ${slot.teacher_name}` : slot.subject_name}
                                     </div>
-
-                                    {isStudentView ? (
-                                      <>
-                                        <div className="font-black text-[10px] text-indigo-700 mb-0.5 leading-none">{safeString(slot.subject_name)}</div>
-                                        <div className="font-bold text-[8px] text-slate-600 leading-none">أ. {safeString(slot.teacher_name)}</div>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div className="font-black text-[10px] text-emerald-700 mb-0.5 leading-none">{safeString(slot.section_name)}</div>
-                                        <div className="font-bold text-[8px] text-slate-600 leading-none">{safeString(slot.subject_name)}</div>
-                                      </>
-                                    )}
-
-                                    {showZoom && (
-                                      <div className="mt-1 w-full shrink-0">
-                                         <a 
-                                           href={slot.zoom_link} 
-                                           className="w-full flex items-center justify-center gap-1 text-[8px] font-black rounded-sm bg-blue-50 text-blue-600 border border-blue-200 py-0.5"
-                                           style={{ textDecoration: 'underline' }}
-                                         >
-                                           <Video className="w-2 h-2"/> دخول للبث
-                                         </a>
-                                      </div>
+                                    {/* 🚀 رابط الزووم مزروع بكلاس zoom-link ليتم صيده في محرك الـ PDF */}
+                                    {slot.zoom_link && (
+                                      <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
+                                        رابط البث
+                                      </a>
                                     )}
                                   </div>
-                                ) : (<div className="flex items-center justify-center h-full text-slate-300">-</div>)}
+                                ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
                               </td>
                             );
                           })}
@@ -691,8 +723,14 @@ export default function PublicSchedulesViewPage() {
                       ))}
                     </tbody>
                   </table>
-               </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
+                    <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
+                  </div>
+                </div>
+              )}
             </div>
+
           </>
         ) : null}
       </div>
