@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown, Printer, X, User
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
@@ -54,11 +54,15 @@ const getKuwaitDayId = (date: Date) => {
   return jsDay + 1;
 };
 
-// 🚀 تنظيف الرابط ليعمل بشكل صحيح في PDF
 const normalizeUrl = (url?: string) => {
   if (!url) return '';
   const clean = url.trim();
   return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+};
+
+const formatClassName = (rawName?: string) => {
+  if (!rawName) return '';
+  return rawName.replace('الصف ', '').trim();
 };
 
 export default function PublicSchedulesViewPage() {
@@ -85,6 +89,13 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
+  // 🚀 حالات الطباعة المتقدمة
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'specific-dept' | 'all-sections' | 'specific-class'>('single');
+  const [printFilterVal, setPrintFilterVal] = useState<string>('');
+  const [selectedPrintClass, setSelectedPrintClass] = useState<string>('');
+  const [selectedPrintDept, setSelectedPrintDept] = useState<string>('');
+  const [entitiesToPrint, setEntitiesToPrint] = useState<any[]>([]);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const hasFetched = useRef(false);
@@ -251,7 +262,9 @@ export default function PublicSchedulesViewPage() {
 
           formattedSchedules.forEach(s => {
             if (!uniqueSecsMap.has(s.section_id)) {
-               uniqueSecsMap.set(s.section_id, { id: s.section_id, name: s.section_name });
+               // حفظ كائن كامل لتسهيل الطباعة الجماعية لاحقاً
+               const sec = sectionsData.find(x => String(x.id) === s.section_id);
+               uniqueSecsMap.set(s.section_id, { id: s.section_id, name: s.section_name, classes: sec?.classes });
             }
             if (!uniqueTeachMap.has(s.teacher_id)) {
                uniqueTeachMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name });
@@ -300,6 +313,24 @@ export default function PublicSchedulesViewPage() {
      });
   }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
+  // 🚀 استخراج الفئات والأقسام لتغذية فلاتر الطباعة
+  const uniqueClasses = Array.from(new Set(sections.map(s => formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)))).filter(Boolean).sort();
+  const uniqueDepts = ['قسم العلوم', 'قسم الرياضيات', 'قسم اللغة العربية', 'قسم اللغة الإنجليزية', 'قسم التربية الإسلامية', 'قسم الاجتماعيات', 'قسم الحاسوب', 'أقسام أخرى'];
+
+  const getTeacherDept = (tId: string) => {
+    const tSchedules = schedules.filter(s => String(s.teacher_id) === String(tId));
+    if (tSchedules.length === 0) return 'أقسام أخرى';
+    const subjName = tSchedules[0].subject_name || '';
+    if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) return 'قسم العلوم';
+    if (/(رياضيات)/.test(subjName)) return 'قسم الرياضيات';
+    if (/(عربي|عربية)/.test(subjName)) return 'قسم اللغة العربية';
+    if (/(إنجليزي|انجليزي)/.test(subjName)) return 'قسم اللغة الإنجليزية';
+    if (/(إسلامية|قرآن|تجويد|دين)/.test(subjName)) return 'قسم التربية الإسلامية';
+    if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) return 'قسم الاجتماعيات';
+    if (/(حاسوب|معلوماتية)/.test(subjName)) return 'قسم الحاسوب';
+    return 'أقسام أخرى';
+  };
+
   const getEntityName = () => {
     try {
       if (isRestricted) {
@@ -325,62 +356,91 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
-  // 🚀 محرك الطباعة المحصن (لا يعتمد على تفاعلات React لمنع الانهيار)
-  const executePDF = async () => {
-    try {
-      setIsGeneratingPDF(true);
-      
-      // إعطاء واجهة التحميل فرصة صغيرة للظهور بسلاسة
-      await new Promise((resolve) => setTimeout(resolve, 150));
+  // 🚀 محرك الطباعة الأسطوري متعدد الصفحات (Multi-page PDF)
+  const handlePrintCommand = async (mode: string, filterVal: string = '') => {
+    setPrintMode(mode as any);
+    setPrintFilterVal(filterVal);
+    setIsPrintModalOpen(false);
+    setIsGeneratingPDF(true);
 
-      // البحث عن الحاوية الخفية الدائمة (الموجودة في أسفل الكود)
-      const container = document.getElementById('pdf-export-container');
-      if (!container) throw new Error('الجدول غير جاهز للطباعة.');
-
-      const pdf = new jsPDF('landscape', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      // التقاط الصورة للجدول المخفي
-      const canvas = await html2canvas(container, { 
-        scale: 2, 
-        useCORS: true, 
-        backgroundColor: '#ffffff', 
-        logging: false 
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
-      // 🚀 برمجة الروابط النشطة فوق الصورة داخل الـ PDF
-      const links = container.querySelectorAll('a.zoom-link');
-      const elementRect = container.getBoundingClientRect();
-      
-      links.forEach((link: any) => {
-        const rect = link.getBoundingClientRect();
-        // حماية ضد القسمة على الصفر
-        if (elementRect.width > 0 && elementRect.height > 0) {
-          const relativeX = (rect.left - elementRect.left) / elementRect.width;
-          const relativeY = (rect.top - elementRect.top) / elementRect.height;
-          const pdfX = relativeX * pdfWidth; 
-          const pdfY = relativeY * pdfHeight;
-          const finalUrl = normalizeUrl(link.href);
-          
-          if (finalUrl) {
-             pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
-          }
-        }
-      });
-      
-      let safeName = getEntityName().replace(/\s+/g, '_');
-      pdf.save(`جدول_${safeName}.pdf`);
-
-    } catch (error: any) { 
-      console.error(error);
-      alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
-    } finally { 
-      setIsGeneratingPDF(false); 
+    let entities: any[] = [];
+    
+    if (mode === 'single') {
+      const singleEntity = filterType === 'teacher' ? uniqueTeachers.find(t => String(t.id) === String(filterId)) : sections.find(s => String(s.id) === String(filterId));
+      if(singleEntity) entities = [singleEntity];
+    } else if (mode === 'all-teachers') {
+      entities = uniqueTeachers;
+    } else if (mode === 'specific-dept') {
+      entities = uniqueTeachers.filter(t => getTeacherDept(t.id) === filterVal);
+    } else if (mode === 'all-sections') {
+      entities = sections;
+    } else if (mode === 'specific-class') {
+      entities = sections.filter(sec => formatClassName(Array.isArray(sec.classes) ? sec.classes[0]?.name : sec.classes?.name) === filterVal);
     }
+
+    if(entities.length === 0) {
+      alert('لا توجد بيانات (جداول) لطباعتها في هذا التحديد.');
+      setIsGeneratingPDF(false);
+      return;
+    }
+
+    setEntitiesToPrint(entities);
+
+    // 🚀 الإنتظار الإجباري لضمان رسم كل الجداول في الخلفية قبل التقاطها (يمنع الانهيار)
+    setTimeout(async () => {
+      try {
+        const containers = document.querySelectorAll('.batch-pdf-page');
+        if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية.');
+
+        const pdf = new jsPDF('landscape', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        for (let i = 0; i < containers.length; i++) {
+          if (i > 0) pdf.addPage(); // إضافة صفحة جديدة لكل جدول إضافي
+          const el = containers[i] as HTMLElement;
+
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          const imgData = canvas.toDataURL('image/png');
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+          // 🚀 صيد وزراعة روابط الزووم لكل صفحة بشكل مستقل
+          const links = el.querySelectorAll('a.zoom-link');
+          const elementRect = el.getBoundingClientRect();
+
+          links.forEach((link: any) => {
+            const rect = link.getBoundingClientRect();
+            if (elementRect.width > 0 && elementRect.height > 0) {
+              const relativeX = (rect.left - elementRect.left) / elementRect.width;
+              const relativeY = (rect.top - elementRect.top) / elementRect.height;
+              const pdfX = relativeX * pdfWidth; 
+              const pdfY = relativeY * pdfHeight;
+              const finalUrl = normalizeUrl(link.href);
+              
+              if (finalUrl) {
+                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+              }
+            }
+          });
+        }
+
+        // تسمية الملف بذكاء
+        let fileName = 'الجدول_الدراسي.pdf';
+        if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
+        if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
+        if (mode === 'specific-class') fileName = `جداول_مرحلة_${filterVal.replace(/\s+/g, '_')}.pdf`;
+        if (mode === 'specific-dept') fileName = `جداول_${filterVal.replace(/\s+/g, '_')}.pdf`;
+        if (mode === 'single') fileName = `جدول_${getEntityName().replace(/\s+/g, '_')}.pdf`;
+
+        pdf.save(fileName);
+      } catch (error: any) { 
+        console.error(error);
+        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
+      } finally { 
+        setIsGeneratingPDF(false); 
+        setEntitiesToPrint([]); // مسح الجداول المؤقتة
+      }
+    }, 1000); // إنتظار ثانية واحدة (آمن جداً)
   };
 
   if (!mounted || isChecking || loading) {
@@ -424,7 +484,7 @@ export default function PublicSchedulesViewPage() {
   return (
     <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden" dir="rtl">
       
-      {/* 🚀 إخفاء الطباعة العادية للمتصفح تماماً */}
+      {/* إخفاء الطباعة العادية للمتصفح تماماً */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
            body { display: none !important; }
@@ -438,13 +498,60 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
+      {/* 🚀 مركز الطباعة المتقدم (يظهر للإدارة فقط) */}
+      <AnimatePresence>
+        {isPrintModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPrintModalOpen(false)} className="absolute inset-0 bg-[#090b14]/80 backdrop-blur-md" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-[#131836] border border-white/10 rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 w-full max-w-2xl relative">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-2xl font-black text-white flex items-center gap-3"><Printer className="w-6 h-6 text-emerald-400" /> مركز الطباعة المتقدم</h2>
+                <button onClick={() => setIsPrintModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              
+              <div className="space-y-6">
+                {/* قسم طباعة المعلمين */}
+                <div className="bg-[#090b14]/50 p-6 rounded-3xl border border-white/5 space-y-5">
+                  <h3 className="font-black text-indigo-400 flex items-center gap-2 text-lg"><User className="w-5 h-5" /> جداول المعلمين</h3>
+                  <button onClick={() => handlePrintCommand('all-teachers')} className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-white transition-all active:scale-95 shadow-sm">
+                    طباعة جميع المعلمين (ملف واحد)
+                  </button>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <select value={selectedPrintDept} onChange={e=>setSelectedPrintDept(e.target.value)} className="w-full sm:flex-1 p-3.5 border border-white/10 bg-[#131836] text-white rounded-2xl font-bold outline-none appearance-none cursor-pointer">
+                      <option value="">-- اختر قسماً محدداً للطباعة --</option>
+                      {uniqueDepts.map((d, i) => <option key={i} value={d}>{d}</option>)}
+                    </select>
+                    <button onClick={() => handlePrintCommand('specific-dept', selectedPrintDept)} disabled={!selectedPrintDept} className="w-full sm:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black disabled:opacity-50 transition-all shadow-lg active:scale-95">طباعة القسم</button>
+                  </div>
+                </div>
+
+                {/* قسم طباعة الفصول */}
+                <div className="bg-[#090b14]/50 p-6 rounded-3xl border border-white/5 space-y-5">
+                  <h3 className="font-black text-emerald-400 flex items-center gap-2 text-lg"><Users className="w-5 h-5" /> جداول الفصول الدراسية</h3>
+                  <button onClick={() => handlePrintCommand('all-sections')} className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-white transition-all active:scale-95 shadow-sm">
+                    طباعة جميع الفصول (ملف واحد)
+                  </button>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <select value={selectedPrintClass} onChange={e=>setSelectedPrintClass(e.target.value)} className="w-full sm:flex-1 p-3.5 border border-white/10 bg-[#131836] text-white rounded-2xl font-bold outline-none appearance-none cursor-pointer">
+                      <option value="">-- اختر صفاً محدداً للطباعة --</option>
+                      {uniqueClasses.map((c, i) => <option key={i} value={c}>{c}</option>)}
+                    </select>
+                    <button onClick={() => handlePrintCommand('specific-class', selectedPrintClass)} disabled={!selectedPrintClass} className="w-full sm:w-auto px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black disabled:opacity-50 transition-all shadow-lg active:scale-95">طباعة الصف</button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* شاشة تحميل الـ PDF */}
       <AnimatePresence>
         {isGeneratingPDF && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#090b14]/90 backdrop-blur-xl text-white">
             <Loader2 className="w-20 h-20 animate-spin text-emerald-400 mb-6 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
-            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثيقة الـ PDF الذكية...</h2>
-            <p className="text-slate-300 font-bold mt-3 text-lg">يتم الآن تجهيز الجدول وروابط البث המباشر.</p>
+            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثائق الـ PDF الذكية...</h2>
+            <p className="text-slate-300 font-bold mt-3 text-lg">النظام يقوم برسم الجداول وترتيبها حسب طلبك.</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -467,9 +574,19 @@ export default function PublicSchedulesViewPage() {
                 </p>
               </div>
             </div>
-            <button onClick={executePDF} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2">
-               <FileDown className="w-5 h-5" /> تحميل الجدول PDF
-            </button>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={() => handlePrintCommand('single')} className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                 <FileDown className="w-5 h-5" /> تحميل الجدول الحالي
+              </button>
+              
+              {/* زر الطباعة المتقدمة يظهر للإدارة فقط */}
+              {(!isRestricted || currentRole === 'admin' || currentRole === 'management') && (
+                <button onClick={() => setIsPrintModalOpen(true)} className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-90 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2">
+                   <Printer className="w-5 h-5" /> مركز الطباعة
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -675,73 +792,81 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 منطقة الطباعة الخفية (موجودة دائماً في الخلفية لتجنب تأخيرات وأخطاء React) */}
-            <div style={{ position: 'fixed', top: '-10000px', left: '-10000px', pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
-              <div id="pdf-export-container" className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
-                  <div>
-                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
-                    <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
-                       {isStudentView ? `الفصل: ${getEntityName()}` : `المعلم: ${getEntityName()}`}
-                    </h2>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
-                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
-                  </div>
-                </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
-                      {dynamicPeriods.map(p => (
-                        <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
-                          <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p}</div>
-                          {(() => {
-                            const slotForTime = currentViewSchedules.find(s => s.period_number === p);
-                            if (slotForTime) {
-                              return <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{formatTime(slotForTime.start_time)} - {formatTime(slotForTime.end_time)}</div>;
-                            }
-                            return null;
-                          })()}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {DAYS.map((day, index) => (
-                      <tr key={day.id}>
-                        <td style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
-                        {dynamicPeriods.map((p) => {
-                          const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
-                          return (
-                            <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
-                              {slot ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
-                                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isStudentView ? slot.subject_name : slot.section_name}</div>
-                                  <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
-                                    {isStudentView ? `أ. ${slot.teacher_name}` : slot.subject_name}
-                                  </div>
-                                  {/* 🚀 رابط الزووم مزروع بكلاس zoom-link ليتم صيده في محرك الـ PDF */}
-                                  {slot.zoom_link && (
-                                    <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
-                                      رابط البث
-                                    </a>
-                                  )}
-                                </div>
-                              ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
-                  <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
-                </div>
-              </div>
+            {/* 🚀 منطقة الطباعة الخفية (تستوعب ملف واحد أو 100 ملف بدون انهيار) */}
+            <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+              {entitiesToPrint.map((entity, idx) => {
+                 const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class' || (printMode === 'single' && filterType === 'section');
+                 const entId = String(entity.id);
+                 const entName = entity.name || entity.users?.full_name || 'غير محدد';
+                 const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
+
+                 return (
+                   <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
+                       <div>
+                         <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                         <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
+                           {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
+                         </h2>
+                       </div>
+                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
+                         <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+                       </div>
+                     </div>
+                     <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
+                       <thead>
+                         <tr>
+                           <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
+                           {dynamicPeriods.map(p => (
+                             <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
+                               <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p}</div>
+                               {(() => {
+                                 const slotForTime = schedules.find(s => s.period_number === p);
+                                 if (slotForTime) {
+                                   return <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{formatTime(slotForTime.start_time)} - {formatTime(slotForTime.end_time)}</div>;
+                                 }
+                                 return null;
+                               })()}
+                             </th>
+                           ))}
+                         </tr>
+                       </thead>
+                       <tbody>
+                         {DAYS.map((day, dIdx) => (
+                           <tr key={day.id}>
+                             <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
+                             {dynamicPeriods.map((p) => {
+                               const slot = schedules.find(s => String(s.day_of_week) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
+                               return (
+                                 <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                   {slot ? (
+                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                                       <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
+                                       <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
+                                         {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
+                                       </div>
+                                       {slot.zoom_link && (
+                                         <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
+                                           رابط البث
+                                         </a>
+                                       )}
+                                     </div>
+                                   ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
+                                 </td>
+                               );
+                             })}
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
+                       <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
+                     </div>
+                   </div>
+                 );
+              })}
             </div>
 
           </>
