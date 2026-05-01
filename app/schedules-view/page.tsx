@@ -26,17 +26,15 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-// دالة تحويل الوقت (08:30) إلى دقائق لتسهيل المقارنة الرياضية
 const timeToMinutes = (timeStr: string) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 };
 
-// دالة تحويل يوم جافاسكريبت إلى أيامنا (الأحد=1، الخميس=5)
 const getKuwaitDayId = (date: Date) => {
-  const jsDay = date.getDay(); // 0=Sun, 1=Mon...
-  if (jsDay === 5 || jsDay === 6) return 0; // عطلة الجمعة والسبت
+  const jsDay = date.getDay(); 
+  if (jsDay === 5 || jsDay === 6) return 0; 
   return jsDay + 1;
 };
 
@@ -60,14 +58,14 @@ export default function PublicSchedulesViewPage() {
   const [activeRole, setActiveRole] = useState<string>('');
   const [restrictedIds, setRestrictedIds] = useState<string[]>([]);
   const [restrictedName, setRestrictedName] = useState<string>('');
+  
+  // 🚀 حفظ الاسم الصريح للمستخدم لاستخدامه في الفلترة كخطة بديلة (Fallback)
+  const [userFullName, setUserFullName] = useState<string>('');
 
   const hasFetched = useRef(false);
-
-  // 🚀 محرك الوقت الحي (يعمل حصرياً في جهاز المستخدم بدون ضغط على السيرفر)
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   useEffect(() => {
-    // تحديث الوقت كل 60 ثانية لتحديث حالة (الآن/فائتة/قادمة)
     const timer = setInterval(() => setCurrentDateTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
@@ -91,13 +89,18 @@ export default function PublicSchedulesViewPage() {
       let isUserRestricted = false;
       let allowedIds: string[] = [];
       let displayName = 'جدولك';
+      let fetchedName = '';
 
       const [userInfoRes, planRes] = await Promise.all([
          supabase.from('users').select('full_name').eq('id', user.id).maybeSingle(),
          supabase.from('auto_schedule_plans').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle()
       ]);
 
-      if (userInfoRes.data?.full_name) displayName = userInfoRes.data.full_name;
+      if (userInfoRes.data?.full_name) {
+         displayName = userInfoRes.data.full_name;
+         fetchedName = userInfoRes.data.full_name;
+         setUserFullName(fetchedName);
+      }
 
       if (!planRes.data) {
         setLoading(false);
@@ -114,14 +117,15 @@ export default function PublicSchedulesViewPage() {
          
          if (teacherProfiles && teacherProfiles.length > 0) {
             resolvedRole = 'teacher';
-            allowedIds = teacherProfiles.map(t => t.id);
-            if (userInfoRes.data?.full_name) displayName = `أ. ${userInfoRes.data.full_name}`;
+            // 🚀 تحويل المعرفات إلى String لضمان عدم حدوث خطأ Type Mismatch
+            allowedIds = teacherProfiles.map(t => String(t.id));
+            if (fetchedName) displayName = `أ. ${fetchedName}`;
          } else {
             const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
             
             if (studentProfiles && studentProfiles.length > 0) {
                resolvedRole = 'student';
-               allowedIds = studentProfiles.map(s => s.section_id).filter(Boolean);
+               allowedIds = studentProfiles.map(s => String(s.section_id)).filter(Boolean);
                if (allowedIds.length === 0) setNoSectionAssigned(true);
             }
          }
@@ -159,30 +163,30 @@ export default function PublicSchedulesViewPage() {
       const sectionsData = sectionsRes.data || [];
       const subjectsData = subjectsRes.data || [];
 
-      // ربط البيانات
       const formattedSchedules = slots.map(slot => {
-        const sec = sectionsData.find(s => s.id === slot.section_id);
-        const subj = subjectsData.find(s => s.id === slot.subject_id);
-        const teach = safeTeachersData.find(t => t.id === slot.teacher_id);
+        const sec = sectionsData.find(s => String(s.id) === String(slot.section_id));
+        const subj = subjectsData.find(s => String(s.id) === String(slot.subject_id));
+        const teach = safeTeachersData.find(t => String(t.id) === String(slot.teacher_id));
 
         const cData = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
         const level = cData?.level || 0;
         const stage = level >= 10 ? 'high' : 'middle';
         const sectionFullName = sec ? `${cData?.name || ''} - شعبة ${sec.name || ''}` : 'شعبة غير معروفة';
         
-        const zoomLink = teach?.users?.zoom_link || teach?.zoom_link || null;
+        let zoomLink = teach?.users?.zoom_link || teach?.zoom_link || null;
+        if (typeof zoomLink !== 'string' || zoomLink.trim() === '') zoomLink = null;
 
         return {
-          id: slot.id,
+          id: String(slot.id),
           day: slot.day_of_week,
           period_number: slot.period_number,
           start_time: slot.start_time,
-          end_time: slot.end_time, // 🚀 التوقيت الدقيق محفوظ في الحصة
+          end_time: slot.end_time,
           stage: stage,
-          section_id: slot.section_id,
+          section_id: String(slot.section_id),
           section_name: sectionFullName,
           subject_name: subj?.name || 'مادة محذوفة',
-          teacher_id: slot.teacher_id,
+          teacher_id: String(slot.teacher_id),
           teacher_name: teach?.users?.full_name || 'معلم غير محدد',
           zoom_link: zoomLink
         };
@@ -230,14 +234,25 @@ export default function PublicSchedulesViewPage() {
     return Array.from({length: maxPeriod}, (_, i) => i + 1);
   }, [periods]);
 
+  // 🚀 فلترة الجداول بقوة الذكاء الاصطناعي (مضادة للأعطال)
   const currentViewSchedules = useMemo(() => {
      return schedules.filter(s => {
         if (isRestricted) {
-           return activeRole === 'teacher' ? restrictedIds.includes(s.teacher_id) : restrictedIds.includes(s.section_id);
+           if (activeRole === 'teacher') {
+              // الخطة أ: المطابقة عبر الـ ID (بعد تحويله لنص لضمان المساواة)
+              const matchById = restrictedIds.some(id => String(id) === String(s.teacher_id));
+              
+              // الخطة ب (السرية): المطابقة عبر الاسم الحرفي! (تُنقذ الموقف إذا كان الـ ID مفقوداً من قاعدة البيانات)
+              const matchByName = userFullName && s.teacher_name && s.teacher_name.trim() === userFullName.trim();
+              
+              return matchById || matchByName;
+           } else {
+              return restrictedIds.some(id => String(id) === String(s.section_id));
+           }
         }
-        return filterType === 'section' ? s.section_id === filterId : s.teacher_id === filterId;
+        return filterType === 'section' ? String(s.section_id) === String(filterId) : String(s.teacher_id) === String(filterId);
      });
-  }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId]);
+  }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
   if (isChecking || loading) {
     return (
@@ -287,7 +302,6 @@ export default function PublicSchedulesViewPage() {
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-inner shrink-0 relative">
-                {/* تأثير نبض خفيف للأيقونة لتدل على التحديث الحي */}
                 <div className="absolute inset-0 bg-indigo-400/20 rounded-2xl animate-ping"></div>
                 <CalendarDays className="h-8 w-8 text-indigo-400 drop-shadow-md relative z-10" />
               </div>
@@ -323,13 +337,13 @@ export default function PublicSchedulesViewPage() {
                 <>
                   <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto shrink-0">
                     <button 
-                      onClick={() => { setFilterType('section'); if(sections[0]) setFilterId(sections[0].id); }}
+                      onClick={() => { setFilterType('section'); if(sections[0]) setFilterId(String(sections[0].id)); }}
                       className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'section' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                       <Layers className="w-4 h-4" /> فصول
                     </button>
                     <button 
-                      onClick={() => { setFilterType('teacher'); if(uniqueTeachers[0]) setFilterId(uniqueTeachers[0].id); }}
+                      onClick={() => { setFilterType('teacher'); if(uniqueTeachers[0]) setFilterId(String(uniqueTeachers[0].id)); }}
                       className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'teacher' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                       <UserCircle className="w-4 h-4" /> معلمون
@@ -364,7 +378,6 @@ export default function PublicSchedulesViewPage() {
                       </p>
                       <p className="text-base font-black text-white mt-0.5">{restrictedName}</p>
                    </div>
-                   {/* 🚀 إظهار الوقت الحالي أعلى البطاقة ليعرف المستخدم */}
                    <div className="hidden sm:flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-white/5">
                       <Clock className="w-4 h-4 text-amber-400" />
                       <span className="text-sm font-black text-amber-400" dir="ltr">
@@ -385,7 +398,6 @@ export default function PublicSchedulesViewPage() {
                         اليوم / الحصة
                       </th>
                       {dynamicPeriods.map(p => {
-                        // إزالة التوقيت من الـ Header لأنه مضلل للمعلم المشترك (وضعناه داخل الكارت نفسه)
                         return (
                           <th key={p} scope="col" className="py-4 px-2 text-center border-l border-white/5 min-w-[150px] bg-[#02040a]/40">
                             <span className="text-white font-black text-sm drop-shadow-sm">الحصة {p}</span>
@@ -397,7 +409,6 @@ export default function PublicSchedulesViewPage() {
                   <tbody className="divide-y divide-white/5 bg-transparent">
                     {DAYS.map((day) => {
                       const todayId = getKuwaitDayId(currentDateTime);
-                      // تمييز اليوم الحالي في الصف
                       const isToday = day.id === todayId;
 
                       return (
@@ -411,7 +422,6 @@ export default function PublicSchedulesViewPage() {
                             
                             const showZoom = slot && slot.zoom_link;
 
-                            // 🚀 منطق حالة الحصة (الآن، فائتة، قادمة)
                             let isNow = false;
                             let isPast = false;
                             const currentMins = currentDateTime.getHours() * 60 + currentDateTime.getMinutes();
@@ -420,12 +430,12 @@ export default function PublicSchedulesViewPage() {
                                const startMins = timeToMinutes(slot.start_time);
                                const endMins = timeToMinutes(slot.end_time);
 
-                               if (todayId !== 0) { // لو مش عطلة نهاية أسبوع
+                               if (todayId !== 0) { 
                                   if (day.id < todayId) {
-                                    isPast = true; // أيام سابقة
+                                    isPast = true; 
                                   } else if (day.id === todayId) {
-                                    if (currentMins > endMins) isPast = true; // حصة انتهت اليوم
-                                    else if (currentMins >= startMins && currentMins <= endMins) isNow = true; // الحصة تعمل الآن!
+                                    if (currentMins > endMins) isPast = true; 
+                                    else if (currentMins >= startMins && currentMins <= endMins) isNow = true; 
                                   }
                                }
                             }
@@ -437,21 +447,19 @@ export default function PublicSchedulesViewPage() {
                                     whileHover={{ scale: isPast ? 1 : 1.02 }} 
                                     className={`h-full flex flex-col justify-start rounded-xl p-2.5 shadow-inner relative overflow-hidden group transition-all duration-300
                                       ${isNow 
-                                        ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/50' // ستايل الـ NOW
+                                        ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/50' 
                                         : isPast 
-                                        ? 'bg-[#02040a]/40 border border-white/5 opacity-50 grayscale hover:grayscale-0' // ستايل الـ PAST
-                                        : 'bg-[#02040a]/80 border border-white/10' // ستايل الـ FUTURE الطبيعي
+                                        ? 'bg-[#02040a]/40 border border-white/5 opacity-50 grayscale hover:grayscale-0' 
+                                        : 'bg-[#02040a]/80 border border-white/10' 
                                       }
                                     `}
                                   >
                                     <div className={`absolute top-0 right-0 w-1.5 h-full ${isRestricted ? (activeRole === 'student' ? 'bg-indigo-500' : 'bg-emerald-500') : (filterType === 'section' ? 'bg-indigo-500' : 'bg-emerald-500')} ${isPast ? 'opacity-30' : ''}`}></div>
                                     
-                                    {/* 🚀 إظهار الوقت الدقيق للمرحلة بخط عريض ومميز */}
                                     <div className="flex justify-between items-start mb-2 w-full pr-1.5">
                                       <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-white/10 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
                                          {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
                                       </div>
-                                      {/* شارة التتبع الحي */}
                                       {isNow && (
                                          <div className="flex items-center gap-1 bg-rose-500/20 px-1.5 py-0.5 rounded border border-rose-500/50">
                                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
@@ -472,7 +480,6 @@ export default function PublicSchedulesViewPage() {
                                       }
                                     </div>
 
-                                    {/* زر الزووم */}
                                     {showZoom && (
                                       <div className="mt-auto pt-2 w-full">
                                          <a 
