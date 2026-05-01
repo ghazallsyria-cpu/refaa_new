@@ -352,16 +352,41 @@ export default function PublicSchedulesViewPage() {
   return (
     <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden print:bg-white print:text-black print:p-0" dir="rtl">
       
-      {/* 🚀 إعدادات طباعة معدلة ومضغوطة لضمان بقائها في صفحة واحدة */}
+      {/* 🚀 إعدادات طباعة صارمة جداً (لإجبار المتصفح على صفحة واحدة وتفعيل الروابط) */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-           @page { size: landscape; margin: 8mm; } /* تقليل الهوامش لتوفير مساحة */
-           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background-color: #ffffff !important; }
+           @page { size: A4 landscape; margin: 0.5cm; }
+           body { 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
+              background-color: #ffffff !important; 
+              margin: 0 !important;
+              padding: 0 !important;
+           }
            .print-hide { display: none !important; }
-           /* منع تقسيم الجدول */
-           table { page-break-inside: auto; width: 100% !important; }
-           tr { page-break-inside: avoid; page-break-after: auto; }
-           td, th { padding: 4px !important; } /* ضغط المسافات لتصغير حجم الجدول عمودياً */
+           
+           /* القوة الغاشمة لمنع الصفحة الثانية */
+           .print-container {
+               height: 96vh !important;
+               max-height: 96vh !important;
+               display: flex !important;
+               flex-direction: column !important;
+               overflow: hidden !important;
+               page-break-after: avoid !important;
+           }
+           
+           table { 
+               height: 100% !important; 
+               page-break-inside: avoid !important; 
+           }
+           tr { 
+               page-break-inside: avoid !important; 
+               page-break-after: avoid !important; 
+           }
+           td, th { padding: 2px !important; }
+           
+           /* تحسين الروابط للـ PDF */
+           a { text-decoration: underline !important; color: #2563eb !important; }
         }
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; border-radius: 10px; }
@@ -372,7 +397,7 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0 print-hide" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0 print-hide" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10 print:w-full print:max-w-none print:px-0 print:space-y-2">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10 print:w-full print:max-w-none print:px-0 print:space-y-0">
         
         {/* Header - Screen View */}
         <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] print-hide">
@@ -598,65 +623,62 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 عارض الطباعة (مُحسن ليكون في صفحة واحدة، مع إظهار روابط الزووم) */}
-            <div className="hidden print:block w-full max-w-full m-0 p-0">
-               <div className="text-center mb-3 border-b-2 border-slate-800 pb-2 w-full">
-                  <h1 className="text-xl font-black text-slate-900 mb-1">جدول الحصص الأسبوعي المعتمد</h1>
-                  <h2 className="text-lg font-bold text-slate-700">
+            {/* 🚀 عارض الطباعة المُحكم (يستحيل أن ينقسم لصفحتين) */}
+            <div className="hidden print:flex print-container w-full max-w-full m-0 p-0 flex-col">
+               <div className="text-center mb-1 border-b-2 border-slate-800 pb-1 w-full shrink-0">
+                  <h1 className="text-xl font-black text-slate-900 mb-0.5">جدول الحصص الأسبوعي المعتمد</h1>
+                  <h2 className="text-sm font-bold text-slate-700">
                      {isStudentView ? 'الفصل: ' : 'المعلم: '} 
                      {getEntityName()}
                   </h2>
                </div>
 
-               <div className="w-full bg-white rounded-lg overflow-hidden border border-slate-200">
-                  <table className="w-full text-center border-collapse table-fixed table-layout-fixed">
+               <div className="w-full bg-white rounded-lg overflow-hidden border border-slate-200 flex-grow flex">
+                  <table className="w-full h-full text-center border-collapse table-fixed table-layout-fixed">
                     <thead>
-                      <tr className="bg-slate-800 text-white">
-                        <th className="p-1.5 font-black text-xs w-20 border border-slate-700">اليوم</th>
-                        {dynamicPeriods.map(p => <th key={p} className="p-1.5 font-black text-xs border border-slate-700">الحصة {p}</th>)}
+                      <tr className="bg-slate-800 text-white h-6">
+                        <th className="p-1 font-black text-xs w-16 border border-slate-700">اليوم</th>
+                        {dynamicPeriods.map(p => <th key={p} className="p-1 font-black text-xs border border-slate-700">الحصة {p}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {DAYS.map((day) => (
                         <tr key={day.id} className="border-b border-slate-200">
-                          <td className="p-1.5 font-black text-slate-800 bg-slate-100 border border-slate-200">{safeString(day.name)}</td>
+                          <td className="p-1 font-black text-sm text-slate-800 bg-slate-100 border border-slate-200">{safeString(day.name)}</td>
                           {dynamicPeriods.map(p => {
                             const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
                             const showZoom = slot && slot.zoom_link;
                             
                             return (
-                              <td key={p} className="p-1 border border-slate-200 align-middle bg-white h-[5.5rem]">
+                              <td key={p} className="p-1 border border-slate-200 align-middle bg-white">
                                 {slot ? (
-                                  <div className="p-1.5 flex flex-col justify-center items-center h-full bg-slate-50 rounded-md border border-slate-200 relative overflow-hidden">
+                                  <div className="p-1 flex flex-col justify-center items-center h-full bg-slate-50 rounded border border-slate-200 relative overflow-hidden">
                                     <div className={`absolute top-0 right-0 w-1 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
                                     
-                                    <div className="font-mono text-[9px] font-black text-amber-600 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 mb-1" dir="ltr">
+                                    <div className="font-mono text-[8px] font-black text-amber-600 bg-amber-50 px-1 rounded border border-amber-200 mb-0.5" dir="ltr">
                                        {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                     </div>
 
                                     {isStudentView ? (
                                       <>
-                                        <div className="font-black text-[10px] text-indigo-700 mb-0.5 leading-tight">{safeString(slot.subject_name)}</div>
-                                        <div className="font-bold text-[8px] text-slate-600">أ. {safeString(slot.teacher_name)}</div>
+                                        <div className="font-black text-[10px] text-indigo-700 mb-0.5 leading-none">{safeString(slot.subject_name)}</div>
+                                        <div className="font-bold text-[8px] text-slate-600 leading-none">أ. {safeString(slot.teacher_name)}</div>
                                       </>
                                     ) : (
                                       <>
-                                        <div className="font-black text-[10px] text-emerald-700 mb-0.5 leading-tight">{safeString(slot.section_name)}</div>
-                                        <div className="font-bold text-[8px] text-slate-600">{safeString(slot.subject_name)}</div>
+                                        <div className="font-black text-[10px] text-emerald-700 mb-0.5 leading-none">{safeString(slot.section_name)}</div>
+                                        <div className="font-bold text-[8px] text-slate-600 leading-none">{safeString(slot.subject_name)}</div>
                                       </>
                                     )}
 
-                                    {/* 🚀 إظهار رابط الزووم في الطباعة */}
                                     {showZoom && (
-                                      <div className="mt-auto pt-1 w-full">
+                                      <div className="mt-1 w-full shrink-0">
                                          <a 
                                            href={slot.zoom_link} 
-                                           target="_blank" 
-                                           rel="noopener noreferrer" 
-                                           className="w-full flex items-center justify-center gap-1 text-[8px] font-black rounded bg-blue-50 text-blue-600 border border-blue-200 py-0.5"
-                                           style={{ textDecoration: 'none' }}
+                                           className="w-full flex items-center justify-center gap-1 text-[8px] font-black rounded-sm bg-blue-50 text-blue-600 border border-blue-200 py-0.5"
+                                           style={{ textDecoration: 'underline' }}
                                          >
-                                           <Video className="w-2.5 h-2.5"/> دخول للبث
+                                           <Video className="w-2 h-2"/> دخول للبث
                                          </a>
                                       </div>
                                     )}
@@ -677,5 +699,3 @@ export default function PublicSchedulesViewPage() {
     </div>
   );
 }
-
-
