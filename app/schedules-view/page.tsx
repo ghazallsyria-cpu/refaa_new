@@ -26,13 +26,26 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-const timeToMinutes = (timeStr: string) => {
-  if (!timeStr) return 0;
-  const [h, m] = timeStr.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
+// 🚀 دوال التحصين المطلق (تمنع انهيار المتصفح لو كانت البيانات فاسدة)
+const safeString = (val: any, fallback = 'غير محدد') => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') return fallback; // منع خطأ رسم الـ Objects
+  return String(val);
+};
+
+const formatTime = (timeStr: any) => {
+  if (typeof timeStr !== 'string' || !timeStr.includes(':')) return '--:--';
+  return timeStr.slice(0, 5);
+};
+
+const timeToMinutes = (timeStr: any) => {
+  if (typeof timeStr !== 'string' || !timeStr.includes(':')) return 0;
+  const parts = timeStr.split(':');
+  return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
 };
 
 const getKuwaitDayId = (date: Date) => {
+  if (!date || !(date instanceof Date)) return 1;
   const jsDay = date.getDay(); 
   if (jsDay === 5 || jsDay === 6) return 0; 
   return jsDay + 1;
@@ -42,11 +55,10 @@ export default function PublicSchedulesViewPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
-  // 🚀 درع التزامن لحل مشكلة Application Error
   const [mounted, setMounted] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  
   const [periods, setPeriods] = useState<Period[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [uniqueTeachers, setUniqueTeachers] = useState<any[]>([]);
@@ -60,7 +72,7 @@ export default function PublicSchedulesViewPage() {
   const [noSectionAssigned, setNoSectionAssigned] = useState(false);
   const [activeRole, setActiveRole] = useState<string>('');
   const [restrictedIds, setRestrictedIds] = useState<string[]>([]);
-  const [restrictedName, setRestrictedName] = useState<string>('');
+  const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
   const hasFetched = useRef(false);
@@ -87,7 +99,7 @@ export default function PublicSchedulesViewPage() {
       setFetchError(null);
       setNoSectionAssigned(false);
 
-      let resolvedRole = (currentRole || '').toLowerCase();
+      let resolvedRole = safeString(currentRole, '').toLowerCase();
       let isUserRestricted = false;
       let allowedIds: string[] = [];
       let displayName = 'جدولك';
@@ -99,8 +111,8 @@ export default function PublicSchedulesViewPage() {
       ]);
 
       if (userInfoRes.data?.full_name) {
-         displayName = userInfoRes.data.full_name;
-         fetchedName = userInfoRes.data.full_name;
+         displayName = safeString(userInfoRes.data.full_name);
+         fetchedName = displayName;
          setUserFullName(fetchedName);
       }
 
@@ -112,19 +124,18 @@ export default function PublicSchedulesViewPage() {
         return; 
       }
       
-      const latestPlan = planRes.data;
-      setLatestPlanName(latestPlan.name);
+      setLatestPlanName(safeString(planRes.data.name, 'خطة دراسية'));
 
       if (resolvedRole !== 'admin' && resolvedRole !== 'management') {
          isUserRestricted = true;
 
          if (resolvedRole === 'student') {
-            // 🚀 العودة لاستخدام id بناءً على توجيهاتك
+            // 🚀 جلب بيانات الطالب بناءً على التوجيه (id)
             const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('id', user.id);
             if (stuErr) console.error("Student Fetch Error:", stuErr);
 
             if (studentProfiles && studentProfiles.length > 0) {
-               allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
+               allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean) as string[];
                if (allowedIds.length === 0) setNoSectionAssigned(true);
             } else {
                setNoSectionAssigned(true);
@@ -133,26 +144,24 @@ export default function PublicSchedulesViewPage() {
             }
          } 
          else if (resolvedRole === 'teacher') {
-            const { data: teacherProfiles, error: teachErr } = await supabase.from('teachers').select('id').eq('user_id', user.id);
-            if (teachErr) console.error("Teacher Fetch Error:", teachErr);
-
+            const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
             if (teacherProfiles && teacherProfiles.length > 0) {
                allowedIds = teacherProfiles.map(t => String(t.id));
                if (fetchedName) displayName = `أ. ${fetchedName}`;
             }
          }
          else {
+             // 🚀 مسار احتياطي قوي
              const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
              if (teacherProfiles && teacherProfiles.length > 0) {
                 resolvedRole = 'teacher';
                 allowedIds = teacherProfiles.map(t => String(t.id));
                 if (fetchedName) displayName = `أ. ${fetchedName}`;
              } else {
-                // 🚀 استخدام id في المسار الاحتياطي أيضاً
                 const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('id', user.id);
                 if (studentProfiles && studentProfiles.length > 0) {
                    resolvedRole = 'student';
-                   allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
+                   allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean) as string[];
                    if (allowedIds.length === 0) setNoSectionAssigned(true);
                 } else {
                    setNoSectionAssigned(true);
@@ -174,7 +183,7 @@ export default function PublicSchedulesViewPage() {
       }
 
       const [slotsRes, sectionsRes, subjectsRes, teachersRes, periodsRes] = await Promise.all([
-         supabase.from('auto_schedules').select('*').eq('plan_id', latestPlan.id),
+         supabase.from('auto_schedules').select('*').eq('plan_id', planRes.data.id),
          supabase.from('sections').select('id, name, class_id, classes(name, level)'),
          supabase.from('subjects').select('id, name'),
          supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)'),
@@ -203,23 +212,26 @@ export default function PublicSchedulesViewPage() {
         const cData = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
         const level = cData?.level || 0;
         const stage = level >= 10 ? 'high' : 'middle';
-        const sectionFullName = sec ? `${cData?.name || ''} - شعبة ${sec.name || ''}` : 'شعبة غير معروفة';
+        
+        const classNameStr = safeString(cData?.name, '');
+        const secNameStr = safeString(sec?.name, '');
+        const sectionFullName = sec ? `${classNameStr} - شعبة ${secNameStr}` : 'شعبة غير معروفة';
         
         let zoomLink = teach?.users?.zoom_link || teach?.zoom_link || null;
         if (typeof zoomLink !== 'string' || zoomLink.trim() === '') zoomLink = null;
 
         return {
           id: String(slot.id),
-          day: slot.day_of_week,
-          period_number: slot.period_number,
-          start_time: slot.start_time || '',
-          end_time: slot.end_time || '',
+          day: Number(slot.day_of_week) || 1,
+          period_number: Number(slot.period_number) || 1,
+          start_time: safeString(slot.start_time, ''),
+          end_time: safeString(slot.end_time, ''),
           stage: stage,
           section_id: String(slot.section_id),
           section_name: sectionFullName,
-          subject_name: subj?.name || 'مادة محذوفة',
+          subject_name: safeString(subj?.name, 'مادة محذوفة'),
           teacher_id: String(slot.teacher_id),
-          teacher_name: teach?.users?.full_name || 'معلم غير محدد',
+          teacher_name: safeString(teach?.users?.full_name, 'معلم غير محدد'),
           zoom_link: zoomLink
         };
       });
@@ -254,7 +266,7 @@ export default function PublicSchedulesViewPage() {
 
     } catch (error: any) {
       console.error('Error fetching public schedules:', error);
-      setFetchError(error.message);
+      setFetchError(safeString(error?.message || error, 'حدث خطأ غير متوقع'));
     } finally {
       setLoading(false);
     }
@@ -262,8 +274,8 @@ export default function PublicSchedulesViewPage() {
 
   const dynamicPeriods = useMemo(() => {
     if (periods.length === 0) return [1, 2, 3, 4, 5, 6, 7];
-    const maxPeriod = Math.max(...periods.map(p => p.period_number));
-    return Array.from({length: maxPeriod}, (_, i) => i + 1);
+    const maxPeriod = Math.max(...periods.map(p => Number(p.period_number) || 1));
+    return Array.from({length: maxPeriod || 7}, (_, i) => i + 1);
   }, [periods]);
 
   const currentViewSchedules = useMemo(() => {
@@ -281,31 +293,31 @@ export default function PublicSchedulesViewPage() {
      });
   }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
+  // 🚀 دالة جلب الاسم (آمنة تماماً ولا يمكن أن تنهار)
   const getEntityName = () => {
-    if (isRestricted) {
-       if (activeRole === 'student') {
-          if (currentViewSchedules.length > 0 && currentViewSchedules[0].section_name) {
-             return currentViewSchedules[0].section_name;
-          }
-       }
-       return restrictedName;
-    } else {
-       if (filterType === 'section') {
-          const sec = sections.find(s => String(s.id) === String(filterId));
-          return sec ? sec.name : 'غير محدد';
-       } else {
-          const t = uniqueTeachers.find(t => String(t.id) === String(filterId));
-          return t ? t.name : 'غير محدد';
-       }
+    try {
+      if (isRestricted) {
+         if (activeRole === 'student') {
+            if (currentViewSchedules && currentViewSchedules.length > 0 && currentViewSchedules[0]?.section_name) {
+               return safeString(currentViewSchedules[0].section_name);
+            }
+         }
+         return safeString(restrictedName, 'جدولك');
+      } else {
+         if (filterType === 'section') {
+            const sec = sections?.find(s => String(s?.id) === String(filterId));
+            return sec ? safeString(sec.name) : 'غير محدد';
+         } else {
+            const t = uniqueTeachers?.find(t => String(t?.id) === String(filterId));
+            return t ? safeString(t.name) : 'غير محدد';
+         }
+      }
+    } catch(e) {
+      return 'فصل/معلم غير محدد';
     }
   };
 
-  const getDayName = (day: number) => {
-    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-    return days[day - 1] || day;
-  };
-
-  if (isChecking || loading || !mounted) {
+  if (!mounted || isChecking || loading) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
         <div className="flex flex-col items-center gap-5">
@@ -377,7 +389,7 @@ export default function PublicSchedulesViewPage() {
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow-sm">الجداول الدراسية المباشرة</h1>
                 <p className="text-slate-400 mt-1 font-bold text-sm">
-                  {latestPlanName ? `يعرض النظام: ${latestPlanName}` : 'بوابة عرض جداول الطلاب والمعلمين'}
+                  {latestPlanName ? `يعرض النظام: ${safeString(latestPlanName)}` : 'بوابة عرض جداول الطلاب والمعلمين'}
                 </p>
               </div>
             </div>
@@ -390,7 +402,7 @@ export default function PublicSchedulesViewPage() {
         {fetchError && (
            <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold print-hide">
               <AlertTriangle className="w-5 h-5 shrink-0" />
-              <p className="text-sm">تنبيه تقني: {fetchError}</p>
+              <p className="text-sm">تنبيه تقني: {safeString(fetchError)}</p>
            </div>
         )}
 
@@ -432,8 +444,8 @@ export default function PublicSchedulesViewPage() {
                     >
                       <option value="" disabled>-- الرجاء الاختيار --</option>
                       {filterType === 'section' 
-                        ? sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
-                        : uniqueTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
+                        ? sections.map(s => <option key={s.id} value={s.id}>{safeString(s.name)}</option>)
+                        : uniqueTeachers.map(t => <option key={t.id} value={t.id}>{safeString(t.name)}</option>)
                       }
                     </select>
                   </div>
@@ -486,7 +498,7 @@ export default function PublicSchedulesViewPage() {
                       return (
                         <tr key={day.id} className={`transition-colors ${isToday ? 'bg-indigo-900/10' : 'hover:bg-white/[0.02]'}`}>
                           <td className={`py-6 px-3 text-sm font-black border-l border-white/5 text-center ${isToday ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-[#0f1423]/30 text-slate-300'}`}>
-                            {day.name}
+                            {safeString(day.name)}
                             {isToday && <div className="text-[9px] text-indigo-400 mt-1 uppercase tracking-wider">اليوم</div>}
                           </td>
                           {dynamicPeriods.map(p => {
@@ -529,7 +541,7 @@ export default function PublicSchedulesViewPage() {
                                     
                                     <div className="flex justify-between items-start mb-2 w-full pr-1.5">
                                       <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-amber-500/30 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
-                                         {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
+                                         {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                       </div>
                                       {isNow && (
                                          <div className="flex items-center gap-1 bg-rose-500/20 px-1.5 py-0.5 rounded border border-rose-500/50">
@@ -543,19 +555,19 @@ export default function PublicSchedulesViewPage() {
                                     {isStudentView ? (
                                       <>
                                         <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-indigo-300'}`}>
-                                          {slot.subject_name}
+                                          {safeString(slot.subject_name)}
                                         </div>
                                         <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
-                                          أ. {slot.teacher_name}
+                                          أ. {safeString(slot.teacher_name)}
                                         </div>
                                       </>
                                     ) : (
                                       <>
                                         <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-emerald-300'}`}>
-                                          {slot.section_name}
+                                          {safeString(slot.section_name)}
                                         </div>
                                         <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
-                                          {slot.subject_name}
+                                          {safeString(slot.subject_name)}
                                         </div>
                                       </>
                                     )}
@@ -609,7 +621,7 @@ export default function PublicSchedulesViewPage() {
                     <tbody>
                       {workingDays.map((day) => (
                         <tr key={day} className="border-b border-slate-200 break-inside-avoid">
-                          <td className="p-3 font-black text-slate-800 bg-slate-100 border border-slate-200">{getDayName(day)}</td>
+                          <td className="p-3 font-black text-slate-800 bg-slate-100 border border-slate-200">{safeString(day.name)}</td>
                           {dynamicPeriods.map(p => {
                             const slot = currentViewSchedules.find(s => s.day === day && s.period_number === p);
                             return (
@@ -619,18 +631,18 @@ export default function PublicSchedulesViewPage() {
                                     <div className={`absolute top-0 right-0 w-1.5 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
                                     
                                     <div className="font-mono text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mb-1.5" dir="ltr">
-                                       {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
+                                       {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                     </div>
 
                                     {isStudentView ? (
                                       <>
-                                        <div className="font-black text-xs text-indigo-700 mb-1 leading-tight whitespace-normal break-words w-full px-1">{slot.subject_name}</div>
-                                        <div className="font-bold text-[10px] text-slate-600 whitespace-normal break-words w-full px-1">أ. {slot.teacher_name}</div>
+                                        <div className="font-black text-xs text-indigo-700 mb-1 leading-tight whitespace-normal break-words w-full px-1">{safeString(slot.subject_name)}</div>
+                                        <div className="font-bold text-[10px] text-slate-600 whitespace-normal break-words w-full px-1">أ. {safeString(slot.teacher_name)}</div>
                                       </>
                                     ) : (
                                       <>
-                                        <div className="font-black text-xs text-emerald-700 mb-1 leading-tight whitespace-normal break-words w-full px-1">{slot.section_name}</div>
-                                        <div className="font-bold text-[10px] text-slate-600 whitespace-normal break-words w-full px-1">{slot.subject_name}</div>
+                                        <div className="font-black text-xs text-emerald-700 mb-1 leading-tight whitespace-normal break-words w-full px-1">{safeString(slot.section_name)}</div>
+                                        <div className="font-bold text-[10px] text-slate-600 whitespace-normal break-words w-full px-1">{safeString(slot.subject_name)}</div>
                                       </>
                                     )}
                                   </div>
@@ -650,5 +662,3 @@ export default function PublicSchedulesViewPage() {
     </div>
   );
 }
-
-
