@@ -69,7 +69,7 @@ export default function PublicSchedulesViewPage() {
       if (resolvedRole !== 'admin' && resolvedRole !== 'management') {
          isUserRestricted = true;
 
-         // 🔍 البحث القاطع في جدول المعلمين (يحل مشكلة رؤية المعلم لكل شيء)
+         // 🔍 البحث القاطع في جدول المعلمين
          const { data: teacherData } = await supabase
             .from('teachers')
             .select('id')
@@ -80,7 +80,7 @@ export default function PublicSchedulesViewPage() {
          if (teacherData) {
             forcedType = 'teacher';
             forcedId = teacherData.id;
-            resolvedRole = 'teacher'; // تأكيد قاطع أنه معلم
+            resolvedRole = 'teacher'; 
          } else {
             // 🔍 البحث القاطع في جدول الطلاب
             const { data: studentData } = await supabase
@@ -93,7 +93,7 @@ export default function PublicSchedulesViewPage() {
             if (studentData) {
                forcedType = 'section';
                forcedId = studentData.section_id || '';
-               resolvedRole = 'student'; // تأكيد قاطع أنه طالب
+               resolvedRole = 'student'; 
                if (!studentData.section_id) {
                   setNoSectionAssigned(true);
                }
@@ -104,7 +104,6 @@ export default function PublicSchedulesViewPage() {
       setIsRestricted(isUserRestricted);
       setActiveRole(resolvedRole);
 
-      // إذا كان طالباً بلا فصل، لا داعي لإكمال الجلب
       if (isUserRestricted && resolvedRole === 'student' && !forcedId) {
          setLoading(false);
          return;
@@ -260,7 +259,6 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
-  // تحديد اسم المستخدم لعرضه في البطاقة المقفلة
   let restrictedDisplayName = '';
   if (isRestricted) {
      if (activeRole === 'student') {
@@ -310,11 +308,10 @@ export default function PublicSchedulesViewPage() {
            </div>
         ) : schedules.length > 0 ? (
           <>
-            {/* 🚀 فلاتر العرض - قفل قوي للمعلمين والطلاب */}
+            {/* 🚀 Filters */}
             <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
               
               {!isRestricted ? (
-                // 🟢 عرض الإدارة: قوائم منسدلة كاملة
                 <>
                   <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto shrink-0">
                     <button 
@@ -349,7 +346,6 @@ export default function PublicSchedulesViewPage() {
                   </div>
                 </>
               ) : (
-                // 🔴 عرض المعلم أو الطالب: بطاقة ثابتة تظهر الاسم وتقفل الجدول عليه فقط
                 <div className="flex items-center gap-4 w-full bg-[#02040a]/40 p-3 rounded-xl border border-white/5">
                    <div className={`p-2 rounded-lg ${activeRole === 'student' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
                       {activeRole === 'student' ? <Layers className="w-6 h-6"/> : <UserCircle className="w-6 h-6"/>}
@@ -437,7 +433,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
