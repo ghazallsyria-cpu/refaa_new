@@ -100,11 +100,10 @@ export default function PublicSchedulesViewPage() {
          setUserFullName(fetchedName);
       }
 
-      // 🚀 إذا كانت الخطة فارغة، قد يكون بسبب RLS وليس لعدم وجود خطة فعلياً!
       if (!planRes.data) {
         setLoading(false);
-        if (resolvedRole === 'student') {
-            setFetchError("لم يتم العثور على خطة معتمدة، أو أن صلاحيات حسابك (RLS) تمنعك من قراءة الجدول. يرجى مراجعة إدارة المدرسة.");
+        if (resolvedRole === 'student' || resolvedRole === 'teacher') {
+            setFetchError("لم يتم العثور على خطة معتمدة، أو أن صلاحيات حسابك تمنعك من قراءة الجداول. تأكد من إعدادات RLS في Supabase.");
         }
         return; 
       }
@@ -112,36 +111,54 @@ export default function PublicSchedulesViewPage() {
       const latestPlan = planRes.data;
       setLatestPlanName(latestPlan.name);
 
+      // 🚀 توجيه ذكي حسب الصلاحية المعروفة مسبقاً لتجنب التخمين
       if (resolvedRole !== 'admin' && resolvedRole !== 'management') {
          isUserRestricted = true;
 
-         const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
-         
-         if (teacherProfiles && teacherProfiles.length > 0) {
-            resolvedRole = 'teacher';
-            allowedIds = teacherProfiles.map(t => String(t.id));
-            if (fetchedName) displayName = `أ. ${fetchedName}`;
-         } else {
-            // 🚀 البحث القاطع عن الطالب
-            const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
+         if (resolvedRole === 'student') {
+            // الطالب: نبحث في جدول students حصراً
+            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('user_id', user.id);
             
+            if (stuErr) console.error("Student Fetch Error (RLS Issue?):", stuErr);
+
             if (studentProfiles && studentProfiles.length > 0) {
-               resolvedRole = 'student';
-               // تأمين الفلترة من الـ String(null)
                allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
-               
-               if (allowedIds.length === 0) {
-                   setNoSectionAssigned(true);
-                   setLoading(false);
-                   return; // الخروج مبكراً لأن الطالب بلا فصل
-               }
+               if (allowedIds.length === 0) setNoSectionAssigned(true);
             } else {
-               // إذا لم يجد سجل الطالب أبداً (ربما بسبب RLS أو غير مسجل)
-               resolvedRole = 'student';
                setNoSectionAssigned(true);
                setLoading(false);
-               return;
+               return; // طالب غير مسجل في أي فصل أو ممنوع من القراءة
             }
+         } 
+         else if (resolvedRole === 'teacher') {
+            // المعلم: نبحث في جدول teachers حصراً
+            const { data: teacherProfiles, error: teachErr } = await supabase.from('teachers').select('id').eq('user_id', user.id);
+            if (teachErr) console.error("Teacher Fetch Error (RLS Issue?):", teachErr);
+
+            if (teacherProfiles && teacherProfiles.length > 0) {
+               allowedIds = teacherProfiles.map(t => String(t.id));
+               if (fetchedName) displayName = `أ. ${fetchedName}`;
+            }
+         }
+         else {
+             // 🚀 حالة احتياطية (Fallback) لو لم تكن الصلاحية واضحة في المتصفح
+             const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
+             if (teacherProfiles && teacherProfiles.length > 0) {
+                resolvedRole = 'teacher';
+                allowedIds = teacherProfiles.map(t => String(t.id));
+                if (fetchedName) displayName = `أ. ${fetchedName}`;
+             } else {
+                const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
+                if (studentProfiles && studentProfiles.length > 0) {
+                   resolvedRole = 'student';
+                   allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
+                   if (allowedIds.length === 0) setNoSectionAssigned(true);
+                } else {
+                   setNoSectionAssigned(true);
+                   setLoading(false);
+                   return;
+                }
+             }
          }
       }
 
@@ -149,6 +166,11 @@ export default function PublicSchedulesViewPage() {
       setActiveRole(resolvedRole);
       setRestrictedIds(allowedIds);
       setRestrictedName(displayName);
+
+      if (isUserRestricted && resolvedRole === 'student' && allowedIds.length === 0) {
+         setLoading(false);
+         return;
+      }
 
       const [slotsRes, sectionsRes, subjectsRes, teachersRes, periodsRes] = await Promise.all([
          supabase.from('auto_schedules').select('*').eq('plan_id', latestPlan.id),
@@ -251,6 +273,7 @@ export default function PublicSchedulesViewPage() {
               const matchByName = userFullName && s.teacher_name && s.teacher_name.trim() === userFullName.trim();
               return matchById || matchByName;
            } else {
+              // 🚀 مطابقة فصول الطالب
               return restrictedIds.some(id => String(id) === String(s.section_id));
            }
         }
@@ -281,14 +304,16 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
-  // 🚀 شاشة الخطأ الواضحة إذا لم يكن الطالب مسجلاً في فصل
   if (noSectionAssigned) {
     return (
        <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4">
            <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg max-w-md w-full">
               <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto mb-4 opacity-80" />
               <h2 className="text-xl font-black text-white mb-2">غير مسجل في فصل</h2>
-              <p className="text-slate-400 font-bold text-sm">لم يتم تعيينك في أي فصل دراسي حتى الآن، أو أن صلاحيات الحساب (RLS) تمنع قراءة بياناتك. يرجى مراجعة إدارة المدرسة.</p>
+              <p className="text-slate-400 font-bold text-sm leading-relaxed mt-2">
+                 يبدو أنه لم يتم تعيينك في أي فصل دراسي حتى الآن.<br/><br/>
+                 <span className="text-rose-400 font-black">ملاحظة تقنية للإدارة:</span> تأكد من إعطاء صلاحية SELECT لجدول students في Supabase Policies لكي يتمكن الطالب من قراءة رقم فصله.
+              </p>
            </div>
        </div>
     );
@@ -301,6 +326,7 @@ export default function PublicSchedulesViewPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
         
+        {/* Header */}
         <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -323,7 +349,7 @@ export default function PublicSchedulesViewPage() {
         {fetchError && (
            <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
               <AlertTriangle className="w-5 h-5 shrink-0" />
-              <p className="text-sm">حدث خطأ أثناء جلب البيانات: {fetchError}</p>
+              <p className="text-sm">تنبيه تقني: {fetchError}</p>
            </div>
         )}
 
@@ -380,7 +406,9 @@ export default function PublicSchedulesViewPage() {
                       <p className="text-xs text-slate-400 font-bold flex items-center gap-1">
                          <Lock className="w-3 h-3"/> {activeRole === 'student' ? 'جدول فصلك الحالي' : 'الجدول المخصص لك'}
                       </p>
-                      <p className="text-base font-black text-white mt-0.5">{restrictedName}</p>
+                      <p className="text-base font-black text-white mt-0.5">
+                         {activeRole === 'student' && sections.find(s => String(s.id) === String(restrictedIds[0]))?.name || restrictedName}
+                      </p>
                    </div>
                    <div className="hidden sm:flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-white/5">
                       <Clock className="w-4 h-4 text-amber-400" />
