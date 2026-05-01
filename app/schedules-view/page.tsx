@@ -103,7 +103,7 @@ export default function PublicSchedulesViewPage() {
       if (!planRes.data) {
         setLoading(false);
         if (resolvedRole === 'student' || resolvedRole === 'teacher') {
-            setFetchError("لم يتم العثور على خطة معتمدة، أو أن صلاحيات حسابك تمنعك من قراءة الجداول. تأكد من إعدادات RLS في Supabase.");
+            setFetchError("لم يتم العثور على خطة معتمدة، أو أن صلاحيات حسابك تمنعك من قراءة الجداول.");
         }
         return; 
       }
@@ -111,15 +111,14 @@ export default function PublicSchedulesViewPage() {
       const latestPlan = planRes.data;
       setLatestPlanName(latestPlan.name);
 
-      // 🚀 توجيه ذكي حسب الصلاحية المعروفة مسبقاً لتجنب التخمين
       if (resolvedRole !== 'admin' && resolvedRole !== 'management') {
          isUserRestricted = true;
 
          if (resolvedRole === 'student') {
-            // الطالب: نبحث في جدول students حصراً
-            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('user_id', user.id);
+            // 🚀 التعديل الهام: استخدمنا id بدلاً من user_id لجدول الطلاب بناءً على خطأ SQL
+            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('id', user.id);
             
-            if (stuErr) console.error("Student Fetch Error (RLS Issue?):", stuErr);
+            if (stuErr) console.error("Student Fetch Error:", stuErr);
 
             if (studentProfiles && studentProfiles.length > 0) {
                allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
@@ -127,13 +126,12 @@ export default function PublicSchedulesViewPage() {
             } else {
                setNoSectionAssigned(true);
                setLoading(false);
-               return; // طالب غير مسجل في أي فصل أو ممنوع من القراءة
+               return; 
             }
          } 
          else if (resolvedRole === 'teacher') {
-            // المعلم: نبحث في جدول teachers حصراً
             const { data: teacherProfiles, error: teachErr } = await supabase.from('teachers').select('id').eq('user_id', user.id);
-            if (teachErr) console.error("Teacher Fetch Error (RLS Issue?):", teachErr);
+            if (teachErr) console.error("Teacher Fetch Error:", teachErr);
 
             if (teacherProfiles && teacherProfiles.length > 0) {
                allowedIds = teacherProfiles.map(t => String(t.id));
@@ -141,14 +139,15 @@ export default function PublicSchedulesViewPage() {
             }
          }
          else {
-             // 🚀 حالة احتياطية (Fallback) لو لم تكن الصلاحية واضحة في المتصفح
+             // حالة احتياطية لو الصلاحية غير واضحة
              const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
              if (teacherProfiles && teacherProfiles.length > 0) {
                 resolvedRole = 'teacher';
                 allowedIds = teacherProfiles.map(t => String(t.id));
                 if (fetchedName) displayName = `أ. ${fetchedName}`;
              } else {
-                const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
+                // 🚀 التعديل الهام هنا أيضاً (استخدام id للطلاب)
+                const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('id', user.id);
                 if (studentProfiles && studentProfiles.length > 0) {
                    resolvedRole = 'student';
                    allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
@@ -273,7 +272,6 @@ export default function PublicSchedulesViewPage() {
               const matchByName = userFullName && s.teacher_name && s.teacher_name.trim() === userFullName.trim();
               return matchById || matchByName;
            } else {
-              // 🚀 مطابقة فصول الطالب
               return restrictedIds.some(id => String(id) === String(s.section_id));
            }
         }
@@ -312,7 +310,7 @@ export default function PublicSchedulesViewPage() {
               <h2 className="text-xl font-black text-white mb-2">غير مسجل في فصل</h2>
               <p className="text-slate-400 font-bold text-sm leading-relaxed mt-2">
                  يبدو أنه لم يتم تعيينك في أي فصل دراسي حتى الآن.<br/><br/>
-                 <span className="text-rose-400 font-black">ملاحظة تقنية للإدارة:</span> تأكد من إعطاء صلاحية SELECT لجدول students في Supabase Policies لكي يتمكن الطالب من قراءة رقم فصله.
+                 <span className="text-rose-400 font-black">ملاحظة للإدارة:</span> يرجى التأكد من ربط حساب الطالب بشعبة دراسية.
               </p>
            </div>
        </div>
@@ -345,7 +343,6 @@ export default function PublicSchedulesViewPage() {
           </div>
         </div>
 
-        {/* 🚀 إظهار خطأ الـ RLS بوضوح للطالب */}
         {fetchError && (
            <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
               <AlertTriangle className="w-5 h-5 shrink-0" />
