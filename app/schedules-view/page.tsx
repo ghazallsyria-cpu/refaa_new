@@ -26,10 +26,9 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-// 🚀 دوال التحصين المطلق (تمنع انهيار المتصفح لو كانت البيانات فاسدة)
 const safeString = (val: any, fallback = 'غير محدد') => {
   if (val === null || val === undefined) return fallback;
-  if (typeof val === 'object') return fallback; // منع خطأ رسم الـ Objects
+  if (typeof val === 'object') return fallback; 
   return String(val);
 };
 
@@ -130,7 +129,6 @@ export default function PublicSchedulesViewPage() {
          isUserRestricted = true;
 
          if (resolvedRole === 'student') {
-            // 🚀 جلب بيانات الطالب بناءً على التوجيه (id)
             const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('id', user.id);
             if (stuErr) console.error("Student Fetch Error:", stuErr);
 
@@ -151,7 +149,6 @@ export default function PublicSchedulesViewPage() {
             }
          }
          else {
-             // 🚀 مسار احتياطي قوي
              const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
              if (teacherProfiles && teacherProfiles.length > 0) {
                 resolvedRole = 'teacher';
@@ -272,10 +269,13 @@ export default function PublicSchedulesViewPage() {
     }
   };
 
+  // 🚀 درع التيتانيوم المضاد لخطأ (RangeError: Invalid array length)
   const dynamicPeriods = useMemo(() => {
-    if (periods.length === 0) return [1, 2, 3, 4, 5, 6, 7];
+    if (!periods || !Array.isArray(periods) || periods.length === 0) return [1, 2, 3, 4, 5, 6];
     const maxPeriod = Math.max(...periods.map(p => Number(p.period_number) || 1));
-    return Array.from({length: maxPeriod || 7}, (_, i) => i + 1);
+    // إذا كان المخرج هو -Infinity بسبب خلل في البيانات، نستبدله برقم آمن فوراً!
+    const safeMax = (maxPeriod === -Infinity || maxPeriod < 1) ? 6 : maxPeriod;
+    return Array.from({length: safeMax}, (_, i) => i + 1);
   }, [periods]);
 
   const currentViewSchedules = useMemo(() => {
@@ -293,7 +293,6 @@ export default function PublicSchedulesViewPage() {
      });
   }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
-  // 🚀 دالة جلب الاسم (آمنة تماماً ولا يمكن أن تنهار)
   const getEntityName = () => {
     try {
       if (isRestricted) {
@@ -315,6 +314,11 @@ export default function PublicSchedulesViewPage() {
     } catch(e) {
       return 'فصل/معلم غير محدد';
     }
+  };
+
+  const getDayName = (day: number) => {
+    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+    return days[day - 1] || day;
   };
 
   if (!mounted || isChecking || loading) {
