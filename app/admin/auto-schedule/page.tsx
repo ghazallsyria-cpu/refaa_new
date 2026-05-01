@@ -212,14 +212,14 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE ULTIMATE ALGORITHM V6 (Small Quotas First + Double Periods)
+  // 🧠 THE HYBRID ALGORITHM V7 (Rocks First + Maximum Overdrive Fallback)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]);
-    addLog("🚀 بدء التوليد الاستباقي المتقدم...");
+    addLog("🚀 بدء التوليد الاستباقي (الاستراتيجية الهجينة: الكبار أولاً + طوارئ قصوى)...");
     
     let finalSchedule: any[] = [];
     let unplacedQueue: any[] = []; 
@@ -258,23 +258,22 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.weekly_quota > 0); 
 
-    // 🚀 الفرز الجديد (العبقري):
-    // 1. VIP (الفيزياء) أولاً.
-    // 2. المعلمون ذوو الأيام المحدودة ثانياً.
-    // 3. ⭐️ المواد ذات النصاب الأقل (حاسوب، دستور) ثالثاً!
-    // 4. المواد الدسمة (عربي، رياضيات) في النهاية لتملأ الفراغات.
+    // 🚀 الفرز الهجين (العودة لـ: الكبار أولاً لضمان عدم اختناق الرياضيات والعربي)
     const sortedAssignments = [...teacherAssignments].sort((a, b) => {
+      // 1. إيهاب (VIP) دائماً أولاً
       if (a.isVIP && !b.isVIP) return -1;
       if (!a.isVIP && b.isVIP) return 1;
       
+      // 2. المعلمون ذوو الأيام المحدودة ثانياً
       const restrictA = a.available_days.length < 5 ? 1 : 0;
       const restrictB = b.available_days.length < 5 ? 1 : 0;
       if (restrictA !== restrictB) return restrictB - restrictA;
 
-      return a.weekly_quota - b.weekly_quota; // 🚀 تصاعدي: الأقل حصصاً أولاً!
+      // 3. ⭐️ المواد ذات النصاب الأكبر (رياضيات، عربي) ثالثاً! الصخور قبل الرمل.
+      return b.weekly_quota - a.weekly_quota; 
     });
     
-    addLog(`📈 تم قلب استراتيجية التوزيع: تسكين المواد الأقل حصصاً (كالحاسوب) أولاً لتجنب الاختناق.`);
+    addLog(`📈 جاري توزيع المواد الثقيلة أولاً، مع إعطاء صلاحيات طوارئ لكسر القواعد عند الضرورة لمنع الفراغات.`);
     
     let failedPlacements = 0;
     await new Promise(r => setTimeout(r, 500));
@@ -313,15 +312,10 @@ export default function AutoScheduleGenerator() {
 
       let remainingLessons = assignment.weekly_quota;
       
-      // 🚀 تشريع الحصص المزدوجة (Double Periods)
-      // إذا كانت المادة 5 حصص أو أكثر، نسمح بحصتين في اليوم كحد أقصى.
-      let maxPerDay = 1; 
-      if (assignment.weekly_quota >= 5) {
-         maxPerDay = 2; // مسموح للرياضيات والعربي التكرار لمرتين في اليوم كوضع طبيعي
-      }
-      if (assignment.isVIP) {
-         maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
-      }
+      // تحديد الحد الأقصى المثالي للمادة في اليوم
+      let maxPerDay = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length); 
+      if (assignment.weekly_quota >= 5) maxPerDay = 2; 
+      if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
       for (let i = 0; i < remainingLessons; i++) {
         
@@ -337,11 +331,11 @@ export default function AutoScheduleGenerator() {
 
         let isPlaced = false;
 
-        // 🟢 المحاولة 1: التسكين الأساسي (مع السماح بالحصص المزدوجة للمواد الثقيلة)
+        // 🟢 المحاولة 1: التسكين المثالي (تطبيق قاعدة maxPerDay)
         for (const day of preferredDays) {
           const subjectCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
           
-          if (subjectCountToday >= maxPerDay) continue;
+          if (subjectCountToday >= maxPerDay) continue; // رفض إذا تجاوزنا الحد المثالي
 
           let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
           
@@ -370,10 +364,12 @@ export default function AutoScheduleGenerator() {
           if (isPlaced) break;
         }
 
-        // 🟡 المحاولة 2: Fallback (التغاضي عن الحد الأقصى للمادة في اليوم وفتح أيام الطوارئ)
+        // 🟡 المحاولة 2: صلاحيات الطوارئ القصوى (تجاهل maxPerDay تماماً!)
+        // إذا لم نجد مكاناً يحترم الشروط، سنضع الحصة في أي فراغ متاح حتى لو كانت الحصة الثالثة للمادة في نفس اليوم!
         if (!isPlaced) {
            const fallbackDays = assignment.isVIP ? shuffleArray([...allowedDaysForTeacher]) : shuffleArray([...allowedDaysForTeacher]);
            for (const day of fallbackDays) {
+             // 🚀 نسينا قيد subjectCountToday >= maxPerDay هنا متعمّدين!
              const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
              for (const period of fallbackPeriods) {
                if (canPlace(assignment.teacher_id, section.id, day, period)) {
@@ -385,7 +381,7 @@ export default function AutoScheduleGenerator() {
            }
         }
 
-        // 🔴 المحاولة 3: Bulldozer Swapping (الإزاحة لسد الفراغات)
+        // 🔴 المحاولة 3: Bulldozer Swapping (الإزاحة)
         if (!isPlaced && !assignment.isVIP) {
           for (const day of shuffleArray([...allowedDaysForTeacher])) {
             if (isPlaced) break;
@@ -444,7 +440,7 @@ export default function AutoScheduleGenerator() {
     }
 
     await new Promise(r => setTimeout(r, 1000));
-    addLog(`✅ اكتمل التوليد بنجاح! تم السماح بحصص مزدوجة للمواد الثقيلة.`);
+    addLog(`✅ اكتمل التوليد بنجاح! تم استخدام صلاحيات الطوارئ القصوى لمنع الفراغات.`);
     if (failedPlacements > 0) {
       addLog(`⚠️ تحذير: ${failedPlacements} حصة انتقلت لسلة الانتظار لتعذر تسكينها.`);
       const uniqueFails = [...new Set(failedDetailsLog)];
@@ -749,13 +745,13 @@ export default function AutoScheduleGenerator() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] md:text-xs font-black text-indigo-300 mb-3 uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" /> خوارزمية الفرز العكسي للمواد (Smallest First)
+              <ShieldAlert className="w-4 h-4" /> خوارزمية (الاستراتيجية الهجينة) لمنع الاختناق
             </div>
             <h1 className="text-2xl md:text-3xl font-black mb-2 flex items-center gap-3">
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              النظام يوزع المواد القليلة أولاً! كما تم تشريع (الحصص المزدوجة) للمواد الثقيلة كالرياضيات لتخفيف الضغط ومنع الفشل.
+              يتم الآن توزيع (المواد الكبيرة) أولاً مع تفعيل قانون الطوارئ، لتسمح الخوارزمية بوضع الحصص الزائدة في أي فراغ متاح وتمنع تحولها لسلة الانتظار!
             </p>
           </div>
         </div>
@@ -985,4 +981,4 @@ export default function AutoScheduleGenerator() {
   );
 }
 
-
+```
