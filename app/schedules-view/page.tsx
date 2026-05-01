@@ -2,11 +2,11 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
@@ -26,6 +26,20 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
+// دالة تحويل الوقت (08:30) إلى دقائق لتسهيل المقارنة الرياضية
+const timeToMinutes = (timeStr: string) => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+};
+
+// دالة تحويل يوم جافاسكريبت إلى أيامنا (الأحد=1، الخميس=5)
+const getKuwaitDayId = (date: Date) => {
+  const jsDay = date.getDay(); // 0=Sun, 1=Mon...
+  if (jsDay === 5 || jsDay === 6) return 0; // عطلة الجمعة والسبت
+  return jsDay + 1;
+};
+
 export default function PublicSchedulesViewPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
@@ -38,20 +52,34 @@ export default function PublicSchedulesViewPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [latestPlanName, setLatestPlanName] = useState<string>('');
 
-  // 🚀 إعدادات الفلتر والقيود الصارمة
   const [filterType, setFilterType] = useState<'section' | 'teacher'>('section');
   const [filterId, setFilterId] = useState<string>('');
+  
   const [isRestricted, setIsRestricted] = useState(false);
   const [noSectionAssigned, setNoSectionAssigned] = useState(false);
   const [activeRole, setActiveRole] = useState<string>('');
+  const [restrictedIds, setRestrictedIds] = useState<string[]>([]);
+  const [restrictedName, setRestrictedName] = useState<string>('');
+
+  const hasFetched = useRef(false);
+
+  // 🚀 محرك الوقت الحي (يعمل حصرياً في جهاز المستخدم بدون ضغط على السيرفر)
+  const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   useEffect(() => {
-    if (!isChecking && user) {
+    // تحديث الوقت كل 60 ثانية لتحديث حالة (الآن/فائتة/قادمة)
+    const timer = setInterval(() => setCurrentDateTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isChecking && user && !hasFetched.current) {
+        hasFetched.current = true;
         fetchApprovedSchedule();
     } else if (!isChecking && !user) {
         setLoading(false);
     }
-  }, [isChecking, user, currentRole]);
+  }, [isChecking, user]);
 
   const fetchApprovedSchedule = async () => {
     try {
@@ -59,100 +87,83 @@ export default function PublicSchedulesViewPage() {
       setFetchError(null);
       setNoSectionAssigned(false);
 
-      // 1. 🚀 التحقيق الصارم: تجاهل مسميات المتصفح والبحث المباشر في قاعدة البيانات!
-      let isUserRestricted = false;
-      let forcedType = 'section';
-      let forcedId = '';
       let resolvedRole = (currentRole || '').toLowerCase();
+      let isUserRestricted = false;
+      let allowedIds: string[] = [];
+      let displayName = 'جدولك';
 
-      // إذا لم يكن مديراً صريحاً، نطبق القيود الإجبارية
+      const [userInfoRes, planRes] = await Promise.all([
+         supabase.from('users').select('full_name').eq('id', user.id).maybeSingle(),
+         supabase.from('auto_schedule_plans').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      ]);
+
+      if (userInfoRes.data?.full_name) displayName = userInfoRes.data.full_name;
+
+      if (!planRes.data) {
+        setLoading(false);
+        return; 
+      }
+      
+      const latestPlan = planRes.data;
+      setLatestPlanName(latestPlan.name);
+
       if (resolvedRole !== 'admin' && resolvedRole !== 'management') {
          isUserRestricted = true;
 
-         // 🔍 البحث القاطع في جدول المعلمين
-         const { data: teacherData } = await supabase
-            .from('teachers')
-            .select('id')
-            .eq('user_id', user.id)
-            .limit(1)
-            .maybeSingle();
-
-         if (teacherData) {
-            forcedType = 'teacher';
-            forcedId = teacherData.id;
-            resolvedRole = 'teacher'; 
+         const { data: teacherProfiles } = await supabase.from('teachers').select('id').eq('user_id', user.id);
+         
+         if (teacherProfiles && teacherProfiles.length > 0) {
+            resolvedRole = 'teacher';
+            allowedIds = teacherProfiles.map(t => t.id);
+            if (userInfoRes.data?.full_name) displayName = `أ. ${userInfoRes.data.full_name}`;
          } else {
-            // 🔍 البحث القاطع في جدول الطلاب
-            const { data: studentData } = await supabase
-               .from('students')
-               .select('section_id')
-               .eq('user_id', user.id)
-               .limit(1)
-               .maybeSingle();
-
-            if (studentData) {
-               forcedType = 'section';
-               forcedId = studentData.section_id || '';
-               resolvedRole = 'student'; 
-               if (!studentData.section_id) {
-                  setNoSectionAssigned(true);
-               }
+            const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
+            
+            if (studentProfiles && studentProfiles.length > 0) {
+               resolvedRole = 'student';
+               allowedIds = studentProfiles.map(s => s.section_id).filter(Boolean);
+               if (allowedIds.length === 0) setNoSectionAssigned(true);
             }
          }
       }
 
       setIsRestricted(isUserRestricted);
       setActiveRole(resolvedRole);
+      setRestrictedIds(allowedIds);
+      setRestrictedName(displayName);
 
-      if (isUserRestricted && resolvedRole === 'student' && !forcedId) {
+      if (isUserRestricted && resolvedRole === 'student' && allowedIds.length === 0) {
          setLoading(false);
          return;
       }
 
-      // 2. جلب أحدث خطة معتمدة
-      const { data: latestPlan, error: planError } = await supabase
-        .from('auto_schedule_plans')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const [slotsRes, sectionsRes, subjectsRes, teachersRes, periodsRes] = await Promise.all([
+         supabase.from('auto_schedules').select('*').eq('plan_id', latestPlan.id),
+         supabase.from('sections').select('id, name, class_id, classes(name, level)'),
+         supabase.from('subjects').select('id, name'),
+         supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)'),
+         supabase.from('auto_class_periods').select('*').order('period_number')
+      ]);
 
-      if (planError || !latestPlan) {
-        setLoading(false);
-        return; 
+      if (slotsRes.error) throw slotsRes.error;
+
+      let safeTeachersData = teachersRes.data || [];
+      if (teachersRes.error) {
+         const fallbackTeachers = await supabase.from('teachers').select('id, users(full_name)');
+         safeTeachersData = fallbackTeachers.data || [];
       }
 
-      setLatestPlanName(latestPlan.name);
+      setPeriods(periodsRes.data || []);
 
-      // 3. الاستعلام المسطح (Flat Fetch) للسرعة وتجاوز أخطاء RLS
-      const { data: slots, error: slotsError } = await supabase
-        .from('auto_schedules')
-        .select('*')
-        .eq('plan_id', latestPlan.id);
+      const slots = slotsRes.data || [];
+      const sectionsData = sectionsRes.data || [];
+      const subjectsData = subjectsRes.data || [];
 
-      if (slotsError) throw slotsError;
-
-      // 4. جلب البيانات الأساسية للربط
-      const { data: sectionsData } = await supabase.from('sections').select('id, name, class_id, classes(name, level)');
-      const { data: subjectsData } = await supabase.from('subjects').select('id, name');
-      
-      let teachersData = [];
-      const { data: teachersWithZoom, error: zoomError } = await supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)');
-      if (zoomError) {
-         const { data: safeTeachers } = await supabase.from('teachers').select('id, users(full_name)');
-         teachersData = safeTeachers || [];
-      } else {
-         teachersData = teachersWithZoom || [];
-      }
-
-      const { data: periodsData } = await supabase.from('auto_class_periods').select('*').order('period_number');
-      setPeriods(periodsData || []);
-
-      // 5. الربط اليدوي الآمن
-      const formattedSchedules = (slots || []).map(slot => {
-        const sec = sectionsData?.find(s => s.id === slot.section_id);
-        const subj = subjectsData?.find(s => s.id === slot.subject_id);
-        const teach = teachersData?.find(t => t.id === slot.teacher_id);
+      // ربط البيانات
+      const formattedSchedules = slots.map(slot => {
+        const sec = sectionsData.find(s => s.id === slot.section_id);
+        const subj = subjectsData.find(s => s.id === slot.subject_id);
+        const teach = safeTeachersData.find(t => t.id === slot.teacher_id);
 
         const cData = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
         const level = cData?.level || 0;
@@ -166,7 +177,7 @@ export default function PublicSchedulesViewPage() {
           day: slot.day_of_week,
           period_number: slot.period_number,
           start_time: slot.start_time,
-          end_time: slot.end_time,
+          end_time: slot.end_time, // 🚀 التوقيت الدقيق محفوظ في الحصة
           stage: stage,
           section_id: slot.section_id,
           section_name: sectionFullName,
@@ -180,34 +191,29 @@ export default function PublicSchedulesViewPage() {
       formattedSchedules.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       setSchedules(formattedSchedules);
 
-      // 6. استخراج القوائم المنسدلة
-      const uniqueSecsMap = new Map();
-      const uniqueTeachMap = new Map();
+      if (!isUserRestricted) {
+          const uniqueSecsMap = new Map();
+          const uniqueTeachMap = new Map();
 
-      formattedSchedules.forEach(s => {
-        if (!uniqueSecsMap.has(s.section_id)) {
-           uniqueSecsMap.set(s.section_id, { id: s.section_id, name: s.section_name });
-        }
-        if (!uniqueTeachMap.has(s.teacher_id)) {
-           uniqueTeachMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name });
-        }
-      });
+          formattedSchedules.forEach(s => {
+            if (!uniqueSecsMap.has(s.section_id)) {
+               uniqueSecsMap.set(s.section_id, { id: s.section_id, name: s.section_name });
+            }
+            if (!uniqueTeachMap.has(s.teacher_id)) {
+               uniqueTeachMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name });
+            }
+          });
 
-      const secsArray = Array.from(uniqueSecsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-      const teachArray = Array.from(uniqueTeachMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+          const secsArray = Array.from(uniqueSecsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+          const teachArray = Array.from(uniqueTeachMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 
-      setSections(secsArray);
-      setUniqueTeachers(teachArray);
+          setSections(secsArray);
+          setUniqueTeachers(teachArray);
 
-      // 🚀 7. تطبيق القيود الإجبارية وإغلاق הפלتر
-      if (isUserRestricted) {
-         setFilterType(forcedType as any);
-         setFilterId(forcedId);
-      } else {
-         if (secsArray.length > 0) {
-            setFilterType('section');
-            setFilterId(secsArray[0].id);
-         }
+          if (secsArray.length > 0) {
+             setFilterType('section');
+             setFilterId(secsArray[0].id);
+          }
       }
 
     } catch (error: any) {
@@ -223,6 +229,15 @@ export default function PublicSchedulesViewPage() {
     const maxPeriod = Math.max(...periods.map(p => p.period_number));
     return Array.from({length: maxPeriod}, (_, i) => i + 1);
   }, [periods]);
+
+  const currentViewSchedules = useMemo(() => {
+     return schedules.filter(s => {
+        if (isRestricted) {
+           return activeRole === 'teacher' ? restrictedIds.includes(s.teacher_id) : restrictedIds.includes(s.section_id);
+        }
+        return filterType === 'section' ? s.section_id === filterId : s.teacher_id === filterId;
+     });
+  }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId]);
 
   if (isChecking || loading) {
     return (
@@ -259,15 +274,6 @@ export default function PublicSchedulesViewPage() {
     );
   }
 
-  let restrictedDisplayName = '';
-  if (isRestricted) {
-     if (activeRole === 'student') {
-        restrictedDisplayName = sections.find(s => s.id === filterId)?.name || 'فصلك';
-     } else if (activeRole === 'teacher') {
-        restrictedDisplayName = uniqueTeachers.find(t => t.id === filterId)?.name || 'جدولك';
-     }
-  }
-
   return (
     <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden" dir="rtl">
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
@@ -280,13 +286,15 @@ export default function PublicSchedulesViewPage() {
           <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-inner shrink-0">
-                <CalendarDays className="h-8 w-8 text-indigo-400 drop-shadow-md" />
+              <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-inner shrink-0 relative">
+                {/* تأثير نبض خفيف للأيقونة لتدل على التحديث الحي */}
+                <div className="absolute inset-0 bg-indigo-400/20 rounded-2xl animate-ping"></div>
+                <CalendarDays className="h-8 w-8 text-indigo-400 drop-shadow-md relative z-10" />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow-sm">الجداول الدراسية</h1>
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow-sm">الجداول الدراسية المباشرة</h1>
                 <p className="text-slate-400 mt-1 font-bold text-sm">
-                  {latestPlanName ? `الجدول المعتمد: ${latestPlanName}` : 'بوابة عرض جداول الطلاب والمعلمين'}
+                  {latestPlanName ? `يعرض النظام: ${latestPlanName}` : 'بوابة عرض جداول الطلاب والمعلمين'}
                 </p>
               </div>
             </div>
@@ -296,7 +304,7 @@ export default function PublicSchedulesViewPage() {
         {fetchError && (
            <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
               <AlertTriangle className="w-5 h-5 shrink-0" />
-              <p className="text-sm">حدث خطأ أثناء جلب البيانات: {fetchError}. يرجى مراجعة صلاحيات قاعدة البيانات.</p>
+              <p className="text-sm">حدث خطأ أثناء جلب البيانات: {fetchError}</p>
            </div>
         )}
 
@@ -308,20 +316,20 @@ export default function PublicSchedulesViewPage() {
            </div>
         ) : schedules.length > 0 ? (
           <>
-            {/* 🚀 Filters */}
+            {/* Filters / Restricted Card */}
             <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
               
               {!isRestricted ? (
                 <>
                   <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto shrink-0">
                     <button 
-                      onClick={() => { setFilterType('section'); setFilterId(sections[0]?.id || ''); }}
+                      onClick={() => { setFilterType('section'); if(sections[0]) setFilterId(sections[0].id); }}
                       className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'section' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                       <Layers className="w-4 h-4" /> فصول
                     </button>
                     <button 
-                      onClick={() => { setFilterType('teacher'); setFilterId(uniqueTeachers[0]?.id || ''); }}
+                      onClick={() => { setFilterType('teacher'); if(uniqueTeachers[0]) setFilterId(uniqueTeachers[0].id); }}
                       className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'teacher' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                       <UserCircle className="w-4 h-4" /> معلمون
@@ -354,7 +362,14 @@ export default function PublicSchedulesViewPage() {
                       <p className="text-xs text-slate-400 font-bold flex items-center gap-1">
                          <Lock className="w-3 h-3"/> {activeRole === 'student' ? 'جدول فصلك الحالي' : 'الجدول المخصص لك'}
                       </p>
-                      <p className="text-base font-black text-white mt-0.5">{restrictedDisplayName}</p>
+                      <p className="text-base font-black text-white mt-0.5">{restrictedName}</p>
+                   </div>
+                   {/* 🚀 إظهار الوقت الحالي أعلى البطاقة ليعرف المستخدم */}
+                   <div className="hidden sm:flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-white/5">
+                      <Clock className="w-4 h-4 text-amber-400" />
+                      <span className="text-sm font-black text-amber-400" dir="ltr">
+                        {currentDateTime.toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </span>
                    </div>
                 </div>
               )}
@@ -370,64 +385,118 @@ export default function PublicSchedulesViewPage() {
                         اليوم / الحصة
                       </th>
                       {dynamicPeriods.map(p => {
-                        const pData = periods.find(per => per.period_number === p);
+                        // إزالة التوقيت من الـ Header لأنه مضلل للمعلم المشترك (وضعناه داخل الكارت نفسه)
                         return (
-                          <th key={p} scope="col" className="py-4 px-2 text-center border-l border-white/5 min-w-[140px] bg-[#02040a]/40">
-                            <div className="flex flex-col items-center gap-1.5">
-                              <span className="text-white font-black text-sm drop-shadow-sm">الحصة {p}</span>
-                              {pData && <span className="text-[10px] text-slate-500 font-bold tracking-widest bg-[#0f1423] px-2 py-0.5 rounded-md border border-white/5" dir="ltr">{pData.start_time.slice(0,5)}</span>}
-                            </div>
+                          <th key={p} scope="col" className="py-4 px-2 text-center border-l border-white/5 min-w-[150px] bg-[#02040a]/40">
+                            <span className="text-white font-black text-sm drop-shadow-sm">الحصة {p}</span>
                           </th>
                         );
                       })}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 bg-transparent">
-                    {DAYS.map((day) => (
-                      <tr key={day.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-6 px-3 text-sm font-black text-slate-300 border-l border-white/5 text-center bg-[#0f1423]/30">
-                          {day.name}
-                        </td>
-                        {dynamicPeriods.map(p => {
-                          const slot = schedules.find(s => s.day === day.id && s.period_number === p && (filterType === 'section' ? s.section_id === filterId : s.teacher_id === filterId));
-                          
-                          const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
+                    {DAYS.map((day) => {
+                      const todayId = getKuwaitDayId(currentDateTime);
+                      // تمييز اليوم الحالي في الصف
+                      const isToday = day.id === todayId;
 
-                          return (
-                            <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-32 align-top">
-                              {slot ? (
-                                <motion.div whileHover={{ scale: 1.02 }} className="h-full flex flex-col justify-center bg-[#02040a]/60 rounded-xl p-3 border border-white/10 shadow-inner relative overflow-hidden group">
-                                  <div className={`absolute top-0 right-0 w-1.5 h-full ${filterType === 'section' ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
-                                  
-                                  <div className="font-black text-white text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2">
-                                    {slot.subject_name}
-                                  </div>
-                                  
-                                  <div className="text-[10px] sm:text-xs font-bold text-slate-400 pr-2 leading-tight">
-                                    {filterType === 'section' ? `أ. ${slot.teacher_name}` : slot.section_name}
-                                  </div>
+                      return (
+                        <tr key={day.id} className={`transition-colors ${isToday ? 'bg-indigo-900/10' : 'hover:bg-white/[0.02]'}`}>
+                          <td className={`py-6 px-3 text-sm font-black border-l border-white/5 text-center ${isToday ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-[#0f1423]/30 text-slate-300'}`}>
+                            {day.name}
+                            {isToday && <div className="text-[9px] text-indigo-400 mt-1 uppercase tracking-wider">اليوم</div>}
+                          </td>
+                          {dynamicPeriods.map(p => {
+                            const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
+                            
+                            const showZoom = slot && slot.zoom_link;
 
-                                  {showZoom && (
-                                    <a 
-                                      href={slot.zoom_link} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer" 
-                                      className="mt-2 w-full flex items-center justify-center gap-1.5 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-500 rounded-lg py-1.5 transition-colors shadow-[0_0_10px_rgba(37,99,235,0.4)]"
-                                    >
-                                      <Video className="w-3.5 h-3.5"/> دخول للبث
-                                    </a>
-                                  )}
-                                </motion.div>
-                              ) : (
-                                <div className="h-full w-full flex items-center justify-center rounded-xl transition-all opacity-20">
-                                  <span className="text-2xl text-slate-600">-</span>
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                            // 🚀 منطق حالة الحصة (الآن، فائتة، قادمة)
+                            let isNow = false;
+                            let isPast = false;
+                            const currentMins = currentDateTime.getHours() * 60 + currentDateTime.getMinutes();
+
+                            if (slot) {
+                               const startMins = timeToMinutes(slot.start_time);
+                               const endMins = timeToMinutes(slot.end_time);
+
+                               if (todayId !== 0) { // لو مش عطلة نهاية أسبوع
+                                  if (day.id < todayId) {
+                                    isPast = true; // أيام سابقة
+                                  } else if (day.id === todayId) {
+                                    if (currentMins > endMins) isPast = true; // حصة انتهت اليوم
+                                    else if (currentMins >= startMins && currentMins <= endMins) isNow = true; // الحصة تعمل الآن!
+                                  }
+                               }
+                            }
+
+                            return (
+                              <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-36 align-top">
+                                {slot ? (
+                                  <motion.div 
+                                    whileHover={{ scale: isPast ? 1 : 1.02 }} 
+                                    className={`h-full flex flex-col justify-start rounded-xl p-2.5 shadow-inner relative overflow-hidden group transition-all duration-300
+                                      ${isNow 
+                                        ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/50' // ستايل الـ NOW
+                                        : isPast 
+                                        ? 'bg-[#02040a]/40 border border-white/5 opacity-50 grayscale hover:grayscale-0' // ستايل الـ PAST
+                                        : 'bg-[#02040a]/80 border border-white/10' // ستايل الـ FUTURE الطبيعي
+                                      }
+                                    `}
+                                  >
+                                    <div className={`absolute top-0 right-0 w-1.5 h-full ${isRestricted ? (activeRole === 'student' ? 'bg-indigo-500' : 'bg-emerald-500') : (filterType === 'section' ? 'bg-indigo-500' : 'bg-emerald-500')} ${isPast ? 'opacity-30' : ''}`}></div>
+                                    
+                                    {/* 🚀 إظهار الوقت الدقيق للمرحلة بخط عريض ومميز */}
+                                    <div className="flex justify-between items-start mb-2 w-full pr-1.5">
+                                      <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-white/10 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
+                                         {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
+                                      </div>
+                                      {/* شارة التتبع الحي */}
+                                      {isNow && (
+                                         <div className="flex items-center gap-1 bg-rose-500/20 px-1.5 py-0.5 rounded border border-rose-500/50">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
+                                            <span className="text-[8px] font-black text-rose-400">الآن</span>
+                                         </div>
+                                      )}
+                                      {isPast && <CheckCircle2 className="w-4 h-4 text-slate-500" />}
+                                    </div>
+
+                                    <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-white'}`}>
+                                      {slot.subject_name}
+                                    </div>
+                                    
+                                    <div className="text-[10px] sm:text-xs font-bold text-slate-400 pr-2 leading-tight">
+                                      {isRestricted 
+                                        ? (activeRole === 'student' ? `أ. ${slot.teacher_name}` : slot.section_name)
+                                        : (filterType === 'section' ? `أ. ${slot.teacher_name}` : slot.section_name)
+                                      }
+                                    </div>
+
+                                    {/* زر الزووم */}
+                                    {showZoom && (
+                                      <div className="mt-auto pt-2 w-full">
+                                         <a 
+                                           href={slot.zoom_link} 
+                                           target="_blank" 
+                                           rel="noopener noreferrer" 
+                                           className={`w-full flex items-center justify-center gap-1.5 text-[10px] font-black rounded-lg py-1.5 transition-colors ${isPast ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]'}`}
+                                         >
+                                           <Video className="w-3.5 h-3.5"/> دخول للبث
+                                         </a>
+                                      </div>
+                                    )}
+                                  </motion.div>
+                                ) : (
+                                  <div className={`h-full w-full flex items-center justify-center rounded-xl transition-all ${isPast ? 'opacity-5' : 'opacity-20'}`}>
+                                    <span className="text-2xl text-slate-600">-</span>
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
