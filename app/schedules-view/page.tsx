@@ -29,7 +29,7 @@ const DAYS = [
 const timeToMinutes = (timeStr: string) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + m;
+  return (h || 0) * 60 + (m || 0);
 };
 
 const getKuwaitDayId = (date: Date) => {
@@ -41,6 +41,9 @@ const getKuwaitDayId = (date: Date) => {
 export default function PublicSchedulesViewPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
+
+  // 🚀 درع التزامن لحل مشكلة Application Error
+  const [mounted, setMounted] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -60,8 +63,6 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('');
   const [userFullName, setUserFullName] = useState<string>('');
 
-  // 🚀 حل مشكلة تضارب التوقيت (Hydration Mismatch)
-  const [mounted, setMounted] = useState(false);
   const hasFetched = useRef(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
@@ -118,7 +119,8 @@ export default function PublicSchedulesViewPage() {
          isUserRestricted = true;
 
          if (resolvedRole === 'student') {
-            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('id', user.id);
+            // 🚀 العودة لاستخدام user_id بشكل آمن للطلاب
+            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('user_id', user.id);
             if (stuErr) console.error("Student Fetch Error:", stuErr);
 
             if (studentProfiles && studentProfiles.length > 0) {
@@ -146,7 +148,8 @@ export default function PublicSchedulesViewPage() {
                 allowedIds = teacherProfiles.map(t => String(t.id));
                 if (fetchedName) displayName = `أ. ${fetchedName}`;
              } else {
-                const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('id', user.id);
+                // 🚀 استخدام user_id في المسار الاحتياطي أيضاً
+                const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
                 if (studentProfiles && studentProfiles.length > 0) {
                    resolvedRole = 'student';
                    allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
@@ -278,7 +281,6 @@ export default function PublicSchedulesViewPage() {
      });
   }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
-  // 🚀 محرك آمن لاستخراج اسم المعلم أو الفصل لتجنب أي أعطال
   const getEntityName = () => {
     if (isRestricted) {
        if (activeRole === 'student') {
@@ -298,7 +300,14 @@ export default function PublicSchedulesViewPage() {
     }
   };
 
-  if (isChecking || loading) {
+  const getDayName = (day: number) => {
+    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+    return days[day - 1] || day;
+  };
+
+  // 🚀 هذا هو الحل الجذري لمنع خطأ Application Error (Hydration Mismatch)
+  // السيرفر لن يبني الجدول إلا عندما يتأكد أن المتصفح قد تم تحميله بالكامل
+  if (isChecking || loading || !mounted) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
         <div className="flex flex-col items-center gap-5">
@@ -341,7 +350,6 @@ export default function PublicSchedulesViewPage() {
   return (
     <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden print:bg-white print:text-black print:p-0" dir="rtl">
       
-      {/* 🚀 إعدادات الطباعة الفاخرة للورق */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
            @page { size: landscape; margin: 10mm; }
@@ -448,14 +456,13 @@ export default function PublicSchedulesViewPage() {
                    <div className="hidden sm:flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-white/5">
                       <Clock className="w-4 h-4 text-amber-400" />
                       <span className="text-sm font-black text-amber-400" dir="ltr">
-                        {mounted ? currentDateTime.toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
+                        {currentDateTime.toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit', hour12: false })}
                       </span>
                    </div>
                 </div>
               )}
             </div>
 
-            {/* 🚀 عارض الشاشة الرئيسي */}
             <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden print-hide">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
@@ -522,7 +529,6 @@ export default function PublicSchedulesViewPage() {
                                   >
                                     <div className={`absolute top-0 right-0 w-1.5 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'} ${isPast ? 'opacity-30' : ''}`}></div>
                                     
-                                    {/* 🚀 التوقيت باللون الذهبي الواضح */}
                                     <div className="flex justify-between items-start mb-2 w-full pr-1.5">
                                       <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-amber-500/30 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
                                          {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
@@ -536,7 +542,6 @@ export default function PublicSchedulesViewPage() {
                                       {isPast && <CheckCircle2 className="w-4 h-4 text-slate-500" />}
                                     </div>
 
-                                    {/* 🚀 التمييز بين عرض الطالب (يركز على المادة) وعرض المعلم (يركز على الفصل) */}
                                     {isStudentView ? (
                                       <>
                                         <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-indigo-300'}`}>
@@ -557,7 +562,6 @@ export default function PublicSchedulesViewPage() {
                                       </>
                                     )}
 
-                                    {/* 🚀 زر الزووم بارز ومضمون ظهوره إذا وجد */}
                                     {showZoom && (
                                       <div className="mt-auto pt-2 w-full">
                                          <a 
@@ -587,7 +591,6 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 عارض الطباعة الفاخر للورق (ملون وأنيق يشبه الشاشة) */}
             <div className="hidden print:block w-full">
                <div className="text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
                   <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
@@ -617,12 +620,10 @@ export default function PublicSchedulesViewPage() {
                                   <div className="p-2 flex flex-col justify-center items-center h-full bg-slate-50 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
                                     <div className={`absolute top-0 right-0 w-1.5 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
                                     
-                                    {/* التوقيت باللون الذهبي في الطباعة */}
                                     <div className="font-mono text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mb-1.5" dir="ltr">
                                        {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
                                     </div>
 
-                                    {/* التركيز اللوني في الطباعة */}
                                     {isStudentView ? (
                                       <>
                                         <div className="font-black text-xs text-indigo-700 mb-1 leading-tight whitespace-normal break-words w-full px-1">{slot.subject_name}</div>
