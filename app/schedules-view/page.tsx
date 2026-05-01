@@ -171,14 +171,12 @@ export default function PublicSchedulesViewPage() {
          setLoading(false); return;
       }
 
-      // 🚀 التصحيح الجذري هنا بناءً على الهيكل (Schema) الخاص بك:
-      // نطلب من users الاسم فقط، ومن teachers الرابط فقط.
       const [slotsRes, sectionsRes, subjectsRes, teachersRes, usersRes, periodsRes] = await Promise.all([
          supabase.from('auto_schedules').select('*').eq('plan_id', planRes.data.id),
          supabase.from('sections').select('id, name, class_id, classes(name, level)'),
          supabase.from('subjects').select('id, name'),
-         supabase.from('teachers').select('id, zoom_link'), // ⬅️ الرابط موجود هنا
-         supabase.from('users').select('id, full_name'), // ⬅️ الاسم موجود هنا فقط (بدون zoom_link)
+         supabase.from('teachers').select('id, zoom_link'), 
+         supabase.from('users').select('id, full_name'), 
          supabase.from('auto_class_periods').select('*').order('period_number')
       ]);
 
@@ -196,7 +194,6 @@ export default function PublicSchedulesViewPage() {
         const sec = sectionsData.find(s => String(s.id) === String(slot.section_id));
         const subj = subjectsData.find(s => String(s.id) === String(slot.subject_id));
         
-        // 🚀 المطابقة المباشرة برقم المعلم (لأن teacher_id هو نفسه user.id)
         const teacherIdStr = String(slot.teacher_id);
         const teachRec = teachersData.find(t => String(t.id) === teacherIdStr);
         const userRec = usersData.find(u => String(u.id) === teacherIdStr);
@@ -209,11 +206,9 @@ export default function PublicSchedulesViewPage() {
         const secNameStr = safeString(sec?.name, '');
         const sectionFullName = sec ? `${classNameStr} - شعبة ${secNameStr}` : 'شعبة غير معروفة';
         
-        // أخذ الاسم من جدول المستخدمين (users)
         let finalTeacherName = safeString(userRec?.full_name, 'معلم غير محدد');
         if (finalTeacherName === 'undefined') finalTeacherName = 'معلم غير محدد';
 
-        // أخذ الرابط من جدول المعلمين (teachers)
         let zoomLink = teachRec?.zoom_link || null;
         if (typeof zoomLink !== 'string' || zoomLink.trim() === '') zoomLink = null;
 
@@ -312,11 +307,6 @@ export default function PublicSchedulesViewPage() {
     } catch(e) {
       return 'فصل/معلم غير محدد';
     }
-  };
-
-  const getDayName = (day: number) => {
-    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-    return days[day - 1] || day;
   };
 
   if (!mounted || isChecking || loading) {
@@ -602,6 +592,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
+            {/* 🚀 عارض الطباعة (تم حل مشكلة الفراغات من هنا!) */}
             <div className="hidden print:block w-full">
                <div className="text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
                   <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
@@ -624,7 +615,9 @@ export default function PublicSchedulesViewPage() {
                         <tr key={day.id} className="border-b border-slate-200 break-inside-avoid">
                           <td className="p-3 font-black text-slate-800 bg-slate-100 border border-slate-200">{safeString(day.name)}</td>
                           {dynamicPeriods.map(p => {
-                            const slot = currentViewSchedules.find(s => s.day === day && s.period_number === p);
+                            // 🚀 السر كله كان في هذا السطر: day.id بدلاً من day
+                            const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
+                            
                             return (
                               <td key={p} className="p-2 border border-slate-200 h-auto min-h-[7rem] align-middle bg-white">
                                 {slot ? (
