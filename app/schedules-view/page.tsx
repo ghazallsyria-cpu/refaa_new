@@ -119,8 +119,8 @@ export default function PublicSchedulesViewPage() {
          isUserRestricted = true;
 
          if (resolvedRole === 'student') {
-            // 🚀 العودة لاستخدام user_id بشكل آمن للطلاب
-            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('user_id', user.id);
+            // 🚀 العودة لاستخدام id بناءً على توجيهاتك
+            const { data: studentProfiles, error: stuErr } = await supabase.from('students').select('section_id').eq('id', user.id);
             if (stuErr) console.error("Student Fetch Error:", stuErr);
 
             if (studentProfiles && studentProfiles.length > 0) {
@@ -148,8 +148,8 @@ export default function PublicSchedulesViewPage() {
                 allowedIds = teacherProfiles.map(t => String(t.id));
                 if (fetchedName) displayName = `أ. ${fetchedName}`;
              } else {
-                // 🚀 استخدام user_id في المسار الاحتياطي أيضاً
-                const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('user_id', user.id);
+                // 🚀 استخدام id في المسار الاحتياطي أيضاً
+                const { data: studentProfiles } = await supabase.from('students').select('section_id').eq('id', user.id);
                 if (studentProfiles && studentProfiles.length > 0) {
                    resolvedRole = 'student';
                    allowedIds = studentProfiles.map(s => s.section_id ? String(s.section_id) : null).filter(Boolean);
@@ -305,8 +305,6 @@ export default function PublicSchedulesViewPage() {
     return days[day - 1] || day;
   };
 
-  // 🚀 هذا هو الحل الجذري لمنع خطأ Application Error (Hydration Mismatch)
-  // السيرفر لن يبني الجدول إلا عندما يتأكد أن المتصفح قد تم تحميله بالكامل
   if (isChecking || loading || !mounted) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
