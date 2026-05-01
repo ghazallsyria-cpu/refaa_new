@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { motion } from 'framer-motion';
 import { 
   CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2
 } from 'lucide-react';
@@ -189,8 +190,9 @@ export default function PublicSchedulesViewPage() {
       if (slotsRes.error) throw slotsRes.error;
 
       let safeTeachersData = teachersRes.data || [];
+      // 🚀 التحصين: التأكد أن الكود البديل يجلب رابط الزووم في حال فشل الطلب الأول
       if (teachersRes.error) {
-         const fallbackTeachers = await supabase.from('teachers').select('id, users(full_name)');
+         const fallbackTeachers = await supabase.from('teachers').select('id, zoom_link, users(full_name, zoom_link)');
          safeTeachersData = fallbackTeachers.data || [];
       }
 
@@ -213,6 +215,7 @@ export default function PublicSchedulesViewPage() {
         const secNameStr = safeString(sec?.name, '');
         const sectionFullName = sec ? `${classNameStr} - شعبة ${secNameStr}` : 'شعبة غير معروفة';
         
+        // 🚀 محرك جلب الرابط الذكي (يبحث في المعلم ثم يبحث في المستخدم)
         let zoomLink = teach?.users?.zoom_link || teach?.zoom_link || null;
         if (typeof zoomLink !== 'string' || zoomLink.trim() === '') zoomLink = null;
 
@@ -311,6 +314,11 @@ export default function PublicSchedulesViewPage() {
     } catch(e) {
       return 'فصل/معلم غير محدد';
     }
+  };
+
+  const getDayName = (day: number) => {
+    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+    return days[day - 1] || day;
   };
 
   if (!mounted || isChecking || loading) {
@@ -596,7 +604,6 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 عارض الطباعة الفاخر للورق (هنا كان الخطأ الجذري وتم إصلاحه باستخدام DAYS بدلاً من المتغير المفقود) */}
             <div className="hidden print:block w-full">
                <div className="text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
                   <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
