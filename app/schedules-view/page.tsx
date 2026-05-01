@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle 
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
@@ -30,6 +30,7 @@ export default function PublicSchedulesViewPage() {
   const { user, isChecking } = useAuth() as any;
 
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [uniqueTeachers, setUniqueTeachers] = useState<any[]>([]);
@@ -44,7 +45,6 @@ export default function PublicSchedulesViewPage() {
     if (!isChecking && user) {
         fetchApprovedSchedule();
     } else if (!isChecking && !user) {
-        // إذا لم يكن مسجلاً الدخول، نوقف التحميل ليتمكن من رؤية رسالة أو إعادة توجيه
         setLoading(false);
     }
   }, [isChecking, user]);
@@ -52,8 +52,9 @@ export default function PublicSchedulesViewPage() {
   const fetchApprovedSchedule = async () => {
     try {
       setLoading(true);
+      setFetchError(null);
 
-      // 1. جلب أحدث خطة تم حفظها من محرك الذكاء الاصطناعي
+      // 1. جلب أحدث خطة معتمدة
       const { data: latestPlan, error: planError } = await supabase
         .from('auto_schedule_plans')
         .select('*')
@@ -63,13 +64,14 @@ export default function PublicSchedulesViewPage() {
 
       if (planError || !latestPlan) {
         setLoading(false);
-        return; // لا يوجد جداول معتمدة
+        return; // لا توجد خطة
       }
 
       setLatestPlanName(latestPlan.name);
 
-      // 2. جلب الحصص الخاصة بهذه الخطة مع روابط زووم
-      const { data: slots, error: slotsError } = await supabase
+      // 2. 🚀 الاستعلام المضاد للأعطال (Fallback Query) لحل مشكلة الشاشة الفارغة
+      let slots = [];
+      const { data: slotsWithZoom, error: zoomError } = await supabase
         .from('auto_schedules')
         .select(`
           *,
@@ -79,20 +81,44 @@ export default function PublicSchedulesViewPage() {
         `)
         .eq('plan_id', latestPlan.id);
 
-      if (slotsError) throw slotsError;
+      if (zoomError) {
+         console.warn("Zoom relation missing, falling back to safe query...");
+         // استعلام آمن في حال عدم وجود حقل zoom_link
+         const { data: safeSlots, error: safeError } = await supabase
+          .from('auto_schedules')
+          .select(`
+            *,
+            sections (id, name, class_id, classes(name, level)),
+            subjects (name),
+            teachers (id, users(full_name))
+          `)
+          .eq('plan_id', latestPlan.id);
+
+          if (safeError) {
+             console.error("Data Fetch Error:", safeError);
+             setFetchError(safeError.message);
+          }
+          slots = safeSlots || [];
+      } else {
+         slots = slotsWithZoom || [];
+      }
+
+      if (slots.length === 0 && !fetchError) {
+          // إذا كانت المصفوفة فارغة، فهذا يعني غالباً مشكلة في صلاحيات RLS للطلاب
+          console.warn("No slots found for this plan. Might be an RLS issue.");
+      }
 
       // 3. جلب أوقات الحصص
       const { data: periodsData } = await supabase.from('auto_class_periods').select('*').order('period_number');
       setPeriods(periodsData || []);
 
-      // 4. تنسيق البيانات لسهولة العرض
+      // 4. تنسيق البيانات
       const formattedSchedules = (slots || []).map(s => {
         const cData = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
         const level = cData?.level || 0;
         const stage = level >= 10 ? 'high' : 'middle';
         const sectionFullName = `${cData?.name || ''} - شعبة ${s.sections?.name || ''}`;
         
-        // استخراج رابط زووم بأمان
         const zoomLink = s.teachers?.users?.zoom_link || s.teachers?.zoom_link || null;
 
         return {
@@ -114,7 +140,7 @@ export default function PublicSchedulesViewPage() {
       formattedSchedules.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       setSchedules(formattedSchedules);
 
-      // 5. استخراج قائمة الفصول والمعلمين الفريدة للقوائم المنسدلة
+      // 5. استخراج القوائم المنسدلة
       const uniqueSecsMap = new Map();
       const uniqueTeachMap = new Map();
 
@@ -133,17 +159,16 @@ export default function PublicSchedulesViewPage() {
       setSections(secsArray);
       setUniqueTeachers(teachArray);
 
-      // تحديد أول فصل افتراضياً
       if (secsArray.length > 0) setFilterId(secsArray[0].id);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching public schedules:', error);
+      setFetchError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // استخراج أقصى عدد حصص لبناء أعمدة الجدول ديناميكياً
   const dynamicPeriods = useMemo(() => {
     if (periods.length === 0) return [1, 2, 3, 4, 5, 6, 7];
     const maxPeriod = Math.max(...periods.map(p => p.period_number));
@@ -163,21 +188,24 @@ export default function PublicSchedulesViewPage() {
 
   if (!user) {
     return (
-       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4 text-white font-bold">
-           يرجى تسجيل الدخول لرؤية الجدول الدراسي.
+       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4">
+           <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg max-w-md w-full">
+              <Users className="w-16 h-16 text-indigo-400 mx-auto mb-4 opacity-80" />
+              <h2 className="text-xl font-black text-white mb-2">يرجى تسجيل الدخول</h2>
+              <p className="text-slate-400 font-bold text-sm">عذراً، يجب عليك تسجيل الدخول بحسابك (طالب أو معلم) لرؤية الجدول الدراسي الخاص بك.</p>
+           </div>
        </div>
     );
   }
 
   return (
     <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden" dir="rtl">
-      {/* 🚀 الخلفية الزجاجية الفخمة */}
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
         
-        {/* 🚀 Header */}
+        {/* Header */}
         <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -195,17 +223,23 @@ export default function PublicSchedulesViewPage() {
           </div>
         </div>
 
-        {schedules.length === 0 ? (
+        {fetchError && (
+           <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 text-rose-400 font-bold">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <p className="text-sm">حدث خطأ أثناء جلب البيانات: {fetchError}</p>
+           </div>
+        )}
+
+        {schedules.length === 0 && !fetchError ? (
            <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg">
               <CalendarDays className="w-20 h-20 text-slate-600 mx-auto mb-4 opacity-50" />
               <h2 className="text-2xl font-black text-white mb-2">لا توجد جداول معتمدة بعد</h2>
-              <p className="text-slate-400 font-bold">لم تقم الإدارة بنشر الجدول النهائي حتى الآن.</p>
+              <p className="text-slate-400 font-bold">لم تقم الإدارة بنشر الجدول النهائي حتى الآن، أو أن حسابك لا يملك صلاحية رؤيته حالياً.</p>
            </div>
-        ) : (
+        ) : schedules.length > 0 ? (
           <>
-            {/* 🚀 لوحة التحكم بالفلتر */}
+            {/* Filters */}
             <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center">
-              
               <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto">
                 <button 
                   onClick={() => { setFilterType('section'); setFilterId(sections[0]?.id || ''); }}
@@ -237,10 +271,9 @@ export default function PublicSchedulesViewPage() {
                   }
                 </select>
               </div>
-
             </div>
 
-            {/* 🚀 The Timetable Grid (Read-Only) */}
+            {/* Grid */}
             <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
@@ -270,32 +303,21 @@ export default function PublicSchedulesViewPage() {
                         </td>
                         {dynamicPeriods.map(p => {
                           const slot = schedules.find(s => s.day === day.id && s.period_number === p && (filterType === 'section' ? s.section_id === filterId : s.teacher_id === filterId));
-                          
-                          // شروط إظهار رابط زووم: أن تكون مرحلة متوسطة، وأن يكون هناك رابط
                           const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
 
                           return (
-                            <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-32 align-top">
+                            <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-28 align-top">
                               {slot ? (
                                 <motion.div whileHover={{ scale: 1.02 }} className="h-full flex flex-col justify-center bg-[#02040a]/60 rounded-xl p-3 border border-white/10 shadow-inner relative overflow-hidden group">
                                   <div className={`absolute top-0 right-0 w-1.5 h-full ${filterType === 'section' ? 'bg-indigo-500' : 'bg-emerald-500'}`}></div>
-                                  
                                   <div className="font-black text-white text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2">
                                     {slot.subject_name}
                                   </div>
-                                  
                                   <div className="text-[10px] sm:text-xs font-bold text-slate-400 pr-2 leading-tight">
                                     {filterType === 'section' ? `أ. ${slot.teacher_name}` : slot.section_name}
                                   </div>
-
-                                  {/* 🚀 رابط البث المباشر (Zoom) */}
                                   {showZoom && (
-                                    <a 
-                                      href={slot.zoom_link} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer" 
-                                      className="mt-2 w-full flex items-center justify-center gap-1.5 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-500 rounded-lg py-1.5 transition-colors shadow-[0_0_10px_rgba(37,99,235,0.4)]"
-                                    >
+                                    <a href={slot.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-2 w-full flex items-center justify-center gap-1.5 text-[10px] font-black text-white bg-blue-600 hover:bg-blue-500 rounded-lg py-1.5 transition-colors shadow-[0_0_10px_rgba(37,99,235,0.4)]">
                                       <Video className="w-3.5 h-3.5"/> دخول للبث
                                     </a>
                                   )}
@@ -315,7 +337,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
