@@ -4,7 +4,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { motion } from 'framer-motion';
 import { 
   CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2
 } from 'lucide-react';
@@ -269,11 +268,9 @@ export default function PublicSchedulesViewPage() {
     }
   };
 
-  // 🚀 درع التيتانيوم المضاد لخطأ (RangeError: Invalid array length)
   const dynamicPeriods = useMemo(() => {
     if (!periods || !Array.isArray(periods) || periods.length === 0) return [1, 2, 3, 4, 5, 6];
     const maxPeriod = Math.max(...periods.map(p => Number(p.period_number) || 1));
-    // إذا كان المخرج هو -Infinity بسبب خلل في البيانات، نستبدله برقم آمن فوراً!
     const safeMax = (maxPeriod === -Infinity || maxPeriod < 1) ? 6 : maxPeriod;
     return Array.from({length: safeMax}, (_, i) => i + 1);
   }, [periods]);
@@ -314,11 +311,6 @@ export default function PublicSchedulesViewPage() {
     } catch(e) {
       return 'فصل/معلم غير محدد';
     }
-  };
-
-  const getDayName = (day: number) => {
-    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-    return days[day - 1] || day;
   };
 
   if (!mounted || isChecking || loading) {
@@ -530,9 +522,8 @@ export default function PublicSchedulesViewPage() {
                             return (
                               <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-36 align-top">
                                 {slot ? (
-                                  <motion.div 
-                                    whileHover={{ scale: isPast ? 1 : 1.02 }} 
-                                    className={`h-full flex flex-col justify-start rounded-xl p-2.5 shadow-inner relative overflow-hidden group transition-all duration-300
+                                  <div 
+                                    className={`h-full flex flex-col justify-start rounded-xl p-2.5 shadow-inner relative overflow-hidden group transition-all duration-300 transform hover:scale-[1.02]
                                       ${isNow 
                                         ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/50' 
                                         : isPast 
@@ -588,7 +579,7 @@ export default function PublicSchedulesViewPage() {
                                          </a>
                                       </div>
                                     )}
-                                  </motion.div>
+                                  </div>
                                 ) : (
                                   <div className={`h-full w-full flex items-center justify-center rounded-xl transition-all ${isPast ? 'opacity-5' : 'opacity-20'}`}>
                                     <span className="text-2xl text-slate-600">-</span>
@@ -605,6 +596,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
+            {/* 🚀 عارض الطباعة الفاخر للورق (هنا كان الخطأ الجذري وتم إصلاحه باستخدام DAYS بدلاً من المتغير المفقود) */}
             <div className="hidden print:block w-full">
                <div className="text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
                   <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
@@ -623,11 +615,11 @@ export default function PublicSchedulesViewPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {workingDays.map((day) => (
-                        <tr key={day} className="border-b border-slate-200 break-inside-avoid">
+                      {DAYS.map((day) => (
+                        <tr key={day.id} className="border-b border-slate-200 break-inside-avoid">
                           <td className="p-3 font-black text-slate-800 bg-slate-100 border border-slate-200">{safeString(day.name)}</td>
                           {dynamicPeriods.map(p => {
-                            const slot = currentViewSchedules.find(s => s.day === day && s.period_number === p);
+                            const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
                             return (
                               <td key={p} className="p-2 border border-slate-200 h-auto min-h-[7rem] align-middle bg-white">
                                 {slot ? (
@@ -666,3 +658,5 @@ export default function PublicSchedulesViewPage() {
     </div>
   );
 }
+
+
