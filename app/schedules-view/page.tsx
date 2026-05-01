@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
@@ -27,7 +27,9 @@ const DAYS = [
 ];
 
 export default function PublicSchedulesViewPage() {
-  const { user, isChecking } = useAuth() as any;
+  // 🚀 جلب صلاحيات المستخدم (طالب، معلم، أو إدارة)
+  const { user, isChecking, authRole, userRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -37,8 +39,11 @@ export default function PublicSchedulesViewPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [latestPlanName, setLatestPlanName] = useState<string>('');
 
+  // 🚀 إعدادات الفلتر والقيود
   const [filterType, setFilterType] = useState<'section' | 'teacher'>('section');
   const [filterId, setFilterId] = useState<string>('');
+  const [isRestricted, setIsRestricted] = useState(false);
+  const [noSectionAssigned, setNoSectionAssigned] = useState(false);
 
   useEffect(() => {
     if (!isChecking && user) {
@@ -46,14 +51,58 @@ export default function PublicSchedulesViewPage() {
     } else if (!isChecking && !user) {
         setLoading(false);
     }
-  }, [isChecking, user]);
+  }, [isChecking, user, currentRole]);
 
   const fetchApprovedSchedule = async () => {
     try {
       setLoading(true);
       setFetchError(null);
+      setNoSectionAssigned(false);
 
-      // 1. جلب أحدث خطة معتمدة
+      // 1. تحديد قيود المستخدم قبل عرض أي شيء
+      let forcedFilterType = 'section';
+      let forcedFilterId = '';
+      let isUserRestricted = false;
+
+      if (currentRole === 'student') {
+         isUserRestricted = true;
+         // جلب رقم فصل الطالب
+         const { data: studentData, error: studentError } = await supabase
+            .from('students')
+            .select('section_id')
+            .eq('user_id', user.id)
+            .single();
+         
+         if (studentData && studentData.section_id) {
+            forcedFilterType = 'section';
+            forcedFilterId = studentData.section_id;
+         } else {
+            setNoSectionAssigned(true);
+         }
+      } else if (currentRole === 'teacher') {
+         isUserRestricted = true;
+         // جلب رقم المعلم
+         const { data: teacherData, error: teacherError } = await supabase
+            .from('teachers')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+         
+         if (teacherData && teacherData.id) {
+            forcedFilterType = 'teacher';
+            forcedFilterId = teacherData.id;
+         }
+      }
+
+      setIsRestricted(isUserRestricted);
+
+      // إذا كان طالباً بلا فصل، لا داعي لإكمال جلب الجدول
+      if (isUserRestricted && currentRole === 'student' && !forcedFilterId) {
+         setLoading(false);
+         return;
+      }
+
+      // 2. جلب أحدث خطة معتمدة
       const { data: latestPlan, error: planError } = await supabase
         .from('auto_schedule_plans')
         .select('*')
@@ -68,7 +117,7 @@ export default function PublicSchedulesViewPage() {
 
       setLatestPlanName(latestPlan.name);
 
-      // 2. 🚀 الاستعلام المسطح (Flat Fetch): نجلب الجداول بشكل منفصل لتجنب أخطاء العلاقات والصلاحيات
+      // 3. الاستعلام المسطح (Flat Fetch) للسرعة وتجاوز أخطاء RLS
       const { data: slots, error: slotsError } = await supabase
         .from('auto_schedules')
         .select('*')
@@ -76,7 +125,7 @@ export default function PublicSchedulesViewPage() {
 
       if (slotsError) throw slotsError;
 
-      // 3. جلب البيانات الأساسية
+      // 4. جلب البيانات الأساسية
       const { data: sectionsData } = await supabase.from('sections').select('id, name, class_id, classes(name, level)');
       const { data: subjectsData } = await supabase.from('subjects').select('id, name');
       
@@ -92,7 +141,7 @@ export default function PublicSchedulesViewPage() {
       const { data: periodsData } = await supabase.from('auto_class_periods').select('*').order('period_number');
       setPeriods(periodsData || []);
 
-      // 4. 🚀 الربط اليدوي الآمن (Manual Mapping)
+      // 5. الربط اليدوي الآمن
       const formattedSchedules = (slots || []).map(slot => {
         const sec = sectionsData?.find(s => s.id === slot.section_id);
         const subj = subjectsData?.find(s => s.id === slot.subject_id);
@@ -124,7 +173,7 @@ export default function PublicSchedulesViewPage() {
       formattedSchedules.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       setSchedules(formattedSchedules);
 
-      // 5. استخراج القوائم المنسدلة
+      // 6. استخراج القوائم المنسدلة
       const uniqueSecsMap = new Map();
       const uniqueTeachMap = new Map();
 
@@ -143,7 +192,14 @@ export default function PublicSchedulesViewPage() {
       setSections(secsArray);
       setUniqueTeachers(teachArray);
 
-      if (secsArray.length > 0) setFilterId(secsArray[0].id);
+      // 🚀 7. تطبيق القيود النهائية للفلتر
+      if (isUserRestricted) {
+         setFilterType(forcedFilterType as any);
+         setFilterId(forcedFilterId);
+      } else {
+         // إذا كان مديراً، نضع الفصل الأول كافتراضي
+         if (secsArray.length > 0) setFilterId(secsArray[0].id);
+      }
 
     } catch (error: any) {
       console.error('Error fetching public schedules:', error);
@@ -180,6 +236,28 @@ export default function PublicSchedulesViewPage() {
            </div>
        </div>
     );
+  }
+
+  if (noSectionAssigned) {
+    return (
+       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4">
+           <div className="bg-[#131836]/60 backdrop-blur-xl p-10 rounded-[2rem] border border-white/10 text-center shadow-lg max-w-md w-full">
+              <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto mb-4 opacity-80" />
+              <h2 className="text-xl font-black text-white mb-2">غير مسجل في فصل</h2>
+              <p className="text-slate-400 font-bold text-sm">لم يتم تعيينك في أي فصل دراسي حتى الآن. يرجى مراجعة إدارة المدرسة.</p>
+           </div>
+       </div>
+    );
+  }
+
+  // 🚀 تحديد اسم المستخدم لعرضه في البطاقة الثابتة (للمقيدين)
+  let restrictedDisplayName = '';
+  if (isRestricted) {
+     if (currentRole === 'student') {
+        restrictedDisplayName = sections.find(s => s.id === filterId)?.name || 'فصلك';
+     } else {
+        restrictedDisplayName = uniqueTeachers.find(t => t.id === filterId)?.name || 'جدولك';
+     }
   }
 
   return (
@@ -222,39 +300,58 @@ export default function PublicSchedulesViewPage() {
            </div>
         ) : schedules.length > 0 ? (
           <>
-            {/* Filters */}
-            <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center">
-              <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto">
-                <button 
-                  onClick={() => { setFilterType('section'); setFilterId(sections[0]?.id || ''); }}
-                  className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'section' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
-                >
-                  <Layers className="w-4 h-4" /> فصول
-                </button>
-                <button 
-                  onClick={() => { setFilterType('teacher'); setFilterId(uniqueTeachers[0]?.id || ''); }}
-                  className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'teacher' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
-                >
-                  <UserCircle className="w-4 h-4" /> معلمون
-                </button>
-              </div>
+            {/* 🚀 Filters - ديناميكية حسب الصلاحية */}
+            <div className="bg-[#131836]/80 backdrop-blur-xl p-4 rounded-[1.5rem] border border-white/10 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
+              
+              {!isRestricted ? (
+                // 🟢 عرض الإدارة: قوائم منسدلة كاملة
+                <>
+                  <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto shrink-0">
+                    <button 
+                      onClick={() => { setFilterType('section'); setFilterId(sections[0]?.id || ''); }}
+                      className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'section' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      <Layers className="w-4 h-4" /> فصول
+                    </button>
+                    <button 
+                      onClick={() => { setFilterType('teacher'); setFilterId(uniqueTeachers[0]?.id || ''); }}
+                      className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'teacher' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      <UserCircle className="w-4 h-4" /> معلمون
+                    </button>
+                  </div>
 
-              <div className="flex-1 w-full relative">
-                <div className="absolute inset-y-0 right-0 pl-3 flex items-center pointer-events-none pr-4">
-                  <Search className="h-4 w-4 text-indigo-400" />
+                  <div className="flex-1 w-full relative">
+                    <div className="absolute inset-y-0 right-0 pl-3 flex items-center pointer-events-none pr-4">
+                      <Search className="h-4 w-4 text-indigo-400" />
+                    </div>
+                    <select
+                      value={filterId}
+                      onChange={(e) => setFilterId(e.target.value)}
+                      className="block w-full rounded-xl border border-white/10 py-3 pr-10 pl-4 text-white bg-[#02040a]/80 focus:bg-[#02040a] ring-1 ring-inset ring-transparent focus:ring-2 focus:ring-indigo-500/50 text-sm font-bold transition-all shadow-inner outline-none appearance-none [&>option]:bg-[#0f1423]"
+                    >
+                      <option value="" disabled>-- الرجاء الاختيار --</option>
+                      {filterType === 'section' 
+                        ? sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                        : uniqueTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
+                      }
+                    </select>
+                  </div>
+                </>
+              ) : (
+                // 🔴 عرض الطلاب والمعلمين: بطاقة هوية ثابتة للقراءة فقط
+                <div className="flex items-center gap-4 w-full bg-[#02040a]/40 p-3 rounded-xl border border-white/5">
+                   <div className={`p-2 rounded-lg ${currentRole === 'student' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                      {currentRole === 'student' ? <Layers className="w-6 h-6"/> : <UserCircle className="w-6 h-6"/>}
+                   </div>
+                   <div className="flex-1">
+                      <p className="text-xs text-slate-400 font-bold flex items-center gap-1">
+                         <Lock className="w-3 h-3"/> {currentRole === 'student' ? 'جدول فصلك الحالي' : 'الجدول الخاص بك'}
+                      </p>
+                      <p className="text-base font-black text-white mt-0.5">{restrictedDisplayName}</p>
+                   </div>
                 </div>
-                <select
-                  value={filterId}
-                  onChange={(e) => setFilterId(e.target.value)}
-                  className="block w-full rounded-xl border border-white/10 py-3 pr-10 pl-4 text-white bg-[#02040a]/80 focus:bg-[#02040a] ring-1 ring-inset ring-transparent focus:ring-2 focus:ring-indigo-500/50 text-sm font-bold transition-all shadow-inner outline-none appearance-none [&>option]:bg-[#0f1423]"
-                >
-                  <option value="" disabled>-- الرجاء الاختيار --</option>
-                  {filterType === 'section' 
-                    ? sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
-                    : uniqueTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
-                  }
-                </select>
-              </div>
+              )}
             </div>
 
             {/* Grid */}
@@ -288,7 +385,7 @@ export default function PublicSchedulesViewPage() {
                         {dynamicPeriods.map(p => {
                           const slot = schedules.find(s => s.day === day.id && s.period_number === p && (filterType === 'section' ? s.section_id === filterId : s.teacher_id === filterId));
                           
-                          // إظهار رابط زووم
+                          // شروط إظهار رابط زووم
                           const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
 
                           return (
@@ -305,6 +402,7 @@ export default function PublicSchedulesViewPage() {
                                     {filterType === 'section' ? `أ. ${slot.teacher_name}` : slot.section_name}
                                   </div>
 
+                                  {/* 🚀 رابط البث المباشر (Zoom) */}
                                   {showZoom && (
                                     <a 
                                       href={slot.zoom_link} 
