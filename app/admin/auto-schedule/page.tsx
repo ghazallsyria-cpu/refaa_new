@@ -223,7 +223,6 @@ export default function AutoScheduleGenerator() {
         
         subjClassList.forEach(item => { 
            const key = `${item.subj_id}_${item.class_id}`; 
-           // 🚀 التعديل الأهم: الافتراضي هو 0 وليس 3 لقتل الحصص الأشباح!
            if (initialQuotas[key] === undefined) initialQuotas[key] = 0; 
         });
         setSubjectQuotas(initialQuotas);
@@ -254,7 +253,7 @@ export default function AutoScheduleGenerator() {
       localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
     }
     setIsBudgetSaved(true);
-    alert('تم اعتماد الميزانية بنجاح. الخوارزمية الآن ستقرأ هذه الأرقام حصراً ولن تبتكر حصصاً من العدم.');
+    alert('تم اعتماد الميزانية بنجاح.');
   };
 
   const openTeacherConstraintsModal = (id: string, name: string) => {
@@ -297,8 +296,6 @@ export default function AutoScheduleGenerator() {
     rawTeacherAssignments.forEach(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
-      
-      // 🚀 القراءة الصارمة: ما لا تراه بعينك، هو صفر!
       const quota = key && subjectQuotas[key] !== undefined ? Number(subjectQuotas[key]) : 0;
       
       if (quota > 0 && ts.teachers?.users?.full_name) {
@@ -316,7 +313,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Zero-Trust Quota Enforcement)
+  // 🧠 THE CORE ALGORITHM (DOM Read + High-Load Teachers First)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -324,14 +321,23 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (الاعتماد الصارم على ميزانية الشاشة فقط)...");
+    addLog("🚀 بدء التوليد... (تفعيل القراءة المباشرة من الشاشة + أولوية معلم الحاسوب المزدحم)");
+    
+    // 🚀 القراءة المباشرة والقطعية من عناصر واجهة المستخدم (DOM) لضمان الدقة 100%
+    const domQuotas = { ...subjectQuotas };
+    Object.keys(domQuotas).forEach(key => {
+        const inputEl = document.getElementById(`quota-${key}`) as HTMLInputElement;
+        if (inputEl) {
+            domQuotas[key] = parseInt(inputEl.value) || 0;
+        }
+    });
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
       
-      // 🚀 لا يوجد مجال للخطأ: تقرأ من state (ما يراه المستخدم الآن) وأي شيء غائب يُسجل بـ 0 
-      const quota = key && subjectQuotas[key] !== undefined ? Number(subjectQuotas[key]) : 0;
+      // نستخدم الميزانية التي قرأناها من الشاشة مباشرة
+      const quota = key && domQuotas[key] !== undefined ? domQuotas[key] : 0;
       
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
@@ -353,16 +359,20 @@ export default function AutoScheduleGenerator() {
         stage: section?.stage, available_days: tConst.days, available_periods: tConst.periods,
         isVIP: isEhabPhysics, zoom_link: zoomLink
       };
-    }).filter(ta => ta.original_quota > 0); // الحصص الصفرية لن تدخل للتوليد أبداً!
+    }).filter(ta => ta.original_quota > 0); 
+
+    // 🚀 حساب "مؤشر ازدحام المعلم" (كم فصلاً يدرس؟) لضمان تسكينه أولاً
+    const teacherSectionCount: Record<string, number> = {};
+    teacherAssignments.forEach(ta => {
+        if (!teacherSectionCount[ta.teacher_id]) teacherSectionCount[ta.teacher_id] = 0;
+        teacherSectionCount[ta.teacher_id]++;
+    });
 
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
     });
-
-    const totalRequested = Object.values(teacherTotalQuotas).reduce((a, b) => a + b, 0);
-    addLog(`📊 تم قراءة الميزانية: إجمالي الحصص المطلوبة للتسكين في كل المدرسة هو (${totalRequested}) حصة.`);
 
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
@@ -398,6 +408,7 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
+        // 🚀 الفرز الذكي (الأكثر فصولاً أولاً - يحل مشكلة معلمي الحاسوب والإسلامية)
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
@@ -406,11 +417,13 @@ export default function AutoScheduleGenerator() {
           const restrictB = b.available_days.length < 5 ? 1 : 0;
           if (restrictA !== restrictB) return restrictB - restrictA;
           
-          if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
+          // 1. الأولوية المطلقة للمعلم الذي يدرس "عدداً أكبر من الفصول"
+          const aSecCount = teacherSectionCount[a.teacher_id] || 0;
+          const bSecCount = teacherSectionCount[b.teacher_id] || 0;
+          if (aSecCount !== bSecCount) return bSecCount - aSecCount; // التنازلي: الأكثر فصولاً أولاً
           
-          const aTotal = teacherTotalQuotas[a.teacher_id] || 0;
-          const bTotal = teacherTotalQuotas[b.teacher_id] || 0;
-          if (aTotal !== bTotal) return bTotal - aTotal; 
+          // 2. إذا تساويا في عدد الفصول، نضع المواد الكبيرة (5 حصص) أولاً
+          if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
           
           return Math.random() - 0.5;
         });
@@ -651,9 +664,9 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (تم بذل أقصى جهد ممكن).`);
+      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار.`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل بدون أي حصص وهمية.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل (الميزانية مقروءة من الشاشة 100%).`);
     }
     setGenerating(false);
   };
@@ -1399,6 +1412,7 @@ export default function AutoScheduleGenerator() {
                             </span>
                             <div className="flex items-center gap-2 shrink-0">
                                <input 
+                                 id={`quota-${key}`} // 🚀 ID تمت إضافته للقراءة المباشرة والصارمة
                                  type="number" 
                                  min="0" 
                                  value={currentVal} 
