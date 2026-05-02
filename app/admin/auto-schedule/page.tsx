@@ -99,7 +99,6 @@ export default function AutoScheduleGenerator() {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
 
-  // 🚀 أدوات الطباعة (تمت إعادتها للوحة الإدارة)
   const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
@@ -501,6 +500,7 @@ export default function AutoScheduleGenerator() {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   
+                  // فحص العدالة قبل الإزاحة (فقط للثانوي)
                   if (section.stage === 'high' && !ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
@@ -527,6 +527,7 @@ export default function AutoScheduleGenerator() {
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
+                       // حماية المعلم المُزاح إذا كان يدرس ثانوي فقط
                        const isZHighSchool = blockingSlot.stage === 'high';
                        if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
@@ -720,8 +721,10 @@ export default function AutoScheduleGenerator() {
         day_of_week: slot.day, period_number: slot.period_number, stage: slot.stage, start_time: slot.start_time, end_time: slot.end_time
       }));
 
+      // 🚀 إضافة الحماية ومراقبة الأخطاء أثناء الحفظ (التي اكتشفناها سابقاً)
       for (let i = 0; i < slotsPayload.length; i += 500) {
-        await supabase.from('auto_schedules').insert(slotsPayload.slice(i, i + 500));
+        const { error: insertErr } = await supabase.from('auto_schedules').insert(slotsPayload.slice(i, i + 500));
+        if (insertErr) throw insertErr;
       }
 
       addLog(`🎉 تم الحفظ بنجاح!`);
@@ -735,7 +738,23 @@ export default function AutoScheduleGenerator() {
     setGenerating(true);
     addLog(`⏳ جاري استدعاء الجدول السحابي وقراءة إعداداته الأصلية...`);
     try {
-      const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
+      // 🚀 استخدام استراتيجية الطوارئ (Safe Fetch) لحماية الاستدعاء من الفشل الصامت
+      let slots = [];
+      const { data: slotsWithZoom, error: zoomErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
+      
+      if (zoomErr) {
+         const { data: safeSlots, error: safeErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name)), subjects(name)').eq('plan_id', id);
+         if (safeErr) throw safeErr;
+         slots = safeSlots || [];
+      } else {
+         slots = slotsWithZoom || [];
+      }
+      
+      if (slots.length === 0) {
+         addLog(`⚠️ الخطة محملة، لكنها فارغة تماماً! (قد يكون الحفظ السابق لم يكتمل بسبب مشكلة في الصلاحيات).`);
+      } else {
+         addLog(`✅ تم استرجاع ${slots.length} حصة من قاعدة البيانات.`);
+      }
       
       const formatted = (slots || []).map(s => {
         const rawClass = Array.isArray(s.sections?.classes) ? s.sections?.classes[0]?.name : s.sections?.classes?.name;
@@ -768,15 +787,13 @@ export default function AutoScheduleGenerator() {
             return merged;
          });
          setIsBudgetSaved(true);
-         addLog(`✅ تم قراءة الميزانية وتحديث أنصبة المعلمين بنجاح!`);
       }
 
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول المعتمد بالكامل!`);
     } catch(e) { 
-      addLog(`❌ فشل استدعاء الجدول.`); 
+      addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
       setGenerating(false); 
     }
@@ -834,7 +851,7 @@ export default function AutoScheduleGenerator() {
      }
   };
 
-  // 🚀 دوال وأدوات الطباعة المستعادة
+  // 🚀 دوال الطباعة التي تم إرجاعها
   const toggleBatchPrintId = (id: string) => {
     setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -944,6 +961,16 @@ export default function AutoScheduleGenerator() {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo print-hide" dir="rtl">
       
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+           body { display: none !important; }
+        }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 1px solid #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}} />
+
       {/* Modal تقرير التدقيق والإحصائيات */}
       <AnimatePresence>
         {isAuditModalOpen && auditReport && (
@@ -1032,7 +1059,7 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Modal مركز الطباعة المجمعة (الذي اختفى بالخطأ وتم استرجاعه) */}
+      {/* 🚀 Modal مركز الطباعة المجمعة للمدير */}
       <AnimatePresence>
         {isPrintCenterOpen && (
           <>
@@ -1277,7 +1304,7 @@ export default function AutoScheduleGenerator() {
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين.
+              الآن يمكنك استدعاء الجداول السحابية السابقة، توليد جداول جديدة، تعديلها يدوياً، وطباعتها كلها من هذا المركز الإداري.
             </p>
           </div>
         </div>
@@ -1450,7 +1477,7 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
-                     {/* 🚀 أزرار الطباعة والتدقيق (تمت إعادتها للعمل بشكل سليم) */}
+                     {/* 🚀 أزرار الطباعة والتدقيق التي تمت إعادتها */}
                      {displayMode === 'grid' && (
                        <>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
