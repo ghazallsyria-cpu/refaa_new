@@ -10,10 +10,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
-// 🚀 استيراد مكتبات توليد الـ PDF
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas-pro';
-
 type Period = {
   id: string;
   period_number: number;
@@ -353,7 +349,10 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
+  // 🚀 المحرك الموحد والديناميكي (Lazy Load) للطباعة لمنع أي انهيار
   const handlePrintCommand = async (mode: string, filterVal: string = '') => {
+    if (typeof window === 'undefined') return;
+    
     setPrintMode(mode as any);
     setPrintFilterVal(filterVal);
     setIsPrintModalOpen(false);
@@ -384,10 +383,14 @@ export default function PublicSchedulesViewPage() {
 
     setTimeout(async () => {
       try {
+        // 🚀 استيراد ديناميكي يحمي الخادم من الانهيار
+        const jsPDFModule = (await import('jspdf')).default;
+        const html2canvasModule = (await import('html2canvas-pro')).default;
+
         const containers = document.querySelectorAll('.batch-pdf-page');
         if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية.');
 
-        const pdf = new jsPDF('landscape', 'mm', 'a4');
+        const pdf = new jsPDFModule('landscape', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
@@ -395,7 +398,7 @@ export default function PublicSchedulesViewPage() {
           if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
           const imgData = canvas.toDataURL('image/png');
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
@@ -777,10 +780,11 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 منطقة الطباعة الخفية والمعدلة بإصلاح s.day_of_week إلى s.day لتطابق الحصص */}
+            {/* 🚀 منطقة الطباعة الخفية والموحدة للـ PDF */}
             <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
               {entitiesToPrint.map((entity, idx) => {
                  const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class' || (printMode === 'single' && filterType === 'section');
+                 
                  const entId = String(entity.id);
                  const entName = entity.name || entity.users?.full_name || 'غير محدد';
                  const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
@@ -805,14 +809,8 @@ export default function PublicSchedulesViewPage() {
                            <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
                            {dynamicPeriods.map(p => (
                              <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
-                               <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p}</div>
-                               {(() => {
-                                 const slotForTime = schedules.find(s => s.period_number === p);
-                                 if (slotForTime) {
-                                   return <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{formatTime(slotForTime.start_time)} - {formatTime(slotForTime.end_time)}</div>;
-                                 }
-                                 return null;
-                               })()}
+                               <div style={{ fontSize: '14px', fontWeight: 900, margin: '0' }}>الحصة {p}</div>
+                               {/* تم إزالة الوقت من الرأس لمنع التعارض للمعلمين */}
                              </th>
                            ))}
                          </tr>
@@ -822,12 +820,17 @@ export default function PublicSchedulesViewPage() {
                            <tr key={day.id}>
                              <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
                              {dynamicPeriods.map((p) => {
-                               // 🚀 تم إصلاح s.day_of_week إلى s.day
                                const slot = schedules.find(s => String(s.day) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
                                return (
                                  <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
                                    {slot ? (
                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                                       
+                                       {/* 🚀 إظهار الوقت بدقة داخل المربع نفسه */}
+                                       <div style={{ fontSize: '10px', fontWeight: 900, color: '#047857', backgroundColor: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', marginBottom: '6px', border: '1px solid #a7f3d0' }} dir="ltr">
+                                          {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                                       </div>
+
                                        <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
                                        <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
                                          {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
