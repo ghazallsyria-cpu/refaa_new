@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown, Printer, X, User
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown, Printer, X, CheckSquare2, Square
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
@@ -85,11 +85,11 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'specific-dept' | 'all-sections' | 'specific-class'>('single');
-  const [printFilterVal, setPrintFilterVal] = useState<string>('');
-  const [selectedPrintClass, setSelectedPrintClass] = useState<string>('');
-  const [selectedPrintDept, setSelectedPrintDept] = useState<string>('');
+  // 🚀 خيارات الطباعة المتقدمة (تم نقلها من صفحة الإدارة للعمل على الثيم الليلي)
+  const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
+  const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
+  const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
+  const [printMode, setPrintMode] = useState<'single' | 'custom-batch'>('single');
   const [entitiesToPrint, setEntitiesToPrint] = useState<any[]>([]);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
@@ -117,16 +117,18 @@ export default function PublicSchedulesViewPage() {
       setFetchError(null);
       setNoSectionAssigned(false);
 
-      let resolvedRole = safeString(currentRole, '').toLowerCase();
+      const [userInfoRes, planRes] = await Promise.all([
+         supabase.from('users').select('full_name, role').eq('id', user.id).maybeSingle(),
+         supabase.from('auto_schedule_plans').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      ]);
+
+      // 🚀 القراءة المباشرة والمضمونة للصلاحية من قاعدة البيانات
+      let dbRole = safeString(userInfoRes.data?.role || currentRole, '').toLowerCase();
+      let resolvedRole = dbRole;
       let isUserRestricted = false;
       let allowedIds: string[] = [];
       let displayName = 'جدولك';
       let fetchedName = '';
-
-      const [userInfoRes, planRes] = await Promise.all([
-         supabase.from('users').select('full_name').eq('id', user.id).maybeSingle(),
-         supabase.from('auto_schedule_plans').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle()
-      ]);
 
       if (userInfoRes.data?.full_name) {
          displayName = safeString(userInfoRes.data.full_name);
@@ -308,33 +310,6 @@ export default function PublicSchedulesViewPage() {
      });
   }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
-  const uniqueClasses = Array.from(new Set(sections.map(s => formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)))).filter(Boolean).sort();
-  
-  // 🚀 المحرك الديناميكي الذكي للبحث عن القسم 
-  const getTeacherDept = (tId: string) => {
-    const tSchedules = schedules.filter(s => String(s.teacher_id) === String(tId));
-    if (tSchedules.length === 0) return 'أقسام أخرى';
-    const subjName = tSchedules[0].subject_name || '';
-    
-    if (/(علوم|فيزياء|كيمياء|أحياء|احياء|جيولوجيا)/.test(subjName)) return 'العلوم';
-    if (/(رياضيات|جبر|هندسة|احصاء|إحصاء)/.test(subjName)) return 'الرياضيات';
-    if (/(عربي|عربية|أدب|ادب|بلاغة|نحو|صرف)/.test(subjName)) return 'اللغة العربية';
-    if (/(إنجليزي|انجليزي|english)/i.test(subjName)) return 'اللغة الإنجليزية';
-    if (/(إسلامية|اسلامية|قرآن|تجويد|دين|فقه|عقيدة|حديث)/.test(subjName)) return 'التربية الإسلامية';
-    if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|علم نفس|نفس|وطنية|دستور|اقتصاد)/.test(subjName)) return 'الاجتماعيات';
-    if (/(حاسوب|معلوماتية|it)/i.test(subjName)) return 'الحاسوب';
-    
-    return 'أقسام أخرى';
-  };
-
-  const uniqueDepts = useMemo(() => {
-    const mappedDepts = new Set<string>();
-    uniqueTeachers.forEach(t => {
-        mappedDepts.add(getTeacherDept(t.id));
-    });
-    return Array.from(mappedDepts).sort();
-  }, [uniqueTeachers, schedules]);
-
   const getEntityName = () => {
     try {
       if (isRestricted) {
@@ -360,6 +335,7 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
+  // 🚀 أدوات الطباعة المتقدمة
   const toggleBatchPrintId = (id: string) => {
     setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -373,12 +349,11 @@ export default function PublicSchedulesViewPage() {
     }
   };
 
-  const handlePrintCommand = async (mode: string, filterVal: string = '') => {
+  const handlePrintCommand = async (mode: string) => {
     if (typeof window === 'undefined') return;
     
     setPrintMode(mode as any);
-    setPrintFilterVal(filterVal);
-    setIsPrintModalOpen(false);
+    setIsPrintCenterOpen(false);
     setIsGeneratingPDF(true);
 
     let entities: any[] = [];
@@ -386,14 +361,6 @@ export default function PublicSchedulesViewPage() {
     if (mode === 'single') {
       const singleEntity = filterType === 'teacher' ? uniqueTeachers.find(t => String(t.id) === String(filterId)) : sections.find(s => String(s.id) === String(filterId));
       if(singleEntity) entities = [singleEntity];
-    } else if (mode === 'all-teachers') {
-      entities = uniqueTeachers;
-    } else if (mode === 'specific-dept') {
-      entities = uniqueTeachers.filter(t => getTeacherDept(t.id) === filterVal);
-    } else if (mode === 'all-sections') {
-      entities = sections;
-    } else if (mode === 'specific-class') {
-      entities = sections.filter(sec => formatClassName(Array.isArray(sec.classes) ? sec.classes[0]?.name : sec.classes?.name) === filterVal);
     } else if (mode === 'custom-batch') {
       if (batchPrintType === 'section') {
           entities = sections.filter(s => batchPrintIds.includes(s.id));
@@ -450,10 +417,6 @@ export default function PublicSchedulesViewPage() {
         }
 
         let fileName = 'الجدول_الدراسي.pdf';
-        if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
-        if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
-        if (mode === 'specific-class') fileName = `جداول_مرحلة_${filterVal.replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'specific-dept') fileName = `جداول_${filterVal.replace(/\s+/g, '_')}.pdf`;
         if (mode === 'single') fileName = `جدول_${getEntityName().replace(/\s+/g, '_')}.pdf`;
         if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
 
@@ -522,47 +485,66 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
+      {/* 🚀 مركز الطباعة المتقدم بالثيم الليلي */}
       <AnimatePresence>
-        {isPrintModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPrintModalOpen(false)} className="absolute inset-0 bg-[#090b14]/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-[#131836] border border-white/10 rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 w-full max-w-2xl relative">
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-2xl font-black text-white flex items-center gap-3"><Printer className="w-6 h-6 text-emerald-400" /> مركز الطباعة المتقدم</h2>
-                <button onClick={() => setIsPrintModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+        {isPrintCenterOpen && !isRestricted && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40" onClick={() => setIsPrintCenterOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+               animate={{ opacity: 1, scale: 1, y: 0 }} 
+               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-[#0f1423] rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 overflow-hidden border border-white/10 flex flex-col max-h-[85vh]" 
+               dir="rtl"
+            >
+              <div className="p-6 border-b border-white/10 flex items-center justify-between bg-[#131836] shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/30"><Printer className="w-6 h-6"/></div>
+                  <div>
+                    <h3 className="font-black text-white text-lg">مركز الطباعة المجمعة</h3>
+                    <p className="text-xs font-bold text-slate-400 mt-0.5">اختر مجموعة من الجداول لطباعتها معاً</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsPrintCenterOpen(false)} className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 bg-[#0f1423] rounded-full shadow-sm border border-white/10 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
               </div>
               
-              <div className="space-y-6">
-                <div className="bg-[#090b14]/50 p-6 rounded-3xl border border-white/5 space-y-5">
-                  <h3 className="font-black text-indigo-400 flex items-center gap-2 text-lg"><User className="w-5 h-5" /> جداول المعلمين</h3>
-                  <button onClick={() => handlePrintCommand('all-teachers')} className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-white transition-all active:scale-95 shadow-sm">
-                    طباعة جميع المعلمين (ملف واحد)
-                  </button>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <select value={selectedPrintDept} onChange={e=>setSelectedPrintDept(e.target.value)} className="w-full sm:flex-1 p-3.5 border border-white/10 bg-[#131836] text-white rounded-2xl font-bold outline-none appearance-none cursor-pointer">
-                      <option value="">-- اختر قسماً محدداً للطباعة --</option>
-                      {uniqueDepts.map((d, i) => <option key={i} value={d}>{d}</option>)}
-                    </select>
-                    <button onClick={() => handlePrintCommand('specific-dept', selectedPrintDept)} disabled={!selectedPrintDept} className="w-full sm:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black disabled:opacity-50 transition-all shadow-lg active:scale-95">طباعة القسم</button>
-                  </div>
-                </div>
+              <div className="p-6 flex-1 overflow-auto bg-[#090b14] custom-scrollbar">
+                 <div className="flex gap-2 mb-4 bg-[#131836] p-1 rounded-xl shadow-sm border border-white/10">
+                    <button onClick={() => {setBatchPrintType('section'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'section' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>طباعة فصول</button>
+                    <button onClick={() => {setBatchPrintType('teacher'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'teacher' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>طباعة معلمين</button>
+                 </div>
+                 
+                 <div className="flex justify-between items-center mb-3 px-1">
+                    <span className="text-xs font-bold text-slate-400">تم تحديد: <span className="text-white">{batchPrintIds.length}</span></span>
+                    <button onClick={selectAllBatchIds} className="text-xs font-black text-indigo-400 hover:text-indigo-300 hover:underline">تحديد الكل</button>
+                 </div>
 
-                <div className="bg-[#090b14]/50 p-6 rounded-3xl border border-white/5 space-y-5">
-                  <h3 className="font-black text-emerald-400 flex items-center gap-2 text-lg"><Users className="w-5 h-5" /> جداول الفصول الدراسية</h3>
-                  <button onClick={() => handlePrintCommand('all-sections')} className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-white transition-all active:scale-95 shadow-sm">
-                    طباعة جميع الفصول (ملف واحد)
-                  </button>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <select value={selectedPrintClass} onChange={e=>setSelectedPrintClass(e.target.value)} className="w-full sm:flex-1 p-3.5 border border-white/10 bg-[#131836] text-white rounded-2xl font-bold outline-none appearance-none cursor-pointer">
-                      <option value="">-- اختر صفاً محدداً للطباعة --</option>
-                      {uniqueClasses.map((c, i) => <option key={i} value={c}>{c}</option>)}
-                    </select>
-                    <button onClick={() => handlePrintCommand('specific-class', selectedPrintClass)} disabled={!selectedPrintClass} className="w-full sm:w-auto px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black disabled:opacity-50 transition-all shadow-lg active:scale-95">طباعة الصف</button>
-                  </div>
-                </div>
+                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {batchPrintType === 'section' 
+                      ? sections.map(s => (
+                          <div key={s.id} onClick={() => toggleBatchPrintId(s.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(s.id) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
+                             {batchPrintIds.includes(s.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{s.full_name}</span>
+                          </div>
+                      ))
+                      : uniqueTeachers.map(t => (
+                          <div key={t.id} onClick={() => toggleBatchPrintId(t.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(t.id) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
+                             {batchPrintIds.includes(t.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{t.name}</span>
+                          </div>
+                      ))
+                    }
+                 </div>
+              </div>
+
+              <div className="p-6 flex gap-3 border-t border-white/10 shrink-0 bg-[#131836]">
+                <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-white/5 text-slate-300 border border-white/10 font-black rounded-xl hover:bg-white/10 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
+                <button onClick={() => handlePrintCommand('custom-batch')} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-500 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                  <FileDown className="w-5 h-5" /> تحميل PDF للمحددين
+                </button>
               </div>
             </motion.div>
-          </div>
+          </>
         )}
       </AnimatePresence>
 
@@ -599,9 +581,9 @@ export default function PublicSchedulesViewPage() {
                  <FileDown className="w-5 h-5" /> تحميل الجدول الحالي
               </button>
               
-              {(!isRestricted || currentRole === 'admin' || currentRole === 'management') && (
-                <button onClick={() => setIsPrintModalOpen(true)} className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-90 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2">
-                   <Printer className="w-5 h-5" /> مركز الطباعة
+              {!isRestricted && (
+                <button onClick={() => setIsPrintCenterOpen(true)} className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-90 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2">
+                   <Printer className="w-5 h-5" /> مركز الطباعة المتقدم
                 </button>
               )}
             </div>
@@ -812,7 +794,7 @@ export default function PublicSchedulesViewPage() {
             {/* 🚀 منطقة الطباعة الخفية الموحدة للـ PDF - التصميم الكلاسيكي الأنيق */}
             <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
               {entitiesToPrint.map((entity, idx) => {
-                 const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class' || (printMode === 'single' && filterType === 'section') || (printMode === 'custom-batch' && batchPrintType === 'section');
+                 const isPrintTypeStudent = printMode === 'custom-batch' ? batchPrintType === 'section' : filterType === 'section';
                  
                  const entId = String(entity.id);
                  const entName = entity.name || entity.users?.full_name || 'غير محدد';
