@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload
+  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload, Video
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -44,6 +44,12 @@ const formatClassName = (rawName?: string) => {
   return rawName.replace('الصف ', '').trim();
 };
 
+const normalizeUrl = (url?: string) => {
+  if (!url) return '';
+  const clean = url.trim();
+  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+};
+
 export default function AutoScheduleGenerator() {
   const { user, authRole, userRole, isChecking } = useAuth() as any;
   const currentRole = authRole || userRole;
@@ -56,6 +62,7 @@ export default function AutoScheduleGenerator() {
   const [sections, setSections] = useState<any[]>([]);
   const [rawTeacherAssignments, setRawTeacherAssignments] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   
   const [uniqueSubjectClasses, setUniqueSubjectClasses] = useState<{subj_id: string, class_id: string, class_name: string, subj_name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
@@ -89,12 +96,23 @@ export default function AutoScheduleGenerator() {
   const [gridFilterType, setGridFilterType] = useState<'section' | 'teacher'>('section');
   const [gridFilterId, setGridFilterId] = useState<string>('');
 
+  const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
+  const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
+  const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
+  const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'specific-dept' | 'all-sections' | 'specific-class' | 'custom-batch'>('single');
+  const [printFilterVal, setPrintFilterVal] = useState<string>('');
+  const [selectedPrintClass, setSelectedPrintClass] = useState<string>('');
+  const [selectedPrintDept, setSelectedPrintDept] = useState<string>('');
+  const [entitiesToPrint, setEntitiesToPrint] = useState<any[]>([]);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
     if (currentRole !== 'admin' && currentRole !== 'management') return;
+    
     fetchMasterData();
     fetchSavedPlans();
 
@@ -131,7 +149,7 @@ export default function AutoScheduleGenerator() {
   };
 
   useEffect(() => {
-    if (generatedSchedules.length > 0 && !gridFilterId) {
+    if (generatedSchedules.length > 0 && !gridFilterId && !isGeneratingPDF) {
       if (gridFilterType === 'section') {
         const firstSection = sections.find(s => generatedSchedules.some(gs => gs.section_id === s.id));
         if (firstSection) setGridFilterId(firstSection.id);
@@ -140,11 +158,14 @@ export default function AutoScheduleGenerator() {
         if (firstTeacherId) setGridFilterId(firstTeacherId);
       }
     }
-  }, [generatedSchedules, gridFilterType, sections, gridFilterId]);
+  }, [generatedSchedules, gridFilterType, sections, gridFilterId, isGeneratingPDF]);
 
   const fetchMasterData = async () => {
     try {
       setLoadingData(true);
+      const { data: deptsData } = await supabase.from('academic_departments').select('id, name');
+      setDepartments(deptsData || []);
+
       const { data: sectionsData } = await supabase.from('sections').select('id, name, class_id, classes(id, name, level)');
       const formattedSections = (sectionsData || []).map(sec => {
         const cData = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
@@ -289,7 +310,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (4-Phase Engine)
+  // 🧠 THE CORE ALGORITHM (Best Effort Fair Load Balancing)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -297,7 +318,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بمحرك التوزيع رباعي المراحل (المرونة الذكية)...");
+    addLog("🚀 بدء التوليد بمحرك التوزيع المرن (العدالة كـ أفضل جهد)...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -306,7 +327,7 @@ export default function AutoScheduleGenerator() {
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
-      const zoomLink = ts.teachers?.users?.zoom_link || ts.teachers?.zoom_link || null;
+      const zoomLink = ts.teachers?.users?.zoom_link || ts.teachers?.users?.zoom_link || null;
 
       const maxPossibleSlots = tConst.days.length * tConst.periods.length;
       let effectiveQuota = quota;
@@ -326,8 +347,6 @@ export default function AutoScheduleGenerator() {
     }).filter(ta => ta.original_quota > 0); 
 
     const teacherTotalQuotas: Record<string, number> = {};
-    const teacherMaxDailyLoad: Record<string, number> = {};
-
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
@@ -337,7 +356,7 @@ export default function AutoScheduleGenerator() {
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 10; 
+    const MAX_ATTEMPTS = 15; // 🚀 زيادة المحاولات للوصول لحالة الاسترخاء التام
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -345,21 +364,21 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        // 🚀 الاسترخاء التدريجي (العدالة تتنازل قليلاً من أجل اكتمال الجدول)
-        let relaxation = 0;
-        if (attempt > 4) relaxation = 1; 
-        if (attempt > 7) relaxation = 2; 
+        // 🚀 محرك الاسترخاء التدريجي لحماية الجدول من الفشل
+        const ignoreFairness = attempt > 10; // في المحاولات الأخيرة، التسكين يصبح إجبارياً على حساب العدالة المطلقة
+        const relaxation = attempt > 5 ? 2 : 0; // مرونة إضافية للحصص
 
+        const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
            const tConst = teacherConstraints[tId] || { days: [...workingDays] };
            let availableDaysCount = tConst.days.length || 5;
            const hasVIP = teacherAssignments.some(ta => ta.teacher_id === tId && ta.isVIP);
            if (hasVIP && availableDaysCount > 2) availableDaysCount = 2;
-           
            const total = teacherTotalQuotas[tId];
+           
            let baseMax = Math.ceil(total / availableDaysCount);
-           if (baseMax < 2) baseMax = 2; // إعطاء مساحة تنفس دنيا
-           teacherMaxDailyLoad[tId] = baseMax + relaxation;
+           if (baseMax < 2) baseMax = 2; 
+           teacherMaxDailyLoad[tId] = baseMax;
         });
         
         const teacherDailyLoad: Record<string, Record<number, number>> = {};
@@ -391,8 +410,8 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
-          // 🚀 قيد العدالة (مفعل في المراحل الأولى فقط)
-          if (enforceLoadBalance && teacherDailyLoad[teacherId][day] >= teacherMaxDailyLoad[teacherId]) return false;
+          // 🚀 قيد التوزيع العادل (يتم تجاوزه إذا ignoreFairness مفعل)
+          if (enforceLoadBalance && !ignoreFairness && teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
 
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
@@ -428,6 +447,7 @@ export default function AutoScheduleGenerator() {
           if (forcedMax > maxPerDay) maxPerDay = forcedMax; 
           if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
+          // 🚀 الفرز الطبيعي (Natural Balancing) - يبحث دائماً عن الأيام الأقل ضغطاً
           const getBestDays = () => {
              let days = shuffleArray([...allowedDaysForTeacher]);
              days.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
@@ -441,14 +461,12 @@ export default function AutoScheduleGenerator() {
           for (let i = 0; i < remainingLessons; i++) {
             let isPlaced = false;
 
-            // 🚀 المرحلة 1: التسكين المثالي (احترام التباعد وتوازن الأحمال)
             for (const day of getBestDays()) {
               let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
               
               let orderedPeriods = shuffleArray(availablePeriods);
               for (const period of orderedPeriods) {
-                // enforceStrictSpread = true, enforceLoadBalance = true
                 if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, !assignment.isVIP, allowedDaysForTeacher.length, true)) {
                   commitPlacement(section, assignment, day, period);
                   isPlaced = true; break; 
@@ -457,12 +475,10 @@ export default function AutoScheduleGenerator() {
               if (isPlaced) break;
             }
 
-            // 🚀 المرحلة 2: مرونة التباعد (تجاهل التباعد بين المواد، لكن احتفظ بالعدالة اليومية)
             if (!isPlaced) {
                for (const day of getBestDays()) {
                  const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                  for (const period of fallbackPeriods) {
-                   // enforceStrictSpread = false, enforceLoadBalance = true
                    if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length, true)) {
                      commitPlacement(section, assignment, day, period);
                      isPlaced = true; break; 
@@ -472,7 +488,7 @@ export default function AutoScheduleGenerator() {
                }
             }
 
-            // 🚀 المرحلة 3: الإزاحة الذكية (Swap)
+            // 🚀 الإزاحة الذكية (Swap) مع التنازل التدريجي عن العدالة
             if (!isPlaced && !assignment.isVIP) {
               for (const day of getBestDays()) {
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
@@ -481,7 +497,7 @@ export default function AutoScheduleGenerator() {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   
-                  if (teacherDailyLoad[assignment.teacher_id][day] >= teacherMaxDailyLoad[assignment.teacher_id]) continue;
+                  if (!ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
                   const blockingSlotIndex = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
@@ -496,14 +512,18 @@ export default function AutoScheduleGenerator() {
                     
                     const zAssignment = teacherAssignments.find(ta => ta.teacher_id === blockingSlot.teacher_id && ta.subject_id === blockingSlot.subject_id);
                     const zAllowedDaysCount = workingDays.filter(d => zAssignment?.available_days.includes(d)).length || 5;
-                    const isHeavyZ = blockingSlot.subject_name.includes('عربي') || blockingSlot.subject_name.includes('رياضيات');
-                    const zMaxPerDay = isHeavyZ ? 2 : 1; 
+                    
+                    let zMaxPerDay = 1;
+                    if (zAssignment) {
+                        zMaxPerDay = Math.ceil(zAssignment.weekly_quota / zAllowedDaysCount);
+                        if (zAssignment.weekly_quota >= 5 && zMaxPerDay < 2) zMaxPerDay = 2;
+                    }
 
                     let swapped = false;
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
-                       if (teacherDailyLoad[blockingSlot.teacher_id][altDay] >= teacherMaxDailyLoad[blockingSlot.teacher_id]) continue;
+                       if (!ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
                        const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
                        for (const altPeriod of altPeriods) {
@@ -549,13 +569,12 @@ export default function AutoScheduleGenerator() {
               }
             }
 
-            // 🚀 المرحلة 4 (حالة الطوارئ): تسكين الحصة أهم من العدالة المطلقة! (تجاوز الـ Load Balance)
+            // 🚀 المرحلة الرابعة (حالة الطوارئ الحقيقية): التسكين الإجباري مهما كان الضغط
             if (!isPlaced) {
                for (const day of shuffleArray([...allowedDaysForTeacher])) {
                  const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                  for (const period of emergencyPeriods) {
-                   // enforceLoadBalance = false (تجاوز السقف العادل لضمان اكتمال الجدول)
-                   if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay + 1, false, allowedDaysForTeacher.length, false)) {
+                   if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay + 2, false, allowedDaysForTeacher.length, false)) {
                      commitPlacement(section, assignment, day, period);
                      isPlaced = true; break; 
                    }
@@ -1077,7 +1096,7 @@ export default function AutoScheduleGenerator() {
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين. (تم فصل مركز الطباعة للصفحة المتخصصة)
+              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين.
             </p>
           </div>
         </div>
