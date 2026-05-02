@@ -1343,5 +1343,3 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
-
-
