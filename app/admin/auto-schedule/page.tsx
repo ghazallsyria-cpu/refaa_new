@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload
+  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload, Video
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -161,9 +161,9 @@ export default function AutoScheduleGenerator() {
       setPeriods(periodsData || []);
 
       let tsData = [];
-      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name, zoom_link), zoom_link), subjects(name)');
+      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)');
       if (zoomError) {
-         const { data: safeData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name)), subjects(name)');
+         const { data: safeData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name)), subjects(name)');
          tsData = safeData || [];
       } else {
          tsData = tsDataWithZoom || [];
@@ -297,7 +297,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بمحرك التوزيع اليومي العادل (توازن الأحمال)...");
+    addLog("🚀 بدء التوليد بمحرك التوزيع اليومي العادل والصارم...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -325,7 +325,6 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.original_quota > 0); 
 
-    // حساب إجمالي الأنصبة الأسبوعية لكل معلم للتمهيد لمعادلة العدالة
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
@@ -336,7 +335,7 @@ export default function AutoScheduleGenerator() {
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 15; // زيادة عدد المحاولات لمنح فرصة لخوارزمية الاسترخاء
+    const MAX_ATTEMPTS = 15; 
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -344,23 +343,17 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        // 🚀 خوارزمية الاسترخاء التدريجي (Progressive Relaxation)
-        // يبدأ النظام بعدالة مطلقة وقيود صارمة، وإذا فشل بعد عدة محاولات يتساهل قليلاً
         let relaxation = 0;
         if (attempt > 5) relaxation = 1; 
         if (attempt > 10) relaxation = 2; 
 
-        // 🚀 معادلة العدالة: حساب الحد الأقصى العادل للحصص يومياً لكل معلم
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
            const tConst = teacherConstraints[tId] || { days: [...workingDays] };
            let availableDaysCount = tConst.days.length || 5;
            const hasVIP = teacherAssignments.some(ta => ta.teacher_id === tId && ta.isVIP);
-           
-           if (hasVIP && availableDaysCount > 2) availableDaysCount = 2; // احترام قيد المعلم المتميز
-           
+           if (hasVIP && availableDaysCount > 2) availableDaysCount = 2;
            const total = teacherTotalQuotas[tId];
-           // سقف العدالة: إجمالي الحصص ÷ أيام الدوام + مرونة الاسترخاء
            teacherMaxDailyLoad[tId] = Math.ceil(total / availableDaysCount) + relaxation;
         });
         
@@ -393,9 +386,7 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount) => {
-          // 🚀 قيد التوزيع العادل: رفض التسكين إذا تجاوز اليوم الحد الأقصى المسموح
           if (teacherDailyLoad[teacherId][day] >= teacherMaxDailyLoad[teacherId]) return false;
-
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
@@ -430,10 +421,8 @@ export default function AutoScheduleGenerator() {
           if (forcedMax > maxPerDay) maxPerDay = forcedMax; 
           if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
-          // 🚀 دالة ذكية ترتب الأيام بناءً على الضغط الفعلي لضمان العدالة
           const getBestDays = () => {
              let days = shuffleArray([...allowedDaysForTeacher]);
-             // الأولوية دائماً لليوم الذي فيه أقل عدد من الحصص
              days.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
              if (assignment.isVIP) {
                 const vipDays = days.filter(d => d === 1 || d === 2);
@@ -480,7 +469,6 @@ export default function AutoScheduleGenerator() {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   
-                  // الحماية أثناء الإزاحة
                   if (teacherDailyLoad[assignment.teacher_id][day] >= teacherMaxDailyLoad[assignment.teacher_id]) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
@@ -491,7 +479,6 @@ export default function AutoScheduleGenerator() {
                     
                     const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
                     
-                    // 🚀 نقل المعلم المُزاح لليوم الأقل ضغطاً عليه لضمان استمرار توازن أحماله
                     let allowedDaysZ = shuffleArray(workingDays.filter(d => teacherZConstraints.days.includes(d)));
                     allowedDaysZ.sort((d1, d2) => teacherDailyLoad[blockingSlot.teacher_id][d1] - teacherDailyLoad[blockingSlot.teacher_id][d2]);
                     
@@ -504,7 +491,6 @@ export default function AutoScheduleGenerator() {
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
-                       // حماية المعلم المُزاح من تجاوز سقف العدالة اليومي
                        if (teacherDailyLoad[blockingSlot.teacher_id][altDay] >= teacherMaxDailyLoad[blockingSlot.teacher_id]) continue;
 
                        const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
@@ -535,7 +521,6 @@ export default function AutoScheduleGenerator() {
                             finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
                             finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
                             
-                            // تحديث عدادات النصاب اليومي بعد الإزاحة الناجحة
                             teacherDailyLoad[blockingSlot.teacher_id][day]--;
                             teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
 
@@ -783,16 +768,6 @@ export default function AutoScheduleGenerator() {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo print-hide" dir="rtl">
       
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-           body { display: none !important; }
-        }
-        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 1px solid #f8fafc; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      `}} />
-
       {/* Modal تقرير التدقيق والإحصائيات */}
       <AnimatePresence>
         {isAuditModalOpen && auditReport && (
@@ -1323,5 +1298,3 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
-
-
