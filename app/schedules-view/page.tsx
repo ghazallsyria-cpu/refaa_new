@@ -89,7 +89,6 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
-  // 🚀 حالات الطباعة المتقدمة
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'specific-dept' | 'all-sections' | 'specific-class'>('single');
   const [printFilterVal, setPrintFilterVal] = useState<string>('');
@@ -262,7 +261,6 @@ export default function PublicSchedulesViewPage() {
 
           formattedSchedules.forEach(s => {
             if (!uniqueSecsMap.has(s.section_id)) {
-               // حفظ كائن كامل لتسهيل الطباعة الجماعية لاحقاً
                const sec = sectionsData.find(x => String(x.id) === s.section_id);
                uniqueSecsMap.set(s.section_id, { id: s.section_id, name: s.section_name, classes: sec?.classes });
             }
@@ -313,7 +311,6 @@ export default function PublicSchedulesViewPage() {
      });
   }, [schedules, isRestricted, activeRole, restrictedIds, filterType, filterId, userFullName]);
 
-  // 🚀 استخراج الفئات والأقسام لتغذية فلاتر الطباعة
   const uniqueClasses = Array.from(new Set(sections.map(s => formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)))).filter(Boolean).sort();
   const uniqueDepts = ['قسم العلوم', 'قسم الرياضيات', 'قسم اللغة العربية', 'قسم اللغة الإنجليزية', 'قسم التربية الإسلامية', 'قسم الاجتماعيات', 'قسم الحاسوب', 'أقسام أخرى'];
 
@@ -356,7 +353,6 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
-  // 🚀 محرك الطباعة الأسطوري متعدد الصفحات (Multi-page PDF)
   const handlePrintCommand = async (mode: string, filterVal: string = '') => {
     setPrintMode(mode as any);
     setPrintFilterVal(filterVal);
@@ -386,7 +382,6 @@ export default function PublicSchedulesViewPage() {
 
     setEntitiesToPrint(entities);
 
-    // 🚀 الإنتظار الإجباري لضمان رسم كل الجداول في الخلفية قبل التقاطها (يمنع الانهيار)
     setTimeout(async () => {
       try {
         const containers = document.querySelectorAll('.batch-pdf-page');
@@ -397,14 +392,13 @@ export default function PublicSchedulesViewPage() {
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
         for (let i = 0; i < containers.length; i++) {
-          if (i > 0) pdf.addPage(); // إضافة صفحة جديدة لكل جدول إضافي
+          if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
           const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
           const imgData = canvas.toDataURL('image/png');
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
-          // 🚀 صيد وزراعة روابط الزووم لكل صفحة بشكل مستقل
           const links = el.querySelectorAll('a.zoom-link');
           const elementRect = el.getBoundingClientRect();
 
@@ -424,7 +418,6 @@ export default function PublicSchedulesViewPage() {
           });
         }
 
-        // تسمية الملف بذكاء
         let fileName = 'الجدول_الدراسي.pdf';
         if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
         if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
@@ -438,9 +431,9 @@ export default function PublicSchedulesViewPage() {
         alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
       } finally { 
         setIsGeneratingPDF(false); 
-        setEntitiesToPrint([]); // مسح الجداول المؤقتة
+        setEntitiesToPrint([]); 
       }
-    }, 1000); // إنتظار ثانية واحدة (آمن جداً)
+    }, 1000); 
   };
 
   if (!mounted || isChecking || loading) {
@@ -484,7 +477,6 @@ export default function PublicSchedulesViewPage() {
   return (
     <div className="min-h-[100dvh] bg-[#090b14] font-cairo text-slate-100 pb-24 pt-6 relative overflow-hidden" dir="rtl">
       
-      {/* إخفاء الطباعة العادية للمتصفح تماماً */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
            body { display: none !important; }
@@ -498,7 +490,6 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 مركز الطباعة المتقدم (يظهر للإدارة فقط) */}
       <AnimatePresence>
         {isPrintModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -510,7 +501,6 @@ export default function PublicSchedulesViewPage() {
               </div>
               
               <div className="space-y-6">
-                {/* قسم طباعة المعلمين */}
                 <div className="bg-[#090b14]/50 p-6 rounded-3xl border border-white/5 space-y-5">
                   <h3 className="font-black text-indigo-400 flex items-center gap-2 text-lg"><User className="w-5 h-5" /> جداول المعلمين</h3>
                   <button onClick={() => handlePrintCommand('all-teachers')} className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-white transition-all active:scale-95 shadow-sm">
@@ -525,7 +515,6 @@ export default function PublicSchedulesViewPage() {
                   </div>
                 </div>
 
-                {/* قسم طباعة الفصول */}
                 <div className="bg-[#090b14]/50 p-6 rounded-3xl border border-white/5 space-y-5">
                   <h3 className="font-black text-emerald-400 flex items-center gap-2 text-lg"><Users className="w-5 h-5" /> جداول الفصول الدراسية</h3>
                   <button onClick={() => handlePrintCommand('all-sections')} className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-white transition-all active:scale-95 shadow-sm">
@@ -545,7 +534,6 @@ export default function PublicSchedulesViewPage() {
         )}
       </AnimatePresence>
 
-      {/* شاشة تحميل الـ PDF */}
       <AnimatePresence>
         {isGeneratingPDF && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#090b14]/90 backdrop-blur-xl text-white">
@@ -558,7 +546,6 @@ export default function PublicSchedulesViewPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
         
-        {/* Header - Screen View */}
         <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -580,7 +567,6 @@ export default function PublicSchedulesViewPage() {
                  <FileDown className="w-5 h-5" /> تحميل الجدول الحالي
               </button>
               
-              {/* زر الطباعة المتقدمة يظهر للإدارة فقط */}
               {(!isRestricted || currentRole === 'admin' || currentRole === 'management') && (
                 <button onClick={() => setIsPrintModalOpen(true)} className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-90 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2">
                    <Printer className="w-5 h-5" /> مركز الطباعة
@@ -664,7 +650,6 @@ export default function PublicSchedulesViewPage() {
               )}
             </div>
 
-            {/* عارض الشاشة للمستخدم */}
             <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
@@ -792,7 +777,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 منطقة الطباعة الخفية (تستوعب ملف واحد أو 100 ملف بدون انهيار) */}
+            {/* 🚀 منطقة الطباعة الخفية والمعدلة بإصلاح s.day_of_week إلى s.day لتطابق الحصص */}
             <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
               {entitiesToPrint.map((entity, idx) => {
                  const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class' || (printMode === 'single' && filterType === 'section');
@@ -837,7 +822,8 @@ export default function PublicSchedulesViewPage() {
                            <tr key={day.id}>
                              <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
                              {dynamicPeriods.map((p) => {
-                               const slot = schedules.find(s => String(s.day_of_week) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
+                               // 🚀 تم إصلاح s.day_of_week إلى s.day
+                               const slot = schedules.find(s => String(s.day) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
                                return (
                                  <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
                                    {slot ? (
