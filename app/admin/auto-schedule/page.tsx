@@ -187,7 +187,7 @@ export default function AutoScheduleGenerator() {
          tsData = tsDataWithZoom || [];
       }
 
-      // درع التنقية لضمان عدم وجود حصص مكررة وهمية
+      // درع التنقية لمنع التكرار
       const uniqueAssignmentsMap = new Map();
       tsData.forEach(ts => {
          const uniqueKey = `${ts.section_id}_${ts.subject_id}`;
@@ -216,11 +216,11 @@ export default function AutoScheduleGenerator() {
 
         let initialQuotas: Record<string, number> = {};
         if (typeof window !== 'undefined') {
-          const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v3') || localStorage.getItem('auto_schedule_quotas_temp');
+          const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_temp'); // 🚀 القراءة فقط من المؤقت (الشاشة)
           if (savedQuotasStr) { 
              try { initialQuotas = JSON.parse(savedQuotasStr); } catch (e) {} 
           }
-          if (localStorage.getItem('auto_schedule_quotas_v3')) {
+          if (localStorage.getItem('auto_schedule_quotas_temp')) {
              setIsBudgetSaved(true);
           }
         }
@@ -254,7 +254,7 @@ export default function AutoScheduleGenerator() {
 
   const saveBudget = () => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(subjectQuotas));
+      // 🚀 حفظ الميزانية في مسار واحد فقط يعتمد عليه النظام
       localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
     }
     setIsBudgetSaved(true);
@@ -318,7 +318,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Strict Budget Enforcement)
+  // 🧠 THE CORE ALGORITHM (Strict Strict UI Quota Enforcement)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -326,23 +326,15 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد... (يتم الآن قراءة الميزانية المعتمدة بصرامة تامة)");
+    addLog("🚀 بدء التوليد بخوارزمية (الفرز المزدوج والإزاحة المتقدمة)...");
     
-    // 🚀 القراءة المباشرة للميزانية من الذاكرة لضمان عدم وجود أخطاء في واجهة React
-    let activeQuotas = { ...subjectQuotas };
-    if (typeof window !== 'undefined') {
-        const tempQ = localStorage.getItem('auto_schedule_quotas_temp');
-        if (tempQ) {
-            try { activeQuotas = JSON.parse(tempQ); } catch(e) {}
-        }
-    }
-    
+    // 🚀 القراءة الحرفية من الشاشة الظاهرة أمام المستخدم الآن (subjectQuotas)
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
       
-      // 🚀 ربط فولاذي: استخدام الأرقام من الذاكرة المباشرة فقط!
-      const quota = key ? (activeQuotas[key] !== undefined ? activeQuotas[key] : 3) : 3;
+      // هنا تكمن قوة الحل: لا نقرأ من أي مكان آخر سوى ما اعتمدته بيدك
+      const quota = key ? (subjectQuotas[key] !== undefined ? subjectQuotas[key] : 3) : 3;
       
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
@@ -364,7 +356,7 @@ export default function AutoScheduleGenerator() {
         stage: section?.stage, available_days: tConst.days, available_periods: tConst.periods,
         isVIP: isEhabPhysics, zoom_link: zoomLink
       };
-    }).filter(ta => ta.original_quota > 0); // الحصص الصفرية لن تدخل التوليد إطلاقاً
+    }).filter(ta => ta.original_quota > 0); 
 
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
@@ -376,7 +368,7 @@ export default function AutoScheduleGenerator() {
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 15; 
+    const MAX_ATTEMPTS = 25; 
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -384,9 +376,9 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        const ignoreFairness = attempt > 10; 
-        const relaxation = attempt > 5 ? 2 : 0; 
-        const emergencyForce = attempt > 12; 
+        const ignoreFairness = attempt > 15; 
+        const relaxation = attempt > 10 ? 2 : 0; 
+        const emergencyForce = attempt > 20; 
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
@@ -416,6 +408,10 @@ export default function AutoScheduleGenerator() {
           
           if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
           
+          const aTotal = teacherTotalQuotas[a.teacher_id] || 0;
+          const bTotal = teacherTotalQuotas[b.teacher_id] || 0;
+          if (aTotal !== bTotal) return bTotal - aTotal; 
+          
           return Math.random() - 0.5;
         });
 
@@ -438,7 +434,6 @@ export default function AutoScheduleGenerator() {
               if (teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
           }
 
-          // 🚀 الحراسة الصارمة: لا يمكن وضع مادتين في نفس اليوم ونفس الحصة للفصل! (تمنع "حل محلها حصص أخرى")
           if (finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
@@ -447,7 +442,7 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && attempt < 10 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 15 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -518,65 +513,44 @@ export default function AutoScheduleGenerator() {
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                 
                 for (const period of dayPeriods) {
-                  const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
-                  const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
+                  const teachSlotIdx = finalSchedule.findIndex(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
+                  const secSlotIdx = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
                   
                   if (section.stage === 'high' && !ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
-                  if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
-                  const blockingSlotIndex = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
-                  if (blockingSlotIndex !== -1) {
-                    const blockingSlot = finalSchedule[blockingSlotIndex];
-                    if (blockingSlot.isVIP) continue; 
-                    
-                    const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-                    
-                    let allowedDaysZ = shuffleArray(workingDays.filter(d => teacherZConstraints.days.includes(d)));
-                    allowedDaysZ.sort((d1, d2) => teacherDailyLoad[blockingSlot.teacher_id][d1] - teacherDailyLoad[blockingSlot.teacher_id][d2]);
-                    
-                    const zAssignment = teacherAssignments.find(ta => ta.teacher_id === blockingSlot.teacher_id && ta.subject_id === blockingSlot.subject_id);
-                    const zAllowedDaysCount = workingDays.filter(d => zAssignment?.available_days.includes(d)).length || 5;
-                    
-                    let zMaxPerDay = 1;
-                    if (zAssignment) {
-                        zMaxPerDay = Math.ceil(zAssignment.weekly_quota / zAllowedDaysCount);
-                        if (zAssignment.weekly_quota >= 5 && zMaxPerDay < 2) zMaxPerDay = 2;
-                    }
+                  const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
+                  if (subjCountToday >= maxPerDay) continue; 
 
-                    let swapped = false;
-                    for (const altDay of allowedDaysZ) {
-                       if(swapped) break;
-                       
-                       const isZHighSchool = blockingSlot.stage === 'high';
-                       if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
+                  let swapped = false;
 
-                       const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
-                       for (const altPeriod of altPeriods) {
-                          if (altDay === day && altPeriod.period_number === period.period_number) continue;
-                          const tempSchedule = finalSchedule.filter((_, idx) => idx !== blockingSlotIndex);
-                          
-                          const secFreeAtAlt = !tempSchedule.some(s => s.section_id === section.id && s.day === altDay && s.period_number === altPeriod.period_number);
-                          if (!secFreeAtAlt) continue;
-                          
-                          const teacherZBusyAtAlt = tempSchedule.some(s => s.teacher_id === blockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
-                          if (teacherZBusyAtAlt) continue;
+                  if (secSlotIdx !== -1 && teachSlotIdx === -1) {
+                    const blockingSlot = finalSchedule[secSlotIdx];
+                    if (!blockingSlot.isVIP) {
+                      const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
+                      let allowedDaysZ = shuffleArray(workingDays.filter(d => teacherZConstraints.days.includes(d)));
+                      allowedDaysZ.sort((d1, d2) => teacherDailyLoad[blockingSlot.teacher_id][d1] - teacherDailyLoad[blockingSlot.teacher_id][d2]);
+                      
+                      for (const altDay of allowedDaysZ) {
+                         if(swapped) break;
+                         
+                         const isZHighSchool = blockingSlot.stage === 'high';
+                         if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
-                          const zSubjectSlots = tempSchedule.filter(s => s.section_id === section.id && s.subject_id === blockingSlot.subject_id);
-                          const zSubjectCountAltDay = zSubjectSlots.filter(s => s.day === altDay).length;
-                          
-                          if (zSubjectCountAltDay >= zMaxPerDay) continue;
-                          
-                          let safeSpreadForZ = true;
-                          if (zSubjectCountAltDay >= 1) {
-                              const zDaysUsed = new Set(zSubjectSlots.map(s => s.day)).size;
-                              if (zDaysUsed < zAllowedDaysCount) safeSpreadForZ = false; 
-                          }
+                         const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
+                         for (const altPeriod of altPeriods) {
+                            if (altDay === day && altPeriod.period_number === period.period_number) continue;
+                            const tempSchedule = finalSchedule.filter((_, idx) => idx !== secSlotIdx);
+                            
+                            const secFreeAtAlt = !tempSchedule.some(s => s.section_id === section.id && s.day === altDay && s.period_number === altPeriod.period_number);
+                            if (!secFreeAtAlt) continue;
+                            
+                            const teacherZBusyAtAlt = tempSchedule.some(s => s.teacher_id === blockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
+                            if (teacherZBusyAtAlt) continue;
 
-                          if (safeSpreadForZ) {
-                            finalSchedule[blockingSlotIndex].day = altDay;
-                            finalSchedule[blockingSlotIndex].period_number = altPeriod.period_number;
-                            finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
-                            finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
+                            finalSchedule[secSlotIdx].day = altDay;
+                            finalSchedule[secSlotIdx].period_number = altPeriod.period_number;
+                            finalSchedule[secSlotIdx].start_time = altPeriod.start_time;
+                            finalSchedule[secSlotIdx].end_time = altPeriod.end_time;
                             
                             teacherDailyLoad[blockingSlot.teacher_id][day]--;
                             teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
@@ -585,10 +559,50 @@ export default function AutoScheduleGenerator() {
                             isPlaced = true; 
                             swapped = true;
                             break;
-                          }
-                       }
+                         }
+                      }
                     }
                   }
+
+                  if (!swapped && teachSlotIdx !== -1 && secSlotIdx === -1 && attempt > 5) {
+                     const teacherBlockingSlot = finalSchedule[teachSlotIdx];
+                     if (!teacherBlockingSlot.isVIP) {
+                         const tWConstraints = teacherConstraints[teacherBlockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
+                         let allowedDaysW = shuffleArray(workingDays.filter(d => tWConstraints.days.includes(d)));
+                         allowedDaysW.sort((d1, d2) => teacherDailyLoad[teacherBlockingSlot.teacher_id][d1] - teacherDailyLoad[teacherBlockingSlot.teacher_id][d2]);
+                         
+                         for (const altDay of allowedDaysW) {
+                             if(swapped) break;
+                             const isWHighSchool = teacherBlockingSlot.stage === 'high';
+                             if (isWHighSchool && !ignoreFairness && teacherDailyLoad[teacherBlockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[teacherBlockingSlot.teacher_id] + relaxation)) continue;
+
+                             const altPeriods = shuffleArray(periods.filter(p => p.stage === teacherBlockingSlot.stage && !p.is_break && tWConstraints.periods.includes(p.period_number)));
+                             for (const altPeriod of altPeriods) {
+                                 if (altDay === day && altPeriod.period_number === teacherBlockingSlot.period_number) continue;
+                                 
+                                 const tempSchedule = finalSchedule.filter((_, idx) => idx !== teachSlotIdx);
+                                 
+                                 const secWFreeAtAlt = !tempSchedule.some(s => s.section_id === teacherBlockingSlot.section_id && s.day === altDay && s.period_number === altPeriod.period_number);
+                                 if (!secWFreeAtAlt) continue;
+                                 
+                                 const teacherYBusyAtAlt = tempSchedule.some(s => s.teacher_id === teacherBlockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
+                                 if (teacherYBusyAtAlt) continue;
+
+                                 finalSchedule[teachSlotIdx].day = altDay;
+                                 finalSchedule[teachSlotIdx].period_number = altPeriod.period_number;
+                                 finalSchedule[teachSlotIdx].start_time = altPeriod.start_time;
+                                 finalSchedule[teachSlotIdx].end_time = altPeriod.end_time;
+                                 
+                                 teacherDailyLoad[teacherBlockingSlot.teacher_id][day]--;
+                                 teacherDailyLoad[teacherBlockingSlot.teacher_id][altDay]++;
+
+                                 commitPlacement(section, assignment, day, period);
+                                 isPlaced = true; swapped = true; break;
+                             }
+                         }
+                     }
+                  }
+
                   if (isPlaced) break;
                 }
               }
@@ -754,7 +768,8 @@ export default function AutoScheduleGenerator() {
 
   const loadPlan = async (id: string) => {
     setGenerating(true);
-    addLog(`⏳ جاري استدعاء الجدول السحابي (بدون تغيير ميزانيتك المعتمدة)...`);
+    // 🚀 تنبيه هام: هذا الاستدعاء هو للعرض والتعديل اليدوي فقط ولا يمس الميزانية الحالية بأي شكل!
+    addLog(`⏳ جاري استدعاء الجدول السحابي (في وضع القراءة فقط للحفاظ على الميزانية)...`);
     try {
       let slots = [];
       const { data: slotsWithZoom, error: zoomErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
@@ -806,12 +821,12 @@ export default function AutoScheduleGenerator() {
 
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       
-      // 🚀 تم حذف دالة تغيير الميزانية أوتوماتيكياً (استجابة للمشكلة التي اكتشفتها)
+      // 🚀 تم مسح كود التلاعب بالميزانية من هنا نهائياً!
       
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول المعتمد بنجاح!`);
+      addLog(`✅ تم تحميل الجدول المعتمد بنجاح، والميزانية بقيت سليمة وآمنة!`);
 
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
@@ -1497,7 +1512,7 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
-                     {/* أزرار الطباعة والتدقيق */}
+                     {/* 🚀 أزرار الطباعة والتدقيق التي تمت إعادتها */}
                      {displayMode === 'grid' && (
                        <>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
