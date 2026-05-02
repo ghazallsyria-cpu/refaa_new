@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload, Video
+  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -289,7 +289,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (معادلة العدالة وتوازن الأحمال)
+  // 🧠 THE CORE ALGORITHM (4-Phase Engine)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -297,7 +297,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بمحرك التوزيع اليومي العادل والصارم...");
+    addLog("🚀 بدء التوليد بمحرك التوزيع رباعي المراحل (المرونة الذكية)...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -326,6 +326,8 @@ export default function AutoScheduleGenerator() {
     }).filter(ta => ta.original_quota > 0); 
 
     const teacherTotalQuotas: Record<string, number> = {};
+    const teacherMaxDailyLoad: Record<string, number> = {};
+
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
@@ -335,7 +337,7 @@ export default function AutoScheduleGenerator() {
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 15; 
+    const MAX_ATTEMPTS = 10; 
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -343,18 +345,21 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
+        // 🚀 الاسترخاء التدريجي (العدالة تتنازل قليلاً من أجل اكتمال الجدول)
         let relaxation = 0;
-        if (attempt > 5) relaxation = 1; 
-        if (attempt > 10) relaxation = 2; 
+        if (attempt > 4) relaxation = 1; 
+        if (attempt > 7) relaxation = 2; 
 
-        const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
            const tConst = teacherConstraints[tId] || { days: [...workingDays] };
            let availableDaysCount = tConst.days.length || 5;
            const hasVIP = teacherAssignments.some(ta => ta.teacher_id === tId && ta.isVIP);
            if (hasVIP && availableDaysCount > 2) availableDaysCount = 2;
+           
            const total = teacherTotalQuotas[tId];
-           teacherMaxDailyLoad[tId] = Math.ceil(total / availableDaysCount) + relaxation;
+           let baseMax = Math.ceil(total / availableDaysCount);
+           if (baseMax < 2) baseMax = 2; // إعطاء مساحة تنفس دنيا
+           teacherMaxDailyLoad[tId] = baseMax + relaxation;
         });
         
         const teacherDailyLoad: Record<string, Record<number, number>> = {};
@@ -385,8 +390,10 @@ export default function AutoScheduleGenerator() {
           teacherDailyLoad[assignment.teacher_id][day]++; 
         };
 
-        const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount) => {
-          if (teacherDailyLoad[teacherId][day] >= teacherMaxDailyLoad[teacherId]) return false;
+        const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
+          // 🚀 قيد العدالة (مفعل في المراحل الأولى فقط)
+          if (enforceLoadBalance && teacherDailyLoad[teacherId][day] >= teacherMaxDailyLoad[teacherId]) return false;
+
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
@@ -434,13 +441,15 @@ export default function AutoScheduleGenerator() {
           for (let i = 0; i < remainingLessons; i++) {
             let isPlaced = false;
 
+            // 🚀 المرحلة 1: التسكين المثالي (احترام التباعد وتوازن الأحمال)
             for (const day of getBestDays()) {
               let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
               
               let orderedPeriods = shuffleArray(availablePeriods);
               for (const period of orderedPeriods) {
-                if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, !assignment.isVIP, allowedDaysForTeacher.length)) {
+                // enforceStrictSpread = true, enforceLoadBalance = true
+                if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, !assignment.isVIP, allowedDaysForTeacher.length, true)) {
                   commitPlacement(section, assignment, day, period);
                   isPlaced = true; break; 
                 }
@@ -448,11 +457,13 @@ export default function AutoScheduleGenerator() {
               if (isPlaced) break;
             }
 
+            // 🚀 المرحلة 2: مرونة التباعد (تجاهل التباعد بين المواد، لكن احتفظ بالعدالة اليومية)
             if (!isPlaced) {
                for (const day of getBestDays()) {
                  const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                  for (const period of fallbackPeriods) {
-                   if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length)) {
+                   // enforceStrictSpread = false, enforceLoadBalance = true
+                   if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length, true)) {
                      commitPlacement(section, assignment, day, period);
                      isPlaced = true; break; 
                    }
@@ -461,6 +472,7 @@ export default function AutoScheduleGenerator() {
                }
             }
 
+            // 🚀 المرحلة 3: الإزاحة الذكية (Swap)
             if (!isPlaced && !assignment.isVIP) {
               for (const day of getBestDays()) {
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
@@ -536,6 +548,21 @@ export default function AutoScheduleGenerator() {
                 }
               }
             }
+
+            // 🚀 المرحلة 4 (حالة الطوارئ): تسكين الحصة أهم من العدالة المطلقة! (تجاوز الـ Load Balance)
+            if (!isPlaced) {
+               for (const day of shuffleArray([...allowedDaysForTeacher])) {
+                 const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
+                 for (const period of emergencyPeriods) {
+                   // enforceLoadBalance = false (تجاوز السقف العادل لضمان اكتمال الجدول)
+                   if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay + 1, false, allowedDaysForTeacher.length, false)) {
+                     commitPlacement(section, assignment, day, period);
+                     isPlaced = true; break; 
+                   }
+                 }
+                 if (isPlaced) break;
+               }
+            }
             
             if (!isPlaced) {
               failedPlacements++;
@@ -567,9 +594,9 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل مع وجود حصص بالانتظار (القيود صارمة جداً).`);
+      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (القيود متضاربة جداً).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التوزيع مع تطبيق توازن الأحمال العادل.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين الكامل بنسبة 100% مع تطبيق توازن الأحمال الذكي.`);
     }
     setGenerating(false);
   };
@@ -730,6 +757,28 @@ export default function AutoScheduleGenerator() {
     } finally { 
       setGenerating(false); 
     }
+  };
+
+  const getTeacherDept = (tId: string) => {
+    const assignment = rawTeacherAssignments.find(ts => String(ts.teacher_id) === String(tId));
+    if (assignment?.teachers?.department_id) {
+        const dept = departments.find(d => String(d.id) === String(assignment.teachers.department_id));
+        if (dept) return dept.name; 
+    }
+
+    const tSchedules = generatedSchedules.filter(s => String(s.teacher_id) === String(tId));
+    if (tSchedules.length === 0) return 'أقسام أخرى';
+    const subjName = tSchedules[0].subject_name || '';
+    
+    if (/(علوم|فيزياء|كيمياء|أحياء|احياء|جيولوجيا)/.test(subjName)) return 'العلوم';
+    if (/(رياضيات|جبر|هندسة|احصاء|إحصاء)/.test(subjName)) return 'الرياضيات';
+    if (/(عربي|عربية|أدب|ادب|بلاغة|نحو|صرف)/.test(subjName)) return 'اللغة العربية';
+    if (/(إنجليزي|انجليزي|english)/i.test(subjName)) return 'اللغة الإنجليزية';
+    if (/(إسلامية|اسلامية|قرآن|تجويد|دين|فقه|عقيدة|حديث)/.test(subjName)) return 'التربية الإسلامية';
+    if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|علم نفس|نفس|وطنية|دستور|اقتصاد)/.test(subjName)) return 'الاجتماعيات';
+    if (/(حاسوب|معلوماتية|it)/i.test(subjName)) return 'الحاسوب';
+    
+    return 'أقسام أخرى';
   };
 
   const groupedSubjectsByClass = useMemo(() => {
@@ -1263,17 +1312,13 @@ export default function AutoScheduleGenerator() {
                                   <td className="p-4 font-black text-slate-900 bg-slate-100 border-l border-slate-300">{getDayName(day)}</td>
                                   {dynamicPeriods.map(p => {
                                     const slot = generatedSchedules.find(s => s.day === day && s.period_number === p && (gridFilterType === 'section' ? s.section_id === gridFilterId : s.teacher_id === gridFilterId));
-                                    const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
-
+                                    
                                     return (
                                       <td key={p} className="p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7rem] align-top hover:bg-indigo-50/50 transition-colors">
                                         {slot ? (
                                           <div className="bg-white border border-indigo-200 shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative">
                                             <div className="font-black text-indigo-900 text-xs leading-tight mb-1 w-full whitespace-normal break-words" title={slot.subject_name}>{slot.subject_name}</div>
                                             <div className="font-bold text-[9px] sm:text-[10px] text-slate-800 bg-slate-50 px-1.5 py-1 rounded-md w-full whitespace-normal break-words leading-tight border border-slate-200" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
-                                            {showZoom && (
-                                              <a href={slot.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-1.5 w-full flex items-center justify-center gap-1 text-[9px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md py-1 border border-blue-200 transition-colors" title="دخول لبث الزووم"><Video className="w-3 h-3"/> دخول للبث</a>
-                                            )}
                                           </div>
                                         ) : (<div className="flex items-center justify-center h-full text-slate-300"><span className="text-xl opacity-50">-</span></div>)}
                                       </td>
@@ -1298,3 +1343,5 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
+
+
