@@ -74,7 +74,6 @@ export default function AutoScheduleGenerator() {
 
   const workingDays = [1, 2, 3, 4, 5]; 
   
-  // 🚀 حماية DynamicPeriods من הانهيار (RangeError)
   const dynamicPeriods = useMemo(() => {
     if (!periods || !Array.isArray(periods) || periods.length === 0) return [1, 2, 3, 4, 5, 6, 7];
     const maxPeriod = Math.max(...periods.map(p => Number(p.period_number) || 1));
@@ -95,7 +94,6 @@ export default function AutoScheduleGenerator() {
   const [gridFilterType, setGridFilterType] = useState<'section' | 'teacher'>('section');
   const [gridFilterId, setGridFilterId] = useState<string>('');
 
-  // 🚀 حالات الطباعة المتقدمة المدمجة بشكل آمن
   const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
@@ -196,7 +194,6 @@ export default function AutoScheduleGenerator() {
         subjClassList.sort((a, b) => a.class_name.localeCompare(b.class_name) || a.subj_name.localeCompare(b.subj_name));
         setUniqueSubjectClasses(subjClassList);
 
-        // 🚀 الحفظ الفولاذي: جلب الميزانية المحفوظة واعتمادها فوراً
         const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v3') || localStorage.getItem('auto_schedule_quotas_temp');
         let initialQuotas: Record<string, number> = {};
         if (savedQuotasStr) { 
@@ -649,11 +646,13 @@ export default function AutoScheduleGenerator() {
     } catch (err) { addLog(`❌ خطأ: ${err.message}`); } finally { setGenerating(false); }
   };
 
+  // 🚀 دالة تحميل الجدول السحابي والهندسة العكسية لاستخراج الميزانية
   const loadPlan = async (id: string) => {
     setGenerating(true);
-    addLog(`⏳ جاري استدعاء الجدول السحابي...`);
+    addLog(`⏳ جاري استدعاء الجدول السحابي وقراءة إعداداته الأصلية...`);
     try {
-      const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, classes(name)), teachers(users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
+      const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
+      
       const formatted = (slots || []).map(s => {
         const rawClass = Array.isArray(s.sections?.classes) ? s.sections?.classes[0]?.name : s.sections?.classes?.name;
         const zoomL = s.teachers?.users?.zoom_link || s.teachers?.zoom_link || null;
@@ -664,51 +663,40 @@ export default function AutoScheduleGenerator() {
         };
       });
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
+      
+      // 🚀 الهندسة العكسية: قراءة وحساب الميزانية الأصلية للجدول
+      if (slots && slots.length > 0) {
+         const extractedQuotas: Record<string, number> = {};
+         slots.forEach(slot => {
+            const cId = slot.sections?.class_id || sections.find(sec => sec.id === slot.section_id)?.class_id;
+            if (cId && slot.subject_id) {
+               const qKey = `${slot.subject_id}_${cId}`;
+               // كم حصة أخذ هذا الفصل تحديداً في هذه المادة داخل الجدول المحفوظ؟
+               const count = slots.filter(x => x.section_id === slot.section_id && x.subject_id === slot.subject_id).length;
+               extractedQuotas[qKey] = Math.max(extractedQuotas[qKey] || 0, count);
+            }
+         });
+         
+         // تحديث واعتماد الميزانية الجديدة فوراً
+         setSubjectQuotas(prev => {
+            const merged = { ...prev, ...extractedQuotas };
+            localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(merged));
+            localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(merged));
+            return merged;
+         });
+         setIsBudgetSaved(true);
+         addLog(`✅ تم قراءة الميزانية وتحديث أنصبة المعلمين بنجاح!`);
+      }
+
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول المعتمد بنجاح!`);
-    } catch(e) { addLog(`❌ فشل استدعاء الجدول.`); } finally { setGenerating(false); }
-  };
-
-  // 🚀 دوال ومتغيرات الطباعة المتقدمة
-  const uniqueClasses = useMemo(() => {
-    const classNames = sections.map(s => s.class_name).filter(Boolean);
-    return Array.from(new Set(classNames)).sort();
-  }, [sections]);
-
-  const uniqueDepts = ['قسم العلوم', 'قسم الرياضيات', 'قسم اللغة العربية', 'قسم اللغة الإنجليزية', 'قسم التربية الإسلامية', 'قسم الاجتماعيات', 'قسم الحاسوب', 'أقسام أخرى'];
-
-  const getTeacherDept = (tId: string) => {
-    const tSchedules = generatedSchedules.filter(s => String(s.teacher_id) === String(tId));
-    if (tSchedules.length === 0) return 'أقسام أخرى';
-    const subjName = tSchedules[0].subject_name || '';
-    if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) return 'قسم العلوم';
-    if (/(رياضيات)/.test(subjName)) return 'قسم الرياضيات';
-    if (/(عربي|عربية)/.test(subjName)) return 'قسم اللغة العربية';
-    if (/(إنجليزي|انجليزي)/.test(subjName)) return 'قسم اللغة الإنجليزية';
-    if (/(إسلامية|قرآن|تجويد|دين)/.test(subjName)) return 'قسم التربية الإسلامية';
-    if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) return 'قسم الاجتماعيات';
-    if (/(حاسوب|معلوماتية)/.test(subjName)) return 'قسم الحاسوب';
-    return 'أقسام أخرى';
-  };
-
-  const uniqueTeachersInSchedule = useMemo(() => {
-    const tMap = new Map();
-    generatedSchedules.forEach(s => {
-      if (!tMap.has(s.teacher_id)) tMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name });
-    });
-    return Array.from(tMap.values()).sort((a,b) => a.name.localeCompare(b.name));
-  }, [generatedSchedules]);
-
-  const getPrintNameById = (id: string, type: 'section'|'teacher') => {
-     if (type === 'section') {
-       const sec = sections.find(s => s.id === id);
-       return sec ? sec.full_name : 'غير محدد';
-     } else {
-       const t = uniqueTeachersInSchedule.find(t => t.id === id);
-       return t ? t.name : 'غير محدد';
-     }
+      addLog(`✅ تم تحميل الجدول المعتمد بالكامل!`);
+    } catch(e) { 
+      addLog(`❌ فشل استدعاء الجدول.`); 
+    } finally { 
+      setGenerating(false); 
+    }
   };
 
   const toggleBatchPrintId = (id: string) => {
@@ -724,41 +712,47 @@ export default function AutoScheduleGenerator() {
     }
   };
 
-  const handlePrintCommand = async (mode: string, filterVal: string = '') => {
-    setPrintMode(mode as any);
-    setPrintFilterVal(filterVal);
+  // 🚀 محرك الـ PDF הפردي والمجمع
+  const handleSinglePrintPDF = async () => {
+    setIsGeneratingPDF(true);
+    setTimeout(async () => {
+      try {
+        const el = document.getElementById('single-pdf-container');
+        if (!el) throw new Error('الجدول غير جاهز.');
+        
+        const pdf = new jsPDF('landscape', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+        
+        const links = el.querySelectorAll('a.zoom-link');
+        const elementRect = el.getBoundingClientRect();
+        links.forEach((link: any) => {
+           const rect = link.getBoundingClientRect();
+           if (elementRect.width > 0 && elementRect.height > 0) {
+             const relativeX = (rect.left - elementRect.left) / elementRect.width;
+             const relativeY = (rect.top - elementRect.top) / elementRect.height;
+             const finalUrl = normalizeUrl(link.href);
+             if (finalUrl) pdf.link(relativeX * pdfWidth, relativeY * pdfHeight, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+           }
+        });
+
+        pdf.save(`جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`);
+      } catch(e: any) {
+        alert(e.message);
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    }, 500);
+  };
+
+  const handleBatchPrintPDF = () => {
+    if (batchPrintIds.length === 0) { alert('يرجى تحديد جدول واحد على الأقل للطباعة!'); return; }
     setIsPrintCenterOpen(false);
     setIsGeneratingPDF(true);
-
-    let entities: any[] = [];
     
-    if (mode === 'single') {
-      const singleEntity = gridFilterType === 'teacher' ? uniqueTeachersInSchedule.find(t => String(t.id) === String(gridFilterId)) : sections.find(s => String(s.id) === String(gridFilterId));
-      if(singleEntity) entities = [singleEntity];
-    } else if (mode === 'all-teachers') {
-      entities = uniqueTeachersInSchedule;
-    } else if (mode === 'specific-dept') {
-      entities = uniqueTeachersInSchedule.filter(t => getTeacherDept(t.id) === filterVal);
-    } else if (mode === 'all-sections') {
-      entities = sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id));
-    } else if (mode === 'specific-class') {
-      entities = sections.filter(sec => sec.class_name === filterVal && generatedSchedules.some(s => String(s.section_id) === String(sec.id)));
-    } else if (mode === 'custom-batch') {
-      if (batchPrintType === 'section') {
-          entities = sections.filter(s => batchPrintIds.includes(s.id));
-      } else {
-          entities = uniqueTeachersInSchedule.filter(t => batchPrintIds.includes(t.id));
-      }
-    }
-
-    if(entities.length === 0) {
-      alert('لا توجد بيانات (جداول) لطباعتها في هذا التحديد.');
-      setIsGeneratingPDF(false);
-      return;
-    }
-
-    setEntitiesToPrint(entities);
-
     setTimeout(async () => {
       try {
         const containers = document.querySelectorAll('.batch-pdf-page');
@@ -769,16 +763,13 @@ export default function AutoScheduleGenerator() {
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
         for (let i = 0; i < containers.length; i++) {
-          if (i > 0) pdf.addPage(); 
+          if (i > 0) pdf.addPage();
           const el = containers[i] as HTMLElement;
-
           const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          const imgData = canvas.toDataURL('image/png');
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
 
           const links = el.querySelectorAll('a.zoom-link');
           const elementRect = el.getBoundingClientRect();
-
           links.forEach((link: any) => {
             const rect = link.getBoundingClientRect();
             if (elementRect.width > 0 && elementRect.height > 0) {
@@ -787,30 +778,13 @@ export default function AutoScheduleGenerator() {
               const pdfX = relativeX * pdfWidth; 
               const pdfY = relativeY * pdfHeight;
               const finalUrl = normalizeUrl(link.href);
-              
-              if (finalUrl) {
-                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
-              }
+              if (finalUrl) pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
             }
           });
         }
-
-        let fileName = 'الجدول_الدراسي.pdf';
-        if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
-        if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
-        if (mode === 'specific-class') fileName = `جداول_مرحلة_${filterVal.replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'specific-dept') fileName = `جداول_${filterVal.replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'single') fileName = `جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
-
+        let fileName = batchPrintType === 'section' ? 'جداول_الفصول_المحددة.pdf' : 'جداول_المعلمين_المحددين.pdf';
         pdf.save(fileName);
-      } catch (error: any) { 
-        console.error(error);
-        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
-      } finally { 
-        setIsGeneratingPDF(false); 
-        setEntitiesToPrint([]); 
-      }
+      } catch (error: any) { alert(error.message); } finally { setIsGeneratingPDF(false); }
     }, 1000); 
   };
 
@@ -831,7 +805,26 @@ export default function AutoScheduleGenerator() {
     return days[day - 1] || day;
   };
 
-  // 🚀 الحماية من الانهيار أثناء التحميل أو غياب الصلاحيات
+  const uniqueTeachersInSchedule = useMemo(() => {
+    const tMap = new Map();
+    generatedSchedules.forEach(s => {
+      if (!tMap.has(s.teacher_id)) tMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name });
+    });
+    return Array.from(tMap.values()).sort((a,b) => a.name.localeCompare(b.name));
+  }, [generatedSchedules]);
+
+  const getPrintNameById = (id: string, type: 'section'|'teacher') => {
+     if (type === 'section') {
+       const sec = sections.find(s => s.id === id);
+       return sec ? sec.full_name : 'غير محدد';
+     } else {
+       const t = uniqueTeachersInSchedule.find(t => t.id === id);
+       return t ? t.name : 'غير محدد';
+     }
+  };
+
+  const idsToRender = isGeneratingPDF ? batchPrintIds : [];
+
   if (!mounted || loadingData || isChecking) {
      return (
        <div className="flex h-screen items-center justify-center bg-slate-50 font-cairo">
@@ -1010,7 +1003,7 @@ export default function AutoScheduleGenerator() {
 
               <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
                 <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
-                <button onClick={() => handlePrintCommand('custom-batch')} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                <button onClick={handleBatchPrintPDF} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
                   <FileDown className="w-5 h-5" /> تحميل PDF للمحددين
                 </button>
               </div>
@@ -1191,7 +1184,7 @@ export default function AutoScheduleGenerator() {
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية محفوظة وجاهزة دائماً.
+              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين.
             </p>
           </div>
         </div>
@@ -1369,7 +1362,7 @@ export default function AutoScheduleGenerator() {
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
                          </button>
-                         <button onClick={() => handlePrintCommand('single')} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
+                         <button onClick={handleSinglePrintPDF} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
                            <FileDown className="w-4 h-4" /> تحميل PDF
                          </button>
                          <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
@@ -1464,7 +1457,77 @@ export default function AutoScheduleGenerator() {
         </div>
       </div>
 
-      {/* 🚀 الحاوية الخفية للطباعة الفردية والمجمعة (محرك واحد آمن) */}
+      {/* 🚀 الحاوية الخفية للطباعة الفردية */}
+      <div style={{ position: 'fixed', top: '-10000px', left: '-10000px', pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+        {gridFilterId && (
+          <div id="single-pdf-container" className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
+              <div>
+                <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
+                   {gridFilterType === 'section' ? `الفصل: ${getPrintNameById(gridFilterId, 'section')}` : `المعلم: ${getPrintNameById(gridFilterId, 'teacher')}`}
+                </h2>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
+                <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+              </div>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
+                  {dynamicPeriods.map(p => (
+                    <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p}</div>
+                      {(() => {
+                        const slotForTime = generatedSchedules.find(s => s.period_number === p);
+                        if (slotForTime) {
+                          return <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{formatTime(slotForTime.start_time)} - {formatTime(slotForTime.end_time)}</div>;
+                        }
+                        return null;
+                      })()}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((day, dIdx) => (
+                  <tr key={day.id}>
+                    <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
+                    {dynamicPeriods.map((p) => {
+                      const slot = generatedSchedules.find(s => s.day === day.id && s.period_number === p && (gridFilterType === 'section' ? s.section_id === gridFilterId : s.teacher_id === gridFilterId));
+                      return (
+                        <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                          {slot ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                              <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{gridFilterType === 'section' ? slot.subject_name : slot.section_name}</div>
+                              <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
+                                {gridFilterType === 'section' ? `أ. ${slot.teacher_name}` : slot.subject_name}
+                              </div>
+                              {slot.zoom_link && (
+                                <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
+                                  رابط البث
+                                </a>
+                              )}
+                            </div>
+                          ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
+              <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 🚀 الحاوية الخفية للطباعة الجماعية المفلترة */}
       <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
         {entitiesToPrint.map((entity, idx) => {
            const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class' || (printMode === 'custom-batch' && batchPrintType === 'section') || (printMode === 'single' && gridFilterType === 'section');
@@ -1545,3 +1608,5 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
+
+
