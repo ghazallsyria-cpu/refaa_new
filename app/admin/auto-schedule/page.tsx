@@ -291,7 +291,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM
+  // 🧠 THE CORE ALGORITHM (With Fair Load Balancing)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -299,7 +299,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بمحرك التوزيع اليومي الصارم...");
+    addLog("🚀 بدء التوليد بمحرك التوزيع اليومي العادل والصارم...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -327,6 +327,23 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.original_quota > 0); 
 
+    // 🚀 حساب الميزانية العادلة لكل معلم في اليوم (توازن الأحمال)
+    const teacherTotalQuotas: Record<string, number> = {};
+    const teacherMaxDailyLoad: Record<string, number> = {};
+
+    teacherAssignments.forEach(ta => {
+      if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
+      teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
+    });
+
+    Object.keys(teacherTotalQuotas).forEach(tId => {
+       const tConst = teacherConstraints[tId] || { days: [...workingDays] };
+       const availableDaysCount = tConst.days.length || 5;
+       const total = teacherTotalQuotas[tId];
+       // معادلة العدالة: نقسم إجمالي الحصص على عدد أيام الدوام، ونقرب للأعلى، ونضيف 1 كمرونة للمحرك
+       teacherMaxDailyLoad[tId] = Math.ceil(total / availableDaysCount) + 1;
+    });
+
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
@@ -338,8 +355,11 @@ export default function AutoScheduleGenerator() {
         let finalSchedule = [];
         let unplacedQueue = []; 
         let failedPlacements = 0;
-        const teacherDailyLoad = {};
-        teacherAssignments.forEach(ta => { teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; });
+        
+        const teacherDailyLoad: Record<string, Record<number, number>> = {};
+        teacherAssignments.forEach(ta => { 
+            teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
+        });
 
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
@@ -365,6 +385,9 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount) => {
+          // 🚀 قيد العدالة المكتشف حديثاً: منع تكدس الحصص للمعلم في يوم واحد
+          if (teacherDailyLoad[teacherId][day] >= teacherMaxDailyLoad[teacherId]) return false;
+
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
@@ -401,6 +424,7 @@ export default function AutoScheduleGenerator() {
 
           for (let i = 0; i < remainingLessons; i++) {
             let preferredDays = shuffleArray([...allowedDaysForTeacher]);
+            // يفضل الأيام الأقل ضغطاً
             preferredDays.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
             
             if (assignment.isVIP) {
@@ -445,6 +469,9 @@ export default function AutoScheduleGenerator() {
                 for (const period of dayPeriods) {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
+                  
+                  // 🚀 قيد العدالة أثناء الإزاحة الاستثنائية
+                  if (teacherDailyLoad[assignment.teacher_id][day] >= teacherMaxDailyLoad[assignment.teacher_id]) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
                   const blockingSlotIndex = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
@@ -463,6 +490,10 @@ export default function AutoScheduleGenerator() {
                     let swapped = false;
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
+                       
+                       // 🚀 حماية إزاحة المعلم Z لكي لا ينفجر نصابه اليومي في اليوم الجديد
+                       if (teacherDailyLoad[blockingSlot.teacher_id][altDay] >= teacherMaxDailyLoad[blockingSlot.teacher_id]) continue;
+
                        const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
                        for (const altPeriod of altPeriods) {
                           if (altDay === day && altPeriod.period_number === period.period_number) continue;
@@ -491,6 +522,10 @@ export default function AutoScheduleGenerator() {
                             finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
                             finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
                             
+                            // 🚀 تحديث عداد نصاب المعلم Z والمعلم Y بعد نجاح الإزاحة
+                            teacherDailyLoad[blockingSlot.teacher_id][day]--;
+                            teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
+
                             commitPlacement(section, assignment, day, period);
                             isPlaced = true; 
                             swapped = true;
@@ -536,7 +571,7 @@ export default function AutoScheduleGenerator() {
     if (absoluteBestFailedCount > 0) {
       addLog(`⚠️ تبقى ${absoluteBestFailedCount} حصة في الانتظار (القيود صارمة جداً).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم تسكين الجدول مع انتشار يومي مذهل للمواد.`);
+      addLog(`🎉 إنجاز أسطوري! تم توزيع حصص المعلمين بعدالة ممتازة وبدون تكدس يومي.`);
     }
     setGenerating(false);
   };
@@ -814,6 +849,7 @@ export default function AutoScheduleGenerator() {
   };
 
   const handlePrintCommand = async (mode: string, filterVal: string = '') => {
+    if (typeof window === 'undefined') return;
     setPrintMode(mode as any);
     setPrintFilterVal(filterVal);
     setIsPrintCenterOpen(false);
@@ -1423,7 +1459,7 @@ export default function AutoScheduleGenerator() {
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
                          </button>
-                         <button onClick={handleSinglePrintPDF} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
+                         <button onClick={() => handlePrintCommand('single')} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
                            <FileDown className="w-4 h-4" /> تحميل PDF
                          </button>
                          <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
