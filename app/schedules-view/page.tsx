@@ -349,7 +349,7 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
-  // 🚀 المحرك الموحد والديناميكي (Lazy Load) للطباعة لمنع أي انهيار
+  // 🚀 المحرك الديناميكي للطباعة (Lazy Load + Improved HTML generation)
   const handlePrintCommand = async (mode: string, filterVal: string = '') => {
     if (typeof window === 'undefined') return;
     
@@ -383,7 +383,6 @@ export default function PublicSchedulesViewPage() {
 
     setTimeout(async () => {
       try {
-        // 🚀 استيراد ديناميكي يحمي الخادم من الانهيار
         const jsPDFModule = (await import('jspdf')).default;
         const html2canvasModule = (await import('html2canvas-pro')).default;
 
@@ -398,6 +397,7 @@ export default function PublicSchedulesViewPage() {
           if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
+          // Scale 2 is good for clarity without blowing up dimensions if CSS is strictly contained
           const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
           const imgData = canvas.toDataURL('image/png');
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
@@ -542,7 +542,7 @@ export default function PublicSchedulesViewPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#090b14]/90 backdrop-blur-xl text-white">
             <Loader2 className="w-20 h-20 animate-spin text-emerald-400 mb-6 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
             <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثائق الـ PDF الذكية...</h2>
-            <p className="text-slate-300 font-bold mt-3 text-lg">النظام يقوم برسم الجداول وترتيبها حسب طلبك.</p>
+            <p className="text-slate-300 font-bold mt-3 text-lg">النظام يقوم برسم الجداول وترتيبها وتنسيقها للطباعة.</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -780,7 +780,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 منطقة الطباعة الخفية والموحدة للـ PDF */}
+            {/* 🚀 منطقة الطباعة الخفية الموحدة (مُعاد كتابة الـ CSS الخاص بها بالكامل لتجنب التضخم العشوائي) */}
             <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
               {entitiesToPrint.map((entity, idx) => {
                  const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class' || (printMode === 'single' && filterType === 'section');
@@ -790,27 +790,34 @@ export default function PublicSchedulesViewPage() {
                  const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
 
                  return (
-                   <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
-                       <div>
-                         <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
-                         <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
-                           {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
-                         </h2>
-                       </div>
-                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
-                         <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
-                       </div>
-                     </div>
-                     <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
+                   <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '30px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', overflow: 'hidden' }}>
+                     
+                     {/* ترويسة الصفحة - Header */}
+                     <table style={{ width: '100%', marginBottom: '15px', borderCollapse: 'collapse' }}>
+                        <tbody>
+                          <tr>
+                            <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
+                              <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 6px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                              <h2 style={{ fontSize: '14px', fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0, display: 'inline-block' }}>
+                                {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
+                              </h2>
+                            </td>
+                            <td style={{ textAlign: 'left', verticalAlign: 'bottom' }}>
+                              <div style={{ fontSize: '12px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '6px', backgroundColor: '#10b981', color: '#ffffff', marginBottom: '6px', display: 'inline-block' }}>العام الدراسي الحالي</div>
+                              <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+                            </td>
+                          </tr>
+                        </tbody>
+                     </table>
+
+                     {/* الجدول - Table */}
+                     <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '8px', tableLayout: 'fixed' }}>
                        <thead>
                          <tr>
-                           <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
+                           <th style={{ width: '100px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>اليوم / الحصة</th>
                            {dynamicPeriods.map(p => (
-                             <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
-                               <div style={{ fontSize: '14px', fontWeight: 900, margin: '0' }}>الحصة {p}</div>
-                               {/* تم إزالة الوقت من الرأس لمنع التعارض للمعلمين */}
+                             <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>
+                               الحصة {p}
                              </th>
                            ))}
                          </tr>
@@ -818,30 +825,34 @@ export default function PublicSchedulesViewPage() {
                        <tbody>
                          {DAYS.map((day, dIdx) => (
                            <tr key={day.id}>
-                             <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
+                             <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '14px' }}>{day.name}</td>
                              {dynamicPeriods.map((p) => {
                                const slot = schedules.find(s => String(s.day) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
+                               
                                return (
-                                 <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                 <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '4px', textAlign: 'center', verticalAlign: 'middle', height: '110px' }}>
                                    {slot ? (
-                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                                     <div style={{ padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', textAlign: 'center', height: '100%', boxSizing: 'border-box' }}>
                                        
-                                       {/* 🚀 إظهار الوقت بدقة داخل المربع نفسه */}
-                                       <div style={{ fontSize: '10px', fontWeight: 900, color: '#047857', backgroundColor: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', marginBottom: '6px', border: '1px solid #a7f3d0' }} dir="ltr">
+                                       {/* 🚀 إظهار الوقت بدقة داخل المربع نفسه وبحجم دقيق */}
+                                       <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#047857', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 4px', borderRadius: '4px', marginBottom: '4px', display: 'inline-block' }} dir="ltr">
                                           {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                        </div>
 
-                                       <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
-                                       <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
+                                       <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#0f172a', marginBottom: '2px', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
+                                       <div style={{ fontSize: '9px', color: '#475569', marginBottom: '4px', lineHeight: '1.2' }}>
                                          {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
                                        </div>
+                                       
                                        {slot.zoom_link && (
-                                         <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
-                                           رابط البث
-                                         </a>
+                                         <div style={{ marginTop: '4px' }}>
+                                            <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '9px', fontWeight: 'bold', textDecoration: 'none', padding: '4px 8px', borderRadius: '4px' }}>
+                                              رابط البث
+                                            </a>
+                                         </div>
                                        )}
                                      </div>
-                                   ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
+                                   ) : (<span style={{ fontSize: '18px', fontWeight: 'bold', color: '#cbd5e1' }}>-</span>)}
                                  </td>
                                );
                              })}
@@ -849,10 +860,22 @@ export default function PublicSchedulesViewPage() {
                          ))}
                        </tbody>
                      </table>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
-                       <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
-                     </div>
+
+                     {/* تذييل الصفحة - Footer */}
+                     <table style={{ width: '100%', marginTop: '15px', borderTop: '2px solid #cbd5e1', paddingTop: '10px' }}>
+                        <tbody>
+                           <tr>
+                              <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
+                                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>مدرسة الرفعة النموذجية</div>
+                                 <div style={{ fontSize: '10px', color: '#64748b' }}>نظام الإدارة الأكاديمية الشامل</div>
+                              </td>
+                              <td style={{ textAlign: 'left', verticalAlign: 'middle' }}>
+                                 <div style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>وثيقة إلكترونية معتمدة</div>
+                              </td>
+                           </tr>
+                        </tbody>
+                     </table>
+
                    </div>
                  );
               })}
