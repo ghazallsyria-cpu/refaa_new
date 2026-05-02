@@ -313,7 +313,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Bug-Free Loop + Strict Quota)
+  // 🧠 THE CORE ALGORITHM (Strict Quota + Async Yielding)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -321,7 +321,9 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (منع الحلقات الهاربة + الميزانية الصارمة)...");
+    addLog("🚀 بدء التوليد... (تفعيل منع خنق المعالج وقراءة الميزانية الصارمة)");
+    // 🚀 تنفس صناعي أولي للمتصفح ليظهر رسالة البدء
+    await new Promise(r => setTimeout(r, 100)); 
     
     const domQuotas = { ...subjectQuotas };
     Object.keys(domQuotas).forEach(key => {
@@ -365,21 +367,28 @@ export default function AutoScheduleGenerator() {
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
     });
 
+    const totalRequested = Object.values(teacherTotalQuotas).reduce((a, b) => a + b, 0);
+    addLog(`📊 تم تأكيد الميزانية: إجمالي الحصص المطلوبة (${totalRequested}) حصة.`);
+
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 25; 
-    await new Promise(r => setTimeout(r, 100)); 
+    // 🚀 تقليل المحاولات لأن الاستراحة ستأخذ وقتاً (10 محاولات ذكية تكفي)
+    const MAX_ATTEMPTS = 10; 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // 🚀 التنفس الصناعي الأساسي: يعطي المتصفح 50 ملي ثانية ليحدث الشاشة ولا يعلق
+        setGenerationLogs(prev => [`⏳ محرك التفكير: يجري محاولة التسكين وفك الاختناقات (${attempt}/${MAX_ATTEMPTS})...`, ...prev.slice(0, 4)]);
+        await new Promise(r => setTimeout(r, 50)); 
+
         let finalSchedule = [];
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        const ignoreFairness = attempt > 15; 
-        const relaxation = attempt > 10 ? 2 : 0; 
-        const emergencyForce = attempt > 20; 
+        const ignoreFairness = attempt > 5; 
+        const relaxation = attempt > 3 ? 2 : 0; 
+        const emergencyForce = attempt > 8; 
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
@@ -399,7 +408,6 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // 🚀 الفرز المعتمد على المواد الأساسية (العودة للمنطق السليم)
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
@@ -408,10 +416,8 @@ export default function AutoScheduleGenerator() {
           const restrictB = b.available_days.length < 5 ? 1 : 0;
           if (restrictA !== restrictB) return restrictB - restrictA;
           
-          // المواد ذات النصاب العالي أولاً لضمان حجز الفراغات
           if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
           
-          // إذا تساوت، الأولوية للمعلم الأكثر حصصاً في المدرسة
           const aTotal = teacherTotalQuotas[a.teacher_id] || 0;
           const bTotal = teacherTotalQuotas[b.teacher_id] || 0;
           if (aTotal !== bTotal) return bTotal - aTotal; 
@@ -446,7 +452,7 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && attempt < 15 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 5 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -485,7 +491,6 @@ export default function AutoScheduleGenerator() {
           for (let i = 0; i < remainingLessons; i++) {
             let isPlaced = false;
 
-            // Phase 1
             for (const day of getBestDays()) {
               if (isPlaced) break;
               let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
@@ -500,7 +505,6 @@ export default function AutoScheduleGenerator() {
               }
             }
 
-            // Phase 2
             if (!isPlaced) {
                for (const day of getBestDays()) {
                  if (isPlaced) break;
@@ -514,15 +518,15 @@ export default function AutoScheduleGenerator() {
                }
             }
 
-            // 🚀 Phase 3 (Double Swap with Runaway Bug FIXED)
-            if (!isPlaced && !assignment.isVIP) {
+            // 🚀 الإزاحة تعمل فقط في المحاولات المتقدمة لتوفير طاقة المتصفح
+            if (!isPlaced && !assignment.isVIP && attempt > 3) {
               for (const day of getBestDays()) {
-                if (isPlaced) break; // 🚀 الإيقاف السحري الأول لمنع الحلقة الهاربة
+                if (isPlaced) break; 
                 
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                 
                 for (const period of dayPeriods) {
-                  if (isPlaced) break; // 🚀 الإيقاف السحري الثاني لمنع تكرار الحصة
+                  if (isPlaced) break; 
                   
                   const teachSlotIdx = finalSchedule.findIndex(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const secSlotIdx = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
@@ -673,9 +677,9 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (تم بذل أقصى جهد).`);
+      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار.`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل دون أي تكرار أو حصص وهمية.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل (تم حل خنق المعالج بنجاح).`);
     }
     setGenerating(false);
   };
@@ -845,7 +849,7 @@ export default function AutoScheduleGenerator() {
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول بنجاح.`);
+      addLog(`✅ تم تحميل الجدول بنجاح. (الميزانية بقيت آمنة كما حددتها أنت).`);
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
@@ -1404,7 +1408,6 @@ export default function AutoScheduleGenerator() {
                 )}
                 
                 {sortedClassNames.map(className => {
-                  // 🚀 الميزة السحرية الجديدة: حساب إجمالي الحصص المطلوبة للفصل الواحد
                   const totalQuotasForClass = groupedSubjectsByClass[className].reduce((sum, item) => {
                       const key = `${item.subj_id}_${item.class_id}`;
                       return sum + (subjectQuotas[key] || 0);
