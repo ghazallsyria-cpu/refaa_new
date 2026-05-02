@@ -186,11 +186,24 @@ export default function AutoScheduleGenerator() {
       } else {
          tsData = tsDataWithZoom || [];
       }
-      setRawTeacherAssignments(tsData);
 
-      if (tsData && formattedSections.length > 0) {
+      // 🚀 درع تنقية البيانات (Data Purifier Shield)
+      // هذا الدرع سيقوم بمسح أي تكرار في قاعدة البيانات لمنع توليد "حصص وهمية"
+      const uniqueAssignmentsMap = new Map();
+      tsData.forEach(ts => {
+         // القاعدة: كل فصل له مادة واحدة تُدرس بواسطة معلم واحد
+         const uniqueKey = `${ts.section_id}_${ts.subject_id}`;
+         if (!uniqueAssignmentsMap.has(uniqueKey)) {
+            uniqueAssignmentsMap.set(uniqueKey, ts);
+         }
+      });
+      const cleanTsData = Array.from(uniqueAssignmentsMap.values());
+      
+      setRawTeacherAssignments(cleanTsData);
+
+      if (cleanTsData && formattedSections.length > 0) {
         const subjClassMap = new Map();
-        tsData.forEach(ts => {
+        cleanTsData.forEach(ts => {
           const sec = formattedSections.find(s => s.id === ts.section_id);
           if (sec && ts.subject_id && ts.subjects?.name) {
             const key = `${ts.subject_id}_${sec.class_id}`;
@@ -315,7 +328,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (العدالة الهجينة) والمواد الكبيرة أولاً...");
+    addLog("🚀 بدء التوليد بخوارزمية (العدالة الهجينة)... (تم تفعيل درع تنقية البيانات)");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -384,7 +397,7 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // الفرز الصحيح
+        // الفرز الصحيح (المواد الكبيرة أولاً لضمان عدم انهيار العربي والرياضيات)
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
@@ -412,7 +425,7 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, section, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
-          // قيد العدالة يطبق بصرامة فقط على الثانوي
+          // قيد العدالة يطبق بصرامة فقط على الثانوي (حضوري) ويتجاهل المتوسط (أونلاين)
           const isHighSchool = section.stage === 'high';
           if (isHighSchool && enforceLoadBalance && !emergencyForce && !ignoreFairness) {
               if (teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
@@ -500,6 +513,7 @@ export default function AutoScheduleGenerator() {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   
+                  // فحص العدالة قبل الإزاحة (فقط للثانوي)
                   if (section.stage === 'high' && !ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
@@ -526,6 +540,7 @@ export default function AutoScheduleGenerator() {
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
+                       // حماية المعلم المُزاح إذا كان يدرس ثانوي فقط
                        const isZHighSchool = blockingSlot.stage === 'high';
                        if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
@@ -618,7 +633,7 @@ export default function AutoScheduleGenerator() {
     if (absoluteBestFailedCount > 0) {
       addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (القيود متضاربة جداً).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل (تم تطبيق العدالة على الثانوي فقط).`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل بدون حصص وهمية.`);
     }
     setGenerating(false);
   };
@@ -719,7 +734,6 @@ export default function AutoScheduleGenerator() {
         day_of_week: slot.day, period_number: slot.period_number, stage: slot.stage, start_time: slot.start_time, end_time: slot.end_time
       }));
 
-      // حماية ومراقبة الأخطاء أثناء الحفظ 
       for (let i = 0; i < slotsPayload.length; i += 500) {
         const { error: insertErr } = await supabase.from('auto_schedules').insert(slotsPayload.slice(i, i + 500));
         if (insertErr) throw insertErr;
@@ -732,27 +746,29 @@ export default function AutoScheduleGenerator() {
     } catch (err) { addLog(`❌ خطأ: ${err.message}`); } finally { setGenerating(false); }
   };
 
-  // 🚀 دالة الاستدعاء الخارقة (Safe Fetch) التي لا تنهار
   const loadPlan = async (id: string) => {
     setGenerating(true);
     addLog(`⏳ جاري استدعاء الجدول السحابي (الاستدعاء الآمن)...`);
     try {
-      const { data: rawSlots, error: fetchErr } = await supabase
-        .from('auto_schedules')
-        .select('*')
-        .eq('plan_id', id);
-
-      if (fetchErr) throw fetchErr;
-
-      if (!rawSlots || rawSlots.length === 0) {
+      let slots = [];
+      const { data: slotsWithZoom, error: zoomErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
+      
+      if (zoomErr) {
+         const { data: safeSlots, error: safeErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name)), subjects(name)').eq('plan_id', id);
+         if (safeErr) throw safeErr;
+         slots = safeSlots || [];
+      } else {
+         slots = slotsWithZoom || [];
+      }
+      
+      if (slots.length === 0) {
          addLog(`⚠️ الخطة محملة، لكنها فارغة تماماً!`);
          setGeneratedSchedules([]);
          return;
       } else {
-         addLog(`✅ تم استرجاع ${rawSlots.length} حصة من قاعدة البيانات.`);
+         addLog(`✅ تم استرجاع ${slots.length} حصة من قاعدة البيانات.`);
       }
 
-      // 🚀 الدمج المحلي (Client-Side Join) لتجنب أخطاء PostgREST
       const formatted = rawSlots.map(slot => {
         const section = sections.find(s => String(s.id) === String(slot.section_id));
         const assignment = rawTeacherAssignments.find(ts => 
@@ -783,34 +799,32 @@ export default function AutoScheduleGenerator() {
       });
 
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
-
-      const extractedQuotas: Record<string, number> = {};
-      formatted.forEach(slot => {
-         const sec = sections.find(s => String(s.id) === String(slot.section_id));
-         const cId = sec?.class_id;
-         if (cId && slot.subject_id) {
-            const qKey = `${slot.subject_id}_${cId}`;
-            const count = formatted.filter(x => x.section_id === slot.section_id && x.subject_id === slot.subject_id).length;
-            extractedQuotas[qKey] = Math.max(extractedQuotas[qKey] || 0, count);
-         }
-      });
       
-      setSubjectQuotas(prev => {
-         const merged = { ...prev, ...extractedQuotas };
-         if (typeof window !== 'undefined') {
-           localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(merged));
-           localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(merged));
-         }
-         return merged;
-      });
-      setIsBudgetSaved(true);
-      addLog(`✅ تم قراءة الميزانية وتحديث أنصبة المعلمين بنجاح!`);
+      if (slots && slots.length > 0) {
+         const extractedQuotas: Record<string, number> = {};
+         slots.forEach(slot => {
+            const cId = slot.sections?.class_id || sections.find(sec => sec.id === slot.section_id)?.class_id;
+            if (cId && slot.subject_id) {
+               const qKey = `${slot.subject_id}_${cId}`;
+               const count = slots.filter(x => x.section_id === slot.section_id && x.subject_id === slot.subject_id).length;
+               extractedQuotas[qKey] = Math.max(extractedQuotas[qKey] || 0, count);
+            }
+         });
+         
+         setSubjectQuotas(prev => {
+            const merged = { ...prev, ...extractedQuotas };
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(merged));
+              localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(merged));
+            }
+            return merged;
+         });
+         setIsBudgetSaved(true);
+      }
 
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول المعتمد بالكامل!`);
-
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
@@ -870,7 +884,6 @@ export default function AutoScheduleGenerator() {
      }
   };
 
-  // 🚀 دوال الطباعة التي تم إرجاعها
   const toggleBatchPrintId = (id: string) => {
     setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -1078,7 +1091,7 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Modal مركز الطباعة المجمعة للمدير */}
+      {/* Modal مركز الطباعة المجمعة للمدير */}
       <AnimatePresence>
         {isPrintCenterOpen && (
           <>
