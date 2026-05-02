@@ -223,7 +223,8 @@ export default function AutoScheduleGenerator() {
         
         subjClassList.forEach(item => { 
            const key = `${item.subj_id}_${item.class_id}`; 
-           if (initialQuotas[key] === undefined) initialQuotas[key] = 3; 
+           // 🚀 التعديل الأهم: الافتراضي هو 0 وليس 3 لقتل الحصص الأشباح!
+           if (initialQuotas[key] === undefined) initialQuotas[key] = 0; 
         });
         setSubjectQuotas(initialQuotas);
 
@@ -253,7 +254,7 @@ export default function AutoScheduleGenerator() {
       localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
     }
     setIsBudgetSaved(true);
-    alert('تم اعتماد الميزانية بنجاح. الخوارزمية الآن ستقرأ هذه الأرقام حصراً.');
+    alert('تم اعتماد الميزانية بنجاح. الخوارزمية الآن ستقرأ هذه الأرقام حصراً ولن تبتكر حصصاً من العدم.');
   };
 
   const openTeacherConstraintsModal = (id: string, name: string) => {
@@ -296,6 +297,8 @@ export default function AutoScheduleGenerator() {
     rawTeacherAssignments.forEach(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
+      
+      // 🚀 القراءة الصارمة: ما لا تراه بعينك، هو صفر!
       const quota = key && subjectQuotas[key] !== undefined ? Number(subjectQuotas[key]) : 0;
       
       if (quota > 0 && ts.teachers?.users?.full_name) {
@@ -313,7 +316,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Absolute Strict Quota)
+  // 🧠 THE CORE ALGORITHM (Zero-Trust Quota Enforcement)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -321,13 +324,13 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (الاعتماد الصارم على ميزانية الشاشة)...");
+    addLog("🚀 بدء التوليد بخوارزمية (الاعتماد الصارم على ميزانية الشاشة فقط)...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
       
-      // 🚀 التصحيح الأكبر: إذا كانت المادة غير موجودة في المربعات التي أمامك، ستأخذ صفر حصص ولن تظهر كشبح!
+      // 🚀 لا يوجد مجال للخطأ: تقرأ من state (ما يراه المستخدم الآن) وأي شيء غائب يُسجل بـ 0 
       const quota = key && subjectQuotas[key] !== undefined ? Number(subjectQuotas[key]) : 0;
       
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
@@ -350,7 +353,7 @@ export default function AutoScheduleGenerator() {
         stage: section?.stage, available_days: tConst.days, available_periods: tConst.periods,
         isVIP: isEhabPhysics, zoom_link: zoomLink
       };
-    }).filter(ta => ta.original_quota > 0); 
+    }).filter(ta => ta.original_quota > 0); // الحصص الصفرية لن تدخل للتوليد أبداً!
 
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
@@ -358,11 +361,14 @@ export default function AutoScheduleGenerator() {
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
     });
 
+    const totalRequested = Object.values(teacherTotalQuotas).reduce((a, b) => a + b, 0);
+    addLog(`📊 تم قراءة الميزانية: إجمالي الحصص المطلوبة للتسكين في كل المدرسة هو (${totalRequested}) حصة.`);
+
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 15; 
+    const MAX_ATTEMPTS = 25; 
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -370,9 +376,9 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        const ignoreFairness = attempt > 10; 
-        const relaxation = attempt > 5 ? 2 : 0; 
-        const emergencyForce = attempt > 12; 
+        const ignoreFairness = attempt > 15; 
+        const relaxation = attempt > 10 ? 2 : 0; 
+        const emergencyForce = attempt > 20; 
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
@@ -436,7 +442,7 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && attempt < 10 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 15 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -645,9 +651,9 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (القيود متضاربة جداً).`);
+      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (تم بذل أقصى جهد ممكن).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل والميزانية قُرأت بصرامة تامّة دون أشباح.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل بدون أي حصص وهمية.`);
     }
     setGenerating(false);
   };
@@ -813,8 +819,6 @@ export default function AutoScheduleGenerator() {
       });
 
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
-      
-      // 🚀 تم بتر ومسح كل الأسطر التي كانت تستخرج الميزانية القديمة وتحل محل الجديدة! 
       
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
@@ -1485,7 +1489,7 @@ export default function AutoScheduleGenerator() {
                 )}
               </div>
               <div className="mt-6 bg-slate-900 rounded-2xl p-4 h-40 overflow-y-auto font-mono text-[10px] text-slate-300 shadow-inner flex flex-col-reverse custom-scrollbar">
-                {generationLogs.length === 0 ? <span className="text-center opacity-50 m-auto">محرك الذكاء بانتظار الإطلاق...</span> : generationLogs.map((log, i) => <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('❌') || log.includes('⚠️') ? 'text-rose-400' : log.includes('✅') || log.includes('🎉') || log.includes('🔄') || log.includes('🧹') ? 'text-emerald-400' : ''}`}>{'>'} {log}</div>)}
+                {generationLogs.length === 0 ? <span className="text-center opacity-50 m-auto">محرك الذكاء بانتظار الإطلاق...</span> : generationLogs.map((log, i) => <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('❌') || log.includes('⚠️') ? 'text-rose-400' : log.includes('✅') || log.includes('🎉') || log.includes('🔄') || log.includes('🧹') || log.includes('📊') ? 'text-emerald-400' : ''}`}>{'>'} {log}</div>)}
               </div>
             </div>
             
