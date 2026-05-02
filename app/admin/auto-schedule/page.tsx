@@ -310,7 +310,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Deep Thinking Engine + Double Swap)
+  // 🧠 THE CORE ALGORITHM (Smallest Quota & Most Sections First)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -318,7 +318,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد باستخدام محرك (التفكير العميق) والفرز الذكي...");
+    addLog("🚀 بدء التوليد بخوارزمية (الأصغر والأكثر تشتتاً أولاً)...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -346,23 +346,29 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.original_quota > 0); 
 
+    // 🚀 1. حساب إجمالي الحصص لكل معلم
     const teacherTotalQuotas: Record<string, number> = {};
+    const teacherSectionCount: Record<string, number> = {}; // 🚀 2. حساب عدد الفصول التي يدرسها المعلم
+
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
+
+      if (!teacherSectionCount[ta.teacher_id]) teacherSectionCount[ta.teacher_id] = 0;
+      teacherSectionCount[ta.teacher_id] += 1;
     });
 
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    // 🚀 زيادة عمق التفكير وإعطاء الخوارزمية مساحة للمحاولة والخطأ
+    // 🚀 50 محاولة تفكير عميق
     const MAX_ATTEMPTS = 50; 
+    await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        // إعطاء المتصفح فرصة للتنفس وتحديث واجهة المستخدم (Thinking effect)
-        if (attempt % 5 === 0) {
-            setGenerationLogs(prev => [`⏳ محرك التفكير: يجري المحاولة رقم ${attempt} من ${MAX_ATTEMPTS}...`, ...prev.slice(0, 3)]);
+        if (attempt % 10 === 0) {
+            setGenerationLogs(prev => [`⏳ محرك التفكير: يعيد بناء الهيكل (محاولة ${attempt}/${MAX_ATTEMPTS})...`, ...prev.slice(0, 3)]);
             await new Promise(r => setTimeout(r, 20)); 
         }
 
@@ -370,10 +376,9 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        // 🚀 الاسترخاء التدريجي المتوافق مع عدد المحاولات الكبير
-        const ignoreSpread = attempt > 20; 
-        const relaxation = attempt > 35 ? 2 : (attempt > 15 ? 1 : 0); 
-        const emergencyForce = attempt > 45; // حالة طوارئ لإنهاء الجدول
+        const ignoreFairness = attempt > 30; 
+        const relaxation = attempt > 20 ? 2 : (attempt > 10 ? 1 : 0); 
+        const emergencyForce = attempt > 40; 
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
@@ -384,7 +389,7 @@ export default function AutoScheduleGenerator() {
            
            const total = teacherTotalQuotas[tId];
            let baseMax = Math.ceil(total / availableDaysCount);
-           if (baseMax < 2) baseMax = 2; 
+           if (baseMax < 2) baseMax = 2; // منح مرونة للمعلمين الصغار
            teacherMaxDailyLoad[tId] = baseMax;
         });
         
@@ -393,20 +398,23 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // 🚀 الفرز الذكي (الكبير أولاً): وضع حصص الـ 5 والـ 4 أولاً، لتسهيل تسكين حصص الـ 1 (كالحاسوب) في الفراغات!
+        // 🚀🔥 خوارزمية الفرز السحرية (مفتاح حل مشكلة الحاسوب) 🔥🚀
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
           
-          // 1. الأولوية للمواد ذات النصاب العالي في الأسبوع (لأنها الأصعب في التسكين)
-          if (a.weekly_quota !== b.weekly_quota) {
-              return b.weekly_quota - a.weekly_quota; 
-          }
+          // 1. المعلم صاحب القيود الزمنية الأصعب أولاً (مثلاً دوامه يومين فقط)
+          const restrictA = a.available_days.length * a.available_periods.length;
+          const restrictB = b.available_days.length * b.available_periods.length;
+          if (restrictA !== restrictB) return restrictA - restrictB; 
 
-          // 2. إذا تساوت، الأولوية للمعلم الأكثر انشغالاً في المدرسة بالكامل
-          const aTotal = teacherTotalQuotas[a.teacher_id] || 0;
-          const bTotal = teacherTotalQuotas[b.teacher_id] || 0;
-          if (aTotal !== bTotal) return bTotal - aTotal;
+          // 2. المعلم الذي يُدرس أكبر عدد من الفصول أولاً (مثل معلم الحاسوب)
+          const secA = teacherSectionCount[a.teacher_id];
+          const secB = teacherSectionCount[b.teacher_id];
+          if (secA !== secB) return secB - secA; // تنازلي
+
+          // 3. المادة ذات الحصة الواحدة أولاً (أقل نصاب أسبوعي للفصل الواحد)
+          if (a.weekly_quota !== b.weekly_quota) return a.weekly_quota - b.weekly_quota; // تصاعدي
           
           return Math.random() - 0.5;
         });
@@ -425,7 +433,7 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
-          if (enforceLoadBalance && !emergencyForce && teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
+          if (enforceLoadBalance && !emergencyForce && !ignoreFairness && teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
 
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
@@ -435,7 +443,8 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && !ignoreSpread && subjectCountToday >= 1) {
+          // تخفيف التباعد في المحاولات المتقدمة
+          if (enforceStrictSpread && attempt < 25 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -474,7 +483,6 @@ export default function AutoScheduleGenerator() {
           for (let i = 0; i < remainingLessons; i++) {
             let isPlaced = false;
 
-            // Phase 1: Ideal Placement
             for (const day of getBestDays()) {
               let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
@@ -489,7 +497,6 @@ export default function AutoScheduleGenerator() {
               if (isPlaced) break;
             }
 
-            // Phase 2: Relaxed Placement (Ignoring strict spread if needed)
             if (!isPlaced) {
                for (const day of getBestDays()) {
                  const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
@@ -503,104 +510,86 @@ export default function AutoScheduleGenerator() {
                }
             }
 
-            // 🚀 Phase 3: الإزاحة المزدوجة العميقة (Double-Swap)
             if (!isPlaced && !assignment.isVIP) {
               for (const day of getBestDays()) {
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                 
                 for (const period of dayPeriods) {
-                  // هل المعلم الحالي مشغول في هذا الوقت في فصل آخر؟
-                  const teachSlotIdx = finalSchedule.findIndex(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
-                  // هل الفصل الحالي مشغول بمادة أخرى؟
-                  const secSlotIdx = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
-                  
-                  if (!emergencyForce && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
-                  
+                  const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
-                  if (subjCountToday >= maxPerDay) continue; 
-
-                  let swapped = false;
-
-                  // إزاحة نوع 1: الفصل مشغول بمادة أخرى، والمعلم متاح
-                  if (secSlotIdx !== -1 && teachSlotIdx === -1) {
-                      const blockingSlot = finalSchedule[secSlotIdx];
-                      if (!blockingSlot.isVIP) {
-                          const tZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-                          let allowedDaysZ = shuffleArray(workingDays.filter(d => tZConstraints.days.includes(d)));
-                          allowedDaysZ.sort((d1, d2) => teacherDailyLoad[blockingSlot.teacher_id][d1] - teacherDailyLoad[blockingSlot.teacher_id][d2]);
-                          
-                          for (const altDay of allowedDaysZ) {
-                             if(swapped) break;
-                             if (!emergencyForce && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
-
-                             const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && tZConstraints.periods.includes(p.period_number)));
-                             for (const altPeriod of altPeriods) {
-                                if (altDay === day && altPeriod.period_number === period.period_number) continue;
-                                const tempSchedule = finalSchedule.filter((_, idx) => idx !== secSlotIdx);
-                                
-                                const secFreeAtAlt = !tempSchedule.some(s => s.section_id === section.id && s.day === altDay && s.period_number === altPeriod.period_number);
-                                const teacherZBusyAtAlt = tempSchedule.some(s => s.teacher_id === blockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
-                                
-                                if (secFreeAtAlt && !teacherZBusyAtAlt) {
-                                  finalSchedule[secSlotIdx].day = altDay;
-                                  finalSchedule[secSlotIdx].period_number = altPeriod.period_number;
-                                  finalSchedule[secSlotIdx].start_time = altPeriod.start_time;
-                                  finalSchedule[secSlotIdx].end_time = altPeriod.end_time;
-                                  
-                                  teacherDailyLoad[blockingSlot.teacher_id][day]--;
-                                  teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
-
-                                  commitPlacement(section, assignment, day, period);
-                                  isPlaced = true; swapped = true; break;
-                                }
-                             }
-                          }
-                      }
-                  }
                   
-                  // إزاحة نوع 2: المعلم مشغول في فصل آخر، والفصل الحالي متاح! (هذا يحل مشكلة الحاسوب والتربية الإسلامية)
-                  if (!swapped && teachSlotIdx !== -1 && secSlotIdx === -1 && attempt > 25) {
-                      const teacherBlockingSlot = finalSchedule[teachSlotIdx];
-                      if (!teacherBlockingSlot.isVIP) {
-                          const tWConstraints = teacherConstraints[teacherBlockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-                          let allowedDaysW = shuffleArray(workingDays.filter(d => tWConstraints.days.includes(d)));
-                          allowedDaysW.sort((d1, d2) => teacherDailyLoad[teacherBlockingSlot.teacher_id][d1] - teacherDailyLoad[teacherBlockingSlot.teacher_id][d2]);
+                  if (!ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
+                  if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
+
+                  const blockingSlotIndex = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
+                  if (blockingSlotIndex !== -1) {
+                    const blockingSlot = finalSchedule[blockingSlotIndex];
+                    if (blockingSlot.isVIP) continue; 
+                    
+                    const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
+                    
+                    let allowedDaysZ = shuffleArray(workingDays.filter(d => teacherZConstraints.days.includes(d)));
+                    allowedDaysZ.sort((d1, d2) => teacherDailyLoad[blockingSlot.teacher_id][d1] - teacherDailyLoad[blockingSlot.teacher_id][d2]);
+                    
+                    const zAssignment = teacherAssignments.find(ta => ta.teacher_id === blockingSlot.teacher_id && ta.subject_id === blockingSlot.subject_id);
+                    const zAllowedDaysCount = workingDays.filter(d => zAssignment?.available_days.includes(d)).length || 5;
+                    
+                    let zMaxPerDay = 1;
+                    if (zAssignment) {
+                        zMaxPerDay = Math.ceil(zAssignment.weekly_quota / zAllowedDaysCount);
+                        if (zAssignment.weekly_quota >= 5 && zMaxPerDay < 2) zMaxPerDay = 2;
+                    }
+
+                    let swapped = false;
+                    for (const altDay of allowedDaysZ) {
+                       if(swapped) break;
+                       
+                       if (!ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
+
+                       const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
+                       for (const altPeriod of altPeriods) {
+                          if (altDay === day && altPeriod.period_number === period.period_number) continue;
+                          const tempSchedule = finalSchedule.filter((_, idx) => idx !== blockingSlotIndex);
                           
-                          for (const altDay of allowedDaysW) {
-                             if(swapped) break;
-                             if (!emergencyForce && teacherDailyLoad[teacherBlockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[teacherBlockingSlot.teacher_id] + relaxation)) continue;
+                          const secFreeAtAlt = !tempSchedule.some(s => s.section_id === section.id && s.day === altDay && s.period_number === altPeriod.period_number);
+                          if (!secFreeAtAlt) continue;
+                          
+                          const teacherZBusyAtAlt = tempSchedule.some(s => s.teacher_id === blockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
+                          if (teacherZBusyAtAlt) continue;
 
-                             const altPeriods = shuffleArray(periods.filter(p => p.stage === teacherBlockingSlot.stage && !p.is_break && tWConstraints.periods.includes(p.period_number)));
-                             for (const altPeriod of altPeriods) {
-                                if (altDay === day && altPeriod.period_number === teacherBlockingSlot.period_number) continue;
-                                const tempSchedule = finalSchedule.filter((_, idx) => idx !== teachSlotIdx);
-                                
-                                const secWFreeAtAlt = !tempSchedule.some(s => s.section_id === teacherBlockingSlot.section_id && s.day === altDay && s.period_number === altPeriod.period_number);
-                                const teacherYBusyAtAlt = tempSchedule.some(s => s.teacher_id === teacherBlockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
-                                
-                                if (secWFreeAtAlt && !teacherYBusyAtAlt) {
-                                  finalSchedule[teachSlotIdx].day = altDay;
-                                  finalSchedule[teachSlotIdx].period_number = altPeriod.period_number;
-                                  finalSchedule[teachSlotIdx].start_time = altPeriod.start_time;
-                                  finalSchedule[teachSlotIdx].end_time = altPeriod.end_time;
-                                  
-                                  teacherDailyLoad[teacherBlockingSlot.teacher_id][day]--;
-                                  teacherDailyLoad[teacherBlockingSlot.teacher_id][altDay]++;
-
-                                  commitPlacement(section, assignment, day, period);
-                                  isPlaced = true; swapped = true; break;
-                                }
-                             }
+                          const zSubjectSlots = tempSchedule.filter(s => s.section_id === section.id && s.subject_id === blockingSlot.subject_id);
+                          const zSubjectCountAltDay = zSubjectSlots.filter(s => s.day === altDay).length;
+                          
+                          if (zSubjectCountAltDay >= zMaxPerDay) continue;
+                          
+                          let safeSpreadForZ = true;
+                          if (zSubjectCountAltDay >= 1) {
+                              const zDaysUsed = new Set(zSubjectSlots.map(s => s.day)).size;
+                              if (zDaysUsed < zAllowedDaysCount) safeSpreadForZ = false; 
                           }
-                      }
+
+                          if (safeSpreadForZ) {
+                            finalSchedule[blockingSlotIndex].day = altDay;
+                            finalSchedule[blockingSlotIndex].period_number = altPeriod.period_number;
+                            finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
+                            finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
+                            
+                            teacherDailyLoad[blockingSlot.teacher_id][day]--;
+                            teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
+
+                            commitPlacement(section, assignment, day, period);
+                            isPlaced = true; 
+                            swapped = true;
+                            break;
+                          }
+                       }
+                    }
                   }
-                  
                   if (isPlaced) break;
                 }
               }
             }
 
-            // Phase 4: Emergency placement (Force placement ignoring load balance)
             if (!isPlaced && emergencyForce) {
                for (const day of shuffleArray([...allowedDaysForTeacher])) {
                  const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
@@ -634,7 +623,7 @@ export default function AutoScheduleGenerator() {
         if (failedPlacements === 0) break;
     } 
 
-    await new Promise(r => setTimeout(r, 500)); 
+    await new Promise(r => setTimeout(r, 800)); 
     
     absoluteBestSchedule.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
     setGeneratedSchedules(absoluteBestSchedule);
@@ -646,7 +635,7 @@ export default function AutoScheduleGenerator() {
     if (absoluteBestFailedCount > 0) {
       addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (تم بذل أقصى جهد ممكن).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم تسكين جميع الحصص بنسبة 100% بنجاح.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين الكامل بنسبة 100% بنجاح مع الفرز الذكي.`);
     }
     setGenerating(false);
   };
@@ -867,16 +856,6 @@ export default function AutoScheduleGenerator() {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo print-hide" dir="rtl">
       
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-           body { display: none !important; }
-        }
-        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 1px solid #f8fafc; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      `}} />
-
       {/* Modal تقرير التدقيق والإحصائيات */}
       <AnimatePresence>
         {isAuditModalOpen && auditReport && (
@@ -1137,7 +1116,7 @@ export default function AutoScheduleGenerator() {
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين. (تم فصل مركز الطباعة للصفحة المتخصصة)
+              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين.
             </p>
           </div>
         </div>
