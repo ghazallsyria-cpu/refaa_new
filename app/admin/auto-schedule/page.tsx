@@ -253,7 +253,7 @@ export default function AutoScheduleGenerator() {
       localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
     }
     setIsBudgetSaved(true);
-    alert('تم اعتماد الميزانية بنجاح. الخوارزمية الآن ستقرأ هذه الأرقام حصراً.');
+    alert('تم اعتماد الميزانية بنجاح. تم ضبط السعة القصوى للمراحل بشكل صحيح.');
   };
 
   const openTeacherConstraintsModal = (id: string, name: string) => {
@@ -313,7 +313,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Stage Capacities + Deep MRV Sort)
+  // 🧠 THE CORE ALGORITHM (Corrected Stage Capacities 25 vs 30)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -321,7 +321,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد... (تطبيق السعة الحقيقية: 30 للمتوسط، 35 للثانوي)");
+    addLog("🚀 بدء التوليد... (تطبيق السعة الحقيقية: 25 حصة للمتوسط، 30 حصة للثانوي)");
     await new Promise(r => setTimeout(r, 100)); 
     
     const domQuotas = { ...subjectQuotas };
@@ -343,8 +343,9 @@ export default function AutoScheduleGenerator() {
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
       const zoomLink = ts.teachers?.users?.zoom_link || ts.teachers?.zoom_link || null;
 
-      // 🚀 التصحيح الأهم: السعة الفعلية للمراحل (المتوسط 6 حصص يومياً، الثانوي 7 حصص يومياً)
-      const stageMaxDailyPeriods = section?.stage === 'middle' ? 6 : 7;
+      // 🚀 التصحيح العبقري: حساب أقصى عدد حصص للمعلم بناءً على مرحلة الفصل
+      // المتوسط بحد أقصى 5 حصص في اليوم، والثانوي 6 حصص في اليوم
+      const stageMaxDailyPeriods = section?.stage === 'middle' ? 5 : 6;
       const validPeriodsCount = tConst.periods.filter(p => p <= stageMaxDailyPeriods).length;
       const maxPossibleSlots = tConst.days.length * validPeriodsCount;
 
@@ -364,6 +365,12 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.original_quota > 0); 
 
+    const teacherSectionCount: Record<string, number> = {};
+    teacherAssignments.forEach(ta => {
+        if (!teacherSectionCount[ta.teacher_id]) teacherSectionCount[ta.teacher_id] = 0;
+        teacherSectionCount[ta.teacher_id]++;
+    });
+
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
@@ -377,7 +384,7 @@ export default function AutoScheduleGenerator() {
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 15; 
+    const MAX_ATTEMPTS = 20; 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         
@@ -407,25 +414,20 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // 🚀 الفرز الأسطوري (MRV: Minimum Remaining Values + Highest Load)
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
           
-          // 1. الأقل أياماً مسموحة (القيود القاسية أولاً)
-          if (a.available_days.length !== b.available_days.length) {
-              return a.available_days.length - b.available_days.length;
-          }
-
-          // 2. المعلم الأكثر ازدحاماً في المدرسة (يتم تأمينه أولاً)
-          const aTotal = teacherTotalQuotas[a.teacher_id] || 0;
-          const bTotal = teacherTotalQuotas[b.teacher_id] || 0;
-          if (aTotal !== bTotal) return bTotal - aTotal; 
-
-          // 3. المادة ذات النصاب الأكبر (تحتاج 5 أيام خالية لتوزيعها)
+          const restrictA = a.available_days.length < 5 ? 1 : 0;
+          const restrictB = b.available_days.length < 5 ? 1 : 0;
+          if (restrictA !== restrictB) return restrictB - restrictA;
+          
+          const aSecCount = teacherSectionCount[a.teacher_id] || 0;
+          const bSecCount = teacherSectionCount[b.teacher_id] || 0;
+          if (aSecCount !== bSecCount) return bSecCount - aSecCount; 
+          
           if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
           
-          // 4. ضخ العشوائية في المحاولات المتقدمة لتغيير النمط
           return Math.random() - 0.5;
         });
 
@@ -456,7 +458,6 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          // حماية صارمة لمنع التكرار الجائر 
           if (enforceStrictSpread && attempt < 10 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
@@ -471,15 +472,15 @@ export default function AutoScheduleGenerator() {
           assignmentIndex++;
           
           if (assignmentIndex % 30 === 0) {
-             setGenerationLogs(prev => [`⏳ محاولة (${attempt}/${MAX_ATTEMPTS}): جاري التسكين وفك التعارضات... (${assignmentIndex}/${totalAssignmentsLength})`, ...prev.slice(0, 3)]);
+             setGenerationLogs(prev => [`⏳ محاولة (${attempt}/${MAX_ATTEMPTS}): جاري التسكين وتفكيك التعارضات... (${assignmentIndex}/${totalAssignmentsLength})`, ...prev.slice(0, 3)]);
              await new Promise(resolve => setTimeout(resolve, 0));
           }
 
           const section = sections.find(s => s.id === assignment.section_id);
           if (!section) continue;
 
-          // 🚀 السعة الحقيقية
-          const stageMaxPeriods = section.stage === 'middle' ? 6 : 7;
+          // 🚀 السعة الحقيقية: المتوسط = 5 حصص، الثانوي = 6 حصص
+          const stageMaxPeriods = section.stage === 'middle' ? 5 : 6;
 
           for(let i=0; i<assignment.forced_waitlist; i++) {
              unplacedQueue.push({...assignment, section_id: section.id, section_name: section.full_name, stage: section.stage, id: crypto.randomUUID()});
@@ -540,6 +541,7 @@ export default function AutoScheduleGenerator() {
             if (!isPlaced && !assignment.isVIP && attempt > 3) {
               for (const day of getBestDays()) {
                 if (isPlaced) break; 
+                
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
                 
                 for (const period of dayPeriods) {
@@ -564,20 +566,22 @@ export default function AutoScheduleGenerator() {
                       
                       for (const altDay of allowedDaysZ) {
                          if(swapped) break;
+                         
                          const isZHighSchool = blockingSlot.stage === 'high';
                          if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
                          const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
                          for (const altPeriod of altPeriods) {
                             if (altDay === day && altPeriod.period_number === period.period_number) continue;
+                            const tempSchedule = finalSchedule.filter((_, idx) => idx !== secSlotIdx);
                             
-                            const secFreeAtAlt = !finalSchedule.some((s, idx) => idx !== secSlotIdx && s.section_id === section.id && s.day === altDay && s.period_number === altPeriod.period_number);
+                            const secFreeAtAlt = !tempSchedule.some(s => s.section_id === section.id && s.day === altDay && s.period_number === altPeriod.period_number);
                             if (!secFreeAtAlt) continue;
                             
-                            const teacherZBusyAtAlt = finalSchedule.some((s, idx) => idx !== secSlotIdx && s.teacher_id === blockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
+                            const teacherZBusyAtAlt = tempSchedule.some(s => s.teacher_id === blockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
                             if (teacherZBusyAtAlt) continue;
 
-                            const zSubjectSlots = finalSchedule.filter((s, idx) => idx !== secSlotIdx && s.section_id === section.id && s.subject_id === blockingSlot.subject_id);
+                            const zSubjectSlots = tempSchedule.filter(s => s.section_id === section.id && s.subject_id === blockingSlot.subject_id);
                             const zSubjectCountAltDay = zSubjectSlots.filter(s => s.day === altDay).length;
                             
                             const zAssignment = teacherAssignments.find(ta => ta.teacher_id === blockingSlot.teacher_id && ta.subject_id === blockingSlot.subject_id);
@@ -615,7 +619,7 @@ export default function AutoScheduleGenerator() {
                   if (!swapped && teachSlotIdx !== -1 && secSlotIdx === -1 && attempt > 5) {
                      const teacherBlockingSlot = finalSchedule[teachSlotIdx];
                      if (!teacherBlockingSlot.isVIP) {
-                         const stageMaxPeriodsW = teacherBlockingSlot.stage === 'middle' ? 6 : 7; 
+                         const stageMaxPeriodsW = teacherBlockingSlot.stage === 'middle' ? 5 : 6; 
                          const tWConstraints = teacherConstraints[teacherBlockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
                          let allowedDaysW = shuffleArray(workingDays.filter(d => tWConstraints.days.includes(d)));
                          allowedDaysW.sort((d1, d2) => teacherDailyLoad[teacherBlockingSlot.teacher_id][d1] - teacherDailyLoad[teacherBlockingSlot.teacher_id][d2]);
@@ -1438,7 +1442,8 @@ export default function AutoScheduleGenerator() {
                 {sortedClassNames.map(className => {
                   const sampleSection = sections.find(s => s.class_name === className);
                   const stage = sampleSection?.stage || 'high';
-                  const MAX_WEEKLY = stage === 'middle' ? 30 : 35;
+                  // 🚀 تحديد السعة الأسبوعية القصوى حسب المرحلة (تصحيح الخطأ الرياضي)
+                  const MAX_WEEKLY = stage === 'middle' ? 25 : 30;
 
                   const totalQuotasForClass = groupedSubjectsByClass[className].reduce((sum, item) => {
                       const key = `${item.subj_id}_${item.class_id}`;
