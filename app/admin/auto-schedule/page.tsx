@@ -310,7 +310,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Best Effort Fair Load Balancing)
+  // 🧠 THE CORE ALGORITHM (With Global Teacher Difficulty Index)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -318,7 +318,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بمحرك التوزيع المرن (العدالة كـ أفضل جهد)...");
+    addLog("🚀 بدء التوليد باستخدام مؤشر الصعوبة الشامل (Global Difficulty Index)...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -346,17 +346,34 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.original_quota > 0); 
 
+    // 🚀 حساب الميزانية العادلة لكل معلم ومؤشر الصعوبة الشامل
     const teacherTotalQuotas: Record<string, number> = {};
+    const teacherDifficulty: Record<string, number> = {}; 
+
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
+    });
+
+    Object.keys(teacherTotalQuotas).forEach(tId => {
+       const tConst = teacherConstraints[tId] || { days: [...workingDays], periods: [...dynamicPeriods] };
+       let availableDaysCount = tConst.days.length || 5;
+       let availablePeriodsCount = tConst.periods.length || dynamicPeriods.length;
+       
+       const hasVIP = teacherAssignments.some(ta => ta.teacher_id === tId && ta.isVIP);
+       if (hasVIP && availableDaysCount > 2) availableDaysCount = 2;
+       
+       const total = teacherTotalQuotas[tId];
+       
+       // 🚀 معامل الصعوبة: إجمالي الحصص المطلوبة مقسوماً على (أيام الدوام × الحصص المتاحة)
+       teacherDifficulty[tId] = total / (availableDaysCount * availablePeriodsCount);
     });
 
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 15; // 🚀 زيادة المحاولات للوصول لحالة الاسترخاء التام
+    const MAX_ATTEMPTS = 15; 
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -364,9 +381,9 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        // 🚀 محرك الاسترخاء التدريجي لحماية الجدول من الفشل
-        const ignoreFairness = attempt > 10; // في المحاولات الأخيرة، التسكين يصبح إجبارياً على حساب العدالة المطلقة
-        const relaxation = attempt > 5 ? 2 : 0; // مرونة إضافية للحصص
+        // 🚀 الاسترخاء التدريجي (العدالة تتنازل قليلاً من أجل اكتمال الجدول)
+        const ignoreFairness = attempt > 10; 
+        const relaxation = attempt > 5 ? 2 : 0; 
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
@@ -374,8 +391,8 @@ export default function AutoScheduleGenerator() {
            let availableDaysCount = tConst.days.length || 5;
            const hasVIP = teacherAssignments.some(ta => ta.teacher_id === tId && ta.isVIP);
            if (hasVIP && availableDaysCount > 2) availableDaysCount = 2;
-           const total = teacherTotalQuotas[tId];
            
+           const total = teacherTotalQuotas[tId];
            let baseMax = Math.ceil(total / availableDaysCount);
            if (baseMax < 2) baseMax = 2; 
            teacherMaxDailyLoad[tId] = baseMax;
@@ -386,14 +403,28 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
+        // 🚀 الفرز باستخدام "معامل الصعوبة الشامل"
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
-          const restrictA = a.available_days.length < 5 ? 1 : 0;
-          const restrictB = b.available_days.length < 5 ? 1 : 0;
-          if (restrictA !== restrictB) return restrictB - restrictA;
-          if (a.weekly_quota === b.weekly_quota) return Math.random() - 0.5;
-          return b.weekly_quota - a.weekly_quota; 
+          
+          // 1. الأولوية لمعامل صعوبة المعلم (المعلم المزدحم جداً يسكن أولاً)
+          const diffA = teacherDifficulty[a.teacher_id] || 0;
+          const diffB = teacherDifficulty[b.teacher_id] || 0;
+          
+          if (Math.abs(diffA - diffB) > 0.05) {
+             return diffB - diffA; // تنازلي: الأصعب أولاً
+          }
+
+          // 2. المعلم الذي لديه أيام دوام أقل يسكن أولاً
+          const aDays = a.available_days.length;
+          const bDays = b.available_days.length;
+          if (aDays !== bDays) return aDays - bDays;
+
+          // 3. ترتيب الحصص لنفس المعلم تنازلياً
+          if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
+          
+          return Math.random() - 0.5;
         });
 
         const commitPlacement = (section, assignment, day, period) => {
@@ -410,7 +441,7 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
-          // 🚀 قيد التوزيع العادل (يتم تجاوزه إذا ignoreFairness مفعل)
+          // قيد التوزيع العادل
           if (enforceLoadBalance && !ignoreFairness && teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
 
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
@@ -447,9 +478,9 @@ export default function AutoScheduleGenerator() {
           if (forcedMax > maxPerDay) maxPerDay = forcedMax; 
           if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
-          // 🚀 الفرز الطبيعي (Natural Balancing) - يبحث دائماً عن الأيام الأقل ضغطاً
           const getBestDays = () => {
              let days = shuffleArray([...allowedDaysForTeacher]);
+             // 🚀 الفرز الطبيعي: الأولوية لليوم الأقل ضغطاً للمعلم
              days.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
              if (assignment.isVIP) {
                 const vipDays = days.filter(d => d === 1 || d === 2);
@@ -488,7 +519,6 @@ export default function AutoScheduleGenerator() {
                }
             }
 
-            // 🚀 الإزاحة الذكية (Swap) مع التنازل التدريجي عن العدالة
             if (!isPlaced && !assignment.isVIP) {
               for (const day of getBestDays()) {
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
@@ -508,6 +538,7 @@ export default function AutoScheduleGenerator() {
                     const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
                     
                     let allowedDaysZ = shuffleArray(workingDays.filter(d => teacherZConstraints.days.includes(d)));
+                    // نقل المعلم المُزاح لليوم الأقل ضغطاً
                     allowedDaysZ.sort((d1, d2) => teacherDailyLoad[blockingSlot.teacher_id][d1] - teacherDailyLoad[blockingSlot.teacher_id][d2]);
                     
                     const zAssignment = teacherAssignments.find(ta => ta.teacher_id === blockingSlot.teacher_id && ta.subject_id === blockingSlot.subject_id);
@@ -569,7 +600,7 @@ export default function AutoScheduleGenerator() {
               }
             }
 
-            // 🚀 المرحلة الرابعة (حالة الطوارئ الحقيقية): التسكين الإجباري مهما كان الضغط
+            // المرحلة الأخيرة (الطوارئ): إيقاف العدالة الصارمة لتسكين الحصة
             if (!isPlaced) {
                for (const day of shuffleArray([...allowedDaysForTeacher])) {
                  const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
