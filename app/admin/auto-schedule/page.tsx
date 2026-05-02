@@ -8,8 +8,12 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, RefreshCcw, BarChart3, Activity, XCircle, CheckCircle, CloudDownload
+  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, RefreshCcw, BarChart3, Activity, XCircle, CheckCircle, CloudDownload, FileDown
 } from 'lucide-react';
+
+// 🚀 استيراد مكتبات توليد الـ PDF الذكية
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
 
 const timeToMinutes = (timeStr: string) => {
   if (!timeStr) return 0;
@@ -38,6 +42,13 @@ const getKuwaitDayId = (date: Date) => {
   const jsDay = date.getDay(); 
   if (jsDay === 5 || jsDay === 6) return 0; 
   return jsDay + 1;
+};
+
+// تنظيف روابط الزووم للـ PDF
+const normalizeUrl = (url?: string) => {
+  if (!url) return '';
+  const clean = url.trim();
+  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
 };
 
 export default function AutoScheduleGenerator() {
@@ -86,7 +97,9 @@ export default function AutoScheduleGenerator() {
   const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
-  const [isBatchPrinting, setIsBatchPrinting] = useState(false); 
+  
+  // 🚀 حالة توليد الـ PDF
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false); 
 
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
@@ -123,7 +136,7 @@ export default function AutoScheduleGenerator() {
   };
 
   useEffect(() => {
-    if (generatedSchedules.length > 0 && !gridFilterId && !isBatchPrinting) {
+    if (generatedSchedules.length > 0 && !gridFilterId && !isGeneratingPDF) {
       if (gridFilterType === 'section') {
         const firstSection = sections.find(s => generatedSchedules.some(gs => gs.section_id === s.id));
         if (firstSection) setGridFilterId(firstSection.id);
@@ -132,7 +145,7 @@ export default function AutoScheduleGenerator() {
         if (firstTeacherId) setGridFilterId(firstTeacherId);
       }
     }
-  }, [generatedSchedules, gridFilterType, sections, gridFilterId, isBatchPrinting]);
+  }, [generatedSchedules, gridFilterType, sections, gridFilterId, isGeneratingPDF]);
 
   const fetchMasterData = async () => {
     try {
@@ -142,7 +155,8 @@ export default function AutoScheduleGenerator() {
         const cData = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
         const level = cData?.level || 0;
         const className = cData?.name || 'صف غير محدد';
-        const classId = cData?.id || 'unknown';
+        // 🚀 تثبيت الـ class_id لمنع ضياع الميزانية
+        const classId = sec.class_id; 
         const stage = level >= 10 ? 'high' : 'middle';
         return { ...sec, class_id: classId, class_name: className, level, stage, full_name: `${className} - ${sec.name}` };
       });
@@ -153,7 +167,7 @@ export default function AutoScheduleGenerator() {
       setPeriods(periodsData || []);
 
       let tsData = [];
-      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name, zoom_link)), subjects(name)');
+      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name, zoom_link), zoom_link), subjects(name)');
       if (zoomError) {
          const { data: safeData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name)), subjects(name)');
          tsData = safeData || [];
@@ -177,7 +191,7 @@ export default function AutoScheduleGenerator() {
         subjClassList.sort((a, b) => a.class_name.localeCompare(b.class_name) || a.subj_name.localeCompare(b.subj_name));
         setUniqueSubjectClasses(subjClassList);
 
-        // 🚀 الحفظ الفولاذي: جلب الميزانية المحفوظة
+        // 🚀 الحفظ الفولاذي: جلب الميزانية المحفوظة واعتمادها فوراً
         const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v3') || localStorage.getItem('auto_schedule_quotas_temp');
         let initialQuotas: Record<string, number> = {};
         if (savedQuotasStr) { 
@@ -186,9 +200,14 @@ export default function AutoScheduleGenerator() {
         
         subjClassList.forEach(item => { 
            const key = `${item.subj_id}_${item.class_id}`; 
-           if (initialQuotas[key] === undefined) initialQuotas[key] = 3; // الرقم الافتراضي فقط إذا لم يسبق حفظه
+           if (initialQuotas[key] === undefined) initialQuotas[key] = 3; 
         });
         setSubjectQuotas(initialQuotas);
+
+        // إذا كانت الميزانية محفوظة مسبقاً، لا تطلب من الإدارة اعتمادها مجدداً
+        if (localStorage.getItem('auto_schedule_quotas_v3')) {
+           setIsBudgetSaved(true);
+        }
 
         const savedConstraintsStr = localStorage.getItem('auto_schedule_teacher_constraints');
         let initialConstraints: Record<string, { days: number[], periods: number[] }> = {};
@@ -204,7 +223,6 @@ export default function AutoScheduleGenerator() {
     const newQuotas = { ...subjectQuotas, [key]: newVal };
     setSubjectQuotas(newQuotas);
     setIsBudgetSaved(false); 
-    // 🚀 حفظ احتياطي فوري لتجنب الضياع عند التحديث
     localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(newQuotas));
   };
 
@@ -277,7 +295,6 @@ export default function AutoScheduleGenerator() {
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
-    setIsBatchPrinting(false);
     
     addLog("🚀 بدء التوليد بمحرك التوزيع اليومي الصارم...");
     
@@ -718,9 +735,6 @@ export default function AutoScheduleGenerator() {
       fetchSavedPlans();
       setActivePlanId(planData.id);
       alert('تم حفظ الخطة بنجاح. ستجدها متاحة في قائمة الجداول السحابية.');
-      
-      // 🚀 تم إزالة كود مسح المسودة لكي لا تختفي الحصص من أمامك
-      
     } catch (err) { addLog(`❌ خطأ: ${err.message}`); } finally { setGenerating(false); }
   };
 
@@ -735,16 +749,20 @@ export default function AutoScheduleGenerator() {
     }
   };
 
-  // 🚀 استدعاء جدول محفوظ من السحابة
   const loadPlan = async (id: string) => {
     setGenerating(true);
     addLog(`⏳ جاري استدعاء الجدول السحابي المعتمد...`);
     try {
-      const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, classes(name)), teachers(users(full_name)), subjects(name)').eq('plan_id', id);
-      const formatted = (slots || []).map(s => ({
-        ...s, day: s.day_of_week, section_name: `${Array.isArray(s.sections?.classes) ? s.sections?.classes[0]?.name : s.sections?.classes?.name} - ${s.sections?.name}`,
-        teacher_name: s.teachers?.users?.full_name, subject_name: s.subjects?.name, id: crypto.randomUUID()
-      }));
+      const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, classes(name)), teachers(users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
+      const formatted = (slots || []).map(s => {
+        const rawClass = Array.isArray(s.sections?.classes) ? s.sections?.classes[0]?.name : s.sections?.classes?.name;
+        const zoomL = s.teachers?.users?.zoom_link || s.teachers?.zoom_link || null;
+        return {
+          ...s, day: s.day_of_week, section_name: `${formatClassName(rawClass)} - ${s.sections?.name}`,
+          teacher_name: s.teachers?.users?.full_name || 'غير محدد', subject_name: s.subjects?.name, id: crypto.randomUUID(),
+          zoom_link: zoomL
+        };
+      });
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
@@ -753,19 +771,6 @@ export default function AutoScheduleGenerator() {
     } catch(e) {
       addLog(`❌ فشل استدعاء الجدول.`);
     } finally { setGenerating(false); }
-  };
-
-  const handleBatchPrint = () => {
-    if (batchPrintIds.length === 0) {
-       alert('يرجى تحديد جدول واحد على الأقل للطباعة!'); return;
-    }
-    setIsBatchPrinting(true);
-    setIsPrintCenterOpen(false);
-    
-    setTimeout(() => {
-       window.print();
-       setTimeout(() => setIsBatchPrinting(false), 500);
-    }, 1500); 
   };
 
   const toggleBatchPrintId = (id: string) => {
@@ -779,6 +784,92 @@ export default function AutoScheduleGenerator() {
     } else {
       setBatchPrintIds(uniqueTeachersInSchedule.map(t=>t.id));
     }
+  };
+
+  // 🚀 محرك الطباعة المجمعة الجديد والمطور بـ jsPDF
+  const handleBatchPrintPDF = () => {
+    if (batchPrintIds.length === 0) {
+       alert('يرجى تحديد جدول واحد على الأقل للطباعة!'); return;
+    }
+    setIsPrintCenterOpen(false);
+    setIsGeneratingPDF(true);
+    
+    setTimeout(async () => {
+      try {
+        const containers = document.querySelectorAll('.batch-pdf-page');
+        if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية.');
+
+        const pdf = new jsPDF('landscape', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        for (let i = 0; i < containers.length; i++) {
+          if (i > 0) pdf.addPage();
+          const el = containers[i] as HTMLElement;
+
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          const imgData = canvas.toDataURL('image/png');
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+          const links = el.querySelectorAll('a.zoom-link');
+          const elementRect = el.getBoundingClientRect();
+
+          links.forEach((link: any) => {
+            const rect = link.getBoundingClientRect();
+            if (elementRect.width > 0 && elementRect.height > 0) {
+              const relativeX = (rect.left - elementRect.left) / elementRect.width;
+              const relativeY = (rect.top - elementRect.top) / elementRect.height;
+              const pdfX = relativeX * pdfWidth; 
+              const pdfY = relativeY * pdfHeight;
+              const finalUrl = normalizeUrl(link.href);
+              if (finalUrl) pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+            }
+          });
+        }
+
+        let fileName = batchPrintType === 'section' ? 'جداول_الفصول_المحددة.pdf' : 'جداول_المعلمين_المحددين.pdf';
+        pdf.save(fileName);
+      } catch (error: any) { 
+        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
+      } finally { 
+        setIsGeneratingPDF(false); 
+      }
+    }, 1000); 
+  };
+
+  const handleSinglePrintPDF = async () => {
+    setIsGeneratingPDF(true);
+    setTimeout(async () => {
+      try {
+        const el = document.getElementById('single-pdf-container');
+        if (!el) throw new Error('الجدول غير جاهز.');
+        
+        const pdf = new jsPDF('landscape', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+        
+        const links = el.querySelectorAll('a.zoom-link');
+        const elementRect = el.getBoundingClientRect();
+        links.forEach((link: any) => {
+           const rect = link.getBoundingClientRect();
+           if (elementRect.width > 0 && elementRect.height > 0) {
+             const relativeX = (rect.left - elementRect.left) / elementRect.width;
+             const relativeY = (rect.top - elementRect.top) / elementRect.height;
+             const finalUrl = normalizeUrl(link.href);
+             if (finalUrl) pdf.link(relativeX * pdfWidth, relativeY * pdfHeight, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+           }
+        });
+
+        pdf.save(`جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`);
+      } catch(e: any) {
+        alert(e.message);
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    }, 500);
   };
 
   const groupedSubjectsByClass = useMemo(() => {
@@ -816,33 +907,45 @@ export default function AutoScheduleGenerator() {
      }
   };
 
-  const idsToRender = isBatchPrinting ? batchPrintIds : (gridFilterId ? [gridFilterId] : []);
-  const activePrintType = isBatchPrinting ? batchPrintType : gridFilterType;
+  const idsToRender = isGeneratingPDF ? batchPrintIds : [];
 
   if (currentRole !== 'admin' && currentRole !== 'management') return <div className="p-10 text-center font-bold">غير مصرح لك.</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo print:bg-white print:m-0 print:p-0 print:min-h-0" dir="rtl">
+    <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo print-hide" dir="rtl">
       
+      {/* إخفاء الطباعة العادية تماماً */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-           @page { size: landscape; margin: 10mm; }
-           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background-color: white !important; }
-           .page-break { page-break-after: always; break-after: page; }
-           .print-hide { display: none !important; }
+           body { display: none !important; }
         }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 1px solid #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
+
+      {/* شاشة التحميل */}
+      <AnimatePresence>
+        {isGeneratingPDF && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-xl text-white">
+            <Loader2 className="w-20 h-20 animate-spin text-emerald-400 mb-6" />
+            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثائق الـ PDF الذكية...</h2>
+            <p className="text-slate-300 font-bold mt-3 text-lg">يرجى الانتظار، النظام يقوم بدمج الجداول وزراعة الروابط.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modal تقرير التدقيق والإحصائيات */}
       <AnimatePresence>
         {isAuditModalOpen && auditReport && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 print-hide" onClick={() => setIsAuditModalOpen(false)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" onClick={() => setIsAuditModalOpen(false)} />
             <motion.div 
                initial={{ opacity: 0, scale: 0.95, y: 20 }} 
                animate={{ opacity: 1, scale: 1, y: 0 }} 
                exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh] print-hide" 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh]" 
                dir="rtl"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-800 shrink-0">
@@ -930,12 +1033,12 @@ export default function AutoScheduleGenerator() {
       <AnimatePresence>
         {isPrintCenterOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 print-hide" onClick={() => setIsPrintCenterOpen(false)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsPrintCenterOpen(false)} />
             <motion.div 
                initial={{ opacity: 0, scale: 0.95, y: 20 }} 
                animate={{ opacity: 1, scale: 1, y: 0 }} 
                exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh] print-hide" 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh]" 
                dir="rtl"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
@@ -943,7 +1046,7 @@ export default function AutoScheduleGenerator() {
                   <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><Printer className="w-6 h-6"/></div>
                   <div>
                     <h3 className="font-black text-slate-800 text-lg">مركز الطباعة المجمعة</h3>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">اختر مجموعة من الجداول لطباعتها معاً</p>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">اختر مجموعة من الجداول لطباعتها معاً بملف PDF</p>
                   </div>
                 </div>
                 <button onClick={() => setIsPrintCenterOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
@@ -980,8 +1083,8 @@ export default function AutoScheduleGenerator() {
 
               <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
                 <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
-                <button onClick={handleBatchPrint} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
-                  <Printer className="w-5 h-5" /> طباعة المحددين
+                <button onClick={handleBatchPrintPDF} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                  <FileDown className="w-5 h-5" /> تحميل PDF للمحددين
                 </button>
               </div>
             </motion.div>
@@ -993,12 +1096,12 @@ export default function AutoScheduleGenerator() {
       <AnimatePresence>
         {manualAssignModalOpen && lessonToAssign && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 print-hide" onClick={() => setManualAssignModalOpen(false)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setManualAssignModalOpen(false)} />
             <motion.div 
                initial={{ opacity: 0, scale: 0.95, y: 20 }} 
                animate={{ opacity: 1, scale: 1, y: 0 }} 
                exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] print-hide" 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]" 
                dir="rtl"
             >
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
@@ -1092,12 +1195,12 @@ export default function AutoScheduleGenerator() {
       <AnimatePresence>
         {isTeacherModalOpen && selectedTeacherObj && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 print-hide" onClick={() => setIsTeacherModalOpen(false)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsTeacherModalOpen(false)} />
             <motion.div 
                initial={{ opacity: 0, y: 100 }} 
                animate={{ opacity: 1, y: 0 }} 
                exit={{ opacity: 0, y: 100 }} 
-               className="fixed bottom-0 left-0 w-full sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] print-hide" 
+               className="fixed bottom-0 left-0 w-full sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]" 
                dir="rtl"
             >
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
@@ -1148,7 +1251,7 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
-      <div className="max-w-7xl mx-auto space-y-6 print-hide">
+      <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-900 to-slate-900 rounded-[2rem] p-6 md:p-8 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">
@@ -1279,7 +1382,6 @@ export default function AutoScheduleGenerator() {
               </h3>
               
               <div className="space-y-4">
-                {/* 🚀 مركز الاستدعاء السحابي الجديد */}
                 {savedPlans.length > 0 && (
                    <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl mb-4">
                       <label className="text-xs font-black text-indigo-800 mb-2 block flex items-center gap-1">
@@ -1309,7 +1411,6 @@ export default function AutoScheduleGenerator() {
                   </button>
                 </div>
 
-                {/* زر الحفظ السحابي */}
                 {(generatedSchedules.length > 0 || unplacedLessons.length > 0) && (
                   <button onClick={savePlanToDatabase} disabled={generating} className="w-full py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-black text-sm transition-all active:scale-95 flex justify-center items-center gap-2">
                     <Save className="w-4 h-4" /> حفظ الجدول سحابياً {activePlanId ? '(كخطة جديدة)' : ''}
@@ -1341,11 +1442,11 @@ export default function AutoScheduleGenerator() {
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
                          </button>
-                         <button onClick={() => window.print()} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
-                           <Printer className="w-4 h-4" /> طباعة
+                         <button onClick={handleSinglePrintPDF} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
+                           <FileDown className="w-4 h-4" /> تحميل PDF
                          </button>
                          <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
-                           <Layers className="w-4 h-4" /> تجميع
+                           <Layers className="w-4 h-4" /> طباعة مجمعة
                          </button>
                        </>
                      )}
@@ -1436,57 +1537,154 @@ export default function AutoScheduleGenerator() {
         </div>
       </div>
 
-      {/* الحاوية الخاصة بالطباعة المجمعة فقط */}
-      <div className="hidden print:block w-full print:m-0 print:p-0">
-         {idsToRender.map((renderId, index) => {
-            const printName = getPrintNameById(renderId, activePrintType);
-            return (
-              <div key={renderId} className="page-break w-full bg-white mb-8 print:mb-0">
-                 <div className="text-center mb-6 border-b-2 border-slate-800 pb-4 w-full">
-                    <h1 className="text-2xl font-black text-slate-900 mb-2">جدول الحصص الأسبوعي المعتمد</h1>
-                    <h2 className="text-xl font-bold text-slate-700">
-                       {activePrintType === 'section' ? 'الفصل: ' : 'المعلم: '} 
-                       {printName}
-                    </h2>
-                 </div>
-
-                 <div className="w-full border-2 border-black rounded-none bg-white">
-                    <table className="w-full text-center border-collapse table-fixed border-black">
-                      <thead>
-                        <tr className="bg-white text-black">
-                          <th className="p-3 font-black w-24 border-b-2 border-black border-l border-black text-black">اليوم</th>
-                          {dynamicPeriods.map(p => <th key={p} className="p-3 font-black border-b-2 border-black border-l border-black last:border-l-0 text-black">الحصة {p}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {workingDays.map((day) => (
-                          <tr key={day} className="border-b border-black last:border-b-0 break-inside-avoid">
-                            <td className="p-3 font-black text-black bg-white border-l border-black">{getDayName(day)}</td>
-                            {dynamicPeriods.map(p => {
-                              const slot = generatedSchedules.find(s => s.day === day && s.period_number === p && (activePrintType === 'section' ? s.section_id === renderId : s.teacher_id === renderId));
-                              return (
-                                <td key={p} className="p-2 border-l border-black last:border-l-0 h-auto min-h-[6rem] align-middle">
-                                  {slot ? (
-                                    <div className="p-1 flex flex-col justify-center items-center h-full text-black">
-                                      <div className="font-black text-[11px] sm:text-xs text-black mb-1 leading-tight whitespace-normal break-words w-full">{slot.subject_name}</div>
-                                      <div className="font-bold text-[9px] sm:text-[10px] text-black leading-tight whitespace-normal break-words w-full">{activePrintType === 'section' ? slot.teacher_name : slot.section_name}</div>
-                                    </div>
-                                  ) : (<div className="flex items-center justify-center h-full text-transparent">-</div>)}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                 </div>
+      {/* 🚀 الحاوية الخفية للطباعة الفردية (للمشاهدة الحالية فقط) */}
+      <div style={{ position: 'fixed', top: '-10000px', left: '-10000px', pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+        {gridFilterId && (
+          <div id="single-pdf-container" className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
+              <div>
+                <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
+                   {gridFilterType === 'section' ? `الفصل: ${getPrintNameById(gridFilterId, 'section')}` : `المعلم: ${getPrintNameById(gridFilterId, 'teacher')}`}
+                </h2>
               </div>
-            );
-         })}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
+                <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+              </div>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
+                  {dynamicPeriods.map(p => (
+                    <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p}</div>
+                      {(() => {
+                        const slotForTime = generatedSchedules.find(s => s.period_number === p);
+                        if (slotForTime) {
+                          return <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{formatTime(slotForTime.start_time)} - {formatTime(slotForTime.end_time)}</div>;
+                        }
+                        return null;
+                      })()}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((day, dIdx) => (
+                  <tr key={day.id}>
+                    <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
+                    {dynamicPeriods.map((p) => {
+                      const slot = generatedSchedules.find(s => s.day === day.id && s.period_number === p && (gridFilterType === 'section' ? s.section_id === gridFilterId : s.teacher_id === gridFilterId));
+                      return (
+                        <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                          {slot ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                              <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{gridFilterType === 'section' ? slot.subject_name : slot.section_name}</div>
+                              <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
+                                {gridFilterType === 'section' ? `أ. ${slot.teacher_name}` : slot.subject_name}
+                              </div>
+                              {slot.zoom_link && (
+                                <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
+                                  رابط البث
+                                </a>
+                              )}
+                            </div>
+                          ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
+              <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 🚀 الحاوية الخفية للطباعة الجماعية من مركز الطباعة (تم تصحيح s.day_of_week) */}
+      <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+        {entitiesToPrint.map((entity, idx) => {
+           const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class';
+           const entId = String(entity.id);
+           const entName = entity.name || entity.users?.full_name || 'غير محدد';
+           const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
+
+           return (
+             <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #1e293b', paddingBottom: '16px', marginBottom: '24px' }}>
+                 <div>
+                   <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                   <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
+                     {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
+                   </h2>
+                 </div>
+                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>العام الدراسي الحالي</div>
+                   <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+                 </div>
+               </div>
+               <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
+                 <thead>
+                   <tr>
+                     <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
+                     {dynamicPeriods.map(p => (
+                       <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
+                         <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p}</div>
+                         {(() => {
+                           const slotForTime = generatedSchedules.find(s => s.period_number === p);
+                           if (slotForTime) {
+                             return <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#10b981', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>{formatTime(slotForTime.start_time)} - {formatTime(slotForTime.end_time)}</div>;
+                           }
+                           return null;
+                         })()}
+                       </th>
+                     ))}
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {DAYS.map((day, dIdx) => (
+                     <tr key={day.id}>
+                       <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>{day.name}</td>
+                       {dynamicPeriods.map((p) => {
+                         // 🚀 تم إصلاح s.day_of_week إلى s.day
+                         const slot = generatedSchedules.find(s => String(s.day) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
+                         return (
+                           <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                             {slot ? (
+                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                                 <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
+                                 <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
+                                   {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
+                                 </div>
+                                 {slot.zoom_link && (
+                                   <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
+                                     رابط البث
+                                   </a>
+                                 )}
+                               </div>
+                             ) : (<span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>)}
+                           </td>
+                         );
+                       })}
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div><div><p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p><p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p></div></div>
+                 <div><p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p></div>
+               </div>
+             </div>
+           );
+        })}
       </div>
 
     </div>
   );
 }
-
-
