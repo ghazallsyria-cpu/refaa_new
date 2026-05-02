@@ -11,8 +11,6 @@ import {
   Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, Activity, XCircle, CheckCircle, CloudDownload, FileDown
 } from 'lucide-react';
 
-// 🚀 لا نستورد jsPDF أو html2canvas هنا أبداً لمنع الانهيار. سنستدعيهم فقط عند الحاجة في المتصفح.
-
 const timeToMinutes = (timeStr: string) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
@@ -114,12 +112,9 @@ export default function AutoScheduleGenerator() {
   useEffect(() => {
     setMounted(true);
     if (currentRole !== 'admin' && currentRole !== 'management') return;
-    
-    // 🚀 تأمين جلب البيانات
     fetchMasterData();
     fetchSavedPlans();
 
-    // 🚀 حماية LocalStorage بحيث تعمل فقط بعد التأكد من وجود window
     if (typeof window !== 'undefined') {
       const localDraft = localStorage.getItem('auto_schedule_current_draft_v1');
       const localUnplaced = localStorage.getItem('auto_schedule_unplaced_draft_v1');
@@ -207,7 +202,6 @@ export default function AutoScheduleGenerator() {
         subjClassList.sort((a, b) => a.class_name.localeCompare(b.class_name) || a.subj_name.localeCompare(b.subj_name));
         setUniqueSubjectClasses(subjClassList);
 
-        // 🚀 حماية القراءة من LocalStorage
         let initialQuotas: Record<string, number> = {};
         if (typeof window !== 'undefined') {
           const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v3') || localStorage.getItem('auto_schedule_quotas_temp');
@@ -312,7 +306,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM
+  // 🧠 THE CORE ALGORITHM (WITH FAIR LOAD BALANCING)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -348,6 +342,7 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.original_quota > 0); 
 
+    // 🚀 حساب الميزانية العادلة لكل معلم في اليوم (توازن الأحمال)
     const teacherTotalQuotas: Record<string, number> = {};
     const teacherMaxDailyLoad: Record<string, number> = {};
 
@@ -360,6 +355,7 @@ export default function AutoScheduleGenerator() {
        const tConst = teacherConstraints[tId] || { days: [...workingDays] };
        const availableDaysCount = tConst.days.length || 5;
        const total = teacherTotalQuotas[tId];
+       // معادلة العدالة: نقسم إجمالي الحصص على عدد أيام الدوام المتاحة، ونقرب للأعلى، ونضيف 1 كمرونة للمحرك
        teacherMaxDailyLoad[tId] = Math.ceil(total / availableDaysCount) + 1;
     });
 
@@ -404,7 +400,9 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount) => {
+          // 🚀 قيد العدالة المكتشف حديثاً: منع تكدس الحصص للمعلم في يوم واحد
           if (teacherDailyLoad[teacherId][day] >= teacherMaxDailyLoad[teacherId]) return false;
+
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
@@ -486,6 +484,7 @@ export default function AutoScheduleGenerator() {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   
+                  // 🚀 قيد العدالة أثناء الإزاحة الاستثنائية
                   if (teacherDailyLoad[assignment.teacher_id][day] >= teacherMaxDailyLoad[assignment.teacher_id]) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
@@ -506,6 +505,7 @@ export default function AutoScheduleGenerator() {
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
+                       // 🚀 حماية إزاحة المعلم Z لكي لا ينفجر نصابه اليومي في اليوم الجديد
                        if (teacherDailyLoad[blockingSlot.teacher_id][altDay] >= teacherMaxDailyLoad[blockingSlot.teacher_id]) continue;
 
                        const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
@@ -536,6 +536,7 @@ export default function AutoScheduleGenerator() {
                             finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
                             finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
                             
+                            // 🚀 تحديث عداد نصاب المعلم Z والمعلم Y بعد نجاح الإزاحة
                             teacherDailyLoad[blockingSlot.teacher_id][day]--;
                             teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
 
@@ -760,12 +761,10 @@ export default function AutoScheduleGenerator() {
     }
   };
 
-  // 🚀 دالة الطباعة الآمنة (يتم استدعاء المكتبات بداخلها فقط لتجنب SSR Crash)
   const executePDFGeneration = async (mode: string, filterVal: string = '') => {
     setIsGeneratingPDF(true);
     
     try {
-      // 🚀 استيراد ديناميكي آمن
       const jsPDFModule = (await import('jspdf')).default;
       const html2canvasModule = (await import('html2canvas-pro')).default;
 
@@ -955,7 +954,9 @@ export default function AutoScheduleGenerator() {
         mappedDepts.add(getTeacherDept(t.id));
     });
     return Array.from(mappedDepts).sort();
-  }, [uniqueTeachersInSchedule]);
+  }, [uniqueTeachersInSchedule, generatedSchedules]);
+
+  const idsToRender = isGeneratingPDF ? batchPrintIds : [];
 
   if (!mounted || loadingData || isChecking) {
      return (
@@ -983,7 +984,6 @@ export default function AutoScheduleGenerator() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
 
-      {/* شاشة التحميل للـ PDF */}
       <AnimatePresence>
         {isGeneratingPDF && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-xl text-white">
@@ -1560,9 +1560,6 @@ export default function AutoScheduleGenerator() {
                                           <div className="bg-white border border-indigo-200 shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative">
                                             <div className="font-black text-indigo-900 text-xs leading-tight mb-1 w-full whitespace-normal break-words" title={slot.subject_name}>{slot.subject_name}</div>
                                             <div className="font-bold text-[9px] sm:text-[10px] text-slate-800 bg-slate-50 px-1.5 py-1 rounded-md w-full whitespace-normal break-words leading-tight border border-slate-200" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
-                                            {showZoom && (
-                                              <a href={slot.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-1.5 w-full flex items-center justify-center gap-1 text-[9px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md py-1 border border-blue-200 transition-colors" title="دخول لبث الزووم"><Video className="w-3 h-3"/> دخول للبث</a>
-                                            )}
                                           </div>
                                         ) : (<div className="flex items-center justify-center h-full text-slate-300"><span className="text-xl opacity-50">-</span></div>)}
                                       </td>
