@@ -187,7 +187,6 @@ export default function AutoScheduleGenerator() {
          tsData = tsDataWithZoom || [];
       }
 
-      // درع التنقية لمنع التكرار
       const uniqueAssignmentsMap = new Map();
       tsData.forEach(ts => {
          const uniqueKey = `${ts.section_id}_${ts.subject_id}`;
@@ -216,12 +215,9 @@ export default function AutoScheduleGenerator() {
 
         let initialQuotas: Record<string, number> = {};
         if (typeof window !== 'undefined') {
-          const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_temp'); // 🚀 القراءة فقط من المؤقت (الشاشة)
+          const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_temp'); 
           if (savedQuotasStr) { 
              try { initialQuotas = JSON.parse(savedQuotasStr); } catch (e) {} 
-          }
-          if (localStorage.getItem('auto_schedule_quotas_temp')) {
-             setIsBudgetSaved(true);
           }
         }
         
@@ -254,11 +250,10 @@ export default function AutoScheduleGenerator() {
 
   const saveBudget = () => {
     if (typeof window !== 'undefined') {
-      // 🚀 حفظ الميزانية في مسار واحد فقط يعتمد عليه النظام
       localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
     }
     setIsBudgetSaved(true);
-    alert('تم اعتماد الميزانية بنجاح.');
+    alert('تم اعتماد الميزانية بنجاح. الخوارزمية الآن ستقرأ هذه الأرقام حصراً.');
   };
 
   const openTeacherConstraintsModal = (id: string, name: string) => {
@@ -301,7 +296,7 @@ export default function AutoScheduleGenerator() {
     rawTeacherAssignments.forEach(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
-      const quota = key && subjectQuotas[key] !== undefined ? subjectQuotas[key] : 0;
+      const quota = key && subjectQuotas[key] !== undefined ? Number(subjectQuotas[key]) : 0;
       
       if (quota > 0 && ts.teachers?.users?.full_name) {
         const tName = ts.teachers.users.full_name;
@@ -318,7 +313,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Strict Strict UI Quota Enforcement)
+  // 🧠 THE CORE ALGORITHM (Absolute Strict Quota)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -326,15 +321,14 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (الفرز المزدوج والإزاحة المتقدمة)...");
+    addLog("🚀 بدء التوليد بخوارزمية (الاعتماد الصارم على ميزانية الشاشة)...");
     
-    // 🚀 القراءة الحرفية من الشاشة الظاهرة أمام المستخدم الآن (subjectQuotas)
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
       
-      // هنا تكمن قوة الحل: لا نقرأ من أي مكان آخر سوى ما اعتمدته بيدك
-      const quota = key ? (subjectQuotas[key] !== undefined ? subjectQuotas[key] : 3) : 3;
+      // 🚀 التصحيح الأكبر: إذا كانت المادة غير موجودة في المربعات التي أمامك، ستأخذ صفر حصص ولن تظهر كشبح!
+      const quota = key && subjectQuotas[key] !== undefined ? Number(subjectQuotas[key]) : 0;
       
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
@@ -368,7 +362,7 @@ export default function AutoScheduleGenerator() {
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 25; 
+    const MAX_ATTEMPTS = 15; 
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -376,9 +370,9 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        const ignoreFairness = attempt > 15; 
-        const relaxation = attempt > 10 ? 2 : 0; 
-        const emergencyForce = attempt > 20; 
+        const ignoreFairness = attempt > 10; 
+        const relaxation = attempt > 5 ? 2 : 0; 
+        const emergencyForce = attempt > 12; 
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
@@ -442,7 +436,7 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && attempt < 15 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 10 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -653,7 +647,7 @@ export default function AutoScheduleGenerator() {
     if (absoluteBestFailedCount > 0) {
       addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (القيود متضاربة جداً).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل والميزانية قُرأت بصرامة تامّة.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل والميزانية قُرأت بصرامة تامّة دون أشباح.`);
     }
     setGenerating(false);
   };
@@ -768,8 +762,7 @@ export default function AutoScheduleGenerator() {
 
   const loadPlan = async (id: string) => {
     setGenerating(true);
-    // 🚀 تنبيه هام: هذا الاستدعاء هو للعرض والتعديل اليدوي فقط ولا يمس الميزانية الحالية بأي شكل!
-    addLog(`⏳ جاري استدعاء الجدول السحابي (في وضع القراءة فقط للحفاظ على الميزانية)...`);
+    addLog(`⏳ جاري استدعاء الجدول السحابي (أرقام الميزانية لن تتغير)...`);
     try {
       let slots = [];
       const { data: slotsWithZoom, error: zoomErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
@@ -821,13 +814,12 @@ export default function AutoScheduleGenerator() {
 
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       
-      // 🚀 تم مسح كود التلاعب بالميزانية من هنا نهائياً!
+      // 🚀 تم بتر ومسح كل الأسطر التي كانت تستخرج الميزانية القديمة وتحل محل الجديدة! 
       
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول المعتمد بنجاح، والميزانية بقيت سليمة وآمنة!`);
-
+      addLog(`✅ تم تحميل الجدول بنجاح. (الميزانية بقيت آمنة كما حددتها أنت).`);
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
@@ -1393,7 +1385,7 @@ export default function AutoScheduleGenerator() {
                     <div className="space-y-2 pl-3 border-r-2 border-indigo-100 mr-2">
                       {groupedSubjectsByClass[className].map(item => {
                         const key = `${item.subj_id}_${item.class_id}`;
-                        const currentVal = subjectQuotas[key] !== undefined ? subjectQuotas[key] : 3;
+                        const currentVal = subjectQuotas[key] !== undefined ? subjectQuotas[key] : 0;
                         const isZero = currentVal === 0;
 
                         return (
@@ -1512,7 +1504,7 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
-                     {/* 🚀 أزرار الطباعة والتدقيق التي تمت إعادتها */}
+                     {/* أزرار الطباعة والتدقيق */}
                      {displayMode === 'grid' && (
                        <>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
