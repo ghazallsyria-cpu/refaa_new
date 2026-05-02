@@ -11,10 +11,6 @@ import {
   Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, Activity, XCircle, CheckCircle, CloudDownload, FileDown
 } from 'lucide-react';
 
-// 🚀 استيراد مكتبات توليد الـ PDF
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas-pro';
-
 const timeToMinutes = (timeStr: string) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
@@ -36,6 +32,12 @@ const shuffleArray = (array: any[]) => {
     [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
   }
   return newArr;
+};
+
+const getKuwaitDayId = (date: Date) => {
+  const jsDay = date.getDay(); 
+  if (jsDay === 5 || jsDay === 6) return 0; 
+  return jsDay + 1;
 };
 
 const normalizeUrl = (url?: string) => {
@@ -646,7 +648,6 @@ export default function AutoScheduleGenerator() {
     } catch (err) { addLog(`❌ خطأ: ${err.message}`); } finally { setGenerating(false); }
   };
 
-  // 🚀 دالة تحميل الجدول السحابي والهندسة العكسية لاستخراج الميزانية
   const loadPlan = async (id: string) => {
     setGenerating(true);
     addLog(`⏳ جاري استدعاء الجدول السحابي وقراءة إعداداته الأصلية...`);
@@ -664,20 +665,17 @@ export default function AutoScheduleGenerator() {
       });
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       
-      // 🚀 الهندسة العكسية: قراءة وحساب الميزانية الأصلية للجدول
       if (slots && slots.length > 0) {
          const extractedQuotas: Record<string, number> = {};
          slots.forEach(slot => {
             const cId = slot.sections?.class_id || sections.find(sec => sec.id === slot.section_id)?.class_id;
             if (cId && slot.subject_id) {
                const qKey = `${slot.subject_id}_${cId}`;
-               // كم حصة أخذ هذا الفصل تحديداً في هذه المادة داخل الجدول المحفوظ؟
                const count = slots.filter(x => x.section_id === slot.section_id && x.subject_id === slot.subject_id).length;
                extractedQuotas[qKey] = Math.max(extractedQuotas[qKey] || 0, count);
             }
          });
          
-         // تحديث واعتماد الميزانية الجديدة فوراً
          setSubjectQuotas(prev => {
             const merged = { ...prev, ...extractedQuotas };
             localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(merged));
@@ -712,19 +710,21 @@ export default function AutoScheduleGenerator() {
     }
   };
 
-  // 🚀 محرك الـ PDF הפردي والمجمع
+  // 🚀 محرك الـ PDF المحصن بالتأخير الزمني (Lazy Loading) لمنع الانهيار
   const handleSinglePrintPDF = async () => {
+    if (typeof window === 'undefined') return;
     setIsGeneratingPDF(true);
+    
     setTimeout(async () => {
       try {
         const el = document.getElementById('single-pdf-container');
-        if (!el) throw new Error('الجدول غير جاهز.');
+        if (!el) throw new Error('الجدول غير جاهز للطباعة.');
         
         const pdf = new jsPDF('landscape', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
         
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
         pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
         
         const links = el.querySelectorAll('a.zoom-link');
@@ -745,31 +745,65 @@ export default function AutoScheduleGenerator() {
       } finally {
         setIsGeneratingPDF(false);
       }
-    }, 500);
+    }, 800);
   };
 
-  const handleBatchPrintPDF = () => {
-    if (batchPrintIds.length === 0) { alert('يرجى تحديد جدول واحد على الأقل للطباعة!'); return; }
+  const handlePrintCommand = async (mode: string, filterVal: string = '') => {
+    if (typeof window === 'undefined') return;
+    setPrintMode(mode as any);
+    setPrintFilterVal(filterVal);
     setIsPrintCenterOpen(false);
     setIsGeneratingPDF(true);
+
+    let entities: any[] = [];
     
+    if (mode === 'single') {
+      const singleEntity = gridFilterType === 'teacher' ? uniqueTeachersInSchedule.find(t => String(t.id) === String(gridFilterId)) : sections.find(s => String(s.id) === String(gridFilterId));
+      if(singleEntity) entities = [singleEntity];
+    } else if (mode === 'all-teachers') {
+      entities = uniqueTeachersInSchedule;
+    } else if (mode === 'specific-dept') {
+      entities = uniqueTeachersInSchedule.filter(t => getTeacherDept(t.id) === filterVal);
+    } else if (mode === 'all-sections') {
+      entities = sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id));
+    } else if (mode === 'specific-class') {
+      entities = sections.filter(sec => sec.class_name === filterVal && generatedSchedules.some(s => String(s.section_id) === String(sec.id)));
+    } else if (mode === 'custom-batch') {
+      if (batchPrintType === 'section') {
+          entities = sections.filter(s => batchPrintIds.includes(s.id));
+      } else {
+          entities = uniqueTeachersInSchedule.filter(t => batchPrintIds.includes(t.id));
+      }
+    }
+
+    if(entities.length === 0) {
+      alert('لا توجد بيانات (جداول) لطباعتها في هذا التحديد.');
+      setIsGeneratingPDF(false);
+      return;
+    }
+
+    setEntitiesToPrint(entities);
+
     setTimeout(async () => {
       try {
         const containers = document.querySelectorAll('.batch-pdf-page');
-        if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية.');
+        if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
 
         const pdf = new jsPDF('landscape', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
         for (let i = 0; i < containers.length; i++) {
-          if (i > 0) pdf.addPage();
+          if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
+
           const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+          const imgData = canvas.toDataURL('image/png');
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
           const links = el.querySelectorAll('a.zoom-link');
           const elementRect = el.getBoundingClientRect();
+
           links.forEach((link: any) => {
             const rect = link.getBoundingClientRect();
             if (elementRect.width > 0 && elementRect.height > 0) {
@@ -778,14 +812,31 @@ export default function AutoScheduleGenerator() {
               const pdfX = relativeX * pdfWidth; 
               const pdfY = relativeY * pdfHeight;
               const finalUrl = normalizeUrl(link.href);
-              if (finalUrl) pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+              
+              if (finalUrl) {
+                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+              }
             }
           });
         }
-        let fileName = batchPrintType === 'section' ? 'جداول_الفصول_المحددة.pdf' : 'جداول_المعلمين_المحددين.pdf';
+
+        let fileName = 'الجدول_الدراسي.pdf';
+        if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
+        if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
+        if (mode === 'specific-class') fileName = `جداول_مرحلة_${filterVal.replace(/\s+/g, '_')}.pdf`;
+        if (mode === 'specific-dept') fileName = `جداول_${filterVal.replace(/\s+/g, '_')}.pdf`;
+        if (mode === 'single') fileName = `جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`;
+        if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
+
         pdf.save(fileName);
-      } catch (error: any) { alert(error.message); } finally { setIsGeneratingPDF(false); }
-    }, 1000); 
+      } catch (error: any) { 
+        console.error(error);
+        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
+      } finally { 
+        setIsGeneratingPDF(false); 
+        setEntitiesToPrint([]); 
+      }
+    }, 1200); 
   };
 
   const groupedSubjectsByClass = useMemo(() => {
@@ -851,6 +902,7 @@ export default function AutoScheduleGenerator() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
 
+      {/* شاشة التحميل للـ PDF */}
       <AnimatePresence>
         {isGeneratingPDF && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-xl text-white">
@@ -1003,7 +1055,7 @@ export default function AutoScheduleGenerator() {
 
               <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
                 <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
-                <button onClick={handleBatchPrintPDF} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                <button onClick={() => handlePrintCommand('custom-batch')} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
                   <FileDown className="w-5 h-5" /> تحميل PDF للمحددين
                 </button>
               </div>
