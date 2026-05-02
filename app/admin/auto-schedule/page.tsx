@@ -96,16 +96,6 @@ export default function AutoScheduleGenerator() {
   const [gridFilterType, setGridFilterType] = useState<'section' | 'teacher'>('section');
   const [gridFilterId, setGridFilterId] = useState<string>('');
 
-  const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
-  const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
-  const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
-  const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'specific-dept' | 'all-sections' | 'specific-class' | 'custom-batch'>('single');
-  const [printFilterVal, setPrintFilterVal] = useState<string>('');
-  const [selectedPrintClass, setSelectedPrintClass] = useState<string>('');
-  const [selectedPrintDept, setSelectedPrintDept] = useState<string>('');
-  const [entitiesToPrint, setEntitiesToPrint] = useState<any[]>([]);
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
 
@@ -149,7 +139,7 @@ export default function AutoScheduleGenerator() {
   };
 
   useEffect(() => {
-    if (generatedSchedules.length > 0 && !gridFilterId && !isGeneratingPDF) {
+    if (generatedSchedules.length > 0 && !gridFilterId) {
       if (gridFilterType === 'section') {
         const firstSection = sections.find(s => generatedSchedules.some(gs => gs.section_id === s.id));
         if (firstSection) setGridFilterId(firstSection.id);
@@ -158,7 +148,7 @@ export default function AutoScheduleGenerator() {
         if (firstTeacherId) setGridFilterId(firstTeacherId);
       }
     }
-  }, [generatedSchedules, gridFilterType, sections, gridFilterId, isGeneratingPDF]);
+  }, [generatedSchedules, gridFilterType, sections, gridFilterId]);
 
   const fetchMasterData = async () => {
     try {
@@ -310,7 +300,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Smallest Quota & Most Sections First)
+  // 🧠 THE CORE ALGORITHM (Hybrid Fairness - High School Only)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -318,7 +308,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (الأصغر والأكثر تشتتاً أولاً)...");
+    addLog("🚀 بدء التوليد بخوارزمية (العدالة الهجينة) والمواد الكبيرة أولاً...");
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
@@ -346,40 +336,29 @@ export default function AutoScheduleGenerator() {
       };
     }).filter(ta => ta.original_quota > 0); 
 
-    // 🚀 1. حساب إجمالي الحصص لكل معلم
     const teacherTotalQuotas: Record<string, number> = {};
-    const teacherSectionCount: Record<string, number> = {}; // 🚀 2. حساب عدد الفصول التي يدرسها المعلم
-
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
       teacherTotalQuotas[ta.teacher_id] += ta.weekly_quota;
-
-      if (!teacherSectionCount[ta.teacher_id]) teacherSectionCount[ta.teacher_id] = 0;
-      teacherSectionCount[ta.teacher_id] += 1;
     });
 
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    // 🚀 50 محاولة تفكير عميق
-    const MAX_ATTEMPTS = 50; 
+    const MAX_ATTEMPTS = 15; 
     await new Promise(r => setTimeout(r, 100)); 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        if (attempt % 10 === 0) {
-            setGenerationLogs(prev => [`⏳ محرك التفكير: يعيد بناء الهيكل (محاولة ${attempt}/${MAX_ATTEMPTS})...`, ...prev.slice(0, 3)]);
-            await new Promise(r => setTimeout(r, 20)); 
-        }
-
         let finalSchedule = [];
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        const ignoreFairness = attempt > 30; 
-        const relaxation = attempt > 20 ? 2 : (attempt > 10 ? 1 : 0); 
-        const emergencyForce = attempt > 40; 
+        const ignoreFairness = attempt > 10; 
+        const relaxation = attempt > 5 ? 2 : 0; 
+        const emergencyForce = attempt > 12; 
 
+        // 🚀 حساب العدالة اليومية
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
            const tConst = teacherConstraints[tId] || { days: [...workingDays] };
@@ -389,7 +368,7 @@ export default function AutoScheduleGenerator() {
            
            const total = teacherTotalQuotas[tId];
            let baseMax = Math.ceil(total / availableDaysCount);
-           if (baseMax < 2) baseMax = 2; // منح مرونة للمعلمين الصغار
+           if (baseMax < 2) baseMax = 2; 
            teacherMaxDailyLoad[tId] = baseMax;
         });
         
@@ -398,23 +377,16 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // 🚀🔥 خوارزمية الفرز السحرية (مفتاح حل مشكلة الحاسوب) 🔥🚀
+        // 🚀 العودة للفرز الصحيح (المواد الكبيرة أولاً لضمان عدم انهيار العربي والرياضيات)
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
           
-          // 1. المعلم صاحب القيود الزمنية الأصعب أولاً (مثلاً دوامه يومين فقط)
-          const restrictA = a.available_days.length * a.available_periods.length;
-          const restrictB = b.available_days.length * b.available_periods.length;
-          if (restrictA !== restrictB) return restrictA - restrictB; 
-
-          // 2. المعلم الذي يُدرس أكبر عدد من الفصول أولاً (مثل معلم الحاسوب)
-          const secA = teacherSectionCount[a.teacher_id];
-          const secB = teacherSectionCount[b.teacher_id];
-          if (secA !== secB) return secB - secA; // تنازلي
-
-          // 3. المادة ذات الحصة الواحدة أولاً (أقل نصاب أسبوعي للفصل الواحد)
-          if (a.weekly_quota !== b.weekly_quota) return a.weekly_quota - b.weekly_quota; // تصاعدي
+          const restrictA = a.available_days.length < 5 ? 1 : 0;
+          const restrictB = b.available_days.length < 5 ? 1 : 0;
+          if (restrictA !== restrictB) return restrictB - restrictA;
+          
+          if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
           
           return Math.random() - 0.5;
         });
@@ -432,19 +404,22 @@ export default function AutoScheduleGenerator() {
           teacherDailyLoad[assignment.teacher_id][day]++; 
         };
 
-        const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
-          if (enforceLoadBalance && !emergencyForce && !ignoreFairness && teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
+        const canPlaceAbsolute = (teacherId, section, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
+          // 🚀 قيد العدالة يطبق بصرامة فقط على الثانوي (حضوري) ويتجاهل المتوسط (أونلاين)
+          const isHighSchool = section.stage === 'high';
+          if (isHighSchool && enforceLoadBalance && !emergencyForce && !ignoreFairness) {
+              if (teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
+          }
 
-          if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
+          if (finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
-          const subjectSlots = finalSchedule.filter(s => s.section_id === sectionId && s.subject_id === subjectId);
+          const subjectSlots = finalSchedule.filter(s => s.section_id === section.id && s.subject_id === subjectId);
           const subjectCountToday = subjectSlots.filter(s => s.day === day).length;
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          // تخفيف التباعد في المحاولات المتقدمة
-          if (enforceStrictSpread && attempt < 25 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 10 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -489,7 +464,7 @@ export default function AutoScheduleGenerator() {
               
               let orderedPeriods = shuffleArray(availablePeriods);
               for (const period of orderedPeriods) {
-                if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, !assignment.isVIP, allowedDaysForTeacher.length, true)) {
+                if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, !assignment.isVIP, allowedDaysForTeacher.length, true)) {
                   commitPlacement(section, assignment, day, period);
                   isPlaced = true; break; 
                 }
@@ -501,7 +476,7 @@ export default function AutoScheduleGenerator() {
                for (const day of getBestDays()) {
                  const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                  for (const period of fallbackPeriods) {
-                   if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length, true)) {
+                   if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length, true)) {
                      commitPlacement(section, assignment, day, period);
                      isPlaced = true; break; 
                    }
@@ -518,7 +493,8 @@ export default function AutoScheduleGenerator() {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   
-                  if (!ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
+                  // فحص العدالة قبل الإزاحة (فقط للثانوي)
+                  if (section.stage === 'high' && !ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
                   const blockingSlotIndex = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
@@ -544,7 +520,9 @@ export default function AutoScheduleGenerator() {
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
-                       if (!ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
+                       // 🚀 حماية المعلم المُزاح إذا كان يدرس ثانوي فقط
+                       const isZHighSchool = blockingSlot.stage === 'high';
+                       if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
                        const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
                        for (const altPeriod of altPeriods) {
@@ -594,7 +572,7 @@ export default function AutoScheduleGenerator() {
                for (const day of shuffleArray([...allowedDaysForTeacher])) {
                  const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                  for (const period of emergencyPeriods) {
-                   if (canPlaceAbsolute(assignment.teacher_id, section.id, day, period, assignment.subject_id, maxPerDay + 2, false, allowedDaysForTeacher.length, false)) {
+                   if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay + 2, false, allowedDaysForTeacher.length, false)) {
                      commitPlacement(section, assignment, day, period);
                      isPlaced = true; break; 
                    }
@@ -633,9 +611,9 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (تم بذل أقصى جهد ممكن).`);
+      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (القيود متضاربة جداً).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين الكامل بنسبة 100% بنجاح مع الفرز الذكي.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل (تم تطبيق العدالة على الثانوي فقط).`);
     }
     setGenerating(false);
   };
@@ -1382,5 +1360,3 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
-
-
