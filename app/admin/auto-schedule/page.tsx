@@ -253,7 +253,7 @@ export default function AutoScheduleGenerator() {
       localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
     }
     setIsBudgetSaved(true);
-    alert('تم اعتماد الميزانية بنجاح.');
+    alert('تم اعتماد الميزانية بنجاح. الخوارزمية الآن ستقرأ هذه الأرقام حصراً ولن تبتكر حصصاً من العدم.');
   };
 
   const openTeacherConstraintsModal = (id: string, name: string) => {
@@ -313,7 +313,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (DOM Read + High-Load Teachers First)
+  // 🧠 THE CORE ALGORITHM (Bug-Free Loop + Strict Quota)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -321,9 +321,8 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد... (تفعيل القراءة المباشرة من الشاشة + أولوية معلم الحاسوب المزدحم)");
+    addLog("🚀 بدء التوليد بخوارزمية (منع الحلقات الهاربة + الميزانية الصارمة)...");
     
-    // 🚀 القراءة المباشرة والقطعية من عناصر واجهة المستخدم (DOM) لضمان الدقة 100%
     const domQuotas = { ...subjectQuotas };
     Object.keys(domQuotas).forEach(key => {
         const inputEl = document.getElementById(`quota-${key}`) as HTMLInputElement;
@@ -336,7 +335,6 @@ export default function AutoScheduleGenerator() {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
       
-      // نستخدم الميزانية التي قرأناها من الشاشة مباشرة
       const quota = key && domQuotas[key] !== undefined ? domQuotas[key] : 0;
       
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
@@ -360,13 +358,6 @@ export default function AutoScheduleGenerator() {
         isVIP: isEhabPhysics, zoom_link: zoomLink
       };
     }).filter(ta => ta.original_quota > 0); 
-
-    // 🚀 حساب "مؤشر ازدحام المعلم" (كم فصلاً يدرس؟) لضمان تسكينه أولاً
-    const teacherSectionCount: Record<string, number> = {};
-    teacherAssignments.forEach(ta => {
-        if (!teacherSectionCount[ta.teacher_id]) teacherSectionCount[ta.teacher_id] = 0;
-        teacherSectionCount[ta.teacher_id]++;
-    });
 
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
@@ -408,7 +399,7 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // 🚀 الفرز الذكي (الأكثر فصولاً أولاً - يحل مشكلة معلمي الحاسوب والإسلامية)
+        // 🚀 الفرز المعتمد على المواد الأساسية (العودة للمنطق السليم)
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
@@ -417,13 +408,13 @@ export default function AutoScheduleGenerator() {
           const restrictB = b.available_days.length < 5 ? 1 : 0;
           if (restrictA !== restrictB) return restrictB - restrictA;
           
-          // 1. الأولوية المطلقة للمعلم الذي يدرس "عدداً أكبر من الفصول"
-          const aSecCount = teacherSectionCount[a.teacher_id] || 0;
-          const bSecCount = teacherSectionCount[b.teacher_id] || 0;
-          if (aSecCount !== bSecCount) return bSecCount - aSecCount; // التنازلي: الأكثر فصولاً أولاً
-          
-          // 2. إذا تساويا في عدد الفصول، نضع المواد الكبيرة (5 حصص) أولاً
+          // المواد ذات النصاب العالي أولاً لضمان حجز الفراغات
           if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
+          
+          // إذا تساوت، الأولوية للمعلم الأكثر حصصاً في المدرسة
+          const aTotal = teacherTotalQuotas[a.teacher_id] || 0;
+          const bTotal = teacherTotalQuotas[b.teacher_id] || 0;
+          if (aTotal !== bTotal) return bTotal - aTotal; 
           
           return Math.random() - 0.5;
         });
@@ -494,7 +485,9 @@ export default function AutoScheduleGenerator() {
           for (let i = 0; i < remainingLessons; i++) {
             let isPlaced = false;
 
+            // Phase 1
             for (const day of getBestDays()) {
+              if (isPlaced) break;
               let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
               
@@ -505,11 +498,12 @@ export default function AutoScheduleGenerator() {
                   isPlaced = true; break; 
                 }
               }
-              if (isPlaced) break;
             }
 
+            // Phase 2
             if (!isPlaced) {
                for (const day of getBestDays()) {
+                 if (isPlaced) break;
                  const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                  for (const period of fallbackPeriods) {
                    if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length, true)) {
@@ -517,15 +511,19 @@ export default function AutoScheduleGenerator() {
                      isPlaced = true; break; 
                    }
                  }
-                 if (isPlaced) break;
                }
             }
 
+            // 🚀 Phase 3 (Double Swap with Runaway Bug FIXED)
             if (!isPlaced && !assignment.isVIP) {
               for (const day of getBestDays()) {
+                if (isPlaced) break; // 🚀 الإيقاف السحري الأول لمنع الحلقة الهاربة
+                
                 const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                 
                 for (const period of dayPeriods) {
+                  if (isPlaced) break; // 🚀 الإيقاف السحري الثاني لمنع تكرار الحصة
+                  
                   const teachSlotIdx = finalSchedule.findIndex(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const secSlotIdx = finalSchedule.findIndex(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number);
                   
@@ -560,18 +558,31 @@ export default function AutoScheduleGenerator() {
                             const teacherZBusyAtAlt = tempSchedule.some(s => s.teacher_id === blockingSlot.teacher_id && s.day === altDay && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
                             if (teacherZBusyAtAlt) continue;
 
-                            finalSchedule[secSlotIdx].day = altDay;
-                            finalSchedule[secSlotIdx].period_number = altPeriod.period_number;
-                            finalSchedule[secSlotIdx].start_time = altPeriod.start_time;
-                            finalSchedule[secSlotIdx].end_time = altPeriod.end_time;
+                            const zSubjectSlots = tempSchedule.filter(s => s.section_id === section.id && s.subject_id === blockingSlot.subject_id);
+                            const zSubjectCountAltDay = zSubjectSlots.filter(s => s.day === altDay).length;
                             
-                            teacherDailyLoad[blockingSlot.teacher_id][day]--;
-                            teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
+                            if (zSubjectCountAltDay >= zMaxPerDay) continue;
+                            
+                            let safeSpreadForZ = true;
+                            if (zSubjectCountAltDay >= 1) {
+                                const zDaysUsed = new Set(zSubjectSlots.map(s => s.day)).size;
+                                if (zDaysUsed < zAllowedDaysCount) safeSpreadForZ = false; 
+                            }
 
-                            commitPlacement(section, assignment, day, period);
-                            isPlaced = true; 
-                            swapped = true;
-                            break;
+                            if (safeSpreadForZ) {
+                              finalSchedule[blockingSlotIndex].day = altDay;
+                              finalSchedule[blockingSlotIndex].period_number = altPeriod.period_number;
+                              finalSchedule[blockingSlotIndex].start_time = altPeriod.start_time;
+                              finalSchedule[blockingSlotIndex].end_time = altPeriod.end_time;
+                              
+                              teacherDailyLoad[blockingSlot.teacher_id][day]--;
+                              teacherDailyLoad[blockingSlot.teacher_id][altDay]++;
+
+                              commitPlacement(section, assignment, day, period);
+                              isPlaced = true; 
+                              swapped = true;
+                              break;
+                            }
                          }
                       }
                     }
@@ -615,14 +626,13 @@ export default function AutoScheduleGenerator() {
                          }
                      }
                   }
-
-                  if (isPlaced) break;
                 }
               }
             }
 
             if (!isPlaced && emergencyForce) {
                for (const day of shuffleArray([...allowedDaysForTeacher])) {
+                 if (isPlaced) break;
                  const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
                  for (const period of emergencyPeriods) {
                    if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay + 2, false, allowedDaysForTeacher.length, false)) {
@@ -630,7 +640,6 @@ export default function AutoScheduleGenerator() {
                      isPlaced = true; break; 
                    }
                  }
-                 if (isPlaced) break;
                }
             }
             
@@ -664,9 +673,9 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار.`);
+      addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (تم بذل أقصى جهد).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل (الميزانية مقروءة من الشاشة 100%).`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل دون أي تكرار أو حصص وهمية.`);
     }
     setGenerating(false);
   };
@@ -836,7 +845,7 @@ export default function AutoScheduleGenerator() {
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول بنجاح. (الميزانية بقيت آمنة كما حددتها أنت).`);
+      addLog(`✅ تم تحميل الجدول بنجاح.`);
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
@@ -1394,10 +1403,20 @@ export default function AutoScheduleGenerator() {
                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">فارغ</p>
                 )}
                 
-                {sortedClassNames.map(className => (
+                {sortedClassNames.map(className => {
+                  // 🚀 الميزة السحرية الجديدة: حساب إجمالي الحصص المطلوبة للفصل الواحد
+                  const totalQuotasForClass = groupedSubjectsByClass[className].reduce((sum, item) => {
+                      const key = `${item.subj_id}_${item.class_id}`;
+                      return sum + (subjectQuotas[key] || 0);
+                  }, 0);
+
+                  return (
                   <div key={className} className="space-y-3">
-                    <h4 className="font-black text-sm text-indigo-900 bg-indigo-50/80 px-3 py-2.5 rounded-lg border border-indigo-100 flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-indigo-500" /> {className}
+                    <h4 className="font-black text-sm text-indigo-900 bg-indigo-50/80 px-3 py-2.5 rounded-lg border border-indigo-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> {className}</div>
+                      <span className={`text-[10px] px-2 py-1 rounded-md ${totalQuotasForClass > 35 ? 'bg-rose-500 text-white animate-pulse' : 'bg-white text-indigo-700 font-bold'}`} title="السعة القصوى للأسبوع هي 35 حصة">
+                         {totalQuotasForClass}/35
+                      </span>
                     </h4>
                     <div className="space-y-2 pl-3 border-r-2 border-indigo-100 mr-2">
                       {groupedSubjectsByClass[className].map(item => {
@@ -1412,7 +1431,7 @@ export default function AutoScheduleGenerator() {
                             </span>
                             <div className="flex items-center gap-2 shrink-0">
                                <input 
-                                 id={`quota-${key}`} // 🚀 ID تمت إضافته للقراءة المباشرة والصارمة
+                                 id={`quota-${key}`}
                                  type="number" 
                                  min="0" 
                                  value={currentVal} 
@@ -1425,7 +1444,7 @@ export default function AutoScheduleGenerator() {
                       })}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
 
               <button onClick={saveBudget} disabled={loadingData || isBudgetSaved} className={`mt-4 w-full py-3.5 rounded-xl font-black text-sm transition-all active:scale-95 shadow-md flex justify-center items-center gap-2 ${isBudgetSaved ? 'bg-emerald-50 border border-emerald-200 text-emerald-700 opacity-60' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
