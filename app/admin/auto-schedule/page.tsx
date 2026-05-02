@@ -710,56 +710,119 @@ export default function AutoScheduleGenerator() {
     }
   };
 
-  // 🚀 محرك الـ PDF المحصن بالتأخير الزمني (Lazy Loading) لمنع الانهيار
-  const handleSinglePrintPDF = async () => {
-    if (typeof window === 'undefined') return;
+  // 🚀 استيراد وتشغيل مكتبات الـ PDF بشكل ديناميكي (Lazy & Dynamic) لمنع انهيار Next.js
+  const executePDFGeneration = async (mode: string, filterVal: string = '') => {
     setIsGeneratingPDF(true);
     
-    setTimeout(async () => {
-      try {
-        const el = document.getElementById('single-pdf-container');
-        if (!el) throw new Error('الجدول غير جاهز للطباعة.');
-        
-        const pdf = new jsPDF('landscape', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
-        
-        const links = el.querySelectorAll('a.zoom-link');
-        const elementRect = el.getBoundingClientRect();
-        links.forEach((link: any) => {
-           const rect = link.getBoundingClientRect();
-           if (elementRect.width > 0 && elementRect.height > 0) {
-             const relativeX = (rect.left - elementRect.left) / elementRect.width;
-             const relativeY = (rect.top - elementRect.top) / elementRect.height;
-             const finalUrl = normalizeUrl(link.href);
-             if (finalUrl) pdf.link(relativeX * pdfWidth, relativeY * pdfHeight, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
-           }
-        });
+    try {
+      // 🚀 استيراد ديناميكي صارم لا يعمل إلا في المتصفح
+      const jsPDFModule = (await import('jspdf')).default;
+      const html2canvasModule = (await import('html2canvas-pro')).default;
 
-        pdf.save(`جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`);
-      } catch(e: any) {
-        alert(e.message);
-      } finally {
-        setIsGeneratingPDF(false);
+      if (mode === 'single') {
+        setTimeout(async () => {
+          try {
+            const el = document.getElementById('single-pdf-container');
+            if (!el) throw new Error('الجدول غير جاهز.');
+            
+            const pdf = new jsPDFModule('landscape', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+            
+            const links = el.querySelectorAll('a.zoom-link');
+            const elementRect = el.getBoundingClientRect();
+            links.forEach((link: any) => {
+               const rect = link.getBoundingClientRect();
+               if (elementRect.width > 0 && elementRect.height > 0) {
+                 const relativeX = (rect.left - elementRect.left) / elementRect.width;
+                 const relativeY = (rect.top - elementRect.top) / elementRect.height;
+                 const finalUrl = normalizeUrl(link.href);
+                 if (finalUrl) pdf.link(relativeX * pdfWidth, relativeY * pdfHeight, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+               }
+            });
+
+            pdf.save(`جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`);
+          } catch(e: any) {
+            alert(e.message);
+          } finally {
+            setIsGeneratingPDF(false);
+          }
+        }, 500);
+
+      } else {
+        // الطباعة المجمعة
+        setTimeout(async () => {
+          try {
+            const containers = document.querySelectorAll('.batch-pdf-page');
+            if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
+
+            const pdf = new jsPDFModule('landscape', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            for (let i = 0; i < containers.length; i++) {
+              if (i > 0) pdf.addPage(); 
+              const el = containers[i] as HTMLElement;
+
+              const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+              const imgData = canvas.toDataURL('image/png');
+              pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+              const links = el.querySelectorAll('a.zoom-link');
+              const elementRect = el.getBoundingClientRect();
+
+              links.forEach((link: any) => {
+                const rect = link.getBoundingClientRect();
+                if (elementRect.width > 0 && elementRect.height > 0) {
+                  const relativeX = (rect.left - elementRect.left) / elementRect.width;
+                  const relativeY = (rect.top - elementRect.top) / elementRect.height;
+                  const pdfX = relativeX * pdfWidth; 
+                  const pdfY = relativeY * pdfHeight;
+                  const finalUrl = normalizeUrl(link.href);
+                  
+                  if (finalUrl) {
+                     pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+                  }
+                }
+              });
+            }
+
+            let fileName = 'الجدول_الدراسي.pdf';
+            if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
+            if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
+            if (mode === 'specific-class') fileName = `جداول_مرحلة_${filterVal.replace(/\s+/g, '_')}.pdf`;
+            if (mode === 'specific-dept') fileName = `جداول_${filterVal.replace(/\s+/g, '_')}.pdf`;
+            if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
+
+            pdf.save(fileName);
+          } catch (error: any) { 
+            console.error(error);
+            alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
+          } finally { 
+            setIsGeneratingPDF(false); 
+            setEntitiesToPrint([]); 
+          }
+        }, 1200);
       }
-    }, 800);
+    } catch (error) {
+      console.error("فشل في تحميل مكتبات الـ PDF", error);
+      setIsGeneratingPDF(false);
+    }
   };
 
   const handlePrintCommand = async (mode: string, filterVal: string = '') => {
-    if (typeof window === 'undefined') return;
     setPrintMode(mode as any);
     setPrintFilterVal(filterVal);
     setIsPrintCenterOpen(false);
-    setIsGeneratingPDF(true);
 
     let entities: any[] = [];
     
     if (mode === 'single') {
-      const singleEntity = gridFilterType === 'teacher' ? uniqueTeachersInSchedule.find(t => String(t.id) === String(gridFilterId)) : sections.find(s => String(s.id) === String(gridFilterId));
-      if(singleEntity) entities = [singleEntity];
+      executePDFGeneration('single');
+      return;
     } else if (mode === 'all-teachers') {
       entities = uniqueTeachersInSchedule;
     } else if (mode === 'specific-dept') {
@@ -778,65 +841,11 @@ export default function AutoScheduleGenerator() {
 
     if(entities.length === 0) {
       alert('لا توجد بيانات (جداول) لطباعتها في هذا التحديد.');
-      setIsGeneratingPDF(false);
       return;
     }
 
     setEntitiesToPrint(entities);
-
-    setTimeout(async () => {
-      try {
-        const containers = document.querySelectorAll('.batch-pdf-page');
-        if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
-
-        const pdf = new jsPDF('landscape', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-
-        for (let i = 0; i < containers.length; i++) {
-          if (i > 0) pdf.addPage(); 
-          const el = containers[i] as HTMLElement;
-
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          const imgData = canvas.toDataURL('image/png');
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-          const links = el.querySelectorAll('a.zoom-link');
-          const elementRect = el.getBoundingClientRect();
-
-          links.forEach((link: any) => {
-            const rect = link.getBoundingClientRect();
-            if (elementRect.width > 0 && elementRect.height > 0) {
-              const relativeX = (rect.left - elementRect.left) / elementRect.width;
-              const relativeY = (rect.top - elementRect.top) / elementRect.height;
-              const pdfX = relativeX * pdfWidth; 
-              const pdfY = relativeY * pdfHeight;
-              const finalUrl = normalizeUrl(link.href);
-              
-              if (finalUrl) {
-                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
-              }
-            }
-          });
-        }
-
-        let fileName = 'الجدول_الدراسي.pdf';
-        if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
-        if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
-        if (mode === 'specific-class') fileName = `جداول_مرحلة_${filterVal.replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'specific-dept') fileName = `جداول_${filterVal.replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'single') fileName = `جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
-
-        pdf.save(fileName);
-      } catch (error: any) { 
-        console.error(error);
-        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
-      } finally { 
-        setIsGeneratingPDF(false); 
-        setEntitiesToPrint([]); 
-      }
-    }, 1200); 
+    executePDFGeneration(mode, filterVal);
   };
 
   const groupedSubjectsByClass = useMemo(() => {
