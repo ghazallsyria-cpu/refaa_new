@@ -11,6 +11,8 @@ import {
   Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, Activity, XCircle, CheckCircle, CloudDownload, FileDown
 } from 'lucide-react';
 
+// 🚀 لا نستورد jsPDF أو html2canvas هنا أبداً لمنع الانهيار. سنستدعيهم فقط عند الحاجة في المتصفح.
+
 const timeToMinutes = (timeStr: string) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
@@ -113,10 +115,11 @@ export default function AutoScheduleGenerator() {
     setMounted(true);
     if (currentRole !== 'admin' && currentRole !== 'management') return;
     
-    // 🚀 نقل جلب البيانات من LocalStorage إلى داخل useEffect لتجنب خطأ الـ SSR
+    // 🚀 تأمين جلب البيانات
     fetchMasterData();
     fetchSavedPlans();
 
+    // 🚀 حماية LocalStorage بحيث تعمل فقط بعد التأكد من وجود window
     if (typeof window !== 'undefined') {
       const localDraft = localStorage.getItem('auto_schedule_current_draft_v1');
       const localUnplaced = localStorage.getItem('auto_schedule_unplaced_draft_v1');
@@ -180,9 +183,9 @@ export default function AutoScheduleGenerator() {
       setPeriods(periodsData || []);
 
       let tsData = [];
-      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name, zoom_link), zoom_link), subjects(name)');
+      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)');
       if (zoomError) {
-         const { data: safeData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(users(full_name)), subjects(name)');
+         const { data: safeData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name)), subjects(name)');
          tsData = safeData || [];
       } else {
          tsData = tsDataWithZoom || [];
@@ -697,7 +700,7 @@ export default function AutoScheduleGenerator() {
     setGenerating(true);
     addLog(`⏳ جاري استدعاء الجدول السحابي وقراءة إعداداته الأصلية...`);
     try {
-      const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
+      const { data: slots } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
       
       const formatted = (slots || []).map(s => {
         const rawClass = Array.isArray(s.sections?.classes) ? s.sections?.classes[0]?.name : s.sections?.classes?.name;
@@ -757,11 +760,12 @@ export default function AutoScheduleGenerator() {
     }
   };
 
-  // 🚀 استيراد وتشغيل مكتبات الـ PDF بشكل ديناميكي (Lazy & Dynamic) لمنع انهيار Next.js
+  // 🚀 دالة الطباعة الآمنة (يتم استدعاء المكتبات بداخلها فقط لتجنب SSR Crash)
   const executePDFGeneration = async (mode: string, filterVal: string = '') => {
     setIsGeneratingPDF(true);
     
     try {
+      // 🚀 استيراد ديناميكي آمن
       const jsPDFModule = (await import('jspdf')).default;
       const html2canvasModule = (await import('html2canvas-pro')).default;
 
@@ -929,7 +933,6 @@ export default function AutoScheduleGenerator() {
      }
   };
 
-  // 🚀 المحرك الديناميكي الذكي للبحث عن القسم (للطباعة المفلترة للأقسام في الإدارة)
   const getTeacherDept = (tId: string) => {
     const tSchedules = generatedSchedules.filter(s => String(s.teacher_id) === String(tId));
     if (tSchedules.length === 0) return 'أقسام أخرى';
@@ -1491,12 +1494,6 @@ export default function AutoScheduleGenerator() {
                        <>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
-                         </button>
-                         <button onClick={() => handlePrintCommand('single')} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
-                           <FileDown className="w-4 h-4" /> تحميل PDF
-                         </button>
-                         <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
-                           <Printer className="w-4 h-4" /> طباعة مجمعة
                          </button>
                        </>
                      )}
