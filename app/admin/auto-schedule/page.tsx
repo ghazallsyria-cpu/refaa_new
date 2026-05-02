@@ -253,7 +253,7 @@ export default function AutoScheduleGenerator() {
       localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
     }
     setIsBudgetSaved(true);
-    alert('تم اعتماد الميزانية بنجاح. الخوارزمية الآن ستقرأ هذه الأرقام حصراً.');
+    alert('تم اعتماد الميزانية بنجاح. تم ضبط السعة القصوى للمراحل.');
   };
 
   const openTeacherConstraintsModal = (id: string, name: string) => {
@@ -313,7 +313,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (No Freezing + Super Fast Swaps)
+  // 🧠 THE CORE ALGORITHM (Stage-Specific Strict Capacities)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -321,7 +321,8 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (السرعة الفائقة ومنع تجمد المتصفح)...");
+    addLog("🚀 بدء التوليد... (تطبيق القاعدة الرياضية الصارمة: 25 حصة للمتوسط و 30 للثانوي)");
+    await new Promise(r => setTimeout(r, 100)); 
     
     const domQuotas = { ...subjectQuotas };
     Object.keys(domQuotas).forEach(key => {
@@ -334,6 +335,7 @@ export default function AutoScheduleGenerator() {
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
+      
       const quota = key && domQuotas[key] !== undefined ? domQuotas[key] : 0;
       
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
@@ -341,7 +343,12 @@ export default function AutoScheduleGenerator() {
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
       const zoomLink = ts.teachers?.users?.zoom_link || ts.teachers?.zoom_link || null;
 
-      const maxPossibleSlots = tConst.days.length * tConst.periods.length;
+      // 🚀 التصحيح العبقري: حساب أقصى عدد حصص للمعلم بناءً على مرحلة الفصل
+      // المتوسط بحد أقصى 5 حصص في اليوم، والثانوي 6 حصص في اليوم
+      const stageMaxDailyPeriods = section?.stage === 'middle' ? 5 : 6;
+      const validPeriodsCount = tConst.periods.filter(p => p <= stageMaxDailyPeriods).length;
+      const maxPossibleSlots = tConst.days.length * validPeriodsCount;
+
       let effectiveQuota = quota;
       let forcedWaitlistCount = 0;
       if (quota > maxPossibleSlots) {
@@ -377,7 +384,7 @@ export default function AutoScheduleGenerator() {
     let absoluteBestUnplaced = Array(1000).fill(null); 
     let absoluteBestFailedCount = 1000;
     
-    const MAX_ATTEMPTS = 10; // تم تخفيضها لتسريع العملية الكلية
+    const MAX_ATTEMPTS = 10; 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         
@@ -464,15 +471,16 @@ export default function AutoScheduleGenerator() {
         for (const assignment of sortedAssignments) {
           assignmentIndex++;
           
-          // 🚀 سر التنفس الحقيقي للمتصفح (يمنع التجمد تماماً):
-          // يتوقف الخيط الرئيسي ليحدث الشاشة بعد كل 30 مادة
           if (assignmentIndex % 30 === 0) {
-             setGenerationLogs(prev => [`⏳ محاولة (${attempt}/${MAX_ATTEMPTS}): جاري المعالجة وتسكين المعلمين... (${assignmentIndex}/${totalAssignmentsLength})`, ...prev.slice(0, 3)]);
+             setGenerationLogs(prev => [`⏳ محاولة (${attempt}/${MAX_ATTEMPTS}): جاري التسكين وتطبيق سعة المراحل... (${assignmentIndex}/${totalAssignmentsLength})`, ...prev.slice(0, 3)]);
              await new Promise(resolve => setTimeout(resolve, 0));
           }
 
           const section = sections.find(s => s.id === assignment.section_id);
           if (!section) continue;
+
+          // 🚀 تطبيق السعة القصوى الصارمة (لإخفاء الحصص الوهمية 6 و 7 عن المتوسط)
+          const stageMaxPeriods = section.stage === 'middle' ? 5 : 6;
 
           for(let i=0; i<assignment.forced_waitlist; i++) {
              unplacedQueue.push({...assignment, section_id: section.id, section_name: section.full_name, stage: section.stage, id: crypto.randomUUID()});
@@ -502,9 +510,11 @@ export default function AutoScheduleGenerator() {
           for (let i = 0; i < remainingLessons; i++) {
             let isPlaced = false;
 
+            // Phase 1
             for (const day of getBestDays()) {
               if (isPlaced) break;
-              let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number));
+              // 🚀 الخوارزمية الآن ترشح الحصص بناءً على المرحلة (لا تتجاوز السعة)
+              let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods);
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
               
               let orderedPeriods = shuffleArray(availablePeriods);
@@ -516,10 +526,11 @@ export default function AutoScheduleGenerator() {
               }
             }
 
+            // Phase 2
             if (!isPlaced) {
                for (const day of getBestDays()) {
                  if (isPlaced) break;
-                 const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
+                 const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
                  for (const period of fallbackPeriods) {
                    if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length, true)) {
                      commitPlacement(section, assignment, day, period);
@@ -529,11 +540,12 @@ export default function AutoScheduleGenerator() {
                }
             }
 
-            // 🚀 الإزاحة المزدوجة المعالجة والمسرعة (تم حذف المصفوفات الثقيلة)
+            // Phase 3 (Swaps)
             if (!isPlaced && !assignment.isVIP && attempt > 3) {
               for (const day of getBestDays()) {
                 if (isPlaced) break; 
-                const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
+                
+                const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
                 
                 for (const period of dayPeriods) {
                   if (isPlaced) break; 
@@ -557,14 +569,14 @@ export default function AutoScheduleGenerator() {
                       
                       for (const altDay of allowedDaysZ) {
                          if(swapped) break;
+                         
                          const isZHighSchool = blockingSlot.stage === 'high';
                          if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
-                         const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number)));
+                         const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
                          for (const altPeriod of altPeriods) {
                             if (altDay === day && altPeriod.period_number === period.period_number) continue;
                             
-                            // 🚀 الفحص السريع بدلاً من صنع مصفوفات جديدة (tempSchedule)
                             const secFreeAtAlt = !finalSchedule.some((s, idx) => idx !== secSlotIdx && s.section_id === section.id && s.day === altDay && s.period_number === altPeriod.period_number);
                             if (!secFreeAtAlt) continue;
                             
@@ -612,6 +624,7 @@ export default function AutoScheduleGenerator() {
                   if (!swapped && teachSlotIdx !== -1 && secSlotIdx === -1 && attempt > 5) {
                      const teacherBlockingSlot = finalSchedule[teachSlotIdx];
                      if (!teacherBlockingSlot.isVIP) {
+                         const stageMaxPeriodsW = teacherBlockingSlot.stage === 'middle' ? 5 : 6; // 🚀 تطبيق السعة على المعلم المُزاح أيضاً
                          const tWConstraints = teacherConstraints[teacherBlockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
                          let allowedDaysW = shuffleArray(workingDays.filter(d => tWConstraints.days.includes(d)));
                          allowedDaysW.sort((d1, d2) => teacherDailyLoad[teacherBlockingSlot.teacher_id][d1] - teacherDailyLoad[teacherBlockingSlot.teacher_id][d2]);
@@ -621,11 +634,10 @@ export default function AutoScheduleGenerator() {
                              const isWHighSchool = teacherBlockingSlot.stage === 'high';
                              if (isWHighSchool && !ignoreFairness && teacherDailyLoad[teacherBlockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[teacherBlockingSlot.teacher_id] + relaxation)) continue;
 
-                             const altPeriods = shuffleArray(periods.filter(p => p.stage === teacherBlockingSlot.stage && !p.is_break && tWConstraints.periods.includes(p.period_number)));
+                             const altPeriods = shuffleArray(periods.filter(p => p.stage === teacherBlockingSlot.stage && !p.is_break && tWConstraints.periods.includes(p.period_number) && p.period_number <= stageMaxPeriodsW));
                              for (const altPeriod of altPeriods) {
                                  if (altDay === day && altPeriod.period_number === teacherBlockingSlot.period_number) continue;
                                  
-                                 // الفحص السريع
                                  const secWFreeAtAlt = !finalSchedule.some((s, idx) => idx !== teachSlotIdx && s.section_id === teacherBlockingSlot.section_id && s.day === altDay && s.period_number === altPeriod.period_number);
                                  if (!secWFreeAtAlt) continue;
                                  
@@ -653,7 +665,7 @@ export default function AutoScheduleGenerator() {
             if (!isPlaced && emergencyForce) {
                for (const day of shuffleArray([...allowedDaysForTeacher])) {
                  if (isPlaced) break;
-                 const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number)));
+                 const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
                  for (const period of emergencyPeriods) {
                    if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay + 2, false, allowedDaysForTeacher.length, false)) {
                      commitPlacement(section, assignment, day, period);
@@ -695,7 +707,7 @@ export default function AutoScheduleGenerator() {
     if (absoluteBestFailedCount > 0) {
       addLog(`⚠️ اكتمل التوليد مع وجود ${absoluteBestFailedCount} حصص بالانتظار.`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل دون أي تجميد وبسرعة عالية.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل وتطبيق سعة المراحل بدقة.`);
     }
     setGenerating(false);
   };
@@ -865,7 +877,7 @@ export default function AutoScheduleGenerator() {
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم تحميل الجدول بنجاح.`);
+      addLog(`✅ تم تحميل الجدول بنجاح. (الميزانية بقيت آمنة كما حددتها أنت).`);
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
@@ -1424,6 +1436,11 @@ export default function AutoScheduleGenerator() {
                 )}
                 
                 {sortedClassNames.map(className => {
+                  // 🚀 الميزة السحرية الجديدة: تحديد السعة حسب المرحلة
+                  const sampleSection = sections.find(s => s.class_name === className);
+                  const stage = sampleSection?.stage || 'high';
+                  const MAX_WEEKLY = stage === 'middle' ? 25 : 30; // 5 حصص للمتوسط، 6 للثانوي
+
                   const totalQuotasForClass = groupedSubjectsByClass[className].reduce((sum, item) => {
                       const key = `${item.subj_id}_${item.class_id}`;
                       return sum + (subjectQuotas[key] || 0);
@@ -1433,8 +1450,8 @@ export default function AutoScheduleGenerator() {
                   <div key={className} className="space-y-3">
                     <h4 className="font-black text-sm text-indigo-900 bg-indigo-50/80 px-3 py-2.5 rounded-lg border border-indigo-100 flex items-center justify-between">
                       <div className="flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> {className}</div>
-                      <span className={`text-[10px] px-2 py-1 rounded-md ${totalQuotasForClass > 35 ? 'bg-rose-500 text-white animate-pulse' : 'bg-white text-indigo-700 font-bold'}`} title="السعة القصوى للأسبوع هي 35 حصة">
-                         {totalQuotasForClass}/35
+                      <span className={`text-[10px] px-2 py-1 rounded-md ${totalQuotasForClass > MAX_WEEKLY ? 'bg-rose-500 text-white animate-pulse' : 'bg-white text-indigo-700 font-bold'}`} title={`السعة القصوى للأسبوع هي ${MAX_WEEKLY} حصة`}>
+                         {totalQuotasForClass}/{MAX_WEEKLY}
                       </span>
                     </h4>
                     <div className="space-y-2 pl-3 border-r-2 border-indigo-100 mr-2">
@@ -1560,6 +1577,7 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
+                     {/* أزرار الطباعة والتدقيق */}
                      {displayMode === 'grid' && (
                        <>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
