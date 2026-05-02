@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload
+  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Printer, Video, CheckSquare2, Square, Activity, XCircle, CheckCircle, CloudDownload, FileDown
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -34,9 +34,10 @@ const shuffleArray = (array: any[]) => {
   return newArr;
 };
 
-const getDayName = (day: number) => {
-  const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-  return days[day - 1] || day;
+const getKuwaitDayId = (date: Date) => {
+  const jsDay = date.getDay(); 
+  if (jsDay === 5 || jsDay === 6) return 0; 
+  return jsDay + 1;
 };
 
 const normalizeUrl = (url?: string) => {
@@ -95,35 +96,53 @@ export default function AutoScheduleGenerator() {
   const [gridFilterType, setGridFilterType] = useState<'section' | 'teacher'>('section');
   const [gridFilterId, setGridFilterId] = useState<string>('');
 
+  const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
+  const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
+  const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
+  const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'specific-dept' | 'all-sections' | 'specific-class' | 'custom-batch'>('single');
+  const [printFilterVal, setPrintFilterVal] = useState<string>('');
+  const [selectedPrintClass, setSelectedPrintClass] = useState<string>('');
+  const [selectedPrintDept, setSelectedPrintDept] = useState<string>('');
+  const [entitiesToPrint, setEntitiesToPrint] = useState<any[]>([]);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditReport, setAuditReport] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
     if (currentRole !== 'admin' && currentRole !== 'management') return;
+    
+    // 🚀 نقل جلب البيانات من LocalStorage إلى داخل useEffect لتجنب خطأ الـ SSR
     fetchMasterData();
     fetchSavedPlans();
 
-    const localDraft = localStorage.getItem('auto_schedule_current_draft_v1');
-    const localUnplaced = localStorage.getItem('auto_schedule_unplaced_draft_v1');
-    if (localDraft) {
-      try {
-        setGeneratedSchedules(JSON.parse(localDraft));
-        if (localUnplaced) setUnplacedLessons(JSON.parse(localUnplaced));
-        setGenerationLogs(['🔄 تم استرجاع مسودتك المحلية السابقة بنجاح!']);
-      } catch (e) {}
+    if (typeof window !== 'undefined') {
+      const localDraft = localStorage.getItem('auto_schedule_current_draft_v1');
+      const localUnplaced = localStorage.getItem('auto_schedule_unplaced_draft_v1');
+      if (localDraft) {
+        try {
+          setGeneratedSchedules(JSON.parse(localDraft));
+          if (localUnplaced) setUnplacedLessons(JSON.parse(localUnplaced));
+          setGenerationLogs(['🔄 تم استرجاع مسودتك المحلية السابقة بنجاح!']);
+        } catch (e) {}
+      }
     }
   }, [currentRole]);
 
   const saveToLocalDraft = (schedules: any[], unplaced: any[]) => {
-    localStorage.setItem('auto_schedule_current_draft_v1', JSON.stringify(schedules));
-    localStorage.setItem('auto_schedule_unplaced_draft_v1', JSON.stringify(unplaced));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auto_schedule_current_draft_v1', JSON.stringify(schedules));
+      localStorage.setItem('auto_schedule_unplaced_draft_v1', JSON.stringify(unplaced));
+    }
   };
 
   const clearLocalDraft = () => {
     if(!confirm('هل أنت متأكد من مسح مسودة الجدول الحالي وبدء العمل من الصفر؟')) return;
-    localStorage.removeItem('auto_schedule_current_draft_v1');
-    localStorage.removeItem('auto_schedule_unplaced_draft_v1');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auto_schedule_current_draft_v1');
+      localStorage.removeItem('auto_schedule_unplaced_draft_v1');
+    }
     setGeneratedSchedules([]);
     setUnplacedLessons([]);
     setActivePlanId(null);
@@ -131,7 +150,7 @@ export default function AutoScheduleGenerator() {
   };
 
   useEffect(() => {
-    if (generatedSchedules.length > 0 && !gridFilterId) {
+    if (generatedSchedules.length > 0 && !gridFilterId && !isGeneratingPDF) {
       if (gridFilterType === 'section') {
         const firstSection = sections.find(s => generatedSchedules.some(gs => gs.section_id === s.id));
         if (firstSection) setGridFilterId(firstSection.id);
@@ -140,7 +159,7 @@ export default function AutoScheduleGenerator() {
         if (firstTeacherId) setGridFilterId(firstTeacherId);
       }
     }
-  }, [generatedSchedules, gridFilterType, sections, gridFilterId]);
+  }, [generatedSchedules, gridFilterType, sections, gridFilterId, isGeneratingPDF]);
 
   const fetchMasterData = async () => {
     try {
@@ -185,10 +204,16 @@ export default function AutoScheduleGenerator() {
         subjClassList.sort((a, b) => a.class_name.localeCompare(b.class_name) || a.subj_name.localeCompare(b.subj_name));
         setUniqueSubjectClasses(subjClassList);
 
-        const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v3') || localStorage.getItem('auto_schedule_quotas_temp');
+        // 🚀 حماية القراءة من LocalStorage
         let initialQuotas: Record<string, number> = {};
-        if (savedQuotasStr) { 
-           try { initialQuotas = JSON.parse(savedQuotasStr); } catch (e) {} 
+        if (typeof window !== 'undefined') {
+          const savedQuotasStr = localStorage.getItem('auto_schedule_quotas_v3') || localStorage.getItem('auto_schedule_quotas_temp');
+          if (savedQuotasStr) { 
+             try { initialQuotas = JSON.parse(savedQuotasStr); } catch (e) {} 
+          }
+          if (localStorage.getItem('auto_schedule_quotas_v3')) {
+             setIsBudgetSaved(true);
+          }
         }
         
         subjClassList.forEach(item => { 
@@ -197,13 +222,11 @@ export default function AutoScheduleGenerator() {
         });
         setSubjectQuotas(initialQuotas);
 
-        if (localStorage.getItem('auto_schedule_quotas_v3')) {
-           setIsBudgetSaved(true);
-        }
-
-        const savedConstraintsStr = localStorage.getItem('auto_schedule_teacher_constraints');
         let initialConstraints: Record<string, { days: number[], periods: number[] }> = {};
-        if (savedConstraintsStr) { try { initialConstraints = JSON.parse(savedConstraintsStr); } catch (e) {} }
+        if (typeof window !== 'undefined') {
+          const savedConstraintsStr = localStorage.getItem('auto_schedule_teacher_constraints');
+          if (savedConstraintsStr) { try { initialConstraints = JSON.parse(savedConstraintsStr); } catch (e) {} }
+        }
         setTeacherConstraints(initialConstraints);
       }
     } catch (error) { console.error(error); } finally { setLoadingData(false); }
@@ -215,12 +238,16 @@ export default function AutoScheduleGenerator() {
     const newQuotas = { ...subjectQuotas, [key]: newVal };
     setSubjectQuotas(newQuotas);
     setIsBudgetSaved(false); 
-    localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(newQuotas));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(newQuotas));
+    }
   };
 
   const saveBudget = () => {
-    localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(subjectQuotas));
-    localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(subjectQuotas));
+      localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(subjectQuotas));
+    }
     setIsBudgetSaved(true);
     alert('تم اعتماد الميزانية بنجاح.');
   };
@@ -247,7 +274,9 @@ export default function AutoScheduleGenerator() {
     }
     const newConstraints = { ...teacherConstraints, [selectedTeacherObj.id]: tempConstraints };
     setTeacherConstraints(newConstraints);
-    localStorage.setItem('auto_schedule_teacher_constraints', JSON.stringify(newConstraints));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auto_schedule_teacher_constraints', JSON.stringify(newConstraints));
+    }
     setIsTeacherModalOpen(false);
   };
 
@@ -280,7 +309,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (With Fair Load Balancing)
+  // 🧠 THE CORE ALGORITHM
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -373,7 +402,6 @@ export default function AutoScheduleGenerator() {
 
         const canPlaceAbsolute = (teacherId, sectionId, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount) => {
           if (teacherDailyLoad[teacherId][day] >= teacherMaxDailyLoad[teacherId]) return false;
-
           if (finalSchedule.some(s => s.section_id === sectionId && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
@@ -695,8 +723,10 @@ export default function AutoScheduleGenerator() {
          
          setSubjectQuotas(prev => {
             const merged = { ...prev, ...extractedQuotas };
-            localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(merged));
-            localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(merged));
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(merged));
+              localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(merged));
+            }
             return merged;
          });
          setIsBudgetSaved(true);
@@ -714,6 +744,156 @@ export default function AutoScheduleGenerator() {
     }
   };
 
+  const toggleBatchPrintId = (id: string) => {
+    setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const selectAllBatchIds = () => {
+    if (batchPrintType === 'section') {
+      const availableSecs = sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id)).map(s=>s.id);
+      setBatchPrintIds(availableSecs);
+    } else {
+      setBatchPrintIds(uniqueTeachersInSchedule.map(t=>t.id));
+    }
+  };
+
+  // 🚀 استيراد وتشغيل مكتبات الـ PDF بشكل ديناميكي (Lazy & Dynamic) لمنع انهيار Next.js
+  const executePDFGeneration = async (mode: string, filterVal: string = '') => {
+    setIsGeneratingPDF(true);
+    
+    try {
+      const jsPDFModule = (await import('jspdf')).default;
+      const html2canvasModule = (await import('html2canvas-pro')).default;
+
+      if (mode === 'single') {
+        setTimeout(async () => {
+          try {
+            const el = document.getElementById('single-pdf-container');
+            if (!el) throw new Error('الجدول غير جاهز.');
+            
+            const pdf = new jsPDFModule('landscape', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+            
+            const links = el.querySelectorAll('a.zoom-link');
+            const elementRect = el.getBoundingClientRect();
+            links.forEach((link: any) => {
+               const rect = link.getBoundingClientRect();
+               if (elementRect.width > 0 && elementRect.height > 0) {
+                 const relativeX = (rect.left - elementRect.left) / elementRect.width;
+                 const relativeY = (rect.top - elementRect.top) / elementRect.height;
+                 const finalUrl = normalizeUrl(link.href);
+                 if (finalUrl) pdf.link(relativeX * pdfWidth, relativeY * pdfHeight, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+               }
+            });
+
+            pdf.save(`جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`);
+          } catch(e: any) {
+            alert(e.message);
+          } finally {
+            setIsGeneratingPDF(false);
+          }
+        }, 500);
+
+      } else {
+        setTimeout(async () => {
+          try {
+            const containers = document.querySelectorAll('.batch-pdf-page');
+            if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
+
+            const pdf = new jsPDFModule('landscape', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            for (let i = 0; i < containers.length; i++) {
+              if (i > 0) pdf.addPage(); 
+              const el = containers[i] as HTMLElement;
+
+              const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+              const imgData = canvas.toDataURL('image/png');
+              pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+              const links = el.querySelectorAll('a.zoom-link');
+              const elementRect = el.getBoundingClientRect();
+
+              links.forEach((link: any) => {
+                const rect = link.getBoundingClientRect();
+                if (elementRect.width > 0 && elementRect.height > 0) {
+                  const relativeX = (rect.left - elementRect.left) / elementRect.width;
+                  const relativeY = (rect.top - elementRect.top) / elementRect.height;
+                  const pdfX = relativeX * pdfWidth; 
+                  const pdfY = relativeY * pdfHeight;
+                  const finalUrl = normalizeUrl(link.href);
+                  
+                  if (finalUrl) {
+                     pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+                  }
+                }
+              });
+            }
+
+            let fileName = 'الجدول_الدراسي.pdf';
+            if (mode === 'all-sections') fileName = 'جداول_جميع_الفصول.pdf';
+            if (mode === 'all-teachers') fileName = 'جداول_جميع_المعلمين.pdf';
+            if (mode === 'specific-class') fileName = `جداول_مرحلة_${filterVal.replace(/\s+/g, '_')}.pdf`;
+            if (mode === 'specific-dept') fileName = `جداول_${filterVal.replace(/\s+/g, '_')}.pdf`;
+            if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
+
+            pdf.save(fileName);
+          } catch (error: any) { 
+            console.error(error);
+            alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
+          } finally { 
+            setIsGeneratingPDF(false); 
+            setEntitiesToPrint([]); 
+          }
+        }, 1200);
+      }
+    } catch (error) {
+      console.error("فشل في تحميل مكتبات الـ PDF", error);
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  const handlePrintCommand = async (mode: string, filterVal: string = '') => {
+    if (typeof window === 'undefined') return;
+    setPrintMode(mode as any);
+    setPrintFilterVal(filterVal);
+    setIsPrintCenterOpen(false);
+
+    let entities: any[] = [];
+    
+    if (mode === 'single') {
+      executePDFGeneration('single');
+      return;
+    } else if (mode === 'all-teachers') {
+      entities = uniqueTeachersInSchedule;
+    } else if (mode === 'specific-dept') {
+      entities = uniqueTeachersInSchedule.filter(t => getTeacherDept(t.id) === filterVal);
+    } else if (mode === 'all-sections') {
+      entities = sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id));
+    } else if (mode === 'specific-class') {
+      entities = sections.filter(sec => sec.class_name === filterVal && generatedSchedules.some(s => String(s.section_id) === String(sec.id)));
+    } else if (mode === 'custom-batch') {
+      if (batchPrintType === 'section') {
+          entities = sections.filter(s => batchPrintIds.includes(s.id));
+      } else {
+          entities = uniqueTeachersInSchedule.filter(t => batchPrintIds.includes(t.id));
+      }
+    }
+
+    if(entities.length === 0) {
+      alert('لا توجد بيانات (جداول) لطباعتها في هذا التحديد.');
+      return;
+    }
+
+    setEntitiesToPrint(entities);
+    executePDFGeneration(mode, filterVal);
+  };
+
   const groupedSubjectsByClass = useMemo(() => {
     const groups: Record<string, typeof uniqueSubjectClasses> = {};
     uniqueSubjectClasses.forEach(item => {
@@ -726,6 +906,11 @@ export default function AutoScheduleGenerator() {
 
   const sortedClassNames = Object.keys(groupedSubjectsByClass).sort();
 
+  const getDayName = (day: number) => {
+    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+    return days[day - 1] || day;
+  };
+
   const uniqueTeachersInSchedule = useMemo(() => {
     const tMap = new Map();
     generatedSchedules.forEach(s => {
@@ -733,6 +918,41 @@ export default function AutoScheduleGenerator() {
     });
     return Array.from(tMap.values()).sort((a,b) => a.name.localeCompare(b.name));
   }, [generatedSchedules]);
+
+  const getPrintNameById = (id: string, type: 'section'|'teacher') => {
+     if (type === 'section') {
+       const sec = sections.find(s => s.id === id);
+       return sec ? sec.full_name : 'غير محدد';
+     } else {
+       const t = uniqueTeachersInSchedule.find(t => t.id === id);
+       return t ? t.name : 'غير محدد';
+     }
+  };
+
+  // 🚀 المحرك الديناميكي الذكي للبحث عن القسم (للطباعة المفلترة للأقسام في الإدارة)
+  const getTeacherDept = (tId: string) => {
+    const tSchedules = generatedSchedules.filter(s => String(s.teacher_id) === String(tId));
+    if (tSchedules.length === 0) return 'أقسام أخرى';
+    const subjName = tSchedules[0].subject_name || '';
+    
+    if (/(علوم|فيزياء|كيمياء|أحياء|احياء|جيولوجيا)/.test(subjName)) return 'العلوم';
+    if (/(رياضيات|جبر|هندسة|احصاء|إحصاء)/.test(subjName)) return 'الرياضيات';
+    if (/(عربي|عربية|أدب|ادب|بلاغة|نحو|صرف)/.test(subjName)) return 'اللغة العربية';
+    if (/(إنجليزي|انجليزي|english)/i.test(subjName)) return 'اللغة الإنجليزية';
+    if (/(إسلامية|اسلامية|قرآن|تجويد|دين|فقه|عقيدة|حديث)/.test(subjName)) return 'التربية الإسلامية';
+    if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|علم نفس|نفس|وطنية|دستور|اقتصاد)/.test(subjName)) return 'الاجتماعيات';
+    if (/(حاسوب|معلوماتية|it)/i.test(subjName)) return 'الحاسوب';
+    
+    return 'أقسام أخرى';
+  };
+
+  const uniqueDepts = useMemo(() => {
+    const mappedDepts = new Set<string>();
+    uniqueTeachersInSchedule.forEach(t => {
+        mappedDepts.add(getTeacherDept(t.id));
+    });
+    return Array.from(mappedDepts).sort();
+  }, [uniqueTeachersInSchedule]);
 
   if (!mounted || loadingData || isChecking) {
      return (
@@ -748,8 +968,29 @@ export default function AutoScheduleGenerator() {
   if (currentRole !== 'admin' && currentRole !== 'management') return <div className="p-10 text-center font-bold">غير مصرح لك.</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
+    <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo print-hide" dir="rtl">
       
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+           body { display: none !important; }
+        }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 1px solid #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}} />
+
+      {/* شاشة التحميل للـ PDF */}
+      <AnimatePresence>
+        {isGeneratingPDF && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-xl text-white">
+            <Loader2 className="w-20 h-20 animate-spin text-emerald-400 mb-6" />
+            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثائق الـ PDF الذكية...</h2>
+            <p className="text-slate-300 font-bold mt-3 text-lg">يرجى الانتظار، النظام يقوم بدمج الجداول وزراعة الروابط.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modal تقرير التدقيق والإحصائيات */}
       <AnimatePresence>
         {isAuditModalOpen && auditReport && (
@@ -832,6 +1073,69 @@ export default function AutoScheduleGenerator() {
               </div>
               <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
                 <button onClick={() => setIsAuditModalOpen(false)} className="w-full py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 transition-colors active:scale-95 text-sm shadow-sm">إغلاق التقرير</button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Modal مركز الطباعة المجمعة */}
+      <AnimatePresence>
+        {isPrintCenterOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsPrintCenterOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+               animate={{ opacity: 1, scale: 1, y: 0 }} 
+               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh]" 
+               dir="rtl"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><Printer className="w-6 h-6"/></div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-lg">مركز الطباعة المجمعة</h3>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">اختر مجموعة من الجداول لطباعتها معاً</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsPrintCenterOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="p-6 flex-1 overflow-auto bg-slate-50 custom-scrollbar">
+                 <div className="flex gap-2 mb-4 bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+                    <button onClick={() => {setBatchPrintType('section'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'section' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة فصول</button>
+                    <button onClick={() => {setBatchPrintType('teacher'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'teacher' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة معلمين</button>
+                 </div>
+                 
+                 <div className="flex justify-between items-center mb-3 px-1">
+                    <span className="text-xs font-bold text-slate-500">تم تحديد: {batchPrintIds.length}</span>
+                    <button onClick={selectAllBatchIds} className="text-xs font-black text-indigo-600 hover:underline">تحديد الكل</button>
+                 </div>
+
+                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {batchPrintType === 'section' 
+                      ? sections.filter(s => generatedSchedules.some(gs => gs.section_id === s.id)).map(s => (
+                          <div key={s.id} onClick={() => toggleBatchPrintId(s.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(s.id) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                             {batchPrintIds.includes(s.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{s.full_name}</span>
+                          </div>
+                      ))
+                      : uniqueTeachersInSchedule.map(t => (
+                          <div key={t.id} onClick={() => toggleBatchPrintId(t.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(t.id) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                             {batchPrintIds.includes(t.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{t.name}</span>
+                          </div>
+                      ))
+                    }
+                 </div>
+              </div>
+
+              <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
+                <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
+                <button onClick={() => handlePrintCommand('custom-batch')} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                  <FileDown className="w-5 h-5" /> تحميل PDF للمحددين
+                </button>
               </div>
             </motion.div>
           </>
@@ -1010,7 +1314,7 @@ export default function AutoScheduleGenerator() {
               <Wand2 className="w-6 h-6 md:w-8 md:h-8 text-amber-400" /> محرك الجدولة الشامل
             </h1>
             <p className="text-slate-300 font-bold max-w-xl text-sm md:text-base">
-              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين. (تم فصل مركز الطباعة للصفحة المتخصصة)
+              الآن يمكنك استدعاء الجداول السحابية السابقة بضغطة زر. الميزانية تسترجع تلقائياً لحفظ أنصبة المعلمين.
             </p>
           </div>
         </div>
@@ -1188,6 +1492,12 @@ export default function AutoScheduleGenerator() {
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
                          </button>
+                         <button onClick={() => handlePrintCommand('single')} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
+                           <FileDown className="w-4 h-4" /> تحميل PDF
+                         </button>
+                         <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
+                           <Printer className="w-4 h-4" /> طباعة مجمعة
+                         </button>
                        </>
                      )}
                    </div>
@@ -1245,13 +1555,17 @@ export default function AutoScheduleGenerator() {
                                   <td className="p-4 font-black text-slate-900 bg-slate-100 border-l border-slate-300">{getDayName(day)}</td>
                                   {dynamicPeriods.map(p => {
                                     const slot = generatedSchedules.find(s => s.day === day && s.period_number === p && (gridFilterType === 'section' ? s.section_id === gridFilterId : s.teacher_id === gridFilterId));
-                                    
+                                    const showZoom = slot && slot.stage === 'middle' && slot.zoom_link;
+
                                     return (
                                       <td key={p} className="p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7rem] align-top hover:bg-indigo-50/50 transition-colors">
                                         {slot ? (
                                           <div className="bg-white border border-indigo-200 shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative">
                                             <div className="font-black text-indigo-900 text-xs leading-tight mb-1 w-full whitespace-normal break-words" title={slot.subject_name}>{slot.subject_name}</div>
                                             <div className="font-bold text-[9px] sm:text-[10px] text-slate-800 bg-slate-50 px-1.5 py-1 rounded-md w-full whitespace-normal break-words leading-tight border border-slate-200" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
+                                            {showZoom && (
+                                              <a href={slot.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-1.5 w-full flex items-center justify-center gap-1 text-[9px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md py-1 border border-blue-200 transition-colors" title="دخول لبث الزووم"><Video className="w-3 h-3"/> دخول للبث</a>
+                                            )}
                                           </div>
                                         ) : (<div className="flex items-center justify-center h-full text-slate-300"><span className="text-xl opacity-50">-</span></div>)}
                                       </td>
@@ -1276,5 +1590,3 @@ export default function AutoScheduleGenerator() {
     </div>
   );
 }
-
-
