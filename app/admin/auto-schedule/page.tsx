@@ -187,11 +187,9 @@ export default function AutoScheduleGenerator() {
          tsData = tsDataWithZoom || [];
       }
 
-      // 🚀 درع تنقية البيانات (Data Purifier Shield)
-      // هذا الدرع سيقوم بمسح أي تكرار في قاعدة البيانات لمنع توليد "حصص وهمية"
+      // درع التنقية لضمان عدم وجود حصص مكررة وهمية
       const uniqueAssignmentsMap = new Map();
       tsData.forEach(ts => {
-         // القاعدة: كل فصل له مادة واحدة تُدرس بواسطة معلم واحد
          const uniqueKey = `${ts.section_id}_${ts.subject_id}`;
          if (!uniqueAssignmentsMap.has(uniqueKey)) {
             uniqueAssignmentsMap.set(uniqueKey, ts);
@@ -320,7 +318,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Hybrid Fairness - High School Only)
+  // 🧠 THE CORE ALGORITHM (Strict Budget Enforcement)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -328,12 +326,24 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد بخوارزمية (العدالة الهجينة)... (تم تفعيل درع تنقية البيانات)");
+    addLog("🚀 بدء التوليد... (يتم الآن قراءة الميزانية المعتمدة بصرامة تامة)");
+    
+    // 🚀 القراءة المباشرة للميزانية من الذاكرة لضمان عدم وجود أخطاء في واجهة React
+    let activeQuotas = { ...subjectQuotas };
+    if (typeof window !== 'undefined') {
+        const tempQ = localStorage.getItem('auto_schedule_quotas_temp');
+        if (tempQ) {
+            try { activeQuotas = JSON.parse(tempQ); } catch(e) {}
+        }
+    }
     
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
-      const quota = key ? (subjectQuotas[key] !== undefined ? subjectQuotas[key] : 3) : 3;
+      
+      // 🚀 ربط فولاذي: استخدام الأرقام من الذاكرة المباشرة فقط!
+      const quota = key ? (activeQuotas[key] !== undefined ? activeQuotas[key] : 3) : 3;
+      
       const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
@@ -354,7 +364,7 @@ export default function AutoScheduleGenerator() {
         stage: section?.stage, available_days: tConst.days, available_periods: tConst.periods,
         isVIP: isEhabPhysics, zoom_link: zoomLink
       };
-    }).filter(ta => ta.original_quota > 0); 
+    }).filter(ta => ta.original_quota > 0); // الحصص الصفرية لن تدخل التوليد إطلاقاً
 
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
@@ -378,7 +388,6 @@ export default function AutoScheduleGenerator() {
         const relaxation = attempt > 5 ? 2 : 0; 
         const emergencyForce = attempt > 12; 
 
-        // حساب العدالة اليومية
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
            const tConst = teacherConstraints[tId] || { days: [...workingDays] };
@@ -397,7 +406,6 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // الفرز الصحيح (المواد الكبيرة أولاً لضمان عدم انهيار العربي والرياضيات)
         const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
@@ -425,12 +433,12 @@ export default function AutoScheduleGenerator() {
         };
 
         const canPlaceAbsolute = (teacherId, section, day, period, subjectId, maxAllowedPerDay, enforceStrictSpread, allowedDaysCount, enforceLoadBalance = true) => {
-          // قيد العدالة يطبق بصرامة فقط على الثانوي (حضوري) ويتجاهل المتوسط (أونلاين)
           const isHighSchool = section.stage === 'high';
           if (isHighSchool && enforceLoadBalance && !emergencyForce && !ignoreFairness) {
               if (teacherDailyLoad[teacherId][day] >= (teacherMaxDailyLoad[teacherId] + relaxation)) return false;
           }
 
+          // 🚀 الحراسة الصارمة: لا يمكن وضع مادتين في نفس اليوم ونفس الحصة للفصل! (تمنع "حل محلها حصص أخرى")
           if (finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number)) return false;
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
@@ -513,7 +521,6 @@ export default function AutoScheduleGenerator() {
                   const teacherYBusy = finalSchedule.some(s => s.teacher_id === assignment.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
                   const subjCountToday = finalSchedule.filter(s => s.section_id === section.id && s.day === day && s.subject_id === assignment.subject_id).length;
                   
-                  // فحص العدالة قبل الإزاحة (فقط للثانوي)
                   if (section.stage === 'high' && !ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
                   if (teacherYBusy || subjCountToday >= maxPerDay) continue; 
 
@@ -540,7 +547,6 @@ export default function AutoScheduleGenerator() {
                     for (const altDay of allowedDaysZ) {
                        if(swapped) break;
                        
-                       // حماية المعلم المُزاح إذا كان يدرس ثانوي فقط
                        const isZHighSchool = blockingSlot.stage === 'high';
                        if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
@@ -633,7 +639,7 @@ export default function AutoScheduleGenerator() {
     if (absoluteBestFailedCount > 0) {
       addLog(`⚠️ اكتمل مع وجود ${absoluteBestFailedCount} حصص بالانتظار (القيود متضاربة جداً).`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل بدون حصص وهمية.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل والميزانية قُرأت بصرامة تامّة.`);
     }
     setGenerating(false);
   };
@@ -748,7 +754,7 @@ export default function AutoScheduleGenerator() {
 
   const loadPlan = async (id: string) => {
     setGenerating(true);
-    addLog(`⏳ جاري استدعاء الجدول السحابي (الاستدعاء الآمن)...`);
+    addLog(`⏳ جاري استدعاء الجدول السحابي (بدون تغيير ميزانيتك المعتمدة)...`);
     try {
       let slots = [];
       const { data: slotsWithZoom, error: zoomErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
@@ -769,7 +775,7 @@ export default function AutoScheduleGenerator() {
          addLog(`✅ تم استرجاع ${slots.length} حصة من قاعدة البيانات.`);
       }
 
-      const formatted = rawSlots.map(slot => {
+      const formatted = slots.map(slot => {
         const section = sections.find(s => String(s.id) === String(slot.section_id));
         const assignment = rawTeacherAssignments.find(ts => 
            String(ts.teacher_id) === String(slot.teacher_id) && 
@@ -800,31 +806,13 @@ export default function AutoScheduleGenerator() {
 
       formatted.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
       
-      if (slots && slots.length > 0) {
-         const extractedQuotas: Record<string, number> = {};
-         slots.forEach(slot => {
-            const cId = slot.sections?.class_id || sections.find(sec => sec.id === slot.section_id)?.class_id;
-            if (cId && slot.subject_id) {
-               const qKey = `${slot.subject_id}_${cId}`;
-               const count = slots.filter(x => x.section_id === slot.section_id && x.subject_id === slot.subject_id).length;
-               extractedQuotas[qKey] = Math.max(extractedQuotas[qKey] || 0, count);
-            }
-         });
-         
-         setSubjectQuotas(prev => {
-            const merged = { ...prev, ...extractedQuotas };
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('auto_schedule_quotas_v3', JSON.stringify(merged));
-              localStorage.setItem('auto_schedule_quotas_temp', JSON.stringify(merged));
-            }
-            return merged;
-         });
-         setIsBudgetSaved(true);
-      }
-
+      // 🚀 تم حذف دالة تغيير الميزانية أوتوماتيكياً (استجابة للمشكلة التي اكتشفتها)
+      
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
+      addLog(`✅ تم تحميل الجدول المعتمد بنجاح!`);
+
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
@@ -1509,7 +1497,7 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
-                     {/* 🚀 أزرار الطباعة والتدقيق التي تمت إعادتها */}
+                     {/* أزرار الطباعة والتدقيق */}
                      {displayMode === 'grid' && (
                        <>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
