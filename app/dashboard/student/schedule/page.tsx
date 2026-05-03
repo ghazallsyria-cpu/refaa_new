@@ -1,8 +1,9 @@
 /* eslint-disable react/no-unescaped-entities */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Clock, BookOpen, User, ArrowRight, Loader2, AlertCircle, Sparkles, Play, Video, ShieldAlert } from 'lucide-react';
+import { Calendar, Clock, BookOpen, User, ArrowRight, Loader2, AlertCircle, Sparkles, Play, Video, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale'; 
@@ -12,6 +13,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem'; // 🚀 استيراد المحرك الشامل
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -42,6 +44,7 @@ export default function StudentSchedulePage() {
 
   // 🚀 الحارس (Guard) لمنع الطلبات المزدوجة والمكررة
   const isFetchedRef = useRef(false);
+  const { fetchStudentSchedule } = useDashboardSystem(); // 🚀 استخدام الـ Hook الجديد
 
   // 🚀 الاستعلام القناص: يجلب بيانات الطالب الحالية وجدوله المخصص فقط مرة واحدة
   const fetchStrictSchedule = useCallback(async () => {
@@ -51,40 +54,14 @@ export default function StudentSchedulePage() {
     setLoading(true);
 
     try {
-      // 1. تحديد شعبة الطالب بدقة (Section ID)
-      const { data: studentDataRaw, error: stuErr } = await supabase
-        .from('students')
-        .select('id, section_id, sections(id, name, classes(name))')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (stuErr || !studentDataRaw) throw new Error("لم يتم العثور على بيانات الطالب");
+      // 🚀 الاعتماد على المحرك الشامل لجلب الجدول بناءً على النظام الفعال
+      const data = await fetchStudentSchedule();
       
-      const studentData: any = studentDataRaw;
-      const actualSectionId = studentData.section_id || (Array.isArray(studentData.sections) ? studentData.sections[0]?.id : studentData.sections?.id);
-      setStudentInfo(studentData);
-
-      // 2. جلب الحصص التي تتطابق 100% مع رقم الشعبة فقط
-      if (actualSectionId) {
-        const { data: strictSchedule } = await supabase
-          .from('schedules')
-          .select(`
-            id, day_of_week, period, section_id,
-            subjects(name),
-            teachers(users(full_name), zoom_link)
-          `)
-          .eq('section_id', actualSectionId); // 🔒 القفل السري لمنع التداخل!
-        
-        setSchedule(strictSchedule || []);
+      if (data) {
+          setStudentInfo(data.student);
+          setSchedule(data.schedule || []);
+          setPeriods(data.periods || []);
       }
-
-      // 3. جلب أوقات الحصص
-      const { data: periodsData } = await supabase
-        .from('periods')
-        .select('*')
-        .order('period_number', { ascending: true });
-
-      setPeriods(periodsData || []);
 
     } catch (error) {
       console.error('Error fetching strict schedule:', error);
@@ -93,7 +70,7 @@ export default function StudentSchedulePage() {
     } finally {
       setLoading(false);
     }
-  }, [authRole, user?.id]); // 🚀 الاعتماد فقط على الـ id وليس الكائن الكامل لمنع الريندر
+  }, [authRole, user?.id, fetchStudentSchedule]);
 
   useEffect(() => {
     if (!isChecking) fetchStrictSchedule();
@@ -112,31 +89,50 @@ export default function StudentSchedulePage() {
     );
   }, [schedule]);
 
-  const isCurrentClass = useCallback((day: number, period: any) => {
-    if (!period?.start_time || !period?.end_time) return false;
+  // 🚀 [تعديل جراحي] الاعتماد على الوقت المحقون
+  const isCurrentClassLocal = useCallback((day: number, startTime?: string, endTime?: string) => {
+    if (!currentTime || !startTime || !endTime) return false;
     const now = currentTime;
     const currentDay = now.getDay() + 1; 
     if (day !== currentDay) return false;
 
-    const [startH, startM] = period.start_time.split(':').map(Number);
-    const [endH, endM] = period.end_time.split(':').map(Number);
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
     
-    const startTime = new Date(now); startTime.setHours(startH, startM, 0);
-    const endTime = new Date(now); endTime.setHours(endH, endM, 0);
+    const start = new Date(now); start.setHours(startH, startM, 0);
+    const end = new Date(now); end.setHours(endH, endM, 0);
 
-    return now >= startTime && now <= endTime;
+    return now >= start && now <= end;
   }, [currentTime]);
 
-  const isNextClass = useCallback((day: number, period: any) => {
-    if (!period?.start_time) return false;
+  // 🚀 [تعديل جراحي] الاعتماد على الوقت المحقون
+  const isNextClassLocal = useCallback((day: number, startTime?: string) => {
+    if (!currentTime || !startTime) return false;
     const now = currentTime;
     const currentDay = now.getDay() + 1;
     if (day !== currentDay) return false;
 
-    const [startH, startM] = period.start_time.split(':').map(Number);
-    const startTime = new Date(now); startTime.setHours(startH, startM, 0);
+    const [startH, startM] = startTime.split(':').map(Number);
+    const start = new Date(now); start.setHours(startH, startM, 0);
 
-    return startTime > now && (startTime.getTime() - now.getTime()) < 120 * 60000;
+    const diff = (start.getTime() - now.getTime()) / (1000 * 60);
+    return diff > 0 && diff <= 60;
+  }, [currentTime]);
+
+  const isPastClassLocal = useCallback((day: number, endTime?: string) => {
+      if (!currentTime || !endTime) return false;
+      const now = currentTime;
+      const currentDay = now.getDay() + 1;
+      
+      // إذا كان اليوم المطلوب قد مضى في هذا الأسبوع
+      if (day < currentDay) return true;
+      // إذا كان اليوم المطلوب لم يأتِ بعد
+      if (day > currentDay) return false;
+
+      // إذا كنا في نفس اليوم نقارن الساعات
+      const [endH, endM] = endTime.split(':').map(Number);
+      const end = new Date(now); end.setHours(endH, endM, 0);
+      return now > end;
   }, [currentTime]);
 
   if (isChecking) {
@@ -249,30 +245,71 @@ export default function StudentSchedulePage() {
                       const slot = getCellData(activeDayTab, p.period_number);
                       if (!slot) return null;
                       
-                      const isCurrent = isCurrentClass(activeDayTab, p);
-                      const isNext = isNextClass(activeDayTab, p);
+                      const isCurrent = isCurrentClassLocal(activeDayTab, slot.start_time, slot.end_time);
+                      const isNext = isNextClassLocal(activeDayTab, slot.start_time);
+                      const isPast = isPastClassLocal(activeDayTab, slot.end_time);
 
                       return (
-                        <div key={p.id} className={`glass-panel p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] flex flex-col gap-3 sm:gap-4 relative overflow-hidden group transition-all ${isCurrent ? 'border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.2)] bg-[#0f1423]/90' : 'border-white/5 hover:border-white/20'}`}>
-                          <div className={`absolute top-0 right-0 w-1.5 h-full ${isCurrent ? 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : isNext ? 'bg-amber-400' : 'bg-gradient-to-b from-blue-500 to-indigo-600'}`}></div>
+                        <div key={p.id} className={cn("glass-panel p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] flex flex-col gap-3 sm:gap-4 relative overflow-hidden group transition-all duration-500 border", 
+                            isCurrent ? 'border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.2)] bg-[#0f1423]/90 scale-[1.02]' : 
+                            isPast ? 'bg-[#02040a]/40 border-white/5 opacity-50 grayscale' :
+                            'border-white/5 hover:border-white/20'
+                        )}>
+                          
+                          {isCurrent && (
+                            <span className="absolute top-4 left-4 flex h-3.5 w-3.5 z-20">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)]"></span>
+                            </span>
+                          )}
+
+                          <div className={`absolute top-0 right-0 w-1.5 h-full ${
+                              isCurrent ? 'bg-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : 
+                              isPast ? 'bg-slate-700' :
+                              isNext ? 'bg-amber-400' : 
+                              'bg-gradient-to-b from-blue-500 to-indigo-600'
+                          }`}></div>
+                          
                           <div className="flex justify-between items-start pl-2">
                             <div>
-                              <span className={`text-[9px] sm:text-[10px] font-black px-2 sm:px-2.5 py-1 rounded-lg inline-flex items-center gap-1 sm:gap-1.5 mb-2 sm:mb-2.5 shadow-inner border ${isCurrent ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : isNext ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                              <span className={cn("text-[9px] sm:text-[10px] font-black px-2 sm:px-2.5 py-1 rounded-lg inline-flex items-center gap-1 sm:gap-1.5 mb-2 sm:mb-2.5 shadow-inner border", 
+                                  isCurrent ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                                  isPast ? 'bg-transparent text-slate-500 border-slate-700' :
+                                  isNext ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
+                                  'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              )}>
                                 <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> الحصة {p.period_number}
                               </span>
-                              <h3 className={`text-lg sm:text-xl font-black drop-shadow-sm ${isCurrent ? 'text-emerald-400' : 'text-white'}`}>{slot.subjects?.name}</h3>
+                              <h3 className={cn("text-lg sm:text-xl font-black drop-shadow-sm", 
+                                  isCurrent ? 'text-blue-400' : 
+                                  isPast ? 'text-slate-500' :
+                                  'text-white'
+                              )}>{slot.subjects?.name}</h3>
                             </div>
-                            <span className="text-[10px] sm:text-xs font-bold text-slate-400 bg-[#02040a]/80 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-white/5 shadow-inner" dir="ltr">
-                              {p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}
+                            <span className={cn("text-[10px] sm:text-xs font-bold bg-[#02040a]/80 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border shadow-inner", 
+                                isCurrent ? 'text-blue-200 border-blue-500/20' :
+                                isPast ? 'text-slate-600 border-white/5' :
+                                'text-slate-400 border-white/5'
+                            )} dir="ltr">
+                              {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
                             </span>
                           </div>
-                          <div className={`flex items-center justify-between pt-3 sm:pt-4 border-t gap-3 ${isCurrent ? 'border-emerald-500/20' : 'border-white/5'}`}>
+                          
+                          <div className={`flex items-center justify-between pt-3 sm:pt-4 border-t gap-3 relative z-10 ${
+                              isCurrent ? 'border-blue-500/20' : 
+                              isPast ? 'border-slate-800' :
+                              'border-white/5'
+                          }`}>
                             <div className="flex items-center gap-2">
                               <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#02040a] flex items-center justify-center text-slate-500 border border-white/10 shrink-0 shadow-inner"><User className="w-3 h-3 sm:w-4 sm:h-4" /></div>
-                              <span className={`text-xs sm:text-sm font-bold truncate ${isCurrent ? 'text-slate-200' : 'text-slate-300'}`}>أ. {slot.teachers?.users?.full_name}</span>
+                              <span className={cn("text-xs sm:text-sm font-bold truncate", 
+                                  isCurrent ? 'text-blue-200' : 
+                                  isPast ? 'text-slate-600' :
+                                  'text-slate-300'
+                              )}>أ. {slot.teachers?.users?.full_name}</span>
                             </div>
-                            {slot.teachers?.zoom_link && (
-                              <a href={normalizeUrl(slot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black transition-all border shrink-0 ${isCurrent ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500 hover:text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500 hover:text-slate-950'}`}>
+                            {slot.teachers?.zoom_link && !isPast && (
+                              <a href={normalizeUrl(slot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black transition-all border shrink-0 ${isCurrent ? 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500 hover:text-slate-950 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500 hover:text-white'}`}>
                                 <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-pulse" /> دخول البث
                               </a>
                             )}
@@ -302,9 +339,6 @@ export default function StudentSchedulePage() {
                         <th key={period.id} className={`py-4 sm:py-5 px-3 sm:px-4 text-center border-l border-white/5 w-44 sm:w-48 bg-[#02040a]/60 ${idx === periods.length - 1 ? 'rounded-tl-[1.5rem]' : ''}`}>
                           <div className="flex flex-col items-center gap-1.5 sm:gap-2">
                             <span className="text-white font-black text-xs sm:text-sm drop-shadow-sm">الحصة {period.period_number}</span>
-                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-[#0f1423] px-2.5 sm:px-3 py-1 rounded-lg border border-white/5 shadow-inner" dir="ltr">
-                              {period.start_time.substring(0, 5)} - {period.end_time.substring(0, 5)}
-                            </span>
                           </div>
                         </th>
                       ))}
@@ -316,57 +350,82 @@ export default function StudentSchedulePage() {
                         <td className="py-5 sm:py-6 px-3 sm:px-4 text-xs sm:text-sm font-black text-slate-300 border-l border-white/5 text-center bg-[#02040a]/40 group-hover:text-blue-400 transition-colors">{day.name}</td>
                         {periods.map(period => {
                           const cellData = getCellData(day.id, period.period_number);
-                          const isCurrent = isCurrentClass(day.id, period);
-                          const isNext = isNextClass(day.id, period);
+                          
+                          // تمرير الوقت المحقون بدلاً من البحث في periods العامة
+                          const isCurrent = isCurrentClassLocal(day.id, cellData?.start_time, cellData?.end_time);
+                          const isNext = isNextClassLocal(day.id, cellData?.start_time);
+                          const isPast = isPastClassLocal(day.id, cellData?.end_time);
 
                           return (
                             <td key={`${day.id}-${period.id}`} className="p-2 sm:p-3 border-l border-white/5 h-36 sm:h-40 align-top min-w-[160px] sm:min-w-[180px]">
                               {cellData ? (
                                 <motion.div 
-                                  whileHover={{ scale: 1.03 }}
-                                  className={`h-full flex flex-col justify-between rounded-[1rem] sm:rounded-[1.5rem] p-3 sm:p-4 transition-all duration-300 relative overflow-hidden shadow-inner border ${
-                                    isCurrent 
-                                      ? 'bg-[#0f1423]/90 border-emerald-500/50 shadow-[0_0_25px_rgba(16,185,129,0.2)] ring-1 ring-emerald-500/30' 
-                                      : isNext
-                                        ? 'bg-amber-500/10 border-amber-500/30 shadow-sm'
-                                        : 'bg-[#02040a]/60 border-white/5 hover:border-blue-500/30 hover:bg-[#0f1423]'
-                                  }`}
+                                  whileHover={!isPast ? { scale: 1.03 } : {}}
+                                  className={cn("h-full flex flex-col justify-between rounded-[1rem] sm:rounded-[1.5rem] p-3 sm:p-4 transition-all duration-300 relative overflow-hidden shadow-inner border",
+                                    isCurrent ? 'bg-[#0f1423]/90 border-blue-500/50 shadow-[0_0_25px_rgba(59,130,246,0.2)] ring-1 ring-blue-500/30 scale-[1.02]' : 
+                                    isPast ? 'bg-[#02040a]/40 border-white/5 opacity-50 grayscale' :
+                                    isNext ? 'bg-amber-500/10 border-amber-500/30 shadow-sm' : 
+                                    'bg-[#02040a]/60 border-white/5 hover:border-blue-500/30 hover:bg-[#0f1423]'
+                                  )}
                                 >
-                                  {isCurrent && <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none mix-blend-overlay"></div>}
+                                  {isCurrent && (
+                                    <>
+                                      <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none mix-blend-overlay"></div>
+                                      <span className="absolute top-2 left-2 flex h-2.5 w-2.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)]"></span>
+                                      </span>
+                                    </>
+                                  )}
                                   
                                   <div className="space-y-1.5 sm:space-y-2 relative z-10">
-                                    <div className={`flex items-center gap-1 sm:gap-1.5 ${isCurrent ? 'text-emerald-400/80' : isNext ? 'text-amber-400/80' : 'text-slate-500'}`}>
+                                    <div className={cn("flex items-center gap-1 sm:gap-1.5", 
+                                        isCurrent ? 'text-blue-400/80' : 
+                                        isPast ? 'text-slate-600' :
+                                        isNext ? 'text-amber-400/80' : 
+                                        'text-slate-500'
+                                    )}>
                                       <BookOpen className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
-                                      <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider">المادة</span>
+                                      <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider truncate">
+                                        {cellData.start_time?.slice(0, 5)} - {cellData.end_time?.slice(0, 5)}
+                                      </span>
                                     </div>
-                                    <div className={`font-black text-sm sm:text-base leading-snug truncate drop-shadow-sm ${isCurrent ? 'text-emerald-400' : isNext ? 'text-amber-400' : 'text-white'}`}>
+                                    <div className={cn("font-black text-sm sm:text-base leading-snug truncate drop-shadow-sm", 
+                                        isCurrent ? 'text-blue-400' : 
+                                        isPast ? 'text-slate-500' :
+                                        isNext ? 'text-amber-400' : 
+                                        'text-white'
+                                    )}>
                                       {cellData.subjects?.name}
                                     </div>
                                   </div>
-                                  <div className={`mt-2 sm:mt-3 pt-2 sm:pt-3 border-t flex flex-col gap-1.5 sm:gap-2 relative z-10 ${isCurrent ? 'border-emerald-500/20' : isNext ? 'border-amber-500/20' : 'border-white/5'}`}>
-                                    <div className={`flex items-center gap-1.5 sm:gap-2 ${isCurrent ? 'text-slate-200' : 'text-slate-400'}`}>
+                                  <div className={cn("mt-2 sm:mt-3 pt-2 sm:pt-3 border-t flex flex-col gap-1.5 sm:gap-2 relative z-10", 
+                                      isCurrent ? 'border-blue-500/20' : 
+                                      isPast ? 'border-slate-800' :
+                                      isNext ? 'border-amber-500/20' : 
+                                      'border-white/5'
+                                  )}>
+                                    <div className={cn("flex items-center gap-1.5 sm:gap-2", 
+                                        isCurrent ? 'text-blue-200' : 
+                                        isPast ? 'text-slate-600' :
+                                        'text-slate-400'
+                                    )}>
                                       <User className="h-3.5 w-3.5 sm:h-4 w-4 shrink-0 opacity-70" />
                                       <div className="text-[10px] sm:text-xs font-bold truncate">
                                         أ. {cellData.teachers?.users?.full_name || 'غير محدد'}
                                       </div>
                                     </div>
-                                    {cellData.teachers?.zoom_link && (
-                                      <a href={normalizeUrl(cellData.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className={`w-full flex items-center justify-center gap-1 sm:gap-1.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black transition-colors border ${isCurrent ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-slate-950 border-blue-500/20'}`}>
-                                        <Video className="w-3 h-3 sm:w-3.5 h-3.5" /> دخول البث
+                                    {cellData.teachers?.zoom_link && !isPast && (
+                                      <a href={normalizeUrl(cellData.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className={cn("w-full flex items-center justify-center gap-1 sm:gap-1.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black transition-colors border", 
+                                          isCurrent ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-slate-950 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 
+                                          'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-slate-950 border-indigo-500/20'
+                                      )}>
+                                        <Video className="w-3 h-3 sm:w-3.5 h-3.5 animate-pulse" /> دخول البث
                                       </a>
                                     )}
                                     {isCurrent && !cellData.teachers?.zoom_link && (
-                                      <div className="inline-flex items-center justify-center py-1 sm:py-1.5 px-2 sm:px-3 bg-[#02040a] rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black text-emerald-400 shadow-inner w-full border border-emerald-500/20">
-                                        <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2 ml-1.5 sm:ml-2">
-                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-emerald-500"></span>
-                                        </span>
+                                      <div className="inline-flex items-center justify-center py-1 sm:py-1.5 px-2 sm:px-3 bg-[#02040a] rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black text-blue-400 shadow-inner w-full border border-blue-500/20">
                                         الحصة جارية
-                                      </div>
-                                    )}
-                                    {isNext && !isCurrent && (
-                                      <div className="inline-flex items-center justify-center py-1 sm:py-1.5 px-2 sm:px-3 bg-amber-500/10 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black text-amber-400 border border-amber-500/30 shadow-inner w-full">
-                                        الحصة القادمة
                                       </div>
                                     )}
                                   </div>
@@ -388,12 +447,12 @@ export default function StudentSchedulePage() {
           </>
         )}
 
-        <div className="glass-panel border-amber-500/30 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 mt-4 sm:mt-6 shadow-[0_0_20px_rgba(245,158,11,0.1)] text-center sm:text-right">
-          <div className="p-2.5 sm:p-3 bg-amber-500/10 rounded-xl sm:rounded-2xl shrink-0 border border-amber-500/20 shadow-inner">
-            <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400 drop-shadow-md" />
+        <div className="glass-panel border-blue-500/30 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 mt-4 sm:mt-6 shadow-[0_0_20px_rgba(59,130,246,0.1)] text-center sm:text-right">
+          <div className="p-2.5 sm:p-3 bg-blue-500/10 rounded-xl sm:rounded-2xl shrink-0 border border-blue-500/20 shadow-inner">
+            <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 drop-shadow-md" />
           </div>
           <div>
-            <h4 className="font-black text-amber-400 text-base sm:text-lg drop-shadow-sm">تنبيه الحصص</h4>
+            <h4 className="font-black text-blue-400 text-base sm:text-lg drop-shadow-sm">تنبيه الحصص</h4>
             <p className="text-xs sm:text-sm text-slate-300 font-bold mt-1 sm:mt-1.5 leading-relaxed max-w-2xl">يرجى الالتزام بمواعيد الحصص الدراسية والتواجد في الفصل قبل بدء الحصة بـ 5 دقائق تجنباً لتسجيلك كمتأخر أو غائب في الرصد الآلي.</p>
           </div>
         </div>
