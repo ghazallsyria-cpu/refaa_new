@@ -68,34 +68,30 @@ export default function TeacherDashboard() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  const isCurrentClass = useCallback((period: number | string) => {
-    if (!currentTime) return false;
-    const periodInfo = periods.find(p => Number(p.period_number) === Number(period));
-    if (!periodInfo || !periodInfo.start_time || !periodInfo.end_time) return false;
-
-    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
-    const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+  // 🚀 [تعديل جراحي] الاعتماد على الوقت المحقون في الكرت مباشرة بدلاً من البحث
+  const isCurrentClass = useCallback((startTime?: string, endTime?: string) => {
+    if (!currentTime || !startTime || !endTime) return false;
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
     
     const now = currentTime;
     const start = new Date(now); start.setHours(startH, startM, 0);
     const end = new Date(now); end.setHours(endH, endM, 0);
     
     return now >= start && now <= end;
-  }, [currentTime, periods]);
+  }, [currentTime]);
 
-  const isNextClass = useCallback((period: number | string) => {
-    if (!currentTime) return false;
-    const periodInfo = periods.find(p => Number(p.period_number) === Number(period));
-    if (!periodInfo || !periodInfo.start_time) return false;
-
-    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
+  // 🚀 [تعديل جراحي] الاعتماد على الوقت المحقون
+  const isNextClass = useCallback((startTime?: string) => {
+    if (!currentTime || !startTime) return false;
+    const [startH, startM] = startTime.split(':').map(Number);
     
     const now = currentTime;
     const start = new Date(now); start.setHours(startH, startM, 0);
     
     const diff = (start.getTime() - now.getTime()) / (1000 * 60);
     return diff > 0 && diff <= 60;
-  }, [currentTime, periods]);
+  }, [currentTime]);
 
 const fetchData = useCallback(async () => {
     if (!user?.id || isFetchedRef.current) return;
@@ -149,7 +145,7 @@ const fetchData = useCallback(async () => {
               setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
             }
 
-            // 🚀 [إصلاح خلل التنبيه الإداري لتسجيل الغياب]
+            // نظام الإنذار الإداري
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
               
@@ -163,13 +159,11 @@ const fetchData = useCallback(async () => {
               } else {
                 const todaySectionIds = Array.from(new Set(todaysScheduleData.map((s: any) => s.section_id)));
                 
-                // 🚀 سحب البيانات من السجلات والجلسات وتجنب الحقول غير الموجودة
                 const [ { data: recordsData }, { data: sessionsData } ] = await Promise.all([
                   supabase.from('attendance_records').select('period, section_id').eq('date', todayStr).in('section_id', todaySectionIds),
                   supabase.from('attendance_sessions').select('period_number, section_id').eq('date', todayStr).eq('status', 'submitted').in('section_id', todaySectionIds)
                 ]);
 
-                // تجميع كل المفاتيح المسجلة لضمان الدقة (رقم الشعبة - رقم الحصة)
                 const recordedKeys = new Set([
                   ...(recordsData || []).map(r => `${r.section_id}-${Number(r.period)}`),
                   ...(sessionsData || []).map(r => `${r.section_id}-${Number(r.period_number)}`)
@@ -186,9 +180,9 @@ const fetchData = useCallback(async () => {
                   if (recordedKeys.has(key)) {
                     totalRecorded++;
                   } else {
-                    const pInfo = data.periods.find((p: any) => Number(p.period_number) === pNum);
-                    if (pInfo && pInfo.end_time) {
-                      const [h, m] = pInfo.end_time.split(':').map(Number);
+                    // 🚀 نقرأ الوقت من الكرت مباشرة لضمان توافق النظام الآلي
+                    if (slot.end_time) {
+                      const [h, m] = slot.end_time.split(':').map(Number);
                       const endTime = new Date(now);
                       endTime.setHours(h, m, 0, 0);
 
@@ -483,7 +477,7 @@ const fetchData = useCallback(async () => {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8 items-start">
           
           <div className="xl:col-span-2 space-y-6 lg:space-y-8 w-full">
-            {/* Today's Schedule */}
+            {/* Today's Schedule (Live Pulse) */}
             <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden border border-white/5">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
               <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 relative z-10 gap-4 text-center sm:text-right">
@@ -503,13 +497,12 @@ const fetchData = useCallback(async () => {
                 {todaysSchedule.length > 0 ? (
                   <div className="space-y-4 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-amber-500/30 before:via-white/10 before:to-transparent">
                     {todaysSchedule.map((item, i) => {
-                      const current = isCurrentClass(item.period);
-                      const next = isNextClass(item.period);
+                      const current = isCurrentClass(item.start_time, item.end_time);
+                      const next = isNextClass(item.start_time);
                       
                       let isPast = false;
-                      const periodInfo = periods.find(p => Number(p.period_number) === Number(item.period));
-                      if (periodInfo?.end_time && currentTime) {
-                        const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+                      if (item.end_time && currentTime) {
+                        const [endH, endM] = item.end_time.split(':').map(Number);
                         const endTime = new Date(currentTime);
                         endTime.setHours(endH, endM, 0, 0);
                         isPast = currentTime > endTime;
@@ -573,10 +566,10 @@ const fetchData = useCallback(async () => {
                                 <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" />
                                 <span className="truncate">{item.sections?.classes?.name} - {item.sections?.name}</span>
                               </p>
-                              {periodInfo?.start_time && periodInfo?.end_time && (
+                              {item.start_time && item.end_time && (
                                 <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-emerald-400 border-emerald-500/20" : isPast ? "text-slate-600 border-slate-800" : "text-slate-500 border-white/5")} dir="ltr">
                                   <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
-                                  {periodInfo.start_time.substring(0, 5)} - {periodInfo.end_time.substring(0, 5)}
+                                  {item.start_time.substring(0, 5)} - {item.end_time.substring(0, 5)}
                                 </span>
                               )}
                             </div>
