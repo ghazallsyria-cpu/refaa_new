@@ -1332,6 +1332,79 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
+      {/* Modal مركز الطباعة المجمعة للمدير */}
+      <AnimatePresence>
+        {isPrintCenterOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsPrintCenterOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+               animate={{ opacity: 1, scale: 1, y: 0 }} 
+               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh]" 
+               dir="rtl"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><Printer className="w-6 h-6"/></div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-lg">مركز الطباعة المجمعة</h3>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">اختر مجموعة من الجداول لطباعتها معاً</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsPrintCenterOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="p-6 flex-1 overflow-auto bg-slate-50 custom-scrollbar">
+                 <div className="flex gap-2 mb-4 bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+                    <button onClick={() => {setBatchPrintType('section'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'section' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة فصول</button>
+                    <button onClick={() => {setBatchPrintType('teacher'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'teacher' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة معلمين</button>
+                 </div>
+                 
+                 <div className="flex justify-between items-center mb-3 px-1">
+                    <span className="text-xs font-bold text-slate-500">تم تحديد: {batchPrintIds.length}</span>
+                    <button onClick={selectAllBatchIds} className="text-xs font-black text-indigo-600 hover:underline">تحديد الكل</button>
+                 </div>
+
+                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {batchPrintType === 'section' 
+                      ? sections.filter(s => generatedSchedules.some(gs => String(gs.section_id) === String(s.id))).map(s => (
+                          <div key={s.id} onClick={() => toggleBatchPrintId(String(s.id))} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(String(s.id)) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                             {batchPrintIds.includes(String(s.id)) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{s.full_name}</span>
+                          </div>
+                      ))
+                      : uniqueTeachersInSchedule.map(t => (
+                          <div key={t.id} onClick={() => toggleBatchPrintId(String(t.id))} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(String(t.id)) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                             {batchPrintIds.includes(String(t.id)) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{t.name}</span>
+                          </div>
+                      ))
+                    }
+                 </div>
+              </div>
+
+              <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
+                <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
+                <button onClick={() => handlePrintCommand('custom-batch')} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
+                  <FileDown className="w-5 h-5" /> تحميل PDF للمحددين
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isGeneratingPDF && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-xl text-white">
+            <Loader2 className="w-20 h-20 animate-spin text-emerald-400 mb-6" />
+            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثائق الـ PDF الذكية...</h2>
+            <p className="text-slate-300 font-bold mt-3 text-lg">يرجى الانتظار، النظام يقوم بدمج الجداول وزراعة الروابط.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 🚀 Modal مصفوفة إعدادات المعلم الدقيقة (Matrix UI) */}
       <AnimatePresence>
         {isTeacherModalOpen && selectedTeacherObj && (
@@ -1691,7 +1764,7 @@ export default function AutoScheduleGenerator() {
                         {gridFilterType === 'section' ? sections.filter(s => generatedSchedules.some(gs => String(gs.section_id) === String(s.id))).map(s => <option key={s.id} value={s.id}>{s.full_name}</option>) : uniqueTeachersInSchedule.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                       
-                      {/* 🚀 الزر السحري الجديد لتفعيل التبديل بالضغط */}
+                      {/* 🚀 الزر السحري لتفعيل التبديل بالضغط */}
                       {gridFilterType === 'section' && (
                          <button 
                             onClick={() => { setIsSwapMode(!isSwapMode); setSwapSource(null); setManualAssignModalOpen(false); }} 
