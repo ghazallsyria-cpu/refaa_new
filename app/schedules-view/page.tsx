@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown, Printer, X, CheckSquare2, Square, Grid3X3
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown, Printer, X, CheckSquare2, Square, Grid3X3, Filter
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
@@ -59,6 +59,37 @@ const normalizeUrl = (url?: string) => {
 const formatClassName = (rawName?: string) => {
   if (!rawName) return '';
   return rawName.replace('الصف ', '').trim();
+};
+
+const uniqueDepts = ['قسم العلوم', 'قسم الرياضيات', 'قسم اللغة العربية', 'قسم اللغة الإنجليزية', 'قسم التربية الإسلامية', 'قسم الاجتماعيات', 'قسم الحاسوب', 'أقسام أخرى'];
+
+// تم تمرير allSchedules كمتغير لتعمل الدالة بشكل صحيح
+const getTeacherDept = (tId: string, allSchedules: any[]) => {
+  const tSchedules = allSchedules.filter(s => String(s.teacher_id) === String(tId));
+  if (tSchedules.length === 0) return 'أقسام أخرى';
+  const subjName = tSchedules[0].subject_name || '';
+  if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) return 'قسم العلوم';
+  if (/(رياضيات)/.test(subjName)) return 'قسم الرياضيات';
+  if (/(عربي|عربية)/.test(subjName)) return 'قسم اللغة العربية';
+  if (/(إنجليزي|انجليزي)/.test(subjName)) return 'قسم اللغة الإنجليزية';
+  if (/(إسلامية|قرآن|تجويد)/.test(subjName)) return 'قسم التربية الإسلامية';
+  if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) return 'قسم الاجتماعيات';
+  if (/(حاسوب|معلوماتية)/.test(subjName)) return 'قسم الحاسوب';
+  return 'أقسام أخرى';
+};
+
+const getTeacherStageForPrint = (tId: string, allSchedules: any[]) => {
+   const tSchedules = allSchedules.filter(s => String(s.teacher_id) === String(tId));
+   let hasMiddle = false; 
+   let hasHigh = false;
+   tSchedules.forEach(s => {
+      if (s.stage === 'middle') hasMiddle = true;
+      if (s.stage === 'high') hasHigh = true;
+   });
+   if (hasMiddle && hasHigh) return 'both';
+   if (hasMiddle) return 'middle';
+   if (hasHigh) return 'high';
+   return 'unassigned';
 };
 
 export default function PublicSchedulesViewPage() {
@@ -403,21 +434,17 @@ export default function PublicSchedulesViewPage() {
           if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
-          // 🚀 تم خفض الـ Scale للجدول المجمع إلى 2.5 لحماية هواتف الآيفون من انهيار الذاكرة العشوائية (Memory Crash)
           const scaleValue = mode === 'master-print' ? 2.5 : 2;
           const canvas = await html2canvasModule(el, { scale: scaleValue, useCORS: true, backgroundColor: '#ffffff', logging: false });
           
-          // 🚀 الاعتماد على JPEG بدلاً من PNG لتقليص الحجم ومنع خطأ Wrong PNG Signature
           const imgData = canvas.toDataURL('image/jpeg', 0.95);
           
-          // حماية إضافية في حال فشل الكانفاس في رسم الصورة
           if (!imgData || imgData === 'data:,') {
               throw new Error('نفدت ذاكرة المتصفح أثناء رسم الجدول العملاق! يرجى المحاولة من جهاز كمبيوتر بدلاً من الهاتف.');
           }
 
           pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
-          // تطبيق الروابط في الـ PDF
           const links = el.querySelectorAll('a.zoom-link');
           const elementRect = el.getBoundingClientRect();
 
@@ -536,9 +563,64 @@ export default function PublicSchedulesViewPage() {
                     <button onClick={() => {setBatchPrintType('teacher'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'teacher' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>طباعة معلمين</button>
                  </div>
                  
+                 {/* 🚀 أدوات التحديد السريع الذكية */}
+                 <div className="bg-[#131836] p-4 rounded-xl border border-white/10 mb-4 space-y-4">
+                    <div className="flex justify-between items-center px-1">
+                       <span className="text-xs font-black text-indigo-400 flex items-center gap-1.5"><Filter className="w-3.5 h-3.5" /> التحديد السريع:</span>
+                       <button onClick={() => setBatchPrintIds([])} className="text-[10px] font-black text-rose-400 hover:text-rose-300 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">مسح التحديد</button>
+                    </div>
+
+                    {batchPrintType === 'section' && (
+                       <div className="flex gap-2">
+                          <button onClick={() => {
+                             const ids = sections.filter(s => (s.level || 0) < 10).map(s => String(s.id));
+                             setBatchPrintIds(ids);
+                          }} className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-black rounded-lg transition-colors">تحديد فصول المتوسط</button>
+                          
+                          <button onClick={() => {
+                             const ids = sections.filter(s => (s.level || 0) >= 10).map(s => String(s.id));
+                             setBatchPrintIds(ids);
+                          }} className="flex-1 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-xs font-black rounded-lg transition-colors">تحديد فصول الثانوي</button>
+                       </div>
+                    )}
+
+                    {batchPrintType === 'teacher' && (
+                       <>
+                          <div className="flex gap-2">
+                             <select onChange={(e) => {
+                                if(!e.target.value) return;
+                                const dept = e.target.value;
+                                const ids = uniqueTeachers.filter(t => getTeacherDept(t.id, schedules) === dept).map(t => String(t.id));
+                                setBatchPrintIds(ids);
+                             }} className="flex-1 bg-[#02040a]/80 text-white text-xs font-bold p-2 rounded-lg border border-white/10 outline-none focus:border-indigo-500">
+                                <option value="">تحديد جميع معلمي قسم...</option>
+                                {uniqueDepts.map(d => <option key={d} value={d}>{d}</option>)}
+                             </select>
+                          </div>
+                          <div className="flex gap-2">
+                              <button onClick={() => {
+                                 const ids = uniqueTeachers.filter(t => {
+                                    const stage = getTeacherStageForPrint(t.id, schedules);
+                                    return stage === 'middle' || stage === 'both';
+                                 }).map(t => String(t.id));
+                                 setBatchPrintIds(ids);
+                              }} className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-black rounded-lg transition-colors">معلمي المتوسط</button>
+                              
+                              <button onClick={() => {
+                                 const ids = uniqueTeachers.filter(t => {
+                                    const stage = getTeacherStageForPrint(t.id, schedules);
+                                    return stage === 'high' || stage === 'both';
+                                 }).map(t => String(t.id));
+                                 setBatchPrintIds(ids);
+                              }} className="flex-1 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-xs font-black rounded-lg transition-colors">معلمي الثانوي</button>
+                          </div>
+                       </>
+                    )}
+                 </div>
+
                  <div className="flex justify-between items-center mb-3 px-1">
-                    <span className="text-xs font-bold text-slate-400">تم تحديد: <span className="text-white">{batchPrintIds.length}</span></span>
-                    <button onClick={selectAllBatchIds} className="text-xs font-black text-indigo-400 hover:text-indigo-300 hover:underline">تحديد الكل</button>
+                    <span className="text-xs font-bold text-slate-400">محدد يدوياً: <span className="text-white bg-indigo-500/20 px-2 py-0.5 rounded text-[10px] ml-1">{batchPrintIds.length}</span></span>
+                    <button onClick={selectAllBatchIds} className="text-[10px] font-black text-indigo-400 hover:text-indigo-300 hover:underline">تحديد الكل</button>
                  </div>
 
                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
