@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save, Loader2, FileDown, Printer, Layers, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -65,6 +65,7 @@ export default function SchedulePage() {
   // حالات الأمان
   const [isAdmin, setIsAdmin] = useState(false);
   const [isWatcher, setIsWatcher] = useState(false);
+  const [activeSystem, setActiveSystem] = useState<'manual' | 'auto'>('manual'); // 🚀 حالة النظام الفعال
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{day: number, period: number} | null>(null);
@@ -91,6 +92,24 @@ export default function SchedulePage() {
     addSchedule, updateSchedule, deleteSchedule, checkConflicts, swapSchedules
   } = useSchedulesSystem();
 
+  const isInitialFetched = useRef(false);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
+
+  const [currentCell, setCurrentCell] = useState<{
+    day: number;
+    period: number;
+    scheduleId?: string;
+    subjectId?: string;
+    teacherId?: string;
+  }>({ day: 0, period: 1 });
+
   const fetchFilters = useCallback(async () => {
     if (isChecking) return;
     try {
@@ -103,6 +122,10 @@ export default function SchedulePage() {
           isGlobalWatcher = true;
         }
       }
+
+      // 🚀 قراءة المفتاح المركزي للنظام
+      const { data: settings } = await supabase.from('school_settings').select('active_schedule_system').eq('id', 1).maybeSingle();
+      setActiveSystem(settings?.active_schedule_system || 'manual');
 
       setIsAdmin(isSuperAdmin);
       setIsWatcher(isGlobalWatcher);
@@ -145,7 +168,7 @@ export default function SchedulePage() {
   };
 
   const handleSwap = async (targetDay: number, targetPeriod: number, targetSlot: any | null) => {
-    if (!swappingFrom || !isAdmin) return; // المراقب لا يستطيع التبديل
+    if (!swappingFrom || !isAdmin || activeSystem === 'auto') return; // منع التبديل في النظام الذكي
     try {
       setLoading(true);
       const sourceDay = Number(swappingFrom.day_of_week);
@@ -170,26 +193,64 @@ export default function SchedulePage() {
     } catch (err: any) { alert(`حدث خطأ: ${err.message}`); fetchSchedule(); } finally { setLoading(false); }
   };
 
-  const handleAddSchedule = async () => {
-    if (!isAdmin) return; // 🔒 حماية إضافية
-    if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !selectedSlot) { alert('يرجى تعبئة جميع الحقول المطلوبة.'); return; }
+  const handleAddSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin || activeSystem === 'auto') return; // 🔒 حماية إضافية
+    if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !currentCell) { alert('يرجى تعبئة جميع الحقول المطلوبة.'); return; }
+    
+    setIsSubmitting(true);
     try {
       try {
-        const conflicts = await checkConflicts(Number(selectedSlot.day), Number(selectedSlot.period), String(formData.teacher_id), String(formData.section_id), editingId ? String(editingId) : undefined);
-        if (conflicts && conflicts.length > 0) { alert(`يوجد تضارب مع حصة أخرى في نفس الوقت.`); return; }
+        const conflicts = await checkConflicts(Number(currentCell.day), Number(currentCell.period), String(formData.teacher_id), String(formData.section_id), editingId ? String(editingId) : undefined);
+        if (conflicts && conflicts.length > 0) { alert(`يوجد تضارب مع حصة أخرى في نفس الوقت.`); setIsSubmitting(false); return; }
       } catch (e) { console.warn("تجاوز المحرك", e); }
 
-      const payload: any = { teacher_id: String(formData.teacher_id), section_id: String(formData.section_id), subject_id: String(formData.subject_id) };
-      if (editingId) { await updateSchedule(String(editingId), payload); } else { payload.day_of_week = Number(selectedSlot.day); payload.period = Number(selectedSlot.period); await addSchedule(payload); }
+      const payload: any = { teacher_id: String(formData.teacher_id), section_id: String(formData.section_id), subject_id: String(formData.subject_id), day_of_week: currentCell.day, period: currentCell.period };
       
-      setIsModalOpen(false); setEditingId(null); setFormData({ teacher_id: '', section_id: '', subject_id: '' }); await fetchSchedule(); alert('تم الحفظ بنجاح!');
-    } catch (err: any) { alert(`خطأ أثناء الحفظ: ${err.message}`); }
+      if (editingId) { await updateSchedule(String(editingId), payload); } else { await addSchedule(payload); }
+      
+      setIsModalOpen(false); setEditingId(null); setFormData({ teacher_id: '', section_id: '', subject_id: '' }); await fetchSchedule(); showNotification('success', 'تم حفظ الحصة بنجاح');
+    } catch (err: any) { showNotification('error', `خطأ أثناء الحفظ: ${err.message}`); } finally { setIsSubmitting(false); }
   };
 
   const handleDeleteSchedule = async (id: string) => {
-    if (!isAdmin) return; // 🔒 حماية إضافية
-    if (!confirm('هل أنت متأكد من حذف هذه الحصة؟')) return;
-    try { await deleteSchedule(String(id)); await fetchSchedule(); } catch (err: any) { alert(`خطأ: ${err.message}`); }
+    if (!isAdmin || activeSystem === 'auto') return; // 🔒 حماية إضافية
+    setScheduleToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!scheduleToDelete) return;
+    try { 
+      await deleteSchedule(String(scheduleToDelete)); 
+      await fetchSchedule(); 
+      showNotification('success', 'تم حذف الحصة بنجاح');
+    } catch (err: any) { 
+      showNotification('error', `خطأ: ${err.message}`); 
+    } finally {
+      setScheduleToDelete(null);
+    }
+  };
+
+  const openCellModal = (day: number, period: number, existingSchedule?: Schedule) => {
+    if (!selectedId) {
+      showNotification('error', 'الرجاء اختيار الكيان أولاً');
+      return;
+    }
+    
+    setCurrentCell({
+      day,
+      period,
+      scheduleId: existingSchedule?.id,
+      subjectId: existingSchedule?.subject_id || '',
+      teacherId: existingSchedule?.teacher_id || '',
+    });
+    setFormData({
+      teacher_id: viewType === 'teacher' ? selectedId : existingSchedule?.teacher_id || '',
+      section_id: viewType === 'section' ? selectedId : existingSchedule?.section_id || '',
+      subject_id: existingSchedule?.subject_id || ''
+    });
+    setEditingId(existingSchedule?.id || null);
+    setIsModalOpen(true);
   };
 
   const fetchSchedule = useCallback(async () => {
@@ -207,11 +268,19 @@ export default function SchedulePage() {
 
   useEffect(() => { if (!selectedId && !showAllSchedules) return; fetchSchedule(); }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
+  const getCellData = (day: number, period: number) => {
+    return scheduleData.find(s => 
+      s.day_of_week === day && 
+      s.period === period && 
+      (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
+    );
+  };
+
   const getEntitySchedule = (entityId: string, entityType: 'teacher' | 'section') => {
     return scheduleData.filter(s => entityType === 'teacher' ? String(s.teacher_id) === String(entityId) : String(s.section_id) === String(entityId));
   };
 
-  // 🚀 محرك توليد الـ PDF الذكي (يغطي جميع الحالات الجديدة)
+  // 🚀 محرك توليد الـ PDF الذكي
   const executePDF = async (mode: 'single' | 'all-teachers' | 'all-sections' | 'specific-class' | 'specific-dept', filterVal?: string) => {
     try {
       setIsGeneratingPDF(true);
@@ -262,129 +331,46 @@ export default function SchedulePage() {
     } catch (error: any) { alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); } finally { setIsGeneratingPDF(false); }
   };
 
-  // ==========================================
-  // 👨‍🎓 شاشة الطالب (زجاجي فخم)
-  // ==========================================
-  if (authRole === 'student') {
-    const studentSection = sections.find(s => String(s.id) === String(selectedId));
-    const sectionTitle = getEntityTitle(studentSection, 'section');
-
+  // شاشات الحماية والتحميل
+  if (isChecking) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden font-cairo" dir="rtl">
-        <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-indigo-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
-        <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-purple-600/15 rounded-full blur-[140px] pointer-events-none z-0" />
-
-        <div className="space-y-8 max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#131836] via-[#1a2044] to-[#0f142b] p-8 sm:p-12 text-white shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-white/10">
-            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-xs font-black text-emerald-400 uppercase tracking-widest backdrop-blur-md shadow-sm mx-auto md:mx-0">
-                  <Sparkles className="w-4 h-4" /> الفصل الدراسي الحالي
-                </div>
-                <h1 className="text-3xl sm:text-5xl font-black tracking-tight drop-shadow-lg">الجدول الأكاديمي</h1>
-                <p className="text-slate-400 text-sm sm:text-lg font-bold opacity-90">مرحباً بك يا بطل! هذا هو جدول حصصك لصف <span className="text-white underline decoration-wavy decoration-emerald-400">{sectionTitle}</span>.</p>
-              </div>
-              <div className="h-24 w-24 sm:h-32 sm:w-32 bg-white/5 backdrop-blur-xl rounded-full border-4 border-white/10 flex items-center justify-center shadow-2xl shrink-0"><Calendar className="h-12 w-12 sm:h-16 sm:w-16 text-emerald-400 drop-shadow-md" /></div>
-            </div>
-            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none"></div>
-          </motion.div>
-
-          {loading || periods.length === 0 ? (
-            <div className="flex h-64 items-center justify-center bg-[#131836]/40 backdrop-blur-md rounded-[3rem] border border-white/5 shadow-sm">
-              <div className="flex flex-col items-center gap-4"><Loader2 className="h-14 w-14 animate-spin text-emerald-500" /><p className="text-slate-400 font-bold animate-pulse tracking-widest text-lg">جاري سحب الجدول الأسطوري...</p></div>
-            </div>
-          ) : (
-            <>
-              {/* الموبايل */}
-              <div className="lg:hidden">
-                <div className="flex overflow-x-auto gap-2 pb-4 scrollbar-hide snap-x">
-                  {DAYS.map((day) => (
-                    <button key={day.id} onClick={() => setActiveDayTab(day.id)} className={`snap-center shrink-0 px-6 py-3.5 rounded-2xl font-black text-sm transition-all flex items-center gap-2 ${activeDayTab === day.id ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-105' : 'bg-[#131836]/60 text-slate-400 border border-white/10 hover:bg-white/5 hover:text-white'}`}>
-                      {activeDayTab === day.id && <Calendar className="w-4 h-4" />} {day.name}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="space-y-4 mt-2">
-                  <AnimatePresence mode="wait">
-                    <motion.div key={activeDayTab} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                      {periods.map(p => {
-                        const slot = scheduleData.find(s => String(s.day_of_week) === String(activeDayTab) && String(s.period) === String(p.period_number));
-                        if (!slot) return null;
-                        return (
-                          <div key={p.id} className="bg-[#131836]/60 backdrop-blur-xl p-5 rounded-[2rem] shadow-lg border border-white/10 flex flex-col gap-4 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-1.5 h-full bg-gradient-to-b from-emerald-400 to-teal-500"></div>
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 mb-2"><Clock className="w-3 h-3" /> الحصة {p.period_number}</span>
-                                <h3 className="text-xl font-black text-white">{slot.subjects?.name}</h3>
-                              </div>
-                              <span className="text-xs font-bold text-slate-400 bg-[#090b14]/50 px-3 py-1.5 rounded-xl border border-white/5">{p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}</span>
-                            </div>
-                            <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                              <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 border border-white/10"><User className="w-4 h-4" /></div><span className="text-sm font-bold text-slate-300">{slot.teachers?.users?.full_name}</span></div>
-                              {slot.teachers?.zoom_link && (
-                                <a href={normalizeUrl(slot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-xs font-black hover:bg-emerald-500 hover:text-slate-900 transition-all border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]"><Video className="w-4 h-4 animate-pulse" /> دخول البث</a>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {periods.every(p => !scheduleData.find(s => String(s.day_of_week) === String(activeDayTab) && String(s.period) === String(p.period_number))) && (
-                        <div className="text-center py-16 bg-[#131836]/40 backdrop-blur-xl rounded-[2rem] border border-white/5 border-dashed"><Calendar className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="font-bold text-slate-400 text-lg">يوم إجازة أو لا توجد حصص مجدولة!</p></div>
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-              </div>
-
-              {/* الكمبيوتر */}
-              <div className="hidden lg:block bg-[#131836]/60 backdrop-blur-2xl rounded-[3rem] shadow-2xl border border-white/10 p-8 overflow-hidden">
-                <div className="grid gap-4" style={{ gridTemplateColumns: `100px repeat(${periods.length}, minmax(0, 1fr))` }}>
-                  <div className="h-16 flex items-center justify-center bg-[#090b14] rounded-2xl shadow-inner border border-white/5"><span className="text-xs font-black text-emerald-400 uppercase tracking-widest">اليوم</span></div>
-                  {periods.map(p => (
-                    <div key={p.id} className="h-16 flex flex-col items-center justify-center bg-[#090b14]/50 rounded-2xl border border-white/5">
-                      <span className="text-sm font-black text-white">الحصة {p.period_number}</span>
-                      <span className="text-[10px] text-slate-500 font-bold flex items-center gap-1 mt-0.5"><Clock className="w-3 h-3" /> {p.start_time.slice(0, 5)}</span>
-                    </div>
-                  ))}
-                  {DAYS.map((day, idx) => (
-                    <React.Fragment key={day.id}>
-                      <div className={`font-black text-sm flex items-center justify-center rounded-2xl shadow-sm border ${day.id === currentDayOfWeek ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-slate-900 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'bg-[#090b14]/80 text-slate-400 border-white/5'}`}>{day.name}</div>
-                      {periods.map((p, pIdx) => {
-                        const slot = scheduleData.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number) && String(s.section_id) === String(selectedId));
-                        return (
-                          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: (idx * 0.1) + (pIdx * 0.05) }} key={`${day.id}-${p.id}`} className={`relative p-4 rounded-2xl min-h-[140px] flex flex-col justify-between transition-all group overflow-hidden ${slot ? 'bg-[#1a2044] border border-white/10 shadow-lg hover:-translate-y-1 hover:border-emerald-400/50' : 'bg-[#090b14]/30 border border-white/5 border-dashed opacity-60'}`}>
-                            {slot ? (
-                              <>
-                                <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/20 rounded-full opacity-50 pointer-events-none group-hover:scale-150 transition-transform duration-500 blur-xl"></div>
-                                <div>
-                                  <h4 className="font-black text-white text-base leading-tight mb-1">{slot.subjects?.name}</h4>
-                                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 mt-2"><User className="w-3.5 h-3.5" /><span className="truncate">{slot.teachers?.users?.full_name}</span></div>
-                                </div>
-                                {slot.teachers?.zoom_link && (
-                                  <a href={normalizeUrl(slot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className="mt-3 w-full flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-500 hover:text-slate-900 transition-colors border border-emerald-500/30 relative z-10"><Video className="w-3.5 h-3.5" /> دخول البث</a>
-                                )}
-                              </>
-                            ) : (
-                              <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2"><BookOpen className="w-6 h-6 opacity-20" /><span className="text-[10px] font-bold tracking-widest uppercase">فراغ</span></div>
-                            )}
-                          </motion.div>
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative flex items-center justify-center">
+             <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
+             <ShieldAlert className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
+          </div>
+          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري التحقق وتأمين الصلاحيات...</p>
         </div>
-      </motion.div>
+      </div>
+    );
+  }
+
+  if (authRole !== 'admin' && authRole !== 'management') {
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4">
+        <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)] bg-[#131836]/60 backdrop-blur-md">
+           <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
+           <h2 className="text-2xl font-black text-white mb-2">وصول مقيد</h2>
+           <p className="text-slate-400 font-bold">هذه الصفحة مخصصة للإدارة العليا فقط.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && teachers.length === 0) {
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
+        <div className="flex flex-col items-center gap-5">
+          <div className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.4)]"></div>
+          <p className="text-slate-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري إعداد محرك الجداول...</p>
+        </div>
+      </div>
     );
   }
 
   // ==========================================
-  // 🚀 ADMIN / TEACHER / WATCHER VIEW (Dark Glassmorphism + Print Center)
+  // 🚀 ADMIN / WATCHER VIEW (Dark Glassmorphism + Print Center)
   // ==========================================
   return (
     <div className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden font-cairo" dir="rtl">
@@ -449,10 +435,18 @@ export default function SchedulePage() {
 
       <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 pt-8 relative z-10 print:p-0 print:m-0 print:max-w-none">
         
-        {isAdmin && authRole !== 'teacher' && (
+        {/* 🚀 إشعارات حالة النظام (يدوي أم ذكي) */}
+        {isAdmin && authRole !== 'teacher' && activeSystem === 'manual' && (
           <div className="bg-amber-500/10 p-5 rounded-2xl text-sm text-amber-400 font-bold border border-amber-500/30 flex items-center gap-3 backdrop-blur-md shadow-lg print:hidden">
             <Bug className="w-6 h-6 shrink-0" />
-            <p>وضع الإدارة مفعل. يمكنك تعديل ونسخ وتبديل الحصص بالسحب والنقر بحرية تامة.</p>
+            <p>وضع الإدارة مفعل (النظام اليدوي). يمكنك تعديل ونسخ وتبديل الحصص بالسحب والنقر بحرية تامة.</p>
+          </div>
+        )}
+
+        {isAdmin && authRole !== 'teacher' && activeSystem === 'auto' && (
+          <div className="bg-emerald-500/10 p-5 rounded-2xl text-sm text-emerald-400 font-bold border border-emerald-500/30 flex items-center gap-3 backdrop-blur-md shadow-lg print:hidden">
+            <Sparkles className="w-6 h-6 shrink-0" />
+            <p>الجدول الذكي (Auto) مفعل. التعديل اليدوي مقفل. الجداول معروضة بوضعية القراءة والطباعة فقط لضمان سلامة بيانات الذكاء الاصطناعي.</p>
           </div>
         )}
 
@@ -468,7 +462,7 @@ export default function SchedulePage() {
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-xs font-black text-emerald-400 mb-3 shadow-sm">
               <LayoutGrid className="w-4 h-4" /> <span>إدارة الهيكل الزمني</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black text-white drop-shadow-md">{authRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الشامل'}</h1>
+            <h1 className="text-3xl sm:text-4xl font-black text-white drop-shadow-md">الجدول الشامل</h1>
           </div>
           
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full lg:w-auto mt-2 lg:mt-0">
@@ -483,14 +477,14 @@ export default function SchedulePage() {
           </div>
         </div>
 
-        {isAdmin && authRole !== 'teacher' && swappingFrom && (
+        {isAdmin && authRole !== 'teacher' && swappingFrom && activeSystem === 'manual' && (
           <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-[0_0_30px_rgba(245,158,11,0.3)] flex flex-col sm:flex-row items-center justify-between gap-4 animate-pulse sticky top-4 z-40 print:hidden">
             <p className="font-black text-lg">وضع التبديل نشط - انقر على خانة أخرى للتبديل</p>
             <button onClick={() => setSwappingFrom(null)} className="w-full sm:w-auto bg-[#090b14] text-amber-400 px-6 py-3 rounded-xl font-black shadow-sm">إلغاء التبديل</button>
           </div>
         )}
 
-        {isAdmin && authRole !== 'teacher' && copiedLesson && (
+        {isAdmin && authRole !== 'teacher' && copiedLesson && activeSystem === 'manual' && (
           <div className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-5 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.3)] flex flex-col sm:flex-row items-center justify-between sticky top-4 z-40 gap-4 mt-4 print:hidden">
             <div className="flex items-center gap-4">
               <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm"><Info className="h-6 w-6" /></div>
@@ -503,25 +497,23 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {(isAdmin || isWatcher) && authRole !== 'teacher' && (
-          <div className="bg-[#131836]/60 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-lg border border-white/10 flex flex-col lg:flex-row gap-6 items-center print:hidden">
-            <div className="flex rounded-2xl shadow-inner bg-[#090b14]/50 p-1.5 w-full lg:w-auto shrink-0 border border-white/5">
-              <button type="button" onClick={() => { setViewType('teacher'); if (teachers.length > 0) setSelectedId(String(teachers[0].id)); }} className={`flex-1 flex justify-center items-center gap-2 px-6 py-3.5 text-sm font-black rounded-xl transition-all ${viewType === 'teacher' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><User className="w-4 h-4" /> جدول المعلمين</button>
-              <button type="button" onClick={() => { setViewType('section'); if (sections.length > 0) setSelectedId(String(sections[0].id)); }} className={`flex-1 flex justify-center items-center gap-2 px-6 py-3.5 text-sm font-black rounded-xl transition-all ${viewType === 'section' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Users className="w-4 h-4" /> جدول الفصول</button>
-            </div>
-            <div className="flex-1 w-full relative group">
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none"><BookOpen className="h-5 w-5 text-slate-500" /></div>
-              <select value={selectedId} onChange={(e) => setSelectedId(String(e.target.value))} className="w-full rounded-2xl py-4 pr-12 pl-4 bg-[#090b14]/80 text-white border border-white/10 font-bold outline-none cursor-pointer focus:ring-2 focus:ring-emerald-400 appearance-none [&>option]:bg-[#131836]">
-                <option value="">-- اختر --</option>
-                {viewType === 'teacher' ? teachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>) : sections.map(s => <option key={s.id} value={s.id}>{formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)} - {s.name}</option>)}
-              </select>
-            </div>
-            <div className="flex items-center gap-3 shrink-0 bg-[#090b14]/50 px-6 py-4 rounded-2xl border border-white/5">
-              <input type="checkbox" id="showAll" checked={showAllSchedules} onChange={(e) => setShowAllSchedules(e.target.checked)} className="w-5 h-5 rounded cursor-pointer accent-emerald-500" />
-              <label htmlFor="showAll" className="text-sm font-black cursor-pointer text-slate-300">عرض الكل (المشغول)</label>
-            </div>
+        <div className="bg-[#131836]/60 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-lg border border-white/10 flex flex-col lg:flex-row gap-6 items-center print:hidden">
+          <div className="flex rounded-2xl shadow-inner bg-[#090b14]/50 p-1.5 w-full lg:w-auto shrink-0 border border-white/5">
+            <button type="button" onClick={() => { setViewType('teacher'); if (teachers.length > 0) setSelectedId(String(teachers[0].id)); }} className={`flex-1 flex justify-center items-center gap-2 px-6 py-3.5 text-sm font-black rounded-xl transition-all ${viewType === 'teacher' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><User className="w-4 h-4" /> جدول المعلمين</button>
+            <button type="button" onClick={() => { setViewType('section'); if (sections.length > 0) setSelectedId(String(sections[0].id)); }} className={`flex-1 flex justify-center items-center gap-2 px-6 py-3.5 text-sm font-black rounded-xl transition-all ${viewType === 'section' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Users className="w-4 h-4" /> جدول الفصول</button>
           </div>
-        )}
+          <div className="flex-1 w-full relative group">
+            <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none"><BookOpen className="h-5 w-5 text-slate-500" /></div>
+            <select value={selectedId} onChange={(e) => setSelectedId(String(e.target.value))} className="w-full rounded-2xl py-4 pr-12 pl-4 bg-[#090b14]/80 text-white border border-white/10 font-bold outline-none cursor-pointer focus:ring-2 focus:ring-emerald-400 appearance-none [&>option]:bg-[#131836]">
+              <option value="">-- اختر --</option>
+              {viewType === 'teacher' ? teachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>) : sections.map(s => <option key={s.id} value={s.id}>{formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)} - {s.name}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 bg-[#090b14]/50 px-6 py-4 rounded-2xl border border-white/5">
+            <input type="checkbox" id="showAll" checked={showAllSchedules} onChange={(e) => setShowAllSchedules(e.target.checked)} className="w-5 h-5 rounded cursor-pointer accent-emerald-500" />
+            <label htmlFor="showAll" className="text-sm font-black cursor-pointer text-slate-300">عرض الكل (المشغول)</label>
+          </div>
+        </div>
 
         <AnimatePresence>
           {isModalOpen && (
@@ -563,6 +555,47 @@ export default function SchedulePage() {
           )}
         </AnimatePresence>
 
+        {/* Delete Confirmation Modal */}
+        <Dialog.Root open={!!scheduleToDelete} onOpenChange={(open) => !open && setScheduleToDelete(null)}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-[100]" />
+            <Dialog.Content className="fixed left-[50%] top-[50%] z-[101] w-[95vw] max-w-sm translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] bg-[#0f1423] border border-white/10 p-6 sm:p-8 text-center shadow-[0_30px_60px_rgba(0,0,0,0.8)]" dir="rtl">
+              <Dialog.Description className="sr-only">تأكيد الحذف</Dialog.Description>
+              <div className="mx-auto h-16 w-16 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl flex items-center justify-center mb-5 shadow-inner">
+                <Trash2 className="h-8 w-8 drop-shadow-md" />
+              </div>
+              <Dialog.Title className="text-xl sm:text-2xl font-black text-white mb-2 drop-shadow-sm">حذف الحصة نهائياً؟</Dialog.Title>
+              <p className="text-sm text-slate-400 mb-6 font-bold leading-relaxed">أنت على وشك حذف هذه الحصة من الجدول. هذا الإجراء لا يمكن التراجع عنه.</p>
+              <div className="flex flex-col gap-3">
+                <button onClick={confirmDelete} className="w-full py-3.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 border border-rose-500 text-white font-black hover:from-rose-500 hover:to-red-500 shadow-[0_0_20px_rgba(225,29,72,0.4)] transition-all active:scale-95 text-sm sm:text-base">نعم، احذف الحصة</button>
+                <Dialog.Close asChild>
+                  <button className="w-full py-3.5 rounded-xl sm:rounded-2xl bg-[#02040a] border border-white/10 text-slate-300 font-black hover:bg-white/5 hover:text-white shadow-inner transition-all active:scale-95 text-sm sm:text-base">إلغاء</button>
+                </Dialog.Close>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+
+        {/* Notification Toast */}
+        <AnimatePresence>
+          {notification && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: -20, x: '-50%' }}
+              className={`fixed top-6 left-1/2 z-[100] px-6 py-4 rounded-[1.5rem] shadow-2xl flex items-center gap-4 backdrop-blur-xl border ${
+                notification.type === 'success' ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.3)]' : 'bg-rose-950/90 border-rose-500/50 text-rose-400 shadow-[0_0_30px_rgba(244,63,94,0.3)]'
+              }`}
+            >
+              <div className="h-10 w-10 rounded-2xl bg-[#02040a]/40 flex items-center justify-center border border-white/5">
+                {notification.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+              </div>
+              <div className="font-bold text-sm sm:text-base text-white">{notification.message}</div>
+              <button onClick={() => setNotification(null)} className="p-2 hover:bg-white/10 rounded-xl transition-colors text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {!selectedId && !showAllSchedules ? (
           <div className="bg-[#131836]/40 backdrop-blur-xl rounded-[3rem] p-16 text-center shadow-2xl border border-white/5 print:hidden"><LayoutGrid className="h-16 w-16 mx-auto text-slate-600 mb-6" /><h3 className="text-2xl font-black text-white">الجدول فارغ</h3><p className="text-slate-400 font-bold mt-2">يرجى تحديد الخيارات لعرض الجدول.</p></div>
         ) : periods.length === 0 ? (
@@ -590,11 +623,12 @@ export default function SchedulePage() {
                         const displaySlot = slot || (swappingFrom && others.find(o => String(o.id) === String(swappingFrom.id)) ? swappingFrom : others[0]);
 
                         return (
-                          <div key={`${day.id}-${p.id}`} className={`relative p-4 rounded-2xl min-h-[140px] flex flex-col justify-between transition-all group overflow-hidden ${slot ? 'bg-[#1a2044] border border-white/10 shadow-lg hover:-translate-y-1 hover:border-emerald-400/50' : displaySlot ? 'bg-[#090b14]/60 border border-white/5' : 'bg-[#090b14]/30 border border-dashed border-white/5 hover:bg-white/5'} ${isAdmin ? 'cursor-pointer' : ''}`}
+                          <div key={`${day.id}-${p.id}`} className={`relative p-4 rounded-2xl min-h-[140px] flex flex-col justify-between transition-all group overflow-hidden ${slot ? 'bg-[#1a2044] border border-white/10 shadow-lg hover:-translate-y-1 hover:border-emerald-400/50' : displaySlot ? 'bg-[#090b14]/60 border border-white/5' : 'bg-[#090b14]/30 border border-dashed border-white/5 hover:bg-white/5'} ${isAdmin && activeSystem === 'manual' ? 'cursor-pointer' : ''}`}
                             onClick={() => {
+                              if (activeSystem === 'auto' && isAdmin) return; // 🔒 منع التعديل والنقر في الوضع الآلي
                               if (isAdmin) {
                                 if (swappingFrom) { if (String(swappingFrom.id) === String(displaySlot?.id)) setSwappingFrom(null); else handleSwap(day.id, p.period_number, displaySlot);
-                                } else if (!displaySlot || others.length > 0) { setFormData({ teacher_id: viewType === 'teacher' ? selectedId : '', section_id: viewType === 'section' ? selectedId : '', subject_id: '' }); setSelectedSlot({ day: day.id, period: p.period_number }); setIsModalOpen(true); }
+                                } else if (!displaySlot || others.length > 0) { setFormData({ teacher_id: viewType === 'teacher' ? selectedId : '', section_id: viewType === 'section' ? selectedId : '', subject_id: '' }); setSelectedSlot({day: day.id, period: p.period_number}); setIsModalOpen(true); }
                               } else if (slot?.teachers?.zoom_link) { window.open(normalizeUrl(slot.teachers.zoom_link), '_blank'); }
                             }}>
                             {displaySlot ? (
@@ -605,7 +639,8 @@ export default function SchedulePage() {
                                 {displaySlot.teachers?.zoom_link && (
                                   <a href={normalizeUrl(displaySlot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className="mt-2 w-full flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 py-1.5 rounded-lg text-[10px] font-black hover:bg-emerald-500 hover:text-slate-900 transition-colors border border-emerald-500/30" onClick={(e) => e.stopPropagation()}><Video className="w-3.5 h-3.5" /> البث</a>
                                 )}
-                                {isAdmin && slot && (
+                                {/* 🚀 أزرار التعديل تظهر فقط إذا كان النظام يدوي */}
+                                {isAdmin && slot && activeSystem === 'manual' && (
                                   <div className="absolute inset-0 bg-[#090b14]/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity border border-white/10">
                                     <div className="flex gap-1.5"><button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-slate-900 transition-colors" onClick={(e) => { e.stopPropagation(); setCopiedLesson(displaySlot); }}>نسخ</button><button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-slate-900 transition-colors" onClick={(e) => { e.stopPropagation(); setSwappingFrom(displaySlot); }}>نقل</button></div>
                                     <div className="flex gap-1.5"><button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); setEditingId(String(displaySlot.id)); setFormData({ teacher_id: displaySlot.teacher_id || '', section_id: displaySlot.section_id || '', subject_id: displaySlot.subject_id || '' }); setSelectedSlot({day: day.id, period: p.period_number}); setIsModalOpen(true); }}>تعديل</button><button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(String(displaySlot.id)); }}>حذف</button></div>
@@ -614,7 +649,7 @@ export default function SchedulePage() {
                               </div>
                             ) : (
                               <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2">
-                                {isAdmin ? (
+                                {isAdmin && activeSystem === 'manual' ? (
                                   <Plus className="w-6 h-6 opacity-30 group-hover:opacity-100 group-hover:text-emerald-400 transition-colors" />
                                 ) : (
                                   <span className="text-[10px] font-bold tracking-widest uppercase opacity-30">فراغ</span>
