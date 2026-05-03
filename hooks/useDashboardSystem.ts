@@ -30,6 +30,16 @@ export const clearDashboardCache = () => {
   globalCache.clear();
 };
 
+// 🚀 دالة مساعدة لمعرفة النظام الفعال حالياً (يدوي أو آلي)
+const getActiveSystem = async () => {
+  try {
+    const { data } = await supabase.from('school_settings').select('active_schedule_system').eq('id', 1).maybeSingle();
+    return data?.active_schedule_system || 'manual';
+  } catch {
+    return 'manual';
+  }
+};
+
 export function useDashboardSystem() {
   const { user } = useAuth() as any;
 
@@ -92,13 +102,12 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, []);
 
-  // 🚀 [هوك الطالب المُدرّع ضد الأخطاء]
+  // 🚀 [هوك الطالب المُدرّع والداعم للتبديل الذكي]
   const fetchStudentDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
-        // 1. جلب بيانات الطالب الأساسية
         const { data: studentCore, error: studentError } = await supabase
           .from('students')
           .select('*, sections(id, name, classes(name))')
@@ -119,7 +128,6 @@ export function useDashboardSystem() {
         const student = { ...studentCore, users: userData || { full_name: 'طالب' } };
         const sectionId = studentCore.section_id;
 
-        // تجهيز المتغيرات الافتراضية
         let assignments: any[] = [];
         let exams: any[] = [];
         let attendance: any[] = [];
@@ -127,7 +135,6 @@ export function useDashboardSystem() {
         let todaysSchedule: any[] = [];
         let periods: any[] = [];
 
-        // 2. جلب الحصص (Periods) والدرجات (Grades) والحضور (Attendance) أولاً لأنها لا تعتمد بشكل كلي على الشعبة
         try {
            const [gradesRes, attendanceRes, periodsRes] = await Promise.all([
               supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', studentCore.id).order('completed_at', { ascending: false }).limit(5),
@@ -141,22 +148,59 @@ export function useDashboardSystem() {
            console.error("Error fetching general student info:", e);
         }
 
-        // 3. جلب بيانات الجدول والواجبات والاختبارات (فقط إذا كان له شعبة)
         if (sectionId) {
             try {
-                // جلب جدول اليوم
                 const todayDbDay = new Date().getDay() + 1;
-                const { data: scheduleData } = await supabase
-                  .from('schedules')
-                  .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))') 
-                  .eq('section_id', sectionId)
-                  .eq('day_of_week', todayDbDay)
-                  .order('period')
-                  .limit(100);
-                  
-                if (scheduleData) todaysSchedule = scheduleData;
+                const activeSystem = await getActiveSystem();
 
-                // جلب الواجبات والاختبارات المربوطة بالشعبة
+                // 🚀 جلب جدول اليوم بناءً على النظام الفعال
+                if (activeSystem === 'auto') {
+                   const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+                   if (planData) {
+                      const { data: autoScheds } = await supabase.from('auto_schedules')
+                         .select('*')
+                         .eq('plan_id', planData.id)
+                         .eq('section_id', sectionId)
+                         .eq('day_of_week', todayDbDay)
+                         .order('period_number')
+                         .limit(100);
+
+                      if (autoScheds && autoScheds.length > 0) {
+                         const subjIds = [...new Set(autoScheds.map(s => s.subject_id))];
+                         const teachIds = [...new Set(autoScheds.map(s => s.teacher_id))];
+
+                         const [subjRes, teachRes] = await Promise.all([
+                            supabase.from('subjects').select('id, name').in('id', subjIds),
+                            supabase.from('users').select('id, full_name').in('id', teachIds)
+                         ]);
+
+                         todaysSchedule = autoScheds.map(s => {
+                            const subj = subjRes.data?.find(x => x.id === s.subject_id);
+                            const teach = teachRes.data?.find(x => x.id === s.teacher_id);
+                            return {
+                               id: s.id,
+                               day_of_week: s.day_of_week,
+                               period: s.period_number,
+                               start_time: s.start_time,
+                               end_time: s.end_time,
+                               subjects: { name: subj?.name },
+                               teachers: { users: { full_name: teach?.full_name } }
+                            };
+                         });
+                      }
+                   }
+                } else {
+                   const { data: scheduleData } = await supabase
+                     .from('schedules')
+                     .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))') 
+                     .eq('section_id', sectionId)
+                     .eq('day_of_week', todayDbDay)
+                     .order('period')
+                     .limit(100);
+                     
+                   if (scheduleData) todaysSchedule = scheduleData;
+                }
+
                 const [assignmentSections, examSections] = await Promise.all([
                   supabase.from('assignment_sections').select('assignment_id').eq('section_id', sectionId),
                   supabase.from('exam_sections').select('exam_id').eq('section_id', sectionId)
@@ -166,7 +210,6 @@ export function useDashboardSystem() {
                 const examIds = (examSections.data || []).map((e: any) => e.exam_id);
 
                 if (assignmentIds.length > 0) {
-                   // 🚀 إضافة Assignments V2 مع V1 للطلاب أيضاً
                    const [{ data: v1 }, { data: v2 }] = await Promise.all([
                      supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(5),
                      supabase.from('assignments_v2').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(5)
@@ -215,17 +258,53 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, [user?.id]);
 
+  // 🚀 [تحديث جلب جدول الطالب لدعم النظامين]
   const fetchStudentSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`student_schedule_${user.id}`, async () => {
       try {
         const { data: student } = await supabase.from('students').select('section_id, sections(name, classes(name))').or(`id.eq.${user.id},user_id.eq.${user.id}`).maybeSingle();
         if (!student || !student.section_id) return null;
-        const [ { data: schedule }, { data: periods } ] = await Promise.all([
-          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link)').eq('section_id', student.section_id).order('day_of_week').order('period').limit(5000),
-          supabase.from('class_periods').select('*').order('period_number').limit(100)
-        ]);
-        return { student, schedule: schedule || [], periods: periods || [] };
+
+        const activeSystem = await getActiveSystem();
+        let scheduleData: any[] = [];
+        
+        if (activeSystem === 'auto') {
+            const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (planData) {
+                const { data: raw } = await supabase.from('auto_schedules').select('*').eq('plan_id', planData.id).eq('section_id', student.section_id).order('day_of_week').order('period_number').limit(5000);
+                if (raw && raw.length > 0) {
+                    const subjIds = [...new Set(raw.map(s => s.subject_id))];
+                    const teachIds = [...new Set(raw.map(s => s.teacher_id))];
+
+                    const [subjRes, teachRes] = await Promise.all([
+                        supabase.from('subjects').select('id, name').in('id', subjIds),
+                        supabase.from('teachers').select('id, zoom_link').in('id', teachIds)
+                    ]);
+
+                    scheduleData = raw.map(s => {
+                        const subj = subjRes.data?.find(x => x.id === s.subject_id);
+                        const teach = teachRes.data?.find(x => x.id === s.teacher_id);
+                        return {
+                            id: s.id,
+                            day_of_week: s.day_of_week,
+                            period: s.period_number,
+                            start_time: s.start_time,
+                            end_time: s.end_time,
+                            subjects: { name: subj?.name },
+                            teachers: { zoom_link: teach?.zoom_link }
+                        };
+                    });
+                }
+            }
+        } else {
+            const { data } = await supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link)').eq('section_id', student.section_id).order('day_of_week').order('period').limit(5000);
+            scheduleData = data || [];
+        }
+
+        const { data: periods } = await supabase.from('class_periods').select('*').order('period_number').limit(100);
+
+        return { student, schedule: scheduleData, periods: periods || [] };
       } catch (error) { throw error; }
     }, forceRefresh);
   }, [user?.id]);
@@ -246,23 +325,48 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, [user?.id]);
 
+  // 🚀 [تحديث جلب تفاصيل الأبناء لدعم النظامين]
   const fetchParentChildDetails = useCallback(async (childId: string, sectionId: string | null) => {
     try {
       const todayDbDay = new Date().getDay() + 1; 
-      const [ { data: attendance }, { data: badges }, { data: periods }, { data: schedule }, { data: exams }, { data: assignments } ] = await Promise.all([
+      
+      let scheduleData: any[] = [];
+      if (sectionId) {
+          const activeSystem = await getActiveSystem();
+          if (activeSystem === 'auto') {
+              const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+              if (planData) {
+                  const { data: raw } = await supabase.from('auto_schedules').select('*').eq('plan_id', planData.id).eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period_number').limit(100);
+                  if (raw && raw.length > 0) {
+                      const subjIds = [...new Set(raw.map(s => s.subject_id))];
+                      const { data: subjRes } = await supabase.from('subjects').select('id, name').in('id', subjIds);
+                      scheduleData = raw.map(s => ({
+                          ...s,
+                          period: s.period_number,
+                          subjects: { id: s.subject_id, name: subjRes?.data?.find((x: any) => x.id === s.subject_id)?.name },
+                          teachers: { id: s.teacher_id }
+                      }));
+                  }
+              }
+          } else {
+              const { data } = await supabase.from('schedules').select('*, subjects(id, name), teachers(id)').eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period', { ascending: true });
+              scheduleData = data || [];
+          }
+      }
+
+      const [ { data: attendance }, { data: badges }, { data: periods }, { data: exams }, { data: assignments } ] = await Promise.all([
         supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', childId).order('date', { ascending: false }),
         supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', childId).order('granted_at', { ascending: false }),
         supabase.from('class_periods').select('*').order('period_number', { ascending: true }),
-        sectionId ? supabase.from('schedules').select('*, subjects(id, name), teachers(id)').eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period', { ascending: true }) : Promise.resolve({ data: [] }),
         supabase.from('exam_attempts').select('id, score, status, completed_at, exams(title, total_marks, max_score, subjects(id, name))').eq('student_id', childId),
         supabase.from('assignment_submissions').select('id, grade, status, submitted_at, feedback, assignments(title, total_marks, subjects(id, name))').eq('student_id', childId)
       ]);
 
-      return { attendance: attendance || [], badges: badges || [], periods: periods || [], schedule: schedule || [], exams: exams || [], assignments: assignments || [] };
+      return { attendance: attendance || [], badges: badges || [], periods: periods || [], schedule: scheduleData, exams: exams || [], assignments: assignments || [] };
     } catch (error) { throw error; }
   }, []);
 
-  // 🚀 [الحل النهائي والدرع الحصين للمعلم]
+  // 🚀 [هوك المعلم المُدرّع والداعم للتبديل الذكي]
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
@@ -281,12 +385,45 @@ export function useDashboardSystem() {
 
         const teacher = { id: teacherId, users: userData || { full_name: 'معلم' } };
 
-        // 🚀 تعديل جذري: جلب الفصول التي يدرسها المعلم من جدول الحصص (schedules) وليس teacher_sections فقط لضمان دقة البيانات
-        const { data: teacherSchedules } = await supabase.from('schedules').select('section_id').eq('teacher_id', teacherId);
+        // 🚀 جلب الفصول والجدول بناءً على النظام الفعال
+        const activeSystem = await getActiveSystem();
+        let scheduleData: any[] = [];
+        let teacherSchedules: any[] = [];
+
+        if (activeSystem === 'auto') {
+            const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (planData) {
+                const { data: raw } = await supabase.from('auto_schedules').select('*').eq('plan_id', planData.id).eq('teacher_id', teacherId).order('day_of_week').order('period_number');
+                if (raw && raw.length > 0) {
+                    teacherSchedules = raw;
+                    const secIds = [...new Set(raw.map(s => s.section_id))];
+                    const subjIds = [...new Set(raw.map(s => s.subject_id))];
+
+                    const [secRes, subjRes] = await Promise.all([
+                        supabase.from('sections').select('id, name, classes(name)').in('id', secIds),
+                        supabase.from('subjects').select('id, name').in('id', subjIds)
+                    ]);
+
+                    scheduleData = raw.map(s => {
+                        const sec = secRes.data?.find((x: any) => x.id === s.section_id);
+                        const subj = subjRes.data?.find((x: any) => x.id === s.subject_id);
+                        return {
+                            ...s,
+                            period: s.period_number,
+                            sections: { name: sec?.name, classes: sec?.classes },
+                            subjects: { name: subj?.name }
+                        };
+                    });
+                }
+            }
+        } else {
+            const { data: raw } = await supabase.from('schedules').select('*, sections(name, classes(name)), subjects(name)').eq('teacher_id', teacherId).order('day_of_week').order('period');
+            scheduleData = raw || [];
+            teacherSchedules = scheduleData;
+        }
         
         let sectionIds = Array.from(new Set((teacherSchedules || []).map(ts => ts.section_id).filter(Boolean)));
         
-        // إذا لم نجد في schedules، نجرب teacher_sections كخيار بديل
         if (sectionIds.length === 0) {
            const { data: teacherSectionsFallback } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherId);
            sectionIds = Array.from(new Set((teacherSectionsFallback || []).map(ts => ts.section_id).filter(Boolean)));
@@ -335,33 +472,29 @@ export function useDashboardSystem() {
           };
         });
 
-        // 🚀 تعديل لإصلاح إحصائية الغياب (قراءة السجلات بدقة بناءً على تاريخ اليوم)
         const todayStr = new Date().toISOString().split('T')[0];
         
         const [
           { data: recentExams }, 
-          { data: schedule }, 
           { data: periods }, 
           { data: messages },
           { data: attendanceRecords }
         ] = await Promise.all([
           supabase.from('exams').select(`id, title, created_at, start_time, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(5),
-          supabase.from('schedules').select('*, sections(name, classes(name)), subjects(name)').eq('teacher_id', teacherId).order('day_of_week').order('period'),
           supabase.from('class_periods').select('*').order('period_number'),
           supabase.from('messages').select('*, sender:sender_id(full_name, avatar_url)').eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(5),
-          supabase.from('attendance_records').select('status').eq('teacher_id', teacherId).eq('date', todayStr) // 🚀 فلترة بتاريخ اليوم لتكون النسبة دقيقة
+          supabase.from('attendance_records').select('status').eq('teacher_id', teacherId).eq('date', todayStr)
         ]);
 
         const totalAttendance = attendanceRecords?.length || 0;
         const presentCount = (attendanceRecords || []).filter(a => a.status === 'present').length || 0;
-        // إذا لم يكن هناك سجلات اليوم، نعتبر متوسط الحضور 100% كافتراضي بدلاً من الصفر المخيف
         const avgAttendance = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 100;
         const absenceRate = totalAttendance > 0 ? (100 - avgAttendance) : 0;
 
         return { 
           teacher, 
           sections, 
-          schedule: schedule || [], 
+          schedule: scheduleData, 
           periods: periods || [], 
           messages: messages || [], 
           assignmentStats,
@@ -388,6 +521,7 @@ export function useDashboardSystem() {
     }, forceRefresh); 
   }, [user?.id]);
 
+  // 🚀 [تحديث جلب جدول المعلم لدعم النظامين]
   const fetchTeacherSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
@@ -401,11 +535,44 @@ export function useDashboardSystem() {
             if (tById?.id) teacherId = tById.id;
         }
         
-        const [ { data: schedule }, { data: periods } ] = await Promise.all([
-          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))').eq('teacher_id', teacherId).order('day_of_week').order('period').limit(5000),
-          supabase.from('class_periods').select('*').order('period_number').limit(100)
-        ]);
-        return { schedule: schedule || [], periods: periods || [] };
+        const activeSystem = await getActiveSystem();
+        let scheduleData: any[] = [];
+
+        if (activeSystem === 'auto') {
+            const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (planData) {
+                const { data: raw } = await supabase.from('auto_schedules').select('*').eq('plan_id', planData.id).eq('teacher_id', teacherId).order('day_of_week').order('period_number').limit(5000);
+                if (raw && raw.length > 0) {
+                    const subjIds = [...new Set(raw.map(s => s.subject_id))];
+                    const secIds = [...new Set(raw.map(s => s.section_id))];
+
+                    const [subjRes, secRes] = await Promise.all([
+                        supabase.from('subjects').select('id, name').in('id', subjIds),
+                        supabase.from('sections').select('id, name, classes(name)').in('id', secIds)
+                    ]);
+
+                    scheduleData = raw.map(s => {
+                        const subj = subjRes.data?.find((x: any) => x.id === s.subject_id);
+                        const sec = secRes.data?.find((x: any) => x.id === s.section_id);
+                        return {
+                            id: s.id,
+                            day_of_week: s.day_of_week,
+                            period: s.period_number,
+                            start_time: s.start_time,
+                            end_time: s.end_time,
+                            subjects: { name: subj?.name },
+                            sections: { id: sec?.id, name: sec?.name, classes: sec?.classes }
+                        };
+                    });
+                }
+            }
+        } else {
+            const { data } = await supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))').eq('teacher_id', teacherId).order('day_of_week').order('period').limit(5000);
+            scheduleData = data || [];
+        }
+
+        const { data: periods } = await supabase.from('class_periods').select('*').order('period_number').limit(100);
+        return { schedule: scheduleData, periods: periods || [] };
       } catch (error) { throw error; }
     }, forceRefresh);
   }, [user?.id]);
