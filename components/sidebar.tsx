@@ -13,7 +13,7 @@ import {
   BarChart3, MessageSquare, Bell, FolderOpen, Settings, 
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
-  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target
+  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp
 } from 'lucide-react';
 
 const navigation = [
@@ -42,7 +42,9 @@ const navigation = [
   { name: 'المنتديات', href: '/forums', icon: Compass },
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
-  { name: 'الجدول الدراسي', href: '/schedule', icon: CalendarDays },
+  { name: 'الجدول الدراسي القديم', href: '/schedule', icon: CalendarDays }, // تمت إعادة التسمية للتوضيح إن رغبت، أو يمكنك تركها
+  { name: 'محرك الجدولة الذكي', href: '/admin/auto-schedule', icon: Wand2 }, // 🚀 الرابط الجديد الأول
+  { name: 'شاشة العرض المركزية', href: '/schedules-view', icon: MonitorUp }, // 🚀 الرابط الجديد الثاني
   { name: 'الحصص الحية', href: '/live', icon: Clock },
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
@@ -97,6 +99,10 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'استيراد البيانات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
     
+    // 🚀 الروابط الجديدة للجدول للمدير والإدارة فقط
+    if (item.name === 'محرك الجدولة الذكي') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'شاشة العرض المركزية') return (authRole === 'admin' || authRole === 'management' || authRole === 'student' || authRole === 'teacher' || authRole === 'parent'); // عادةً صفحة العرض متاحة للجميع، لكن إن أردتها للمدير فقط ضع `return (authRole === 'admin' || authRole === 'management');`
+
     // ظهور الملف الشخصي للمعلم فقط
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
     
@@ -113,11 +119,11 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (isGlobalWatcher) return true;
     
     // باقي الصلاحيات للمعلمين والطلاب وأولياء الأمور
-    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'مراقبة الساحة', 'الرسائل'].includes(item.name);
+    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل'].includes(item.name);
     
-    if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
+    if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
     
-    if (authRole === 'parent') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
+    if (authRole === 'parent') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     
     return false;
   });
