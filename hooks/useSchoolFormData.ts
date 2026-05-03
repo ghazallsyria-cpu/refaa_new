@@ -39,14 +39,40 @@ export function useSchoolFormData() {
 
         if (!teacherProfile) return { subjects: [], sections: [], teachers: [] };
 
-        const [subjectsRes, sectionsRes, teacherSectionsRes, schedulesRes] = await Promise.all([
-          supabase.from('subjects').select('*').order('name'),
-          supabase.from('sections').select('*, classes(name)').order('name'),
-          supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherProfile.id),
-          supabase.from('schedules').select('subject_id').eq('teacher_id', teacherProfile.id)
+        // 🚀 قراءة المفتاح المركزي لتوجيه البوصلة
+        const { data: settings } = await supabase.from('school_settings').select('active_schedule_system').eq('id', 1).maybeSingle();
+        const activeSystem = settings?.active_schedule_system || 'manual';
+
+        // 🚀 جلب بيانات المواد والفصول الأساسية
+        const subjectsPromise = supabase.from('subjects').select('*').order('name');
+        const sectionsPromise = supabase.from('sections').select('*, classes(name)').order('name');
+        const teacherSectionsPromise = supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherProfile.id);
+
+        let schedulesData: any[] = [];
+
+        // 🚀 توجيه ذكي لجلب الجدول
+        if (activeSystem === 'auto') {
+           const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+           if (planData) {
+               const { data } = await supabase.from('auto_schedules').select('subject_id, section_id').eq('plan_id', planData.id).eq('teacher_id', teacherProfile.id);
+               schedulesData = data || [];
+           }
+        } else {
+           const { data } = await supabase.from('schedules').select('subject_id, section_id').eq('teacher_id', teacherProfile.id);
+           schedulesData = data || [];
+        }
+
+        const [subjectsRes, sectionsRes, teacherSectionsRes] = await Promise.all([
+          subjectsPromise, 
+          sectionsPromise, 
+          teacherSectionsPromise
         ]);
 
-        const assignedSectionIds = teacherSectionsRes.data?.map(ts => ts.section_id) || [];
+        // 🚀 دمج الفصول المربوطة يدوياً بالمعلم مع الفصول المكتشفة من جدوله
+        const tsIds = teacherSectionsRes.data?.map(ts => ts.section_id) || [];
+        const schedSecIds = schedulesData.map(s => s.section_id).filter(Boolean);
+        const assignedSectionIds = Array.from(new Set([...tsIds, ...schedSecIds]));
+
         const assignedSections = (sectionsRes.data || [])
           .filter(s => assignedSectionIds.includes(s.id))
           .map((s: any) => ({
@@ -54,7 +80,8 @@ export function useSchoolFormData() {
             classes: Array.isArray(s.classes) ? s.classes[0] : s.classes
           }));
 
-        const assignedSubjectIds = Array.from(new Set(schedulesRes.data?.map(s => s.subject_id) || []));
+        // 🚀 استخراج المواد التي يدرسها المعلم من الجدول الفعال
+        const assignedSubjectIds = Array.from(new Set(schedulesData.map(s => s.subject_id).filter(Boolean)));
         const assignedSubjects = (subjectsRes.data || []).filter(s => assignedSubjectIds.includes(s.id));
 
         return {
