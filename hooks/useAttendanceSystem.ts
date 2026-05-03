@@ -34,20 +34,27 @@ export function useAttendanceSystem() {
     try {
       const dayOfWeek = getDayOfWeek(date);
       const activeSystem = await getActiveSystem();
-
-      // 🚀 تم تصحيح هذا السطر لتجاوز خطأ TypeScript في Netlify
       let uniquePeriods: any[] = [];
 
       if (activeSystem === 'auto') {
-        // جلب الحصص من نظام الذكاء الاصطناعي
-        let query = supabase.from('auto_schedules').select('period_number').eq('day_of_week', dayOfWeek).order('period_number', { ascending: true });
-        if (currentRole === 'teacher') query = query.eq('teacher_id', user.id);
+        // 🚀 جلب الخطة الأحدث المعتمدة لتجنب التداخل
+        const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+        
+        if (planData) {
+          let query = supabase.from('auto_schedules')
+            .select('period_number')
+            .eq('plan_id', planData.id)
+            .eq('day_of_week', dayOfWeek)
+            .order('period_number', { ascending: true });
+            
+          if (currentRole === 'teacher') query = query.eq('teacher_id', user.id);
 
-        const { data, error } = await query;
-        if (error) throw error;
+          const { data, error } = await query;
+          if (error) throw error;
 
-        if (data && data.length > 0) {
-          uniquePeriods = Array.from(new Set(data.map(s => s.period_number))).map(p => ({ period: p }));
+          if (data && data.length > 0) {
+            uniquePeriods = Array.from(new Set(data.map(s => s.period_number))).map(p => ({ period: p }));
+          }
         }
       } else {
         // النظام القديم
@@ -82,35 +89,49 @@ export function useAttendanceSystem() {
       const uniqueSectionsMap = new Map();
 
       if (activeSystem === 'auto') {
-        // جلب الفصول من نظام الذكاء الاصطناعي
-        let query = supabase.from('auto_schedules').select('section_id, section_name, subject_id, subject_name').eq('day_of_week', dayOfWeek).eq('period_number', period);
-        if (currentRole === 'teacher') query = query.eq('teacher_id', user.id);
+        // 🚀 جلب الخطة الأحدث المعتمدة
+        const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+        
+        if (planData) {
+          // نجلب المعرفات فقط لأن الأعمدة النصية غير موجودة في قاعدة بيانات auto_schedules
+          let query = supabase.from('auto_schedules')
+            .select('section_id, subject_id')
+            .eq('plan_id', planData.id)
+            .eq('day_of_week', dayOfWeek)
+            .eq('period_number', period);
+            
+          if (currentRole === 'teacher') query = query.eq('teacher_id', user.id);
 
-        const { data: schedules, error } = await query;
-        if (error) throw error;
+          const { data: autoSchedules, error } = await query;
+          if (error) throw error;
 
-        if (schedules && schedules.length > 0) {
-          schedules.forEach((sched: any) => {
-            const key = `${sched.section_id}-${sched.subject_id}`;
-            // فصل اسم الصف عن الشعبة إذا كان ممكناً، أو الاعتماد على الاسم المدمج
-            let className = '';
-            let secName = sched.section_name;
-            if (secName.includes('-')) {
-               const parts = secName.split('-');
-               className = parts[0].trim();
-               secName = parts[1].trim();
-            }
+          if (autoSchedules && autoSchedules.length > 0) {
+            // جلب الأسماء الحقيقية للفصول والمواد بضربة واحدة سريعة (Manual Join)
+            const sectionIds = Array.from(new Set(autoSchedules.map(s => s.section_id)));
+            const subjectIds = Array.from(new Set(autoSchedules.map(s => s.subject_id)));
 
-            if (!uniqueSectionsMap.has(key)) {
-              uniqueSectionsMap.set(key, { 
-                id: sched.section_id, 
-                name: secName, 
-                classes: { name: className }, 
-                subject_id: sched.subject_id, 
-                subject_name: sched.subject_name 
-              });
-            }
-          });
+            const [sectionsRes, subjectsRes] = await Promise.all([
+              supabase.from('sections').select('id, name, classes(name)').in('id', sectionIds),
+              supabase.from('subjects').select('id, name').in('id', subjectIds)
+            ]);
+
+            autoSchedules.forEach((sched: any) => {
+              const secData = sectionsRes.data?.find((s: any) => s.id === sched.section_id);
+              const classObj = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+              const subjData = subjectsRes.data?.find((s: any) => s.id === sched.subject_id);
+
+              const key = `${sched.section_id}-${sched.subject_id}`;
+              if (!uniqueSectionsMap.has(key)) {
+                uniqueSectionsMap.set(key, { 
+                  id: sched.section_id, 
+                  name: secData?.name || 'شعبة غير محددة', 
+                  classes: { name: classObj?.name || 'صف' }, 
+                  subject_id: sched.subject_id, 
+                  subject_name: subjData?.name || 'مادة غير محددة' 
+                });
+              }
+            });
+          }
         }
       } else {
         // النظام القديم
@@ -182,8 +203,12 @@ export function useAttendanceSystem() {
          const activeSystem = await getActiveSystem();
          
          if (activeSystem === 'auto') {
-             const { data: sched } = await supabase.from('auto_schedules').select('teacher_id').eq('section_id', sectionId).eq('day_of_week', getDayOfWeek(date)).eq('period_number', period).maybeSingle();
-             if (sched && sched.teacher_id) actualTeacherId = sched.teacher_id;
+             // 🚀 جلب معرف المعلم من الخطة الحديثة للإدارة
+             const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+             if (planData) {
+               const { data: sched } = await supabase.from('auto_schedules').select('teacher_id').eq('plan_id', planData.id).eq('section_id', sectionId).eq('day_of_week', getDayOfWeek(date)).eq('period_number', period).maybeSingle();
+               if (sched && sched.teacher_id) actualTeacherId = sched.teacher_id;
+             }
          } else {
              const { data: sched } = await supabase.from('schedules').select('teacher_id').eq('section_id', sectionId).eq('day_of_week', getDayOfWeek(date)).eq('period', period).maybeSingle();
              if (sched && sched.teacher_id) actualTeacherId = sched.teacher_id;
@@ -206,6 +231,7 @@ export function useAttendanceSystem() {
 
       if (recordsToUpsert.length === 0) throw new Error("لم تقم بتحديد حالة الحضور لأي طالب!");
 
+      // 🚀 الاعتماد على UPSERT
       const { error: upsertError } = await supabase.from('attendance_records').upsert(recordsToUpsert, {
         onConflict: 'student_id, date, period', 
         ignoreDuplicates: false 
