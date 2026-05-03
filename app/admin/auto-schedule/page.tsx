@@ -67,10 +67,11 @@ export default function AutoScheduleGenerator() {
   const [uniqueSubjectClasses, setUniqueSubjectClasses] = useState<{subj_id: string, class_id: string, class_name: string, subj_name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
   
-  const [teacherConstraints, setTeacherConstraints] = useState<Record<string, { days: number[], periods: number[] }>>({});
+  // 🚀 الهيكل الجديد لقيود المعلم (مصفوفة الإحداثيات)
+  const [teacherConstraints, setTeacherConstraints] = useState<Record<string, string[]>>({});
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
   const [selectedTeacherObj, setSelectedTeacherObj] = useState<{id: string, name: string} | null>(null);
-  const [tempConstraints, setTempConstraints] = useState<{days: number[], periods: number[]}>({days: [], periods: []});
+  const [tempConstraints, setTempConstraints] = useState<string[]>([]);
 
   const [isBudgetSaved, setIsBudgetSaved] = useState(false);
 
@@ -227,9 +228,9 @@ export default function AutoScheduleGenerator() {
         });
         setSubjectQuotas(initialQuotas);
 
-        let initialConstraints: Record<string, { days: number[], periods: number[] }> = {};
+        let initialConstraints: Record<string, string[]> = {};
         if (typeof window !== 'undefined') {
-          const savedConstraintsStr = localStorage.getItem('auto_schedule_teacher_constraints');
+          const savedConstraintsStr = localStorage.getItem('auto_schedule_teacher_constraints_v3'); // مفتاح جديد لتجنب تداخل البيانات القديمة
           if (savedConstraintsStr) { try { initialConstraints = JSON.parse(savedConstraintsStr); } catch (e) {} }
         }
         setTeacherConstraints(initialConstraints);
@@ -256,30 +257,51 @@ export default function AutoScheduleGenerator() {
     alert('تم اعتماد الميزانية بنجاح.');
   };
 
+  // 🚀 دوال التحكم بالمصفوفة الزمنية الجديدة
   const openTeacherConstraintsModal = (id: string, name: string) => {
     setSelectedTeacherObj({ id, name });
-    const existing = teacherConstraints[id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-    setTempConstraints({ days: [...existing.days], periods: [...existing.periods] });
+    let existing = teacherConstraints[id];
+    
+    // إذا لم يكن للمعلم قيود مسبقة، يتم فتح جميع الحصص افتراضياً
+    if (!existing) {
+        existing = [];
+        workingDays.forEach(d => {
+            dynamicPeriods.forEach(p => {
+                existing.push(`${d}-${p}`);
+            });
+        });
+    }
+    setTempConstraints([...existing]);
     setIsTeacherModalOpen(true);
   };
 
-  const toggleTempConstraint = (type: 'days' | 'periods', val: number) => {
-    setTempConstraints(prev => {
-      const arr = prev[type];
-      if (arr.includes(val)) return { ...prev, [type]: arr.filter(x => x !== val) };
-      return { ...prev, [type]: [...arr, val].sort() };
-    });
+  const toggleTempConstraint = (day: number, period: number) => {
+    const key = `${day}-${period}`;
+    setTempConstraints(prev => 
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const toggleWholeDay = (day: number) => {
+      const dayKeys = dynamicPeriods.map(p => `${day}-${p}`);
+      const allSelected = dayKeys.every(k => tempConstraints.includes(k));
+      
+      if (allSelected) {
+          setTempConstraints(prev => prev.filter(k => !k.startsWith(`${day}-`)));
+      } else {
+          setTempConstraints(prev => Array.from(new Set([...prev, ...dayKeys])));
+      }
   };
 
   const saveTeacherConstraints = () => {
     if (!selectedTeacherObj) return;
-    if (tempConstraints.days.length === 0 || tempConstraints.periods.length === 0) {
-      alert("يجب على الأقل اختيار يوم واحد وحصة واحدة للمعلم!"); return;
+    if (tempConstraints.length === 0) {
+      alert("يجب على الأقل ترك حصة واحدة متاحة للمعلم!"); return;
     }
     const newConstraints = { ...teacherConstraints, [selectedTeacherObj.id]: tempConstraints };
     setTeacherConstraints(newConstraints);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('auto_schedule_teacher_constraints', JSON.stringify(newConstraints));
+      localStorage.setItem('auto_schedule_teacher_constraints_v3', JSON.stringify(newConstraints));
     }
     setIsTeacherModalOpen(false);
   };
@@ -313,7 +335,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Learning Engine + Stage Capacities)
+  // 🧠 THE CORE ALGORITHM (Matrix Driven Constraints)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -321,7 +343,7 @@ export default function AutoScheduleGenerator() {
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     
-    addLog("🚀 بدء التوليد... (تفعيل محرك التعلم الذكي والفرز الصارم)");
+    addLog("🚀 بدء التوليد... (تطبيق إحداثيات الدوام الدقيقة لكل معلم)");
     await new Promise(r => setTimeout(r, 100)); 
     
     const domQuotas = { ...subjectQuotas };
@@ -335,19 +357,24 @@ export default function AutoScheduleGenerator() {
     const teacherAssignments = rawTeacherAssignments.map(ts => {
       const section = sections.find(s => s.id === ts.section_id);
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
-      
       const quota = key && domQuotas[key] !== undefined ? domQuotas[key] : 0;
       
-      const tConst = teacherConstraints[ts.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
+      // 🚀 جلب المصفوفة المسموحة للمعلم
+      let allowedSlots = teacherConstraints[ts.teacher_id];
+      if (!allowedSlots) {
+          allowedSlots = [];
+          workingDays.forEach(d => dynamicPeriods.forEach(p => allowedSlots.push(`${d}-${p}`)));
+      }
+      
+      // حساب الأيام المتاحة (يوم واحد على الأقل متاح فيه حصة)
+      const allowedDaysSet = new Set(allowedSlots.map(slot => parseInt(slot.split('-')[0])));
+      const available_days = Array.from(allowedDaysSet);
+
       const isEhab = (ts.teachers?.users?.full_name || '').includes('ايهاب') || (ts.teachers?.users?.full_name || '').includes('إيهاب');
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
       const zoomLink = ts.teachers?.users?.zoom_link || ts.teachers?.zoom_link || null;
 
-      // السعة القصوى حسب المرحلة
-      const stageMaxDailyPeriods = section?.stage === 'middle' ? 5 : 6;
-      const validPeriodsCount = tConst.periods.filter(p => p <= stageMaxDailyPeriods).length;
-      const maxPossibleSlots = tConst.days.length * validPeriodsCount;
-
+      const maxPossibleSlots = allowedSlots.length;
       let effectiveQuota = quota;
       let forcedWaitlistCount = 0;
       if (quota > maxPossibleSlots) {
@@ -359,7 +386,9 @@ export default function AutoScheduleGenerator() {
         ...ts, weekly_quota: effectiveQuota, original_quota: quota, forced_waitlist: forcedWaitlistCount,
         teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
         subject_name: ts.subjects?.name || 'مادة', class_name: section?.class_name, section_level: section?.level,
-        stage: section?.stage, available_days: tConst.days, available_periods: tConst.periods,
+        stage: section?.stage, 
+        allowed_slots: allowedSlots, // المصفوفة الدقيقة
+        available_days: available_days,
         isVIP: isEhabPhysics, zoom_link: zoomLink
       };
     }).filter(ta => ta.original_quota > 0); 
@@ -379,13 +408,11 @@ export default function AutoScheduleGenerator() {
     const totalRequested = Object.values(teacherTotalQuotas).reduce((a, b) => a + b, 0);
     addLog(`📊 الميزانية معتمدة: إجمالي الحصص المطلوبة (${totalRequested}) حصة.`);
 
-    // 🚀 متغيرات "محرك التعلم" لتخزين أفضل نتيجة
     let absoluteBestSchedule = [];
     let absoluteBestUnplaced = Array(1000).fill(null); 
-    let absoluteBestFailedCount = 9999;
+    let absoluteBestFailedCount = 1000;
     
-    // 🚀 رفعنا المحاولات لتوسيع نطاق التفكير والتجارب
-    const MAX_ATTEMPTS = 40; 
+    const MAX_ATTEMPTS = 20; 
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         
@@ -393,19 +420,17 @@ export default function AutoScheduleGenerator() {
         let unplacedQueue = []; 
         let failedPlacements = 0;
         
-        const ignoreFairness = attempt > 25; 
-        const relaxation = attempt > 15 ? 2 : 0; 
-        const emergencyForce = attempt > 30; 
+        const ignoreFairness = attempt > 10; 
+        const relaxation = attempt > 5 ? 2 : 0; 
+        const emergencyForce = attempt > 12; 
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
-           const tConst = teacherConstraints[tId] || { days: [...workingDays] };
-           let availableDaysCount = tConst.days.length || 5;
-           const hasVIP = teacherAssignments.some(ta => ta.teacher_id === tId && ta.isVIP);
-           if (hasVIP && availableDaysCount > 2) availableDaysCount = 2;
-           
+           // حساب الحمل الأقصى بناءً على عدد الأيام التي يداوم بها
+           const assignment = teacherAssignments.find(ta => ta.teacher_id === tId);
+           const availableDaysCount = assignment ? assignment.available_days.length : 5;
            const total = teacherTotalQuotas[tId];
-           let baseMax = Math.ceil(total / availableDaysCount);
+           let baseMax = Math.ceil(total / (availableDaysCount || 1));
            if (baseMax < 2) baseMax = 2; 
            teacherMaxDailyLoad[tId] = baseMax;
         });
@@ -415,26 +440,21 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        // 🚀 خلط عشوائي في كل محاولة (لكي تتغير النتائج ويتعلم النظام)
-        // ثم فرز صارم (الأحجار الكبيرة والقيود أولاً)
-        const sortedAssignments = shuffleArray([...teacherAssignments]).sort((a, b) => {
+        const sortedAssignments = [...teacherAssignments].sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
           
-          // 1. أصحاب قيود الدوام (مثل يحضر يومين فقط) يتم حجز أماكنهم فوراً!
           const restrictA = a.available_days.length < 5 ? 1 : 0;
           const restrictB = b.available_days.length < 5 ? 1 : 0;
           if (restrictA !== restrictB) return restrictB - restrictA;
           
-          // 2. المعلم المزدحم في المدرسة يوزع أولاً
-          const aTotal = teacherTotalQuotas[a.teacher_id] || 0;
-          const bTotal = teacherTotalQuotas[b.teacher_id] || 0;
-          if (aTotal !== bTotal) return bTotal - aTotal; 
+          const aSecCount = teacherSectionCount[a.teacher_id] || 0;
+          const bSecCount = teacherSectionCount[b.teacher_id] || 0;
+          if (aSecCount !== bSecCount) return bSecCount - aSecCount; 
           
-          // 3. المواد ذات النصاب العالي أولاً
           if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
           
-          return 0; // العشوائية المسبقة (shuffle) ستتكفل بالباقي
+          return Math.random() - 0.5;
         });
 
         const commitPlacement = (section, assignment, day, period) => {
@@ -457,8 +477,6 @@ export default function AutoScheduleGenerator() {
           }
 
           if (finalSchedule.some(s => s.section_id === section.id && s.day === day && s.period_number === period.period_number)) return false;
-          
-          // 🚀 الحماية من تعارض أوقات المعلمين بين المتوسط والثانوي
           if (finalSchedule.some(s => s.teacher_id === teacherId && s.day === day && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
           
           const subjectSlots = finalSchedule.filter(s => s.section_id === section.id && s.subject_id === subjectId);
@@ -466,7 +484,7 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && attempt < 25 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 10 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -479,9 +497,8 @@ export default function AutoScheduleGenerator() {
         for (const assignment of sortedAssignments) {
           assignmentIndex++;
           
-          // تنفس صناعي لعدم تجميد المتصفح
-          if (assignmentIndex % 40 === 0) {
-             setGenerationLogs(prev => [`⏳ الذكاء الاصطناعي يبحث (محاولة ${attempt}/${MAX_ATTEMPTS})... تقدم: (${assignmentIndex}/${totalAssignmentsLength})`, ...prev.slice(0, 3)]);
+          if (assignmentIndex % 30 === 0) {
+             setGenerationLogs(prev => [`⏳ محاولة (${attempt}/${MAX_ATTEMPTS}): جاري التسكين (تطبيق مصفوفة المعلم)... (${assignmentIndex}/${totalAssignmentsLength})`, ...prev.slice(0, 3)]);
              await new Promise(resolve => setTimeout(resolve, 0));
           }
 
@@ -496,15 +513,14 @@ export default function AutoScheduleGenerator() {
           }
 
           let remainingLessons = assignment.weekly_quota;
-          let allowedDaysForTeacher = workingDays.filter(d => assignment.available_days.includes(d));
-          if(allowedDaysForTeacher.length === 0) continue;
+          if(assignment.available_days.length === 0) continue;
 
-          let maxPerDay = Math.ceil(assignment.weekly_quota / allowedDaysForTeacher.length);
+          let maxPerDay = Math.ceil(assignment.weekly_quota / assignment.available_days.length);
           if (maxPerDay < 1) maxPerDay = 1;
           if (assignment.isVIP) maxPerDay = Math.ceil(assignment.weekly_quota / 2); 
 
           const getBestDays = () => {
-             let days = shuffleArray([...allowedDaysForTeacher]);
+             let days = shuffleArray([...assignment.available_days]);
              days.sort((d1, d2) => teacherDailyLoad[assignment.teacher_id][d1] - teacherDailyLoad[assignment.teacher_id][d2]);
              if (assignment.isVIP) {
                 const vipDays = days.filter(d => d === 1 || d === 2);
@@ -519,12 +535,13 @@ export default function AutoScheduleGenerator() {
             // Phase 1
             for (const day of getBestDays()) {
               if (isPlaced) break;
-              let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods);
+              // 🚀 الخوارزمية تبحث فقط داخل المصفوفة المسموحة!
+              let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.allowed_slots.includes(`${day}-${p.period_number}`) && p.period_number <= stageMaxPeriods);
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
               
               let orderedPeriods = shuffleArray(availablePeriods);
               for (const period of orderedPeriods) {
-                if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, !assignment.isVIP, allowedDaysForTeacher.length, true)) {
+                if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, !assignment.isVIP, assignment.available_days.length, true)) {
                   commitPlacement(section, assignment, day, period);
                   isPlaced = true; break; 
                 }
@@ -535,9 +552,9 @@ export default function AutoScheduleGenerator() {
             if (!isPlaced) {
                for (const day of getBestDays()) {
                  if (isPlaced) break;
-                 const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
+                 const fallbackPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.allowed_slots.includes(`${day}-${p.period_number}`) && p.period_number <= stageMaxPeriods));
                  for (const period of fallbackPeriods) {
-                   if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, false, allowedDaysForTeacher.length, true)) {
+                   if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay, false, assignment.available_days.length, true)) {
                      commitPlacement(section, assignment, day, period);
                      isPlaced = true; break; 
                    }
@@ -546,11 +563,11 @@ export default function AutoScheduleGenerator() {
             }
 
             // Phase 3 (Swaps)
-            if (!isPlaced && !assignment.isVIP && attempt > 5) {
+            if (!isPlaced && !assignment.isVIP && attempt > 3) {
               for (const day of getBestDays()) {
                 if (isPlaced) break; 
                 
-                const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
+                const dayPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.allowed_slots.includes(`${day}-${p.period_number}`) && p.period_number <= stageMaxPeriods));
                 
                 for (const period of dayPeriods) {
                   if (isPlaced) break; 
@@ -568,8 +585,15 @@ export default function AutoScheduleGenerator() {
                   if (secSlotIdx !== -1 && teachSlotIdx === -1) {
                     const blockingSlot = finalSchedule[secSlotIdx];
                     if (!blockingSlot.isVIP) {
-                      const teacherZConstraints = teacherConstraints[blockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-                      let allowedDaysZ = shuffleArray(workingDays.filter(d => teacherZConstraints.days.includes(d)));
+                      // 🚀 استخدام الإحداثيات للمعلم المُزاح
+                      let allowedSlotsZ = teacherConstraints[blockingSlot.teacher_id];
+                      if (!allowedSlotsZ) {
+                          allowedSlotsZ = [];
+                          workingDays.forEach(d => dynamicPeriods.forEach(p => allowedSlotsZ.push(`${d}-${p}`)));
+                      }
+                      let allowedDaysZ = Array.from(new Set(allowedSlotsZ.map(s => parseInt(s.split('-')[0]))));
+
+                      allowedDaysZ = shuffleArray(allowedDaysZ);
                       allowedDaysZ.sort((d1, d2) => teacherDailyLoad[blockingSlot.teacher_id][d1] - teacherDailyLoad[blockingSlot.teacher_id][d2]);
                       
                       for (const altDay of allowedDaysZ) {
@@ -578,7 +602,7 @@ export default function AutoScheduleGenerator() {
                          const isZHighSchool = blockingSlot.stage === 'high';
                          if (isZHighSchool && !ignoreFairness && teacherDailyLoad[blockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[blockingSlot.teacher_id] + relaxation)) continue;
 
-                         const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && teacherZConstraints.periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
+                         const altPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && allowedSlotsZ.includes(`${altDay}-${p.period_number}`) && p.period_number <= stageMaxPeriods));
                          for (const altPeriod of altPeriods) {
                             if (altDay === day && altPeriod.period_number === period.period_number) continue;
                             
@@ -592,8 +616,8 @@ export default function AutoScheduleGenerator() {
                             const zSubjectCountAltDay = zSubjectSlots.filter(s => s.day === altDay).length;
                             
                             const zAssignment = teacherAssignments.find(ta => ta.teacher_id === blockingSlot.teacher_id && ta.subject_id === blockingSlot.subject_id);
-                            const zAllowedDaysCount = workingDays.filter(d => zAssignment?.available_days.includes(d)).length || 5;
-                            let zMaxPerDay = Math.ceil((zAssignment?.weekly_quota || 1) / zAllowedDaysCount);
+                            const zAllowedDaysCount = zAssignment ? zAssignment.available_days.length : 5;
+                            let zMaxPerDay = Math.ceil((zAssignment?.weekly_quota || 1) / (zAllowedDaysCount || 1));
                             if (zMaxPerDay < 1) zMaxPerDay = 1;
 
                             if (zSubjectCountAltDay >= zMaxPerDay) continue;
@@ -623,12 +647,19 @@ export default function AutoScheduleGenerator() {
                     }
                   }
 
-                  if (!swapped && teachSlotIdx !== -1 && secSlotIdx === -1 && attempt > 10) {
+                  if (!swapped && teachSlotIdx !== -1 && secSlotIdx === -1 && attempt > 5) {
                      const teacherBlockingSlot = finalSchedule[teachSlotIdx];
                      if (!teacherBlockingSlot.isVIP) {
                          const stageMaxPeriodsW = teacherBlockingSlot.stage === 'middle' ? 5 : 6; 
-                         const tWConstraints = teacherConstraints[teacherBlockingSlot.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-                         let allowedDaysW = shuffleArray(workingDays.filter(d => tWConstraints.days.includes(d)));
+                         
+                         let allowedSlotsW = teacherConstraints[teacherBlockingSlot.teacher_id];
+                         if (!allowedSlotsW) {
+                             allowedSlotsW = [];
+                             workingDays.forEach(d => dynamicPeriods.forEach(p => allowedSlotsW.push(`${d}-${p}`)));
+                         }
+                         let allowedDaysW = Array.from(new Set(allowedSlotsW.map(s => parseInt(s.split('-')[0]))));
+
+                         allowedDaysW = shuffleArray(allowedDaysW);
                          allowedDaysW.sort((d1, d2) => teacherDailyLoad[teacherBlockingSlot.teacher_id][d1] - teacherDailyLoad[teacherBlockingSlot.teacher_id][d2]);
                          
                          for (const altDay of allowedDaysW) {
@@ -636,7 +667,7 @@ export default function AutoScheduleGenerator() {
                              const isWHighSchool = teacherBlockingSlot.stage === 'high';
                              if (isWHighSchool && !ignoreFairness && teacherDailyLoad[teacherBlockingSlot.teacher_id][altDay] >= (teacherMaxDailyLoad[teacherBlockingSlot.teacher_id] + relaxation)) continue;
 
-                             const altPeriods = shuffleArray(periods.filter(p => p.stage === teacherBlockingSlot.stage && !p.is_break && tWConstraints.periods.includes(p.period_number) && p.period_number <= stageMaxPeriodsW));
+                             const altPeriods = shuffleArray(periods.filter(p => p.stage === teacherBlockingSlot.stage && !p.is_break && allowedSlotsW.includes(`${altDay}-${p.period_number}`) && p.period_number <= stageMaxPeriodsW));
                              for (const altPeriod of altPeriods) {
                                  if (altDay === day && altPeriod.period_number === teacherBlockingSlot.period_number) continue;
                                  
@@ -649,8 +680,9 @@ export default function AutoScheduleGenerator() {
                                  const wSubjectSlots = finalSchedule.filter((s, idx) => idx !== teachSlotIdx && s.section_id === teacherBlockingSlot.section_id && s.subject_id === teacherBlockingSlot.subject_id);
                                  const wSubjectCountAltDay = wSubjectSlots.filter(s => s.day === altDay).length;
                                  const wAssignment = teacherAssignments.find(ta => ta.teacher_id === teacherBlockingSlot.teacher_id && ta.subject_id === teacherBlockingSlot.subject_id);
-                                 const wAllowedDaysCount = workingDays.filter(d => wAssignment?.available_days.includes(d)).length || 5;
-                                 let wMaxPerDay = Math.ceil((wAssignment?.weekly_quota || 1) / wAllowedDaysCount);
+                                 const wAllowedDaysCount = wAssignment ? wAssignment.available_days.length : 5;
+                                 
+                                 let wMaxPerDay = Math.ceil((wAssignment?.weekly_quota || 1) / (wAllowedDaysCount || 1));
                                  if (wMaxPerDay < 1) wMaxPerDay = 1;
 
                                  if (wSubjectCountAltDay >= wMaxPerDay) continue;
@@ -674,11 +706,11 @@ export default function AutoScheduleGenerator() {
             }
 
             if (!isPlaced && emergencyForce) {
-               for (const day of shuffleArray([...allowedDaysForTeacher])) {
+               for (const day of shuffleArray([...assignment.available_days])) {
                  if (isPlaced) break;
-                 const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.available_periods.includes(p.period_number) && p.period_number <= stageMaxPeriods));
+                 const emergencyPeriods = shuffleArray(periods.filter(p => p.stage === section.stage && !p.is_break && assignment.allowed_slots.includes(`${day}-${p.period_number}`) && p.period_number <= stageMaxPeriods));
                  for (const period of emergencyPeriods) {
-                   if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay + 2, false, allowedDaysForTeacher.length, false)) {
+                   if (canPlaceAbsolute(assignment.teacher_id, section, day, period, assignment.subject_id, maxPerDay + 2, false, assignment.available_days.length, false)) {
                      commitPlacement(section, assignment, day, period);
                      isPlaced = true; break; 
                    }
@@ -698,19 +730,12 @@ export default function AutoScheduleGenerator() {
           }
         } 
 
-        // 🚀 حفظ أفضل نتيجة وصل إليها العقل المدبر
         if (failedPlacements < absoluteBestFailedCount) {
            absoluteBestFailedCount = failedPlacements;
            absoluteBestSchedule = [...finalSchedule];
            absoluteBestUnplaced = [...unplacedQueue];
-           addLog(`💡 تطور ملحوظ: تم إيجاد مسار أفضل (المتبقي: ${failedPlacements} حصص فقط).`);
         }
-        
-        // إيقاف التفكير إذا تم التسكين بالكامل
-        if (failedPlacements === 0) {
-            addLog(`🎯 تم إيجاد الجدول المثالي في المحاولة رقم ${attempt}!`);
-            break;
-        }
+        if (failedPlacements === 0) break;
     } 
 
     await new Promise(r => setTimeout(r, 800)); 
@@ -723,9 +748,9 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل التوليد مع بقاء ${absoluteBestFailedCount} حصص بالانتظار (هذه أفضل نتيجة ممكنة رياضياً).`);
+      addLog(`⚠️ اكتمل التوليد مع وجود ${absoluteBestFailedCount} حصص بالانتظار.`);
     } else {
-      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل بنسبة نجاح 100%.`);
+      addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل دون أي تعارضات.`);
     }
     setGenerating(false);
   };
@@ -840,26 +865,28 @@ export default function AutoScheduleGenerator() {
 
   const loadPlan = async (id: string) => {
     setGenerating(true);
-    addLog(`⏳ جاري استدعاء الجدول السحابي (الاستدعاء الآمن Client-Side Join)...`);
+    addLog(`⏳ جاري استدعاء الجدول السحابي...`);
     try {
-      // 🚀 استدعاء سحابي آمن وخالي من التعقيد لتجنب أخطاء Schema Cache
-      const { data: rawSlots, error: fetchErr } = await supabase
-        .from('auto_schedules')
-        .select('*')
-        .eq('plan_id', id);
-
-      if (fetchErr) throw fetchErr;
+      let slots = [];
+      const { data: slotsWithZoom, error: zoomErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)').eq('plan_id', id);
       
-      if (!rawSlots || rawSlots.length === 0) {
+      if (zoomErr) {
+         const { data: safeSlots, error: safeErr } = await supabase.from('auto_schedules').select('*, sections(name, class_id, classes(name)), teachers(department_id, users(full_name)), subjects(name)').eq('plan_id', id);
+         if (safeErr) throw safeErr;
+         slots = safeSlots || [];
+      } else {
+         slots = slotsWithZoom || [];
+      }
+      
+      if (slots.length === 0) {
          addLog(`⚠️ الخطة محملة، لكنها فارغة تماماً!`);
          setGeneratedSchedules([]);
          return;
       } else {
-         addLog(`✅ تم استرجاع ${rawSlots.length} حصة خام من قاعدة البيانات.`);
+         addLog(`✅ تم استرجاع ${slots.length} حصة من قاعدة البيانات.`);
       }
 
-      // 🚀 دمج ذكي للبيانات داخل المتصفح بدلاً من الخادم
-      const formatted = rawSlots.map(slot => {
+      const formatted = slots.map(slot => {
         const section = sections.find(s => String(s.id) === String(slot.section_id));
         const assignment = rawTeacherAssignments.find(ts => 
            String(ts.teacher_id) === String(slot.teacher_id) && 
@@ -893,7 +920,7 @@ export default function AutoScheduleGenerator() {
       setGeneratedSchedules(formatted);
       setActivePlanId(id);
       setDisplayMode('grid');
-      addLog(`✅ تم دمج وبناء الجدول بنجاح تام داخل المتصفح.`);
+      addLog(`✅ تم تحميل الجدول بنجاح.`);
     } catch(e) { 
       addLog(`❌ فشل استدعاء الجدول: ${e.message}`); 
     } finally { 
@@ -1281,8 +1308,8 @@ export default function AutoScheduleGenerator() {
                                const busySlot = generatedSchedules.find(s => s.teacher_id === lessonToAssign.teacher_id && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
                                const occupant = generatedSchedules.find(s => s.section_id === lessonToAssign.section_id && s.day === day && s.period_number === p);
                                
-                               const tConst = teacherConstraints[lessonToAssign.teacher_id] || { days: [...workingDays], periods: [...dynamicPeriods] };
-                               const isAllowedTime = tConst.days.includes(day) && tConst.periods.includes(p);
+                               const tConst = teacherConstraints[lessonToAssign.teacher_id] || [];
+                               const isAllowedTime = tConst.includes(`${day}-${p}`);
 
                                let statusClass = "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 cursor-pointer text-emerald-700";
                                let statusText = "متاح ✔️";
@@ -1332,7 +1359,7 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
-      {/* Modal إعدادات المعلم */}
+      {/* 🚀 Modal مصفوفة إعدادات المعلم الدقيقة (Matrix UI) */}
       <AnimatePresence>
         {isTeacherModalOpen && selectedTeacherObj && (
           <>
@@ -1341,50 +1368,70 @@ export default function AutoScheduleGenerator() {
                initial={{ opacity: 0, y: 100 }} 
                animate={{ opacity: 1, y: 0 }} 
                exit={{ opacity: 0, y: 100 }} 
-               className="fixed bottom-0 left-0 w-full sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]" 
+               className="fixed bottom-0 left-0 w-full sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-3xl bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]" 
                dir="rtl"
             >
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><UserCog className="w-5 h-5"/></div>
                   <div>
-                    <h3 className="font-black text-slate-800 text-base md:text-lg">قيود وتوفر المعلم</h3>
-                    <p className="text-[10px] md:text-xs font-bold text-slate-500 mt-0.5">المعلم: {selectedTeacherObj.name}</p>
+                    <h3 className="font-black text-slate-800 text-base md:text-lg">مصفوفة توفر المعلم الدقيقة</h3>
+                    <p className="text-[10px] md:text-xs font-bold text-slate-500 mt-0.5">المعلم: {selectedTeacherObj.name} | اختر الحصص المسموحة فقط</p>
                   </div>
                 </div>
                 <button onClick={() => setIsTeacherModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
               </div>
               
-              <div className="p-5 space-y-6 overflow-y-auto custom-scrollbar flex-1">
-                <div>
-                  <label className="block text-sm font-black text-indigo-900 mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-indigo-500"/> أيام الدوام المسموحة</label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {workingDays.map(day => (
-                      <label key={day} className={`flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all shadow-sm ${tempConstraints.days.includes(day) ? 'bg-indigo-50 border-indigo-400 text-indigo-800' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
-                        <input type="checkbox" checked={tempConstraints.days.includes(day)} onChange={() => toggleTempConstraint('days', day)} className="hidden" />
-                        <span className="font-bold text-sm">{getDayName(day)}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100">
-                  <label className="block text-sm font-black text-indigo-900 mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-indigo-500"/> الحصص المسموحة للتدريس</label>
-                  <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                    {dynamicPeriods.map(p => (
-                      <label key={p} className={`flex items-center justify-center gap-1 p-2.5 rounded-xl border cursor-pointer transition-all shadow-sm ${tempConstraints.periods.includes(p) ? 'bg-emerald-50 border-emerald-400 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
-                        <input type="checkbox" checked={tempConstraints.periods.includes(p)} onChange={() => toggleTempConstraint('periods', p)} className="hidden" />
-                        <span className="font-black text-xs md:text-sm">الحصة {p}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+              <div className="p-5 overflow-auto bg-slate-50 custom-scrollbar flex-1">
+                 <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                    <table className="w-full text-center border-collapse">
+                      <thead>
+                        <tr className="bg-slate-800 text-white">
+                          <th className="p-3 text-xs font-black border-l border-white/10 w-28">اليوم / الحصة</th>
+                          {dynamicPeriods.map(p => <th key={p} className="p-3 text-xs font-black border-l border-white/10 last:border-l-0">ح {p}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workingDays.map(day => {
+                          // فحص إذا كان اليوم بأكمله محدد
+                          const dayKeys = dynamicPeriods.map(p => `${day}-${p}`);
+                          const allDaySelected = dayKeys.every(k => tempConstraints.includes(k));
+                          
+                          return (
+                          <tr key={day} className="border-b border-slate-200 last:border-b-0">
+                            <td className="p-2 bg-slate-100 border-l border-slate-200 align-middle">
+                                <button 
+                                   onClick={() => toggleWholeDay(day)}
+                                   className={`w-full py-2 text-xs font-black rounded-lg transition-colors border ${allDaySelected ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                >
+                                   {getDayName(day)}
+                                </button>
+                            </td>
+                            {dynamicPeriods.map(p => {
+                               const key = `${day}-${p}`;
+                               const isSelected = tempConstraints.includes(key);
+                               return (
+                                 <td key={p} className="p-1 border-l border-slate-200 last:border-l-0">
+                                    <button 
+                                      onClick={() => toggleTempConstraint(day, p)}
+                                      className={`w-full h-12 rounded-xl border flex items-center justify-center transition-all ${isSelected ? 'bg-emerald-50 border-emerald-400 text-emerald-600 shadow-sm' : 'bg-slate-50/50 border-dashed border-slate-200 text-slate-300 hover:bg-slate-100 hover:border-slate-300'}`}
+                                    >
+                                       {isSelected ? <CheckSquare2 className="w-5 h-5"/> : <Square className="w-5 h-5"/>}
+                                    </button>
+                                 </td>
+                               );
+                            })}
+                          </tr>
+                        )})}
+                      </tbody>
+                    </table>
+                 </div>
               </div>
 
               <div className="p-5 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
                 <button onClick={() => setIsTeacherModalOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
                 <button onClick={saveTeacherConstraints} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 text-sm border border-indigo-500">
-                  <Save className="w-5 h-5" /> حفظ القيود
+                  <Save className="w-5 h-5" /> حفظ مصفوفة القيود
                 </button>
               </div>
             </motion.div>
@@ -1454,7 +1501,7 @@ export default function AutoScheduleGenerator() {
                 {sortedClassNames.map(className => {
                   const sampleSection = sections.find(s => s.class_name === className);
                   const stage = sampleSection?.stage || 'high';
-                  const MAX_WEEKLY = stage === 'middle' ? 25 : 30; // 🚀 تطبيق دقيق للسعة للمتوسط 25 والثانوي 30
+                  const MAX_WEEKLY = stage === 'middle' ? 25 : 30;
 
                   const totalQuotasForClass = groupedSubjectsByClass[className].reduce((sum, item) => {
                       const key = `${item.subj_id}_${item.class_id}`;
@@ -1511,19 +1558,19 @@ export default function AutoScheduleGenerator() {
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                 {teacherWorkloads.map(([name, data]) => {
                   const tConst = teacherConstraints[data.id];
-                  const hasCustomConstraints = tConst && (tConst.days.length < 5 || tConst.periods.length < dynamicPeriods.length);
+                  const hasCustomConstraints = tConst && tConst.length < (workingDays.length * dynamicPeriods.length);
                   
                   return (
                     <div key={data.id} className={`bg-white border p-3 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors shadow-sm ${hasCustomConstraints ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200'}`}>
                       <div className="flex items-center justify-between md:justify-start gap-3 w-full md:w-auto">
                         <div className="flex flex-col">
                           <span className="font-bold text-sm md:text-base text-slate-700">{name}</span>
-                          {hasCustomConstraints && <span className="text-[9px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 w-fit mt-1">يوجد قيود دوام</span>}
+                          {hasCustomConstraints && <span className="text-[9px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 w-fit mt-1">يوجد مصفوفة قيود</span>}
                         </div>
                         <span className={`font-black text-xs md:text-sm px-2.5 py-1 rounded-lg shrink-0 ${data.total > 24 ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>{data.total} حصة</span>
                       </div>
                       <button onClick={() => openTeacherConstraintsModal(data.id, name)} className={`w-full md:w-auto px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shrink-0 transition-all active:scale-95 shadow-sm border ${hasCustomConstraints ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-indigo-100 hover:text-indigo-600 hover:border-indigo-200'}`}>
-                        <UserCog className="w-5 h-5" /> <span className="text-xs font-black">الدوام</span>
+                        <UserCog className="w-5 h-5" /> <span className="text-xs font-black">المصفوفة</span>
                       </button>
                     </div>
                   );
