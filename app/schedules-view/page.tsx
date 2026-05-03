@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown, Printer, X, CheckSquare2, Square
+  CalendarDays, Users, Search, Video, Layers, UserCircle, AlertTriangle, Lock, Clock, CheckCircle2, Loader2, FileDown, Printer, X, CheckSquare2, Square, Grid3X3
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
@@ -75,7 +75,8 @@ export default function PublicSchedulesViewPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [latestPlanName, setLatestPlanName] = useState<string>('');
 
-  const [filterType, setFilterType] = useState<'section' | 'teacher'>('section');
+  // 🚀 إضافة خيار Master View للمدير
+  const [filterType, setFilterType] = useState<'section' | 'teacher' | 'master'>('section');
   const [filterId, setFilterId] = useState<string>('');
   
   const [isRestricted, setIsRestricted] = useState(false);
@@ -85,11 +86,10 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
-  // 🚀 خيارات الطباعة المتقدمة
   const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
-  const [printMode, setPrintMode] = useState<'single' | 'custom-batch'>('single');
+  const [printMode, setPrintMode] = useState<'single' | 'custom-batch' | 'master-print'>('single');
   const [entitiesToPrint, setEntitiesToPrint] = useState<any[]>([]);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
@@ -295,6 +295,8 @@ export default function PublicSchedulesViewPage() {
   }, [periods]);
 
   const currentViewSchedules = useMemo(() => {
+     if (filterType === 'master') return schedules; // Master returns all
+
      return schedules.filter(s => {
         if (isRestricted) {
            if (activeRole === 'teacher') {
@@ -311,6 +313,7 @@ export default function PublicSchedulesViewPage() {
 
   const getEntityName = () => {
     try {
+      if (filterType === 'master') return 'الجدول المجمع العام';
       if (isRestricted) {
          if (activeRole === 'student') {
             if (currentViewSchedules && currentViewSchedules.length > 0 && currentViewSchedules[0]?.section_name) {
@@ -334,7 +337,6 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
-  // 🚀 أدوات الطباعة المتقدمة
   const toggleBatchPrintId = (id: string) => {
     setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -357,7 +359,10 @@ export default function PublicSchedulesViewPage() {
 
     let entities: any[] = [];
     
-    if (mode === 'single') {
+    // 🚀 حالة الطباعة للجدول المجمع
+    if (mode === 'master-print') {
+       entities = ['MASTER_GRID']; // Dummy entity to trigger print map loop once
+    } else if (mode === 'single') {
       const singleEntity = filterType === 'teacher' ? uniqueTeachers.find(t => String(t.id) === String(filterId)) : sections.find(s => String(s.id) === String(filterId));
       if(singleEntity) entities = [singleEntity];
     } else if (mode === 'custom-batch') {
@@ -381,10 +386,13 @@ export default function PublicSchedulesViewPage() {
         const jsPDFModule = (await import('jspdf')).default;
         const html2canvasModule = (await import('html2canvas-pro')).default;
 
-        const containers = document.querySelectorAll('.batch-pdf-page');
+        const containerClass = mode === 'master-print' ? '.master-pdf-page' : '.batch-pdf-page';
+        const containers = document.querySelectorAll(containerClass);
         if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
 
-        const pdf = new jsPDFModule('landscape', 'mm', 'a4');
+        // 🚀 للمجمع نستخدم ورقة A3 فارهة بالعرض لضمان دقة ووضوح الأرقام الكثيرة
+        const paperFormat = mode === 'master-print' ? 'a3' : 'a4';
+        const pdf = new jsPDFModule('landscape', 'mm', paperFormat);
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
@@ -392,32 +400,36 @@ export default function PublicSchedulesViewPage() {
           if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
-          const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          const imgData = canvas.toDataURL('image/png');
+          // مقياس عالي الدقة للجدول المجمع
+          const canvas = await html2canvasModule(el, { scale: mode === 'master-print' ? 3 : 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          const imgData = canvas.toDataURL('image/png', 1.0);
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
-          const links = el.querySelectorAll('a.zoom-link');
-          const elementRect = el.getBoundingClientRect();
+          if (mode !== 'master-print') {
+             const links = el.querySelectorAll('a.zoom-link');
+             const elementRect = el.getBoundingClientRect();
 
-          links.forEach((link: any) => {
-            const rect = link.getBoundingClientRect();
-            if (elementRect.width > 0 && elementRect.height > 0) {
-              const relativeX = (rect.left - elementRect.left) / elementRect.width;
-              const relativeY = (rect.top - elementRect.top) / elementRect.height;
-              const pdfX = relativeX * pdfWidth; 
-              const pdfY = relativeY * pdfHeight;
-              const finalUrl = normalizeUrl(link.href);
-              
-              if (finalUrl) {
-                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
-              }
-            }
-          });
+             links.forEach((link: any) => {
+               const rect = link.getBoundingClientRect();
+               if (elementRect.width > 0 && elementRect.height > 0) {
+                 const relativeX = (rect.left - elementRect.left) / elementRect.width;
+                 const relativeY = (rect.top - elementRect.top) / elementRect.height;
+                 const pdfX = relativeX * pdfWidth; 
+                 const pdfY = relativeY * pdfHeight;
+                 const finalUrl = normalizeUrl(link.href);
+                 
+                 if (finalUrl) {
+                    pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+                 }
+               }
+             });
+          }
         }
 
         let fileName = 'الجدول_الدراسي.pdf';
-        if (mode === 'single') fileName = `جدول_${getEntityName().replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
+        if (mode === 'master-print') fileName = `الجدول_المجمع_العام.pdf`;
+        else if (mode === 'single') fileName = `جدول_${getEntityName().replace(/\s+/g, '_')}.pdf`;
+        else if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
 
         pdf.save(fileName);
       } catch (error: any) { 
@@ -523,7 +535,7 @@ export default function PublicSchedulesViewPage() {
                       ? sections.map(s => (
                           <div key={s.id} onClick={() => toggleBatchPrintId(s.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(s.id) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
                              {batchPrintIds.includes(s.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
-                             <span className="text-xs font-bold truncate">{s.name}</span> {/* 🚀 تم التصحيح هنا لـ s.name */}
+                             <span className="text-xs font-bold truncate">{s.name}</span>
                           </div>
                       ))
                       : uniqueTeachers.map(t => (
@@ -576,8 +588,8 @@ export default function PublicSchedulesViewPage() {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={() => handlePrintCommand('single')} className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2">
-                 <FileDown className="w-5 h-5" /> تحميل الجدول الحالي
+              <button onClick={() => handlePrintCommand(filterType === 'master' ? 'master-print' : 'single')} className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                 <FileDown className="w-5 h-5" /> {filterType === 'master' ? 'طباعة المجمع (A3)' : 'تحميل الجدول الحالي'}
               </button>
               
               {!isRestricted && (
@@ -608,37 +620,50 @@ export default function PublicSchedulesViewPage() {
               
               {!isRestricted ? (
                 <>
-                  <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto shrink-0">
+                  <div className="flex bg-[#02040a] p-1 rounded-xl border border-white/5 w-full md:w-auto shrink-0 overflow-x-auto custom-scrollbar">
                     <button 
                       onClick={() => { setFilterType('section'); if(sections[0]) setFilterId(String(sections[0].id)); }}
-                      className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'section' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`flex-1 md:w-32 min-w-[100px] py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'section' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                       <Layers className="w-4 h-4" /> فصول
                     </button>
                     <button 
                       onClick={() => { setFilterType('teacher'); if(uniqueTeachers[0]) setFilterId(String(uniqueTeachers[0].id)); }}
-                      className={`flex-1 md:w-32 py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'teacher' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`flex-1 md:w-32 min-w-[100px] py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'teacher' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                       <UserCircle className="w-4 h-4" /> معلمون
                     </button>
+                    {/* 🚀 الزر الذهبي للجدول المجمع العام */}
+                    <button 
+                      onClick={() => { setFilterType('master'); setFilterId(''); }}
+                      className={`flex-1 md:w-36 min-w-[120px] py-2.5 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-2 ${filterType === 'master' ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.4)]' : 'text-slate-400 hover:text-amber-400'}`}
+                    >
+                      <Grid3X3 className="w-4 h-4" /> الجدول المجمع
+                    </button>
                   </div>
 
-                  <div className="flex-1 w-full relative">
-                    <div className="absolute inset-y-0 right-0 pl-3 flex items-center pointer-events-none pr-4">
-                      <Search className="h-4 w-4 text-indigo-400" />
+                  {filterType !== 'master' ? (
+                    <div className="flex-1 w-full relative">
+                      <div className="absolute inset-y-0 right-0 pl-3 flex items-center pointer-events-none pr-4">
+                        <Search className="h-4 w-4 text-indigo-400" />
+                      </div>
+                      <select
+                        value={filterId}
+                        onChange={(e) => setFilterId(e.target.value)}
+                        className="block w-full rounded-xl border border-white/10 py-3 pr-10 pl-4 text-white bg-[#02040a]/80 focus:bg-[#02040a] ring-1 ring-inset ring-transparent focus:ring-2 focus:ring-indigo-500/50 text-sm font-bold transition-all shadow-inner outline-none appearance-none [&>option]:bg-[#0f1423]"
+                      >
+                        <option value="" disabled>-- الرجاء الاختيار --</option>
+                        {filterType === 'section' 
+                          ? sections.map(s => <option key={s.id} value={s.id}>{safeString(s.name)}</option>)
+                          : uniqueTeachers.map(t => <option key={t.id} value={t.id}>{safeString(t.name)}</option>)
+                        }
+                      </select>
                     </div>
-                    <select
-                      value={filterId}
-                      onChange={(e) => setFilterId(e.target.value)}
-                      className="block w-full rounded-xl border border-white/10 py-3 pr-10 pl-4 text-white bg-[#02040a]/80 focus:bg-[#02040a] ring-1 ring-inset ring-transparent focus:ring-2 focus:ring-indigo-500/50 text-sm font-bold transition-all shadow-inner outline-none appearance-none [&>option]:bg-[#0f1423]"
-                    >
-                      <option value="" disabled>-- الرجاء الاختيار --</option>
-                      {filterType === 'section' 
-                        ? sections.map(s => <option key={s.id} value={s.id}>{safeString(s.name)}</option>)
-                        : uniqueTeachers.map(t => <option key={t.id} value={t.id}>{safeString(t.name)}</option>)
-                      }
-                    </select>
-                  </div>
+                  ) : (
+                    <div className="flex-1 w-full text-center md:text-left flex items-center justify-end px-4">
+                       <span className="text-sm font-black text-amber-400 animate-pulse flex items-center gap-2"><Layers className="w-4 h-4"/> الرؤية البانورامية الشاملة لجميع الفصول</span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="flex items-center gap-4 w-full bg-[#02040a]/40 p-3 rounded-xl border border-white/5">
@@ -663,248 +688,377 @@ export default function PublicSchedulesViewPage() {
               )}
             </div>
 
-            <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
-              <div className="overflow-x-auto custom-scrollbar">
-                <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
-                  <thead className="bg-[#02040a]/80">
-                    <tr>
-                      <th scope="col" className="py-4 px-4 text-center text-xs font-black text-indigo-300 uppercase tracking-widest border-l border-white/5 w-28">
-                        اليوم / الحصة
-                      </th>
-                      {dynamicPeriods.map(p => {
-                        return (
-                          <th key={p} scope="col" className="py-4 px-2 text-center border-l border-white/5 min-w-[150px] bg-[#02040a]/40">
-                            <span className="text-white font-black text-sm drop-shadow-sm">الحصة {p}</span>
+            {/* 🚀 واجهة عرض الجدول المجمع (Master View) */}
+            {filterType === 'master' ? (
+              <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden relative max-h-[75vh]">
+                <div className="overflow-auto custom-scrollbar h-full w-full">
+                  <table className="min-w-max w-full divide-y divide-white/5 border-collapse text-right">
+                    <thead className="bg-[#02040a]/90 sticky top-0 z-30 shadow-md">
+                      <tr>
+                        <th className="py-4 px-4 text-center font-black text-indigo-300 w-24 border-l border-white/5 sticky right-0 bg-[#02040a]/95 backdrop-blur-xl z-40">اليوم</th>
+                        <th className="py-4 px-4 text-center font-black text-indigo-300 w-28 border-l border-white/5 sticky right-24 bg-[#02040a]/95 backdrop-blur-xl z-40">الحصة</th>
+                        {sections.map(sec => (
+                          <th key={sec.id} className="py-4 px-4 text-center font-black text-white border-l border-white/5 min-w-[140px]">
+                            {safeString(sec.name)}
                           </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 bg-transparent relative z-10">
+                      {DAYS.map(day => (
+                        <React.Fragment key={day.id}>
+                          {dynamicPeriods.map((p, pIdx) => {
+                            const isToday = getKuwaitDayId(currentDateTime) === day.id;
+                            return (
+                              <tr key={`${day.id}-${p}`} className={`transition-colors hover:bg-white/[0.04] ${isToday ? 'bg-indigo-900/5' : ''}`}>
+                                {pIdx === 0 && (
+                                  <td rowSpan={dynamicPeriods.length} className={`py-2 px-2 text-center font-black border-l border-b border-white/5 sticky right-0 z-20 ${isToday ? 'bg-indigo-900/90 text-indigo-300 border-indigo-500/30' : 'bg-[#0f1423]/95 text-slate-300'} backdrop-blur-xl`}>
+                                    {day.name}
+                                    {isToday && <div className="text-[10px] text-indigo-400 mt-1 uppercase">اليوم</div>}
+                                  </td>
+                                )}
+                                <td className={`py-2 px-2 text-center border-l border-white/5 sticky right-24 z-20 backdrop-blur-xl ${isToday ? 'bg-indigo-900/80' : 'bg-[#0f1423]/90'}`}>
+                                  <div className="font-black text-sm text-slate-200">الحصة {p}</div>
+                                </td>
+                                {sections.map(sec => {
+                                  const slot = schedules.find(s => s.day === day.id && s.period_number === p && String(s.section_id) === String(sec.id));
+                                  return (
+                                    <td key={sec.id} className="p-2 border-l border-white/5 align-middle h-20">
+                                      {slot ? (
+                                        <div className="bg-[#02040a]/60 border border-indigo-500/20 rounded-xl p-2 text-center h-full flex flex-col justify-center gap-1 shadow-sm hover:border-indigo-400 hover:bg-indigo-900/20 transition-all">
+                                          <div className="text-[9px] text-amber-400 font-mono font-black bg-slate-900/80 rounded px-1.5 py-0.5 mx-auto w-max" dir="ltr">
+                                            {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                                          </div>
+                                          <span className="text-xs sm:text-sm font-black text-emerald-300 line-clamp-1" title={safeString(slot.subject_name)}>{safeString(slot.subject_name)}</span>
+                                          <span className="text-[10px] text-slate-400 font-bold line-clamp-1" title={safeString(slot.teacher_name)}>أ. {safeString(slot.teacher_name)}</span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-center h-full opacity-10 text-slate-500 font-black">-</div>
+                                      )}
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                            )
+                          })}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              /* 🚀 واجهة عرض الجدول العادي (معلم/طالب) */
+              <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[2rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
+                    <thead className="bg-[#02040a]/80">
+                      <tr>
+                        <th scope="col" className="py-4 px-4 text-center text-xs font-black text-indigo-300 uppercase tracking-widest border-l border-white/5 w-28">
+                          اليوم / الحصة
+                        </th>
+                        {dynamicPeriods.map(p => {
+                          return (
+                            <th key={p} scope="col" className="py-4 px-2 text-center border-l border-white/5 min-w-[150px] bg-[#02040a]/40">
+                              <span className="text-white font-black text-sm drop-shadow-sm">الحصة {p}</span>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 bg-transparent">
+                      {DAYS.map((day) => {
+                        const todayId = getKuwaitDayId(currentDateTime);
+                        const isToday = day.id === todayId;
+
+                        return (
+                          <tr key={day.id} className={`transition-colors ${isToday ? 'bg-indigo-900/10' : 'hover:bg-white/[0.02]'}`}>
+                            <td className={`py-6 px-3 text-sm font-black border-l border-white/5 text-center ${isToday ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-[#0f1423]/30 text-slate-300'}`}>
+                              {safeString(day.name)}
+                              {isToday && <div className="text-[9px] text-indigo-400 mt-1 uppercase tracking-wider">اليوم</div>}
+                            </td>
+                            {dynamicPeriods.map(p => {
+                              const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
+                              const showZoom = slot && slot.zoom_link;
+
+                              let isNow = false;
+                              let isPast = false;
+                              const currentMins = currentDateTime.getHours() * 60 + currentDateTime.getMinutes();
+
+                              if (slot) {
+                                 const startMins = timeToMinutes(slot.start_time);
+                                 const endMins = timeToMinutes(slot.end_time);
+
+                                 if (todayId !== 0) { 
+                                    if (day.id < todayId) {
+                                      isPast = true; 
+                                    } else if (day.id === todayId) {
+                                      if (currentMins > endMins) isPast = true; 
+                                      else if (currentMins >= startMins && currentMins <= endMins) isNow = true; 
+                                    }
+                                 }
+                              }
+
+                              return (
+                                <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-36 align-top">
+                                  {slot ? (
+                                    <div 
+                                      className={`h-full flex flex-col justify-start rounded-xl p-2.5 shadow-inner relative overflow-hidden group transition-all duration-300 transform hover:scale-[1.02]
+                                        ${isNow 
+                                          ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/50' 
+                                          : isPast 
+                                          ? 'bg-[#02040a]/40 border border-white/5 opacity-50 grayscale hover:grayscale-0' 
+                                          : 'bg-[#02040a]/80 border border-white/10' 
+                                        }
+                                      `}
+                                    >
+                                      <div className={`absolute top-0 right-0 w-1.5 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'} ${isPast ? 'opacity-30' : ''}`}></div>
+                                      
+                                      <div className="flex justify-between items-start mb-2 w-full pr-1.5">
+                                        <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-amber-500/30 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
+                                           {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                                        </div>
+                                        {isNow && (
+                                           <div className="flex items-center gap-1 bg-rose-500/20 px-1.5 py-0.5 rounded border border-rose-500/50">
+                                              <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
+                                              <span className="text-[8px] font-black text-rose-400">الآن</span>
+                                           </div>
+                                        )}
+                                        {isPast && <CheckCircle2 className="w-4 h-4 text-slate-500" />}
+                                      </div>
+
+                                      {isStudentView ? (
+                                        <>
+                                          <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-indigo-300'}`}>
+                                            {safeString(slot.subject_name)}
+                                          </div>
+                                          <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
+                                            أ. {safeString(slot.teacher_name)}
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-emerald-300'}`}>
+                                            {safeString(slot.section_name)}
+                                          </div>
+                                          <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
+                                            {safeString(slot.subject_name)}
+                                          </div>
+                                        </>
+                                      )}
+
+                                      {showZoom && (
+                                        <div className="mt-auto pt-2 w-full">
+                                           <a 
+                                             href={slot.zoom_link} 
+                                             target="_blank" 
+                                             rel="noopener noreferrer" 
+                                             className={`w-full flex items-center justify-center gap-1.5 text-[10px] font-black rounded-lg py-1.5 transition-colors relative z-20 ${isPast ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]'}`}
+                                           >
+                                             <Video className="w-3.5 h-3.5"/> دخول للبث
+                                           </a>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className={`h-full w-full flex items-center justify-center rounded-xl transition-all ${isPast ? 'opacity-5' : 'opacity-20'}`}>
+                                      <span className="text-2xl text-slate-600">-</span>
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
                         );
                       })}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5 bg-transparent">
-                    {DAYS.map((day) => {
-                      const todayId = getKuwaitDayId(currentDateTime);
-                      const isToday = day.id === todayId;
-
-                      return (
-                        <tr key={day.id} className={`transition-colors ${isToday ? 'bg-indigo-900/10' : 'hover:bg-white/[0.02]'}`}>
-                          <td className={`py-6 px-3 text-sm font-black border-l border-white/5 text-center ${isToday ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-[#0f1423]/30 text-slate-300'}`}>
-                            {safeString(day.name)}
-                            {isToday && <div className="text-[9px] text-indigo-400 mt-1 uppercase tracking-wider">اليوم</div>}
-                          </td>
-                          {dynamicPeriods.map(p => {
-                            const slot = currentViewSchedules.find(s => s.day === day.id && s.period_number === p);
-                            const showZoom = slot && slot.zoom_link;
-
-                            let isNow = false;
-                            let isPast = false;
-                            const currentMins = currentDateTime.getHours() * 60 + currentDateTime.getMinutes();
-
-                            if (slot) {
-                               const startMins = timeToMinutes(slot.start_time);
-                               const endMins = timeToMinutes(slot.end_time);
-
-                               if (todayId !== 0) { 
-                                  if (day.id < todayId) {
-                                    isPast = true; 
-                                  } else if (day.id === todayId) {
-                                    if (currentMins > endMins) isPast = true; 
-                                    else if (currentMins >= startMins && currentMins <= endMins) isNow = true; 
-                                  }
-                               }
-                            }
-
-                            return (
-                              <td key={p} className="p-2 sm:p-3 border-l border-white/5 h-36 align-top">
-                                {slot ? (
-                                  <div 
-                                    className={`h-full flex flex-col justify-start rounded-xl p-2.5 shadow-inner relative overflow-hidden group transition-all duration-300 transform hover:scale-[1.02]
-                                      ${isNow 
-                                        ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/50' 
-                                        : isPast 
-                                        ? 'bg-[#02040a]/40 border border-white/5 opacity-50 grayscale hover:grayscale-0' 
-                                        : 'bg-[#02040a]/80 border border-white/10' 
-                                      }
-                                    `}
-                                  >
-                                    <div className={`absolute top-0 right-0 w-1.5 h-full ${isStudentView ? 'bg-indigo-500' : 'bg-emerald-500'} ${isPast ? 'opacity-30' : ''}`}></div>
-                                    
-                                    <div className="flex justify-between items-start mb-2 w-full pr-1.5">
-                                      <div className="bg-slate-900/80 px-2 py-0.5 rounded border border-amber-500/30 font-mono text-[10px] sm:text-xs font-black text-amber-400 drop-shadow-sm" dir="ltr">
-                                         {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
-                                      </div>
-                                      {isNow && (
-                                         <div className="flex items-center gap-1 bg-rose-500/20 px-1.5 py-0.5 rounded border border-rose-500/50">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
-                                            <span className="text-[8px] font-black text-rose-400">الآن</span>
-                                         </div>
-                                      )}
-                                      {isPast && <CheckCircle2 className="w-4 h-4 text-slate-500" />}
-                                    </div>
-
-                                    {isStudentView ? (
-                                      <>
-                                        <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-indigo-300'}`}>
-                                          {safeString(slot.subject_name)}
-                                        </div>
-                                        <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
-                                          أ. {safeString(slot.teacher_name)}
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div className={`font-black text-xs sm:text-sm whitespace-normal break-words leading-tight mb-1 pr-2 ${isNow ? 'text-emerald-400' : 'text-emerald-300'}`}>
-                                          {safeString(slot.section_name)}
-                                        </div>
-                                        <div className="text-[10px] sm:text-xs font-bold text-slate-300 pr-2 leading-tight">
-                                          {safeString(slot.subject_name)}
-                                        </div>
-                                      </>
-                                    )}
-
-                                    {showZoom && (
-                                      <div className="mt-auto pt-2 w-full">
-                                         <a 
-                                           href={slot.zoom_link} 
-                                           target="_blank" 
-                                           rel="noopener noreferrer" 
-                                           className={`w-full flex items-center justify-center gap-1.5 text-[10px] font-black rounded-lg py-1.5 transition-colors relative z-20 ${isPast ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]'}`}
-                                         >
-                                           <Video className="w-3.5 h-3.5"/> دخول للبث
-                                         </a>
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className={`h-full w-full flex items-center justify-center rounded-xl transition-all ${isPast ? 'opacity-5' : 'opacity-20'}`}>
-                                    <span className="text-2xl text-slate-600">-</span>
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* 🚀 منطقة الطباعة الخفية للـ PDF مع ثيم الألوان المخصص */}
-            <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
-              {entitiesToPrint.map((entity, idx) => {
-                 const isPrintTypeStudent = printMode === 'custom-batch' ? batchPrintType === 'section' : filterType === 'section';
-                 
-                 const entId = String(entity.id);
-                 const entName = entity.name || entity.users?.full_name || 'غير محدد';
-                 const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
+            {/* 🚀 منطقة الطباعة للجدول العادي */}
+            {filterType !== 'master' && (
+              <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+                {entitiesToPrint.map((entity, idx) => {
+                   const isPrintTypeStudent = printMode === 'custom-batch' ? batchPrintType === 'section' : filterType === 'section';
+                   
+                   const entId = String(entity.id);
+                   const entName = entity.name || entity.users?.full_name || 'غير محدد';
+                   const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
 
-                 // 🚀 تطبيق ثيم الألوان للطباعة ليكون واضحاً ومميزاً (بدون تغيير المنطق)
-                 const printTheme = isPrintTypeStudent ? {
-                     cardBg: '#eef2ff',     // bg-indigo-50
-                     cardBorder: '#c7d2fe', // border-indigo-200
-                     timeBg: '#e0e7ff',     // bg-indigo-100
-                     timeText: '#3730a3',   // text-indigo-800
-                     timeBorder: '#c7d2fe', // border-indigo-200
-                     titleText: '#312e81',  // text-indigo-900
-                     subText: '#4f46e5'     // text-indigo-600
-                 } : {
-                     cardBg: '#f0fdf4',     // bg-emerald-50
-                     cardBorder: '#a7f3d0', // border-emerald-200
-                     timeBg: '#d1fae5',     // bg-emerald-100
-                     timeText: '#065f46',   // text-emerald-800
-                     timeBorder: '#a7f3d0', // border-emerald-200
-                     titleText: '#064e3b',  // text-emerald-900
-                     subText: '#059669'     // text-emerald-600
-                 };
+                   const printTheme = isPrintTypeStudent ? {
+                       cardBg: '#eef2ff',     // bg-indigo-50
+                       cardBorder: '#c7d2fe', // border-indigo-200
+                       timeBg: '#e0e7ff',     // bg-indigo-100
+                       timeText: '#3730a3',   // text-indigo-800
+                       timeBorder: '#c7d2fe', // border-indigo-200
+                       titleText: '#312e81',  // text-indigo-900
+                       subText: '#4f46e5'     // text-indigo-600
+                   } : {
+                       cardBg: '#f0fdf4',     // bg-emerald-50
+                       cardBorder: '#a7f3d0', // border-emerald-200
+                       timeBg: '#d1fae5',     // bg-emerald-100
+                       timeText: '#065f46',   // text-emerald-800
+                       timeBorder: '#a7f3d0', // border-emerald-200
+                       titleText: '#064e3b',  // text-emerald-900
+                       subText: '#059669'     // text-emerald-600
+                   };
 
-                 return (
-                   <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '30px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', overflow: 'hidden' }}>
-                     
-                     <table style={{ width: '100%', marginBottom: '15px', borderCollapse: 'collapse' }}>
-                        <tbody>
-                          <tr>
-                            <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
-                              <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 6px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
-                              <h2 style={{ fontSize: '14px', fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0, display: 'inline-block' }}>
-                                {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
-                              </h2>
-                            </td>
-                            <td style={{ textAlign: 'left', verticalAlign: 'bottom' }}>
-                              <div style={{ fontSize: '12px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '6px', backgroundColor: '#10b981', color: '#ffffff', marginBottom: '6px', display: 'inline-block' }}>العام الدراسي الحالي</div>
-                              <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
-                            </td>
-                          </tr>
-                        </tbody>
-                     </table>
-
-                     <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '8px', tableLayout: 'fixed' }}>
-                       <thead>
-                         <tr>
-                           <th style={{ width: '100px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>اليوم / الحصة</th>
-                           {dynamicPeriods.map(p => (
-                             <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>
-                               الحصة {p}
-                             </th>
-                           ))}
-                         </tr>
-                       </thead>
-                       <tbody>
-                         {DAYS.map((day, dIdx) => (
-                           <tr key={day.id}>
-                             <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '14px' }}>{day.name}</td>
-                             {dynamicPeriods.map((p) => {
-                               const slot = schedules.find(s => String(s.day) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
-                               
-                               return (
-                                 <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '4px', textAlign: 'center', verticalAlign: 'middle', height: '110px' }}>
-                                   {slot ? (
-                                     <div style={{ padding: '6px', border: `1px solid ${printTheme.cardBorder}`, borderRadius: '6px', backgroundColor: printTheme.cardBg, textAlign: 'center', height: '100%', boxSizing: 'border-box' }}>
-                                       
-                                       <div style={{ fontSize: '9px', fontWeight: 'bold', color: printTheme.timeText, backgroundColor: printTheme.timeBg, border: `1px solid ${printTheme.timeBorder}`, padding: '2px 4px', borderRadius: '4px', marginBottom: '4px', display: 'inline-block' }} dir="ltr">
-                                          {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
-                                       </div>
-
-                                       <div style={{ fontSize: '11px', fontWeight: 'bold', color: printTheme.titleText, marginBottom: '2px', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
-                                       <div style={{ fontSize: '9px', color: printTheme.subText, marginBottom: '4px', lineHeight: '1.2', fontWeight: 'bold' }}>
-                                         {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
-                                       </div>
-                                       
-                                       {slot.zoom_link && (
-                                         <div style={{ marginTop: '4px' }}>
-                                            <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '9px', fontWeight: 'bold', textDecoration: 'none', padding: '4px 8px', borderRadius: '4px' }}>
-                                              رابط البث
-                                            </a>
-                                         </div>
-                                       )}
-                                     </div>
-                                   ) : (<span style={{ fontSize: '18px', fontWeight: 'bold', color: '#cbd5e1' }}>-</span>)}
-                                 </td>
-                               );
-                             })}
-                           </tr>
-                         ))}
-                       </tbody>
-                     </table>
-
-                     <table style={{ width: '100%', marginTop: '15px', borderTop: '2px solid #cbd5e1', paddingTop: '10px' }}>
-                        <tbody>
-                           <tr>
+                   return (
+                     <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '30px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', overflow: 'hidden' }}>
+                       
+                       <table style={{ width: '100%', marginBottom: '15px', borderCollapse: 'collapse' }}>
+                          <tbody>
+                            <tr>
                               <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
-                                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>مدرسة الرفعة النموذجية</div>
-                                 <div style={{ fontSize: '10px', color: '#64748b' }}>نظام الإدارة الأكاديمية الشامل</div>
+                                <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 6px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                                <h2 style={{ fontSize: '14px', fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0, display: 'inline-block' }}>
+                                  {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
+                                </h2>
                               </td>
-                              <td style={{ textAlign: 'left', verticalAlign: 'middle' }}>
-                                 <div style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>وثيقة إلكترونية معتمدة</div>
+                              <td style={{ textAlign: 'left', verticalAlign: 'bottom' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '6px', backgroundColor: '#10b981', color: '#ffffff', marginBottom: '6px', display: 'inline-block' }}>العام الدراسي الحالي</div>
+                                <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
                               </td>
-                           </tr>
-                        </tbody>
-                     </table>
+                            </tr>
+                          </tbody>
+                       </table>
 
-                   </div>
-                 );
-              })}
-            </div>
+                       <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '8px', tableLayout: 'fixed' }}>
+                         <thead>
+                           <tr>
+                             <th style={{ width: '100px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>اليوم / الحصة</th>
+                             {dynamicPeriods.map(p => (
+                               <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>
+                                 الحصة {p}
+                               </th>
+                             ))}
+                           </tr>
+                         </thead>
+                         <tbody>
+                           {DAYS.map((day, dIdx) => (
+                             <tr key={day.id}>
+                               <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '14px' }}>{day.name}</td>
+                               {dynamicPeriods.map((p) => {
+                                 const slot = schedules.find(s => String(s.day) === String(day.id) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
+                                 
+                                 return (
+                                   <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '4px', textAlign: 'center', verticalAlign: 'middle', height: '110px' }}>
+                                     {slot ? (
+                                       <div style={{ padding: '6px', border: `1px solid ${printTheme.cardBorder}`, borderRadius: '6px', backgroundColor: printTheme.cardBg, textAlign: 'center', height: '100%', boxSizing: 'border-box' }}>
+                                         
+                                         <div style={{ fontSize: '9px', fontWeight: 'bold', color: printTheme.timeText, backgroundColor: printTheme.timeBg, border: `1px solid ${printTheme.timeBorder}`, padding: '2px 4px', borderRadius: '4px', marginBottom: '4px', display: 'inline-block' }} dir="ltr">
+                                            {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                                         </div>
+
+                                         <div style={{ fontSize: '11px', fontWeight: 'bold', color: printTheme.titleText, marginBottom: '2px', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
+                                         <div style={{ fontSize: '9px', color: printTheme.subText, marginBottom: '4px', lineHeight: '1.2', fontWeight: 'bold' }}>
+                                           {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
+                                         </div>
+                                         
+                                         {slot.zoom_link && (
+                                           <div style={{ marginTop: '4px' }}>
+                                              <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '9px', fontWeight: 'bold', textDecoration: 'none', padding: '4px 8px', borderRadius: '4px' }}>
+                                                رابط البث
+                                              </a>
+                                           </div>
+                                         )}
+                                       </div>
+                                     ) : (<span style={{ fontSize: '18px', fontWeight: 'bold', color: '#cbd5e1' }}>-</span>)}
+                                   </td>
+                                 );
+                               })}
+                             </tr>
+                           ))}
+                         </tbody>
+                       </table>
+
+                       <table style={{ width: '100%', marginTop: '15px', borderTop: '2px solid #cbd5e1', paddingTop: '10px' }}>
+                          <tbody>
+                             <tr>
+                                <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
+                                   <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>مدرسة الرفعة النموذجية</div>
+                                   <div style={{ fontSize: '10px', color: '#64748b' }}>نظام الإدارة الأكاديمية الشامل</div>
+                                </td>
+                                <td style={{ textAlign: 'left', verticalAlign: 'middle' }}>
+                                   <div style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>وثيقة إلكترونية معتمدة</div>
+                                </td>
+                             </tr>
+                          </tbody>
+                       </table>
+
+                     </div>
+                   );
+                })}
+              </div>
+            )}
+
+            {/* 🚀 منطقة الطباعة المخفية الخاصة بالجدول المجمع (Master Print) بصيغة A3 فارهة */}
+            {filterType === 'master' && (
+              <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+                <div className="master-pdf-page" dir="rtl" style={{ width: '1600px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif' }}>
+                  
+                  <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #1e293b', paddingBottom: '15px' }}>
+                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 10px 0', color: '#0f172a', letterSpacing: '-0.5px' }}>الجدول المدرسي المجمع (العام)</h1>
+                    <div style={{ display: 'inline-block', fontSize: '14px', fontWeight: 'bold', padding: '6px 16px', borderRadius: '8px', backgroundColor: '#10b981', color: '#ffffff' }}>
+                       العام الدراسي الحالي - {new Date().toLocaleDateString('ar-EG')}
+                    </div>
+                  </div>
+
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '60px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '12px', fontSize: '14px', fontWeight: 900 }}>اليوم</th>
+                        <th style={{ width: '70px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '12px', fontSize: '14px', fontWeight: 900 }}>الحصة</th>
+                        {sections.map(sec => (
+                          <th key={sec.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', textAlign: 'center', padding: '12px', fontSize: '14px', fontWeight: 900 }}>
+                            {safeString(sec.name)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DAYS.map(day => (
+                        <React.Fragment key={day.id}>
+                          {dynamicPeriods.map((p, pIdx) => (
+                            <tr key={`${day.id}-${p}`}>
+                              {pIdx === 0 && (
+                                <td rowSpan={dynamicPeriods.length} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#0f172a', textAlign: 'center', padding: '8px', fontSize: '16px', fontWeight: 900 }}>
+                                  {day.name}
+                                </td>
+                              )}
+                              <td style={{ border: '1px solid #cbd5e1', backgroundColor: '#ffffff', color: '#334155', textAlign: 'center', padding: '8px', fontSize: '14px', fontWeight: 'bold' }}>
+                                الحصة {p}
+                              </td>
+                              {sections.map(sec => {
+                                const slot = schedules.find(s => s.day === day.id && s.period_number === p && String(s.section_id) === String(sec.id));
+                                return (
+                                  <td key={sec.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#ffffff', padding: '6px', textAlign: 'center', verticalAlign: 'middle', height: '65px' }}>
+                                    {slot ? (
+                                      <div style={{ padding: '4px', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#f8fafc', height: '100%', boxSizing: 'border-box' }}>
+                                         <div style={{ fontSize: '11px', fontWeight: 900, color: '#047857', marginBottom: '2px', lineHeight: '1.2' }}>{safeString(slot.subject_name)}</div>
+                                         <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', lineHeight: '1.2' }}>أ. {safeString(slot.teacher_name)}</div>
+                                      </div>
+                                    ) : (
+                                      <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#e2e8f0' }}>-</span>
+                                    )}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>
+                    تم إنشاء هذا الجدول تلقائياً بواسطة نظام الإدارة الأكاديمية الشامل - مدرسة الرفعة النموذجية
+                  </div>
+                </div>
+              </div>
+            )}
 
           </>
         ) : null}
