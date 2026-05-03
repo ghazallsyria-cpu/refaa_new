@@ -85,7 +85,6 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
-  // 🚀 خيارات الطباعة المتقدمة (تم نقلها من صفحة الإدارة للعمل على الثيم الليلي)
   const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
@@ -122,7 +121,6 @@ export default function PublicSchedulesViewPage() {
          supabase.from('auto_schedule_plans').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle()
       ]);
 
-      // 🚀 القراءة المباشرة والمضمونة للصلاحية من قاعدة البيانات
       let dbRole = safeString(userInfoRes.data?.role || currentRole, '').toLowerCase();
       let resolvedRole = dbRole;
       let isUserRestricted = false;
@@ -335,7 +333,6 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
-  // 🚀 أدوات الطباعة المتقدمة
   const toggleBatchPrintId = (id: string) => {
     setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -485,7 +482,7 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 مركز الطباعة المتقدم بالثيم الليلي */}
+      {/* 🚀 مركز الطباعة المتقدم */}
       <AnimatePresence>
         {isPrintCenterOpen && !isRestricted && (
           <>
@@ -791,7 +788,7 @@ export default function PublicSchedulesViewPage() {
               </div>
             </div>
 
-            {/* 🚀 منطقة الطباعة الخفية الموحدة للـ PDF - التصميم الكلاسيكي الأنيق */}
+            {/* 🚀 منطقة الطباعة الخفية للـ PDF مع ثيم الألوان المخصص */}
             <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
               {entitiesToPrint.map((entity, idx) => {
                  const isPrintTypeStudent = printMode === 'custom-batch' ? batchPrintType === 'section' : filterType === 'section';
@@ -799,6 +796,25 @@ export default function PublicSchedulesViewPage() {
                  const entId = String(entity.id);
                  const entName = entity.name || entity.users?.full_name || 'غير محدد';
                  const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
+
+                 // 🚀 تطبيق ثيم الألوان للطباعة ليكون واضحاً ومميزاً (بدون تغيير المنطق)
+                 const printTheme = isPrintTypeStudent ? {
+                     cardBg: '#eef2ff',     // bg-indigo-50
+                     cardBorder: '#c7d2fe', // border-indigo-200
+                     timeBg: '#e0e7ff',     // bg-indigo-100
+                     timeText: '#3730a3',   // text-indigo-800
+                     timeBorder: '#c7d2fe', // border-indigo-200
+                     titleText: '#312e81',  // text-indigo-900
+                     subText: '#4f46e5'     // text-indigo-600
+                 } : {
+                     cardBg: '#f0fdf4',     // bg-emerald-50
+                     cardBorder: '#a7f3d0', // border-emerald-200
+                     timeBg: '#d1fae5',     // bg-emerald-100
+                     timeText: '#065f46',   // text-emerald-800
+                     timeBorder: '#a7f3d0', // border-emerald-200
+                     titleText: '#064e3b',  // text-emerald-900
+                     subText: '#059669'     // text-emerald-600
+                 };
 
                  return (
                    <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '30px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', overflow: 'hidden' }}>
@@ -841,14 +857,14 @@ export default function PublicSchedulesViewPage() {
                                return (
                                  <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '4px', textAlign: 'center', verticalAlign: 'middle', height: '110px' }}>
                                    {slot ? (
-                                     <div style={{ padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', textAlign: 'center', height: '100%', boxSizing: 'border-box' }}>
+                                     <div style={{ padding: '6px', border: `1px solid ${printTheme.cardBorder}`, borderRadius: '6px', backgroundColor: printTheme.cardBg, textAlign: 'center', height: '100%', boxSizing: 'border-box' }}>
                                        
-                                       <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#047857', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 4px', borderRadius: '4px', marginBottom: '4px', display: 'inline-block' }} dir="ltr">
+                                       <div style={{ fontSize: '9px', fontWeight: 'bold', color: printTheme.timeText, backgroundColor: printTheme.timeBg, border: `1px solid ${printTheme.timeBorder}`, padding: '2px 4px', borderRadius: '4px', marginBottom: '4px', display: 'inline-block' }} dir="ltr">
                                           {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                        </div>
 
-                                       <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#0f172a', marginBottom: '2px', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
-                                       <div style={{ fontSize: '9px', color: '#475569', marginBottom: '4px', lineHeight: '1.2' }}>
+                                       <div style={{ fontSize: '11px', fontWeight: 'bold', color: printTheme.titleText, marginBottom: '2px', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
+                                       <div style={{ fontSize: '9px', color: printTheme.subText, marginBottom: '4px', lineHeight: '1.2', fontWeight: 'bold' }}>
                                          {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
                                        </div>
                                        
