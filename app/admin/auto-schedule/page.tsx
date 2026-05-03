@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wand2, Settings, Play, CheckCircle2, AlertTriangle, 
-  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload, Video, Printer, FileDown, CheckSquare2, Square
+  Loader2, Save, X, CalendarDays, Clock, Users, Trash2, SlidersHorizontal, Layers, CheckSquare, Ban, Briefcase, UserCog, LayoutGrid, List, MousePointerClick, AlertOctagon, Repeat, Activity, XCircle, CheckCircle, CloudDownload, Video, Printer, FileDown, CheckSquare2, Square, ArrowLeftRight
 } from 'lucide-react';
 
 const timeToMinutes = (timeStr: string) => {
@@ -67,13 +67,16 @@ export default function AutoScheduleGenerator() {
   const [uniqueSubjectClasses, setUniqueSubjectClasses] = useState<{subj_id: string, class_id: string, class_name: string, subj_name: string}[]>([]);
   const [subjectQuotas, setSubjectQuotas] = useState<Record<string, number>>({});
   
-  // 🚀 الهيكل الجديد لقيود المعلم (مصفوفة الإحداثيات)
   const [teacherConstraints, setTeacherConstraints] = useState<Record<string, string[]>>({});
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
   const [selectedTeacherObj, setSelectedTeacherObj] = useState<{id: string, name: string} | null>(null);
   const [tempConstraints, setTempConstraints] = useState<string[]>([]);
 
   const [isBudgetSaved, setIsBudgetSaved] = useState(false);
+
+  // 🚀 حالات التبديل التفاعلي اليدوي
+  const [isSwapMode, setIsSwapMode] = useState(false);
+  const [swapSource, setSwapSource] = useState<{day: number, period_number: number, slot: any} | null>(null);
 
   const workingDays = [1, 2, 3, 4, 5]; 
   
@@ -230,7 +233,7 @@ export default function AutoScheduleGenerator() {
 
         let initialConstraints: Record<string, string[]> = {};
         if (typeof window !== 'undefined') {
-          const savedConstraintsStr = localStorage.getItem('auto_schedule_teacher_constraints_v3'); // مفتاح جديد لتجنب تداخل البيانات القديمة
+          const savedConstraintsStr = localStorage.getItem('auto_schedule_teacher_constraints_v3');
           if (savedConstraintsStr) { try { initialConstraints = JSON.parse(savedConstraintsStr); } catch (e) {} }
         }
         setTeacherConstraints(initialConstraints);
@@ -257,12 +260,9 @@ export default function AutoScheduleGenerator() {
     alert('تم اعتماد الميزانية بنجاح.');
   };
 
-  // 🚀 دوال التحكم بالمصفوفة الزمنية الجديدة
   const openTeacherConstraintsModal = (id: string, name: string) => {
     setSelectedTeacherObj({ id, name });
     let existing = teacherConstraints[id];
-    
-    // إذا لم يكن للمعلم قيود مسبقة، يتم فتح جميع الحصص افتراضياً
     if (!existing) {
         existing = [];
         workingDays.forEach(d => {
@@ -335,15 +335,16 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Matrix Driven Constraints)
+  // 🧠 THE CORE ALGORITHM
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
+    setIsSwapMode(false); setSwapSource(null);
     
-    addLog("🚀 بدء التوليد... (تطبيق إحداثيات الدوام الدقيقة لكل معلم)");
+    addLog("🚀 بدء التوليد... (تطبيق السعة الحقيقية: 25 للمتوسط، 30 للثانوي)");
     await new Promise(r => setTimeout(r, 100)); 
     
     const domQuotas = { ...subjectQuotas };
@@ -359,14 +360,12 @@ export default function AutoScheduleGenerator() {
       const key = section ? `${ts.subject_id}_${section.class_id}` : '';
       const quota = key && domQuotas[key] !== undefined ? domQuotas[key] : 0;
       
-      // 🚀 جلب المصفوفة المسموحة للمعلم
       let allowedSlots = teacherConstraints[ts.teacher_id];
       if (!allowedSlots) {
           allowedSlots = [];
           workingDays.forEach(d => dynamicPeriods.forEach(p => allowedSlots.push(`${d}-${p}`)));
       }
       
-      // حساب الأيام المتاحة (يوم واحد على الأقل متاح فيه حصة)
       const allowedDaysSet = new Set(allowedSlots.map(slot => parseInt(slot.split('-')[0])));
       const available_days = Array.from(allowedDaysSet);
 
@@ -374,7 +373,10 @@ export default function AutoScheduleGenerator() {
       const isEhabPhysics = isEhab && section?.stage === 'high' && ((ts.subjects?.name || '').includes('فيزياء') || (ts.subjects?.name || '').includes('فيزيا'));
       const zoomLink = ts.teachers?.users?.zoom_link || ts.teachers?.zoom_link || null;
 
-      const maxPossibleSlots = allowedSlots.length;
+      const stageMaxDailyPeriods = section?.stage === 'middle' ? 5 : 6;
+      const validSlots = allowedSlots.filter(s => parseInt(s.split('-')[1]) <= stageMaxDailyPeriods);
+      const maxPossibleSlots = validSlots.length;
+
       let effectiveQuota = quota;
       let forcedWaitlistCount = 0;
       if (quota > maxPossibleSlots) {
@@ -387,7 +389,7 @@ export default function AutoScheduleGenerator() {
         teacher_name: ts.teachers?.users?.full_name || 'غير معروف',
         subject_name: ts.subjects?.name || 'مادة', class_name: section?.class_name, section_level: section?.level,
         stage: section?.stage, 
-        allowed_slots: allowedSlots, // المصفوفة الدقيقة
+        allowed_slots: allowedSlots, 
         available_days: available_days,
         isVIP: isEhabPhysics, zoom_link: zoomLink
       };
@@ -426,11 +428,15 @@ export default function AutoScheduleGenerator() {
 
         const teacherMaxDailyLoad: Record<string, number> = {};
         Object.keys(teacherTotalQuotas).forEach(tId => {
-           // حساب الحمل الأقصى بناءً على عدد الأيام التي يداوم بها
            const assignment = teacherAssignments.find(ta => ta.teacher_id === tId);
            const availableDaysCount = assignment ? assignment.available_days.length : 5;
+           
+           const hasVIP = teacherAssignments.some(ta => ta.teacher_id === tId && ta.isVIP);
+           let finalDays = availableDaysCount;
+           if (hasVIP && finalDays > 2) finalDays = 2;
+           
            const total = teacherTotalQuotas[tId];
-           let baseMax = Math.ceil(total / (availableDaysCount || 1));
+           let baseMax = Math.ceil(total / (finalDays || 1));
            if (baseMax < 2) baseMax = 2; 
            teacherMaxDailyLoad[tId] = baseMax;
         });
@@ -440,7 +446,7 @@ export default function AutoScheduleGenerator() {
             teacherDailyLoad[ta.teacher_id] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }; 
         });
 
-        const sortedAssignments = [...teacherAssignments].sort((a, b) => {
+        const sortedAssignments = shuffleArray([...teacherAssignments]).sort((a, b) => {
           if (a.isVIP && !b.isVIP) return -1;
           if (!a.isVIP && b.isVIP) return 1;
           
@@ -454,7 +460,7 @@ export default function AutoScheduleGenerator() {
           
           if (a.weekly_quota !== b.weekly_quota) return b.weekly_quota - a.weekly_quota;
           
-          return Math.random() - 0.5;
+          return 0;
         });
 
         const commitPlacement = (section, assignment, day, period) => {
@@ -535,7 +541,6 @@ export default function AutoScheduleGenerator() {
             // Phase 1
             for (const day of getBestDays()) {
               if (isPlaced) break;
-              // 🚀 الخوارزمية تبحث فقط داخل المصفوفة المسموحة!
               let availablePeriods = periods.filter(p => p.stage === section.stage && !p.is_break && assignment.allowed_slots.includes(`${day}-${p.period_number}`) && p.period_number <= stageMaxPeriods);
               if (assignment.isVIP) availablePeriods = availablePeriods.filter(p => p.period_number <= 3);
               
@@ -585,7 +590,6 @@ export default function AutoScheduleGenerator() {
                   if (secSlotIdx !== -1 && teachSlotIdx === -1) {
                     const blockingSlot = finalSchedule[secSlotIdx];
                     if (!blockingSlot.isVIP) {
-                      // 🚀 استخدام الإحداثيات للمعلم المُزاح
                       let allowedSlotsZ = teacherConstraints[blockingSlot.teacher_id];
                       if (!allowedSlotsZ) {
                           allowedSlotsZ = [];
@@ -681,7 +685,6 @@ export default function AutoScheduleGenerator() {
                                  const wSubjectCountAltDay = wSubjectSlots.filter(s => s.day === altDay).length;
                                  const wAssignment = teacherAssignments.find(ta => ta.teacher_id === teacherBlockingSlot.teacher_id && ta.subject_id === teacherBlockingSlot.subject_id);
                                  const wAllowedDaysCount = wAssignment ? wAssignment.available_days.length : 5;
-                                 
                                  let wMaxPerDay = Math.ceil((wAssignment?.weekly_quota || 1) / (wAllowedDaysCount || 1));
                                  if (wMaxPerDay < 1) wMaxPerDay = 1;
 
@@ -753,6 +756,114 @@ export default function AutoScheduleGenerator() {
       addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل دون أي تعارضات.`);
     }
     setGenerating(false);
+  };
+
+  // 🚀 دالة التبديل التفاعلي داخل الجدول
+  const executeInteractiveSwap = (targetDay: number, targetPeriod: number, targetSlot: any) => {
+    if (!swapSource) return;
+
+    const sourceSlot = swapSource.slot;
+    const section = sections.find(s => s.id === sourceSlot.section_id);
+    const stageMaxPeriods = section?.stage === 'middle' ? 5 : 6;
+
+    // حماية من تجاوز السعة
+    if (targetPeriod > stageMaxPeriods) {
+       alert("❌ هذه الحصة تتجاوز سعة المرحلة الدراسية المحددة للفصل!");
+       setSwapSource(null); return;
+    }
+
+    // إذا ضغط على نفس الحصة مرتين، نلغي التحديد
+    if (targetDay === swapSource.day && targetPeriod === swapSource.period_number) {
+       setSwapSource(null); return; 
+    }
+
+    const pDataSource = periods.find(p => p.stage === sourceSlot.stage && p.period_number === swapSource.period_number);
+    const pDataTarget = periods.find(p => p.stage === sourceSlot.stage && p.period_number === targetPeriod);
+
+    if(!pDataSource || !pDataTarget) {
+        alert('❌ خطأ في أوقات الحصص المسجلة.');
+        setSwapSource(null); return;
+    }
+
+    const getTeacherAllowedSlots = (tId: string) => {
+        let slots = teacherConstraints[tId];
+        if (!slots) {
+            slots = [];
+            workingDays.forEach(d => dynamicPeriods.forEach(p => slots.push(`${d}-${p}`)));
+        }
+        return slots;
+    };
+
+    // 1. فحص إمكانية نقل الحصة الأولى (المصدر) إلى المكان الهدف
+    const allowedA = getTeacherAllowedSlots(sourceSlot.teacher_id);
+    if (!allowedA.includes(`${targetDay}-${targetPeriod}`)) {
+        alert(`❌ لا يمكن النقل: المعلم (${sourceSlot.teacher_name}) غير متاح في يوم ${getDayName(targetDay)} الحصة ${targetPeriod} بناءً على مصفوفة الدوام.`);
+        setSwapSource(null); return;
+    }
+
+    const teacherABusy = generatedSchedules.some(s => 
+        s.id !== sourceSlot.id && 
+        (!targetSlot || s.id !== targetSlot.id) && 
+        s.teacher_id === sourceSlot.teacher_id && 
+        s.day === targetDay && 
+        isTimeIntersecting(s.start_time, s.end_time, pDataTarget.start_time, pDataTarget.end_time)
+    );
+
+    if (teacherABusy) {
+        alert(`❌ لا يمكن النقل: المعلم (${sourceSlot.teacher_name}) لديه حصة في فصل آخر في هذا الوقت!`);
+        setSwapSource(null); return;
+    }
+
+    // 2. فحص إمكانية نقل الحصة الهدف (إذا وجدت) إلى مكان المصدر
+    if (targetSlot) {
+        const allowedB = getTeacherAllowedSlots(targetSlot.teacher_id);
+        if (!allowedB.includes(`${swapSource.day}-${swapSource.period_number}`)) {
+            alert(`❌ لا يمكن التبديل: المعلم (${targetSlot.teacher_name}) غير متاح في يوم ${getDayName(swapSource.day)} الحصة ${swapSource.period_number} بناءً على مصفوفة الدوام.`);
+            setSwapSource(null); return;
+        }
+
+        const teacherBBusy = generatedSchedules.some(s => 
+            s.id !== targetSlot.id && 
+            s.id !== sourceSlot.id && 
+            s.teacher_id === targetSlot.teacher_id && 
+            s.day === swapSource.day && 
+            isTimeIntersecting(s.start_time, s.end_time, pDataSource.start_time, pDataSource.end_time)
+        );
+
+        if (teacherBBusy) {
+            alert(`❌ لا يمكن التبديل: المعلم (${targetSlot.teacher_name}) لديه حصة في فصل آخر في وقت المصدر!`);
+            setSwapSource(null); return;
+        }
+    }
+
+    // 🚀 تنفيذ التبديل الفعلي وتحديث الجدول
+    let newSchedules = [...generatedSchedules];
+    let aIndex = newSchedules.findIndex(s => s.id === sourceSlot.id);
+    newSchedules[aIndex] = {
+        ...newSchedules[aIndex],
+        day: targetDay,
+        period_number: targetPeriod,
+        start_time: pDataTarget.start_time,
+        end_time: pDataTarget.end_time
+    };
+
+    if (targetSlot) {
+        let bIndex = newSchedules.findIndex(s => s.id === targetSlot.id);
+        newSchedules[bIndex] = {
+            ...newSchedules[bIndex],
+            day: swapSource.day,
+            period_number: swapSource.period_number,
+            start_time: pDataSource.start_time,
+            end_time: pDataSource.end_time
+        };
+    }
+
+    newSchedules.sort((a, b) => a.day - b.day || a.period_number - b.period_number);
+    setGeneratedSchedules(newSchedules);
+    setSwapSource(null);
+    setIsSwapMode(false); // نخرج من وضع التبديل بعد نجاح العملية
+    saveToLocalDraft(newSchedules, unplacedLessons);
+    alert(`✅ تمت عملية التبديل اليدوي بنجاح وبدون أي تعارض.`);
   };
 
   const generateAuditReport = () => {
@@ -1260,7 +1371,7 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
-      {/* Modal التسكين اليدوي */}
+      {/* Modal التسكين اليدوي من سلة الانتظار */}
       <AnimatePresence>
         {manualAssignModalOpen && lessonToAssign && (
           <>
@@ -1393,7 +1504,6 @@ export default function AutoScheduleGenerator() {
                       </thead>
                       <tbody>
                         {workingDays.map(day => {
-                          // فحص إذا كان اليوم بأكمله محدد
                           const dayKeys = dynamicPeriods.map(p => `${day}-${p}`);
                           const allDaySelected = dayKeys.every(k => tempConstraints.includes(k));
                           
@@ -1639,9 +1749,22 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
-                     {/* أزرار الطباعة والتدقيق */}
+                     {/* 🚀 زر التبديل التفاعلي الجديد */}
                      {displayMode === 'grid' && (
                        <>
+                         <button 
+                           onClick={() => {
+                             if(gridFilterType !== 'section') {
+                                alert("❌ خاصية التبديل اليدوي تعمل فقط عند عرض جدول لفصل محدد.");
+                                return;
+                             }
+                             setIsSwapMode(!isSwapMode);
+                             setSwapSource(null);
+                           }} 
+                           className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${isSwapMode ? 'bg-rose-500 text-white shadow-md animate-pulse border border-rose-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'}`}
+                         >
+                           <ArrowLeftRight className="w-4 h-4" /> تبديل تفاعلي
+                         </button>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
                          </button>
@@ -1656,6 +1779,20 @@ export default function AutoScheduleGenerator() {
                    </div>
                  )}
               </div>
+
+              {/* 🚀 بانر الإرشادات للتبديل التفاعلي */}
+              <AnimatePresence>
+                {isSwapMode && (
+                   <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} exit={{opacity:0, height:0}} className="bg-rose-50 border-b border-rose-200 p-3 flex flex-col md:flex-row md:items-center gap-3 shrink-0">
+                      <div className="bg-rose-500 text-white p-2 rounded-full w-fit"><ArrowLeftRight className="w-4 h-4"/></div>
+                      <div>
+                         <p className="text-sm font-black text-rose-800">وضع التبديل التفاعلي مُفعل</p>
+                         <p className="text-xs font-bold text-rose-600">انقر على الحصة التي تريد نقلها، ثم انقر على خانة (فارغة) أو (حصة أخرى) ليتم التبديل بينهما. النظام سيفحص التعارض تلقائياً.</p>
+                      </div>
+                      <button onClick={()=>{setIsSwapMode(false); setSwapSource(null);}} className="md:mr-auto bg-white border border-rose-200 text-rose-600 px-4 py-2 rounded-xl text-xs font-black hover:bg-rose-100 transition-colors w-fit">إلغاء التبديل</button>
+                   </motion.div>
+                )}
+              </AnimatePresence>
               
               <div className="flex-1 bg-slate-50/30 relative">
                 {generatedSchedules.length === 0 ? (
@@ -1681,7 +1818,7 @@ export default function AutoScheduleGenerator() {
                 ) : (
                   <div className="absolute inset-0 flex flex-col w-full h-full relative">
                     <div className="p-4 bg-white border-b border-slate-200 flex flex-col sm:flex-row gap-3 shrink-0">
-                      <select value={gridFilterType} onChange={(e) => { setGridFilterType(e.target.value as any); setGridFilterId(''); }} className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-sm text-slate-900 outline-none focus:border-indigo-500">
+                      <select value={gridFilterType} onChange={(e) => { setGridFilterType(e.target.value as any); setGridFilterId(''); setIsSwapMode(false); setSwapSource(null); }} className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-sm text-slate-900 outline-none focus:border-indigo-500">
                         <option value="section">عرض جدول (فصل محدد)</option><option value="teacher">عرض جدول (معلم محدد)</option>
                       </select>
                       <select value={gridFilterId} onChange={(e) => setGridFilterId(e.target.value)} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 outline-none focus:border-indigo-500">
@@ -1709,11 +1846,32 @@ export default function AutoScheduleGenerator() {
                                   {dynamicPeriods.map(p => {
                                     const slot = generatedSchedules.find(s => s.day === day && s.period_number === p && (gridFilterType === 'section' ? s.section_id === gridFilterId : s.teacher_id === gridFilterId));
                                     
+                                    // 🚀 منطق الألوان الخاص بالتبديل التفاعلي
+                                    const isSource = swapSource && swapSource.day === day && swapSource.period_number === p;
+                                    const isValidTarget = isSwapMode && swapSource && !isSource;
+
                                     return (
-                                      <td key={p} className="p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7rem] align-top hover:bg-indigo-50/50 transition-colors">
+                                      <td 
+                                        key={p} 
+                                        onClick={() => {
+                                          if (!isSwapMode || gridFilterType !== 'section') return;
+                                          if (!swapSource) {
+                                             if (slot) setSwapSource({day, period_number: p, slot});
+                                          } else {
+                                             if (isSource) setSwapSource(null); // إلغاء التحديد
+                                             else executeInteractiveSwap(day, p, slot);
+                                          }
+                                        }}
+                                        className={`p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7rem] align-top transition-all duration-200 
+                                          ${isSwapMode && !swapSource && slot ? 'cursor-pointer hover:bg-rose-50 hover:ring-2 hover:ring-rose-200 hover:ring-inset' : ''}
+                                          ${isValidTarget ? 'cursor-pointer hover:bg-emerald-50 hover:ring-2 hover:ring-emerald-400 hover:ring-inset bg-slate-50/50' : ''}
+                                          ${isSource ? 'ring-4 ring-rose-500 ring-inset bg-rose-100 scale-[0.98]' : ''}
+                                          ${!isSwapMode ? 'hover:bg-indigo-50/50' : ''}
+                                        `}
+                                      >
                                         {slot ? (
-                                          <div className="bg-white border border-indigo-200 shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative">
-                                            <div className="font-black text-indigo-900 text-xs leading-tight mb-1 w-full whitespace-normal break-words" title={slot.subject_name}>{slot.subject_name}</div>
+                                          <div className={`bg-white border shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative transition-colors ${isSource ? 'border-rose-400 bg-rose-50' : 'border-indigo-200'}`}>
+                                            <div className={`font-black text-xs leading-tight mb-1 w-full whitespace-normal break-words ${isSource ? 'text-rose-900' : 'text-indigo-900'}`} title={slot.subject_name}>{slot.subject_name}</div>
                                             <div className="font-bold text-[9px] sm:text-[10px] text-slate-800 bg-slate-50 px-1.5 py-1 rounded-md w-full whitespace-normal break-words leading-tight border border-slate-200" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
                                           </div>
                                         ) : (<div className="flex items-center justify-center h-full text-slate-300"><span className="text-xl opacity-50">-</span></div>)}
