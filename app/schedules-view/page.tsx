@@ -75,7 +75,6 @@ export default function PublicSchedulesViewPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [latestPlanName, setLatestPlanName] = useState<string>('');
 
-  // 🚀 إضافة خيار Master View للمدير
   const [filterType, setFilterType] = useState<'section' | 'teacher' | 'master'>('section');
   const [filterId, setFilterId] = useState<string>('');
   
@@ -257,18 +256,26 @@ export default function PublicSchedulesViewPage() {
           const uniqueSecsMap = new Map();
           const uniqueTeachMap = new Map();
 
+          // 🚀 الترتيب الدقيق المتسلسل: نضمن استخراج المستوى (Level) لترتيب الفصول (السادس للثاني عشر)
           formattedSchedules.forEach(s => {
             if (!uniqueSecsMap.has(s.section_id)) {
                const sec = sectionsData.find(x => String(x.id) === s.section_id);
-               uniqueSecsMap.set(s.section_id, { id: s.section_id, name: s.section_name, classes: sec?.classes });
+               const cData = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
+               const level = cData?.level || 0;
+               uniqueSecsMap.set(s.section_id, { id: s.section_id, name: s.section_name, level: level });
             }
             if (!uniqueTeachMap.has(s.teacher_id)) {
                uniqueTeachMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name, department_id: s.department_id });
             }
           });
 
-          const secsArray = Array.from(uniqueSecsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-          const teachArray = Array.from(uniqueTeachMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+          // 🚀 الفرز باستخدام الـ Level أولاً، ثم أبجدياً إذا تساوى المستوى
+          const secsArray = Array.from(uniqueSecsMap.values()).sort((a, b) => {
+             if (a.level !== b.level) return a.level - b.level;
+             return String(a.name).localeCompare(String(b.name));
+          });
+          
+          const teachArray = Array.from(uniqueTeachMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
           setSections(secsArray);
           setUniqueTeachers(teachArray);
@@ -295,7 +302,7 @@ export default function PublicSchedulesViewPage() {
   }, [periods]);
 
   const currentViewSchedules = useMemo(() => {
-     if (filterType === 'master') return schedules; // Master returns all
+     if (filterType === 'master') return schedules; 
 
      return schedules.filter(s => {
         if (isRestricted) {
@@ -343,10 +350,10 @@ export default function PublicSchedulesViewPage() {
 
   const selectAllBatchIds = () => {
     if (batchPrintType === 'section') {
-      const availableSecs = sections.map(s=>s.id);
+      const availableSecs = sections.map(s=>String(s.id));
       setBatchPrintIds(availableSecs);
     } else {
-      setBatchPrintIds(uniqueTeachers.map(t=>t.id));
+      setBatchPrintIds(uniqueTeachers.map(t=>String(t.id)));
     }
   };
 
@@ -359,17 +366,16 @@ export default function PublicSchedulesViewPage() {
 
     let entities: any[] = [];
     
-    // 🚀 حالة الطباعة للجدول المجمع
     if (mode === 'master-print') {
-       entities = ['MASTER_GRID']; // Dummy entity to trigger print map loop once
+       entities = ['MASTER_GRID']; 
     } else if (mode === 'single') {
       const singleEntity = filterType === 'teacher' ? uniqueTeachers.find(t => String(t.id) === String(filterId)) : sections.find(s => String(s.id) === String(filterId));
       if(singleEntity) entities = [singleEntity];
     } else if (mode === 'custom-batch') {
       if (batchPrintType === 'section') {
-          entities = sections.filter(s => batchPrintIds.includes(s.id));
+          entities = sections.filter(s => batchPrintIds.includes(String(s.id)));
       } else {
-          entities = uniqueTeachers.filter(t => batchPrintIds.includes(t.id));
+          entities = uniqueTeachers.filter(t => batchPrintIds.includes(String(t.id)));
       }
     }
 
@@ -390,7 +396,7 @@ export default function PublicSchedulesViewPage() {
         const containers = document.querySelectorAll(containerClass);
         if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
 
-        // 🚀 للمجمع نستخدم ورقة A3 فارهة بالعرض لضمان دقة ووضوح الأرقام الكثيرة
+        // 🚀 استخدام A3 عالية الدقة للجدول المجمع
         const paperFormat = mode === 'master-print' ? 'a3' : 'a4';
         const pdf = new jsPDFModule('landscape', 'mm', paperFormat);
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -400,30 +406,30 @@ export default function PublicSchedulesViewPage() {
           if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
-          // مقياس عالي الدقة للجدول المجمع
-          const canvas = await html2canvasModule(el, { scale: mode === 'master-print' ? 3 : 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          // 🚀 رفع دقة الرسم (Scale) لـ 4 للجدول المجمع لضمان وضوح فائق
+          const scaleValue = mode === 'master-print' ? 4 : 2;
+          const canvas = await html2canvasModule(el, { scale: scaleValue, useCORS: true, backgroundColor: '#ffffff', logging: false });
           const imgData = canvas.toDataURL('image/png', 1.0);
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
-          if (mode !== 'master-print') {
-             const links = el.querySelectorAll('a.zoom-link');
-             const elementRect = el.getBoundingClientRect();
+          // تطبيق الروابط في الـ PDF
+          const links = el.querySelectorAll('a.zoom-link');
+          const elementRect = el.getBoundingClientRect();
 
-             links.forEach((link: any) => {
-               const rect = link.getBoundingClientRect();
-               if (elementRect.width > 0 && elementRect.height > 0) {
-                 const relativeX = (rect.left - elementRect.left) / elementRect.width;
-                 const relativeY = (rect.top - elementRect.top) / elementRect.height;
-                 const pdfX = relativeX * pdfWidth; 
-                 const pdfY = relativeY * pdfHeight;
-                 const finalUrl = normalizeUrl(link.href);
-                 
-                 if (finalUrl) {
-                    pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
-                 }
-               }
-             });
-          }
+          links.forEach((link: any) => {
+            const rect = link.getBoundingClientRect();
+            if (elementRect.width > 0 && elementRect.height > 0) {
+              const relativeX = (rect.left - elementRect.left) / elementRect.width;
+              const relativeY = (rect.top - elementRect.top) / elementRect.height;
+              const pdfX = relativeX * pdfWidth; 
+              const pdfY = relativeY * pdfHeight;
+              const finalUrl = normalizeUrl(link.href);
+              
+              if (finalUrl) {
+                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+              }
+            }
+          });
         }
 
         let fileName = 'الجدول_الدراسي.pdf';
@@ -496,7 +502,7 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 مركز الطباعة المتقدم بالثيم الليلي */}
+      {/* 🚀 مركز الطباعة المتقدم */}
       <AnimatePresence>
         {isPrintCenterOpen && !isRestricted && (
           <>
@@ -533,15 +539,15 @@ export default function PublicSchedulesViewPage() {
                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {batchPrintType === 'section' 
                       ? sections.map(s => (
-                          <div key={s.id} onClick={() => toggleBatchPrintId(s.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(s.id) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
-                             {batchPrintIds.includes(s.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
-                             <span className="text-xs font-bold truncate">{s.name}</span>
+                          <div key={s.id} onClick={() => toggleBatchPrintId(String(s.id))} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(String(s.id)) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
+                             {batchPrintIds.includes(String(s.id)) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{safeString(s.name)}</span>
                           </div>
                       ))
                       : uniqueTeachers.map(t => (
-                          <div key={t.id} onClick={() => toggleBatchPrintId(t.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(t.id) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
-                             {batchPrintIds.includes(t.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
-                             <span className="text-xs font-bold truncate">{t.name}</span>
+                          <div key={t.id} onClick={() => toggleBatchPrintId(String(t.id))} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(String(t.id)) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
+                             {batchPrintIds.includes(String(t.id)) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
+                             <span className="text-xs font-bold truncate">{safeString(t.name)}</span>
                           </div>
                       ))
                     }
@@ -725,12 +731,17 @@ export default function PublicSchedulesViewPage() {
                                   return (
                                     <td key={sec.id} className="p-2 border-l border-white/5 align-middle h-20">
                                       {slot ? (
-                                        <div className="bg-[#02040a]/60 border border-indigo-500/20 rounded-xl p-2 text-center h-full flex flex-col justify-center gap-1 shadow-sm hover:border-indigo-400 hover:bg-indigo-900/20 transition-all">
+                                        <div className="bg-[#02040a]/60 border border-indigo-500/20 rounded-xl p-2 text-center h-full flex flex-col justify-center gap-1 shadow-sm hover:border-indigo-400 hover:bg-indigo-900/20 transition-all relative">
                                           <div className="text-[9px] text-amber-400 font-mono font-black bg-slate-900/80 rounded px-1.5 py-0.5 mx-auto w-max" dir="ltr">
                                             {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                           </div>
                                           <span className="text-xs sm:text-sm font-black text-emerald-300 line-clamp-1" title={safeString(slot.subject_name)}>{safeString(slot.subject_name)}</span>
                                           <span className="text-[10px] text-slate-400 font-bold line-clamp-1" title={safeString(slot.teacher_name)}>أ. {safeString(slot.teacher_name)}</span>
+                                          {slot.zoom_link && (
+                                            <a href={normalizeUrl(slot.zoom_link)} target="_blank" rel="noopener noreferrer" className="absolute top-1 right-1 text-blue-400 hover:text-blue-300" title="رابط زوم">
+                                              <Video className="w-3.5 h-3.5" />
+                                            </a>
+                                          )}
                                         </div>
                                       ) : (
                                         <div className="flex items-center justify-center h-full opacity-10 text-slate-500 font-black">-</div>
@@ -850,7 +861,7 @@ export default function PublicSchedulesViewPage() {
                                       {showZoom && (
                                         <div className="mt-auto pt-2 w-full">
                                            <a 
-                                             href={slot.zoom_link} 
+                                             href={normalizeUrl(slot.zoom_link)} 
                                              target="_blank" 
                                              rel="noopener noreferrer" 
                                              className={`w-full flex items-center justify-center gap-1.5 text-[10px] font-black rounded-lg py-1.5 transition-colors relative z-20 ${isPast ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]'}`}
@@ -974,19 +985,11 @@ export default function PublicSchedulesViewPage() {
                          </tbody>
                        </table>
 
-                       <table style={{ width: '100%', marginTop: '15px', borderTop: '2px solid #cbd5e1', paddingTop: '10px' }}>
-                          <tbody>
-                             <tr>
-                                <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
-                                   <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>مدرسة الرفعة النموذجية</div>
-                                   <div style={{ fontSize: '10px', color: '#64748b' }}>نظام الإدارة الأكاديمية الشامل</div>
-                                </td>
-                                <td style={{ textAlign: 'left', verticalAlign: 'middle' }}>
-                                   <div style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>وثيقة إلكترونية معتمدة</div>
-                                </td>
-                             </tr>
-                          </tbody>
-                       </table>
+                       <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>
+                          تم إنشاء هذا الجدول تلقائياً بواسطة نظام الإدارة الأكاديمية الشامل - مدرسة الرفعة النموذجية
+                          <br/>
+                          <span style={{ color: '#4f46e5' }}>برمجة وتطوير إيهاب جمال غزال</span>
+                       </div>
 
                      </div>
                    );
@@ -994,13 +997,13 @@ export default function PublicSchedulesViewPage() {
               </div>
             )}
 
-            {/* 🚀 منطقة الطباعة المخفية الخاصة بالجدول المجمع (Master Print) بصيغة A3 فارهة */}
+            {/* 🚀 منطقة الطباعة المخفية الخاصة بالجدول المجمع (Master Print) بصيغة فارهة */}
             {filterType === 'master' && (
               <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
-                <div className="master-pdf-page" dir="rtl" style={{ width: '1600px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif' }}>
+                <div className="master-pdf-page" dir="rtl" style={{ width: '2200px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif' }}>
                   
                   <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #1e293b', paddingBottom: '15px' }}>
-                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 10px 0', color: '#0f172a', letterSpacing: '-0.5px' }}>الجدول المدرسي المجمع (العام)</h1>
+                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 10px 0', color: '#0f172a' }}>الجدول المدرسي المجمع (العام)</h1>
                     <div style={{ display: 'inline-block', fontSize: '14px', fontWeight: 'bold', padding: '6px 16px', borderRadius: '8px', backgroundColor: '#10b981', color: '#ffffff' }}>
                        العام الدراسي الحالي - {new Date().toLocaleDateString('ar-EG')}
                     </div>
@@ -1034,11 +1037,16 @@ export default function PublicSchedulesViewPage() {
                               {sections.map(sec => {
                                 const slot = schedules.find(s => s.day === day.id && s.period_number === p && String(s.section_id) === String(sec.id));
                                 return (
-                                  <td key={sec.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#ffffff', padding: '6px', textAlign: 'center', verticalAlign: 'middle', height: '65px' }}>
+                                  <td key={sec.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#ffffff', padding: '6px', textAlign: 'center', verticalAlign: 'middle', height: '70px' }}>
                                     {slot ? (
                                       <div style={{ padding: '4px', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#f8fafc', height: '100%', boxSizing: 'border-box' }}>
                                          <div style={{ fontSize: '11px', fontWeight: 900, color: '#047857', marginBottom: '2px', lineHeight: '1.2' }}>{safeString(slot.subject_name)}</div>
                                          <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', lineHeight: '1.2' }}>أ. {safeString(slot.teacher_name)}</div>
+                                         {slot.zoom_link && (
+                                            <div style={{ marginTop: '3px' }}>
+                                                <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '8px', fontWeight: 'bold', textDecoration: 'none', padding: '2px 4px', borderRadius: '3px' }}>بث Zoom</a>
+                                            </div>
+                                         )}
                                       </div>
                                     ) : (
                                       <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#e2e8f0' }}>-</span>
@@ -1055,6 +1063,8 @@ export default function PublicSchedulesViewPage() {
                   
                   <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>
                     تم إنشاء هذا الجدول تلقائياً بواسطة نظام الإدارة الأكاديمية الشامل - مدرسة الرفعة النموذجية
+                    <br/>
+                    <span style={{ color: '#4f46e5' }}>برمجة وتطوير إيهاب جمال غزال</span>
                   </div>
                 </div>
               </div>
