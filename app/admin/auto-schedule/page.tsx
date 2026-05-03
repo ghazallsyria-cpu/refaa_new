@@ -370,7 +370,7 @@ export default function AutoScheduleGenerator() {
     if (sections.length === 0 || rawTeacherAssignments.length === 0 || periods.length === 0) { alert("بيانات غير مكتملة."); return; }
 
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
-    setDraggedItem(null); setDragOverTarget(null); setIsSwapMode(false); setSwapSource(null);
+    setDraggedItem(null); setDragOverTarget(null); setIsSwapMode(false); setSwapSource(null); setManualAssignModalOpen(false);
     
     addLog("🚀 بدء التوليد... (تفعيل الدرع المانع للحصص الشبحية)");
     await new Promise(r => setTimeout(r, 100)); 
@@ -813,7 +813,7 @@ export default function AutoScheduleGenerator() {
   };
 
   // ==========================================
-  // 🚀 محرك السحب والإفلات التفاعلي
+  // 🚀 محرك السحب والإفلات والتعديل اليدوي
   // ==========================================
   const handleDragStart = (e: any, itemType: 'grid'|'unplaced', payload: any) => {
       setDraggedItem({ type: itemType, ...payload });
@@ -963,6 +963,88 @@ export default function AutoScheduleGenerator() {
       setDraggedItem(null);
   };
 
+  // 🚀 الدالة السحرية الخاصة بالتبديل المباشر بالضغط (Click-to-Swap)
+  const executeClickSwap = (source: any, targetDay: number, targetPeriod: number, targetSlot: any) => {
+      // إذا نقر على نفس الخانة مرتين، نلغي التحديد
+      if (String(targetDay) === String(source.day) && String(targetPeriod) === String(source.period_number)) {
+          setSwapSource(null); return; 
+      }
+
+      const pDataTarget = periods.find(p => p.period_number === targetPeriod);
+      if (!pDataTarget) return;
+
+      const sourceSlot = source.slot;
+      const section = sections.find(s => String(s.id) === String(sourceSlot.section_id));
+      const stageMaxPeriods = section?.stage === 'middle' ? 5 : 6;
+
+      if (targetPeriod > stageMaxPeriods) {
+          alert("❌ هذه الحصة تتجاوز سعة المرحلة الدراسية المحددة للفصل!");
+          setSwapSource(null); return;
+      }
+
+      const pDataSource = periods.find(p => p.stage === sourceSlot.stage && String(p.period_number) === String(source.period_number));
+      
+      const getTeacherAllowedSlots = (tId: string) => {
+          let slots = teacherConstraints[tId];
+          if (!slots || slots.length === 0) {
+              slots = [];
+              workingDays.forEach(d => dynamicPeriods.forEach(p => slots.push(`${d}-${p}`)));
+          }
+          return slots;
+      };
+
+      const allowedA = getTeacherAllowedSlots(sourceSlot.teacher_id);
+      if (!allowedA.includes(`${targetDay}-${targetPeriod}`)) {
+          alert(`❌ المعلم (${sourceSlot.teacher_name}) غير متاح في يوم ${getDayName(targetDay)} الحصة ${targetPeriod} بناءً على مصفوفة الدوام.`);
+          setSwapSource(null); return;
+      }
+
+      // الدرع الآمن!
+      if (checkTeacherCollision(generatedSchedules, sourceSlot.teacher_id, targetDay, pDataTarget, sourceSlot.id, targetSlot ? targetSlot.id : null)) {
+          alert(`❌ المعلم (${sourceSlot.teacher_name}) لديه حصة في فصل آخر في هذا الوقت!`);
+          setSwapSource(null); return;
+      }
+
+      if (targetSlot) {
+          const allowedB = getTeacherAllowedSlots(targetSlot.teacher_id);
+          if (!allowedB.includes(`${source.day}-${source.period_number}`)) {
+              alert(`❌ لا يمكن التبديل: المعلم (${targetSlot.teacher_name}) غير متاح في يوم ${getDayName(source.day)} الحصة ${source.period_number}.`);
+              setSwapSource(null); return;
+          }
+
+          if (checkTeacherCollision(generatedSchedules, targetSlot.teacher_id, source.day, pDataSource, targetSlot.id, sourceSlot.id)) {
+              alert(`❌ لا يمكن التبديل: المعلم (${targetSlot.teacher_name}) لديه حصة في فصل آخر في وقت المصدر!`);
+              setSwapSource(null); return;
+          }
+      }
+
+      let newSchedules = [...generatedSchedules];
+      let aIndex = newSchedules.findIndex(s => String(s.id) === String(sourceSlot.id));
+      newSchedules[aIndex] = {
+          ...newSchedules[aIndex],
+          day: targetDay,
+          period_number: targetPeriod,
+          start_time: pDataTarget.start_time,
+          end_time: pDataTarget.end_time
+      };
+
+      if (targetSlot) {
+          let bIndex = newSchedules.findIndex(s => String(s.id) === String(targetSlot.id));
+          newSchedules[bIndex] = {
+              ...newSchedules[bIndex],
+              day: source.day,
+              period_number: source.period_number,
+              start_time: pDataSource.start_time,
+              end_time: pDataSource.end_time
+          };
+      }
+
+      newSchedules.sort((a, b) => Number(a.day) - Number(b.day) || Number(a.period_number) - Number(b.period_number));
+      setGeneratedSchedules(newSchedules);
+      saveToLocalDraft(newSchedules, unplacedLessons);
+      setSwapSource(null);
+  };
+
   const generateAuditReport = () => {
     let errors: string[] = [];
     let warnings: string[] = [];
@@ -996,9 +1078,12 @@ export default function AutoScheduleGenerator() {
     setIsAuditModalOpen(true);
   };
 
+  // 🚀 التسكين اليدوي بالنقر المباشر (Click-to-Assign)
   const openManualAssignModal = (lesson: any) => {
     setLessonToAssign(lesson);
     setManualAssignModalOpen(true);
+    setIsSwapMode(false);
+    setSwapSource(null);
   };
 
   const handleManualCellClick = (day: number, periodNum: number) => {
@@ -1039,6 +1124,7 @@ export default function AutoScheduleGenerator() {
     setGeneratedSchedules(newSchedules);
     setUnplacedLessons(newUnplaced);
     setManualAssignModalOpen(false);
+    setLessonToAssign(null);
     saveToLocalDraft(newSchedules, newUnplaced);
   };
 
@@ -1130,151 +1216,6 @@ export default function AutoScheduleGenerator() {
     } finally { 
       setGenerating(false); 
     }
-  };
-
-  const getTeacherDept = (tId: string) => {
-    const assignment = rawTeacherAssignments.find(ts => String(ts.teacher_id) === String(tId));
-    if (assignment?.teachers?.department_id) {
-        const dept = departments.find(d => String(d.id) === String(assignment.teachers.department_id));
-        if (dept) return dept.name; 
-    }
-
-    const tSchedules = generatedSchedules.filter(s => String(s.teacher_id) === String(tId));
-    if (tSchedules.length === 0) return 'أقسام أخرى';
-    const subjName = tSchedules[0].subject_name || '';
-    
-    if (/(علوم|فيزياء|كيمياء|أحياء|احياء|جيولوجيا)/.test(subjName)) return 'العلوم';
-    if (/(رياضيات|جبر|هندسة|احصاء|إحصاء)/.test(subjName)) return 'الرياضيات';
-    if (/(عربي|عربية|أدب|ادب|بلاغة|نحو|صرف)/.test(subjName)) return 'اللغة العربية';
-    if (/(إنجليزي|انجليزي|english)/i.test(subjName)) return 'اللغة الإنجليزية';
-    if (/(إسلامية|اسلامية|قرآن|تجويد|دين|فقه|عقيدة|حديث)/.test(subjName)) return 'التربية الإسلامية';
-    if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|علم نفس|نفس|وطنية|دستور|اقتصاد)/.test(subjName)) return 'الاجتماعيات';
-    if (/(حاسوب|معلوماتية|it)/i.test(subjName)) return 'الحاسوب';
-    
-    return 'أقسام أخرى';
-  };
-
-  const groupedSubjectsByClass = useMemo(() => {
-    const groups: Record<string, typeof uniqueSubjectClasses> = {};
-    uniqueSubjectClasses.forEach(item => {
-      const cName = item.class_name || 'غير محدد';
-      if (!groups[cName]) groups[cName] = [];
-      groups[cName].push(item);
-    });
-    return groups;
-  }, [uniqueSubjectClasses]);
-
-  const sortedClassNames = Object.keys(groupedSubjectsByClass).sort((a,b) => String(a).localeCompare(String(b)));
-
-  const uniqueTeachersInSchedule = useMemo(() => {
-    const tMap = new Map();
-    generatedSchedules.forEach(s => {
-      if (!tMap.has(s.teacher_id)) tMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name });
-    });
-    return Array.from(tMap.values()).sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')));
-  }, [generatedSchedules]);
-
-  const getPrintNameById = (id: string, type: 'section'|'teacher') => {
-     if (type === 'section') {
-       const sec = sections.find(s => String(s.id) === String(id));
-       return sec ? sec.full_name : 'غير محدد';
-     } else {
-       const t = uniqueTeachersInSchedule.find(t => String(t.id) === String(id));
-       return t ? t.name : 'غير محدد';
-     }
-  };
-
-  const toggleBatchPrintId = (id: string) => {
-    setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-
-  const selectAllBatchIds = () => {
-    if (batchPrintType === 'section') {
-      const availableSecs = sections.filter(s => generatedSchedules.some(gs => String(gs.section_id) === String(s.id))).map(s=>s.id);
-      setBatchPrintIds(availableSecs);
-    } else {
-      setBatchPrintIds(uniqueTeachersInSchedule.map(t=>t.id));
-    }
-  };
-
-  const handlePrintCommand = async (mode: string, filterVal: string = '') => {
-    if (typeof window === 'undefined') return;
-    setPrintMode(mode as any);
-    setIsPrintCenterOpen(false);
-    setIsGeneratingPDF(true);
-
-    let entities: any[] = [];
-    if (mode === 'single') {
-      const singleEntity = gridFilterType === 'teacher' ? uniqueTeachersInSchedule.find(t => String(t.id) === String(gridFilterId)) : sections.find(s => String(s.id) === String(gridFilterId));
-      if(singleEntity) entities = [singleEntity];
-    } else if (mode === 'custom-batch') {
-      if (batchPrintType === 'section') {
-          entities = sections.filter(s => batchPrintIds.includes(String(s.id)));
-      } else {
-          entities = uniqueTeachersInSchedule.filter(t => batchPrintIds.includes(String(t.id)));
-      }
-    }
-
-    if(entities.length === 0) {
-      alert('لا توجد بيانات (جداول) لطباعتها في هذا التحديد.');
-      setIsGeneratingPDF(false);
-      return;
-    }
-
-    setEntitiesToPrint(entities);
-
-    setTimeout(async () => {
-      try {
-        const jsPDFModule = (await import('jspdf')).default;
-        const html2canvasModule = (await import('html2canvas-pro')).default;
-
-        const containers = document.querySelectorAll('.batch-pdf-page');
-        if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
-
-        const pdf = new jsPDFModule('landscape', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-
-        for (let i = 0; i < containers.length; i++) {
-          if (i > 0) pdf.addPage(); 
-          const el = containers[i] as HTMLElement;
-
-          const canvas = await html2canvasModule(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          const imgData = canvas.toDataURL('image/png');
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-          const links = el.querySelectorAll('a.zoom-link');
-          const elementRect = el.getBoundingClientRect();
-
-          links.forEach((link: any) => {
-            const rect = link.getBoundingClientRect();
-            if (elementRect.width > 0 && elementRect.height > 0) {
-              const relativeX = (rect.left - elementRect.left) / elementRect.width;
-              const relativeY = (rect.top - elementRect.top) / elementRect.height;
-              const pdfX = relativeX * pdfWidth; 
-              const pdfY = relativeY * pdfHeight;
-              const finalUrl = normalizeUrl(link.href);
-              
-              if (finalUrl) {
-                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
-              }
-            }
-          });
-        }
-
-        let fileName = 'الجدول_الدراسي.pdf';
-        if (mode === 'single') fileName = `جدول_${getPrintNameById(gridFilterId, gridFilterType).replace(/\s+/g, '_')}.pdf`;
-        if (mode === 'custom-batch') fileName = `جداول_مخصصة_مجمعة.pdf`;
-
-        pdf.save(fileName);
-      } catch (error: any) { 
-        console.error(error);
-        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
-      } finally { 
-        setIsGeneratingPDF(false); 
-        setEntitiesToPrint([]); 
-      }
-    }, 1500); 
   };
 
   if (!mounted || loadingData || isChecking) {
@@ -1391,79 +1332,6 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
-      {/* Modal مركز الطباعة المجمعة للمدير */}
-      <AnimatePresence>
-        {isPrintCenterOpen && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsPrintCenterOpen(false)} />
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-               animate={{ opacity: 1, scale: 1, y: 0 }} 
-               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[85vh]" 
-               dir="rtl"
-            >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><Printer className="w-6 h-6"/></div>
-                  <div>
-                    <h3 className="font-black text-slate-800 text-lg">مركز الطباعة المجمعة</h3>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">اختر مجموعة من الجداول لطباعتها معاً</p>
-                  </div>
-                </div>
-                <button onClick={() => setIsPrintCenterOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
-              </div>
-              
-              <div className="p-6 flex-1 overflow-auto bg-slate-50 custom-scrollbar">
-                 <div className="flex gap-2 mb-4 bg-white p-1 rounded-xl shadow-sm border border-slate-200">
-                    <button onClick={() => {setBatchPrintType('section'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'section' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة فصول</button>
-                    <button onClick={() => {setBatchPrintType('teacher'); setBatchPrintIds([]);}} className={`flex-1 py-2 rounded-lg text-sm font-black transition-colors ${batchPrintType === 'teacher' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>طباعة معلمين</button>
-                 </div>
-                 
-                 <div className="flex justify-between items-center mb-3 px-1">
-                    <span className="text-xs font-bold text-slate-500">تم تحديد: {batchPrintIds.length}</span>
-                    <button onClick={selectAllBatchIds} className="text-xs font-black text-indigo-600 hover:underline">تحديد الكل</button>
-                 </div>
-
-                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {batchPrintType === 'section' 
-                      ? sections.filter(s => generatedSchedules.some(gs => String(gs.section_id) === String(s.id))).map(s => (
-                          <div key={s.id} onClick={() => toggleBatchPrintId(String(s.id))} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(String(s.id)) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                             {batchPrintIds.includes(String(s.id)) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
-                             <span className="text-xs font-bold truncate">{s.full_name}</span>
-                          </div>
-                      ))
-                      : uniqueTeachersInSchedule.map(t => (
-                          <div key={t.id} onClick={() => toggleBatchPrintId(String(t.id))} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(String(t.id)) ? 'bg-indigo-50 border-indigo-400 text-indigo-800 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                             {batchPrintIds.includes(String(t.id)) ? <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0"/> : <Square className="w-4 h-4 text-slate-300 shrink-0"/>}
-                             <span className="text-xs font-bold truncate">{t.name}</span>
-                          </div>
-                      ))
-                    }
-                 </div>
-              </div>
-
-              <div className="p-6 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
-                <button onClick={() => setIsPrintCenterOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
-                <button onClick={() => handlePrintCommand('custom-batch')} disabled={batchPrintIds.length===0} className="flex-[2] py-3.5 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50">
-                  <FileDown className="w-5 h-5" /> تحميل PDF للمحددين
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {isGeneratingPDF && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-xl text-white">
-            <Loader2 className="w-20 h-20 animate-spin text-emerald-400 mb-6" />
-            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وثائق الـ PDF الذكية...</h2>
-            <p className="text-slate-300 font-bold mt-3 text-lg">يرجى الانتظار، النظام يقوم بدمج الجداول وزراعة الروابط.</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* 🚀 Modal مصفوفة إعدادات المعلم الدقيقة (Matrix UI) */}
       <AnimatePresence>
         {isTeacherModalOpen && selectedTeacherObj && (
@@ -1561,13 +1429,37 @@ export default function AutoScheduleGenerator() {
           </div>
         </div>
 
-        {/* سلة الانتظار (تفاعلية السحب والإفلات) */}
+        {/* 🚀 بانرات التسكين والتبديل اليدوي (بالضغط) */}
+        <AnimatePresence>
+          {manualAssignModalOpen && lessonToAssign && (
+            <motion.div initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}} className="bg-amber-50 border-b border-amber-200 p-2.5 flex items-center justify-center gap-3 shrink-0 shadow-sm cursor-pointer rounded-xl mb-4" onClick={() => { setManualAssignModalOpen(false); setLessonToAssign(null); }}>
+                <div className="bg-amber-500 text-white p-1.5 rounded-full"><MousePointerClick className="w-4 h-4 animate-bounce"/></div>
+                <p className="text-xs font-black text-amber-900">وضع التسكين اليدوي: انقر على أي خانة في الجدول أدناه لإسقاط المادة ({lessonToAssign.subject_name}). (انقر هنا للإلغاء)</p>
+            </motion.div>
+          )}
+          {isSwapMode && (
+            <motion.div initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}} className="bg-indigo-50 border-b border-indigo-200 p-2.5 flex items-center justify-center gap-3 shrink-0 shadow-sm cursor-pointer rounded-xl mb-4" onClick={() => { setIsSwapMode(false); setSwapSource(null); }}>
+                <div className="bg-indigo-500 text-white p-1.5 rounded-full"><ArrowLeftRight className="w-4 h-4 animate-pulse"/></div>
+                <p className="text-xs font-black text-indigo-900">
+                   {swapSource ? 'تم تحديد حصة المصدر. انقر على حصة أخرى للتبديل.' : 'وضع التبديل بالضغط مفعل! انقر على الحصة المراد نقلها.'} (انقر هنا للإلغاء)
+                </p>
+            </motion.div>
+          )}
+          {draggedItem && gridFilterType === 'section' && !isSwapMode && !manualAssignModalOpen && (
+            <motion.div initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}} className="bg-emerald-50 border-b border-emerald-200 p-2.5 flex items-center justify-center gap-3 shrink-0 shadow-sm rounded-xl mb-4">
+                <div className="bg-emerald-500 text-white p-1.5 rounded-full"><Hand className="w-4 h-4 animate-pulse"/></div>
+                <p className="text-xs font-black text-emerald-900">وضع السحب مفعل! أفلت الحصة فوق أي خانة فارغة أو حصة أخرى للتبديل.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 🚀 سلة الانتظار (تفاعلية السحب والإفلات والنقر) */}
         {unplacedLessons.length > 0 && (
           <div className="bg-rose-50 border border-rose-200 p-6 rounded-[2rem] shadow-sm relative overflow-hidden">
              <div className="absolute top-0 right-0 w-32 h-32 bg-rose-200/50 rounded-full blur-[40px] pointer-events-none"></div>
              <h3 className="text-rose-800 font-black text-lg mb-4 flex items-center gap-2 relative z-10">
                <AlertOctagon className="w-5 h-5"/> حصص بالانتظار ({unplacedLessons.length}) 
-               <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md mr-2 flex items-center gap-1 font-bold animate-pulse"><Hand className="w-3 h-3"/> اسحب وأفلت في الجدول</span>
+               <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md mr-2 flex items-center gap-1 font-bold animate-pulse"><MousePointerClick className="w-3 h-3"/> انقر للتسكين أو اسحب للجدول</span>
              </h3>
              <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-4 pt-1 px-1 relative z-10">
                 {unplacedLessons.map((lesson) => (
@@ -1576,7 +1468,11 @@ export default function AutoScheduleGenerator() {
                     draggable
                     onDragStart={(e) => handleDragStart(e, 'unplaced', { lesson })}
                     onDragEnd={() => setDraggedItem(null)}
-                    className={`bg-white border-2 rounded-2xl p-4 shadow-sm min-w-[200px] shrink-0 flex flex-col justify-between cursor-grab active:cursor-grabbing transition-transform hover:-translate-y-1 ${draggedItem?.lesson?.id === lesson.id ? 'opacity-50 border-rose-400 scale-95' : 'border-rose-100 hover:border-rose-300'}`}
+                    onClick={() => openManualAssignModal(lesson)}
+                    className={`bg-white border-2 rounded-2xl p-4 shadow-sm min-w-[200px] shrink-0 flex flex-col justify-between transition-transform hover:-translate-y-1 
+                      ${draggedItem?.lesson?.id === lesson.id ? 'opacity-50 border-rose-400 scale-95' : 'border-rose-100 hover:border-rose-300'}
+                      ${lessonToAssign?.id === lesson.id ? 'ring-2 ring-amber-400 bg-amber-50 cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
+                    `}
                   >
                      <div className="pointer-events-none">
                        <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-md mb-2 inline-block">{lesson.section_name}</span>
@@ -1757,12 +1653,6 @@ export default function AutoScheduleGenerator() {
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
                          </button>
-                         <button onClick={() => handlePrintCommand('single')} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">
-                           <FileDown className="w-4 h-4" /> تحميل PDF
-                         </button>
-                         <button onClick={() => setIsPrintCenterOpen(true)} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-md">
-                           <Printer className="w-4 h-4" /> طباعة مجمعة
-                         </button>
                        </>
                      )}
                    </div>
@@ -1793,30 +1683,30 @@ export default function AutoScheduleGenerator() {
                 ) : (
                   <div className="absolute inset-0 flex flex-col w-full h-full relative">
                     <div className="p-4 bg-white border-b border-slate-200 flex flex-col sm:flex-row gap-3 shrink-0">
-                      <select value={gridFilterType} onChange={(e) => { setGridFilterType(e.target.value as any); setGridFilterId(''); setIsSwapMode(false); setSwapSource(null); }} className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-sm text-slate-900 outline-none focus:border-indigo-500">
+                      <select value={gridFilterType} onChange={(e) => { setGridFilterType(e.target.value as any); setGridFilterId(''); setIsSwapMode(false); setSwapSource(null); setManualAssignModalOpen(false); }} className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-sm text-slate-900 outline-none focus:border-indigo-500">
                         <option value="section">عرض جدول (فصل محدد)</option><option value="teacher">عرض جدول (معلم محدد)</option>
                       </select>
                       <select value={gridFilterId} onChange={(e) => setGridFilterId(e.target.value)} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 outline-none focus:border-indigo-500">
                         <option value="" disabled>-- اختر للعرض --</option>
                         {gridFilterType === 'section' ? sections.filter(s => generatedSchedules.some(gs => String(gs.section_id) === String(s.id))).map(s => <option key={s.id} value={s.id}>{s.full_name}</option>) : uniqueTeachersInSchedule.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
-                    </div>
-
-                    {/* 🚀 بانر السحب والإفلات التفاعلي */}
-                    <AnimatePresence>
-                      {draggedItem && gridFilterType === 'section' && (
-                        <motion.div initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}} className="bg-indigo-50 border-b border-indigo-200 p-2.5 flex items-center justify-center gap-3 shrink-0 z-10 shadow-sm">
-                            <div className="bg-indigo-500 text-white p-1.5 rounded-full"><ArrowLeftRight className="w-4 h-4 animate-pulse"/></div>
-                            <p className="text-xs font-black text-indigo-900">وضع السحب مفعل! أفلت الحصة فوق أي خانة فارغة أو حصة أخرى للتبديل.</p>
-                        </motion.div>
+                      
+                      {/* 🚀 الزر السحري الجديد لتفعيل التبديل بالضغط */}
+                      {gridFilterType === 'section' && (
+                         <button 
+                            onClick={() => { setIsSwapMode(!isSwapMode); setSwapSource(null); setManualAssignModalOpen(false); }} 
+                            className={`px-4 py-2.5 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 border ${isSwapMode ? 'bg-amber-500 text-white border-amber-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                         >
+                            <ArrowLeftRight className="w-4 h-4" /> {isSwapMode ? 'إلغاء وضع التبديل' : 'تبديل החصص بالضغط'}
+                         </button>
                       )}
-                    </AnimatePresence>
+                    </div>
 
                     <div className="flex-1 overflow-auto bg-slate-50 p-4 custom-scrollbar w-full relative">
                       {!gridFilterId ? (
                         <div className="flex items-center justify-center h-[400px] text-slate-400 font-bold">يرجى اختيار معلم أو فصل לעرض جدوله</div>
                       ) : (
-                        <div className={`min-w-[800px] w-full border-2 rounded-2xl overflow-hidden shadow-sm mt-4 transition-colors ${draggedItem ? 'border-indigo-400 bg-indigo-50/10' : 'border-slate-300 bg-white'}`}>
+                        <div className={`min-w-[800px] w-full border-2 rounded-2xl overflow-hidden shadow-sm mt-2 transition-colors ${(draggedItem || isSwapMode || manualAssignModalOpen) ? 'border-amber-400 bg-amber-50/10' : 'border-slate-300 bg-white'}`}>
                           <table className="w-full text-center border-collapse table-fixed">
                             <thead>
                               <tr className="bg-slate-800 text-white">
@@ -1834,10 +1724,23 @@ export default function AutoScheduleGenerator() {
                                     const cellKey = `${day}-${p}`;
                                     const isDragOver = dragOverTarget === cellKey;
                                     const isBeingDragged = draggedItem?.type === 'grid' && String(draggedItem.day) === String(day) && String(draggedItem.period_number) === String(p);
+                                    const isSwapSource = swapSource?.day === day && swapSource?.period_number === p;
+                                    const isClickable = gridFilterType === 'section' && (manualAssignModalOpen || isSwapMode);
 
                                     return (
                                       <td 
                                         key={p} 
+                                        onClick={() => {
+                                            if (manualAssignModalOpen && lessonToAssign) {
+                                                handleManualCellClick(day, p);
+                                            } else if (isSwapMode && gridFilterType === 'section') {
+                                                if (!swapSource && slot) {
+                                                    setSwapSource({ day, period_number: p, slot });
+                                                } else if (swapSource) {
+                                                    executeClickSwap(swapSource, day, p, slot);
+                                                }
+                                            }
+                                        }}
                                         onDragOver={(e) => {
                                             if (gridFilterType !== 'section') return;
                                             e.preventDefault(); 
@@ -1855,24 +1758,25 @@ export default function AutoScheduleGenerator() {
                                         }}
                                         className={`p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7.5rem] align-top transition-all duration-200 
                                           ${isDragOver ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset scale-[0.98] rounded-xl' : 'hover:bg-indigo-50/30'}
-                                          ${gridFilterType === 'section' ? 'cursor-pointer' : ''}
+                                          ${isSwapSource ? 'bg-amber-100 ring-2 ring-amber-500 ring-inset rounded-xl scale-[0.98]' : ''}
+                                          ${isClickable ? 'cursor-pointer hover:bg-amber-50/50 hover:ring-2 hover:ring-amber-300 hover:ring-inset rounded-xl' : ''}
                                         `}
                                       >
                                         {slot ? (
                                           <div 
-                                            draggable={gridFilterType === 'section'}
+                                            draggable={gridFilterType === 'section' && !isSwapMode && !manualAssignModalOpen}
                                             onDragStart={(e) => {
                                                 if (gridFilterType === 'section') handleDragStart(e, 'grid', { day, period_number: p, slot });
                                             }}
                                             onDragEnd={() => setDraggedItem(null)}
-                                            className={`bg-white border shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative transition-all duration-200 ${isBeingDragged ? 'opacity-30 scale-90 border-indigo-400' : 'border-slate-200 hover:border-indigo-300 hover:shadow-md'} ${gridFilterType === 'section' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                            className={`bg-white border shadow-sm rounded-xl p-2 h-full flex flex-col justify-center items-center overflow-hidden relative transition-all duration-200 ${isBeingDragged ? 'opacity-30 scale-90 border-indigo-400' : 'border-slate-200 hover:border-indigo-300 hover:shadow-md'} ${(gridFilterType === 'section' && !isSwapMode && !manualAssignModalOpen) ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                           >
                                             <div className="font-black text-indigo-900 text-xs leading-tight mb-1.5 w-full whitespace-normal break-words pointer-events-none" title={slot.subject_name}>{slot.subject_name}</div>
                                             <div className="font-bold text-[9px] sm:text-[10px] text-slate-800 bg-slate-50 px-1.5 py-1 rounded-md w-full whitespace-normal break-words leading-tight border border-slate-200 pointer-events-none" title={gridFilterType === 'section' ? slot.teacher_name : slot.section_name}>{gridFilterType === 'section' ? slot.teacher_name : slot.section_name}</div>
-                                            {gridFilterType === 'section' && <div className="absolute top-1 left-1 opacity-0 hover:opacity-100 transition-opacity"><Hand className="w-3 h-3 text-slate-300"/></div>}
+                                            {gridFilterType === 'section' && !isSwapMode && !manualAssignModalOpen && <div className="absolute top-1 left-1 opacity-0 hover:opacity-100 transition-opacity pointer-events-none"><Hand className="w-3 h-3 text-slate-300"/></div>}
                                           </div>
                                         ) : (
-                                          <div className={`flex items-center justify-center h-full rounded-xl transition-colors ${isDragOver ? 'bg-emerald-100/50 border-2 border-dashed border-emerald-400' : 'text-slate-300 border-2 border-transparent'}`}>
+                                          <div className={`flex items-center justify-center h-full rounded-xl transition-colors ${isDragOver ? 'bg-emerald-100/50 border-2 border-dashed border-emerald-400' : 'text-slate-300 border-2 border-transparent pointer-events-none'}`}>
                                             {isDragOver ? <ArrowLeftRight className="w-5 h-5 text-emerald-600 animate-bounce"/> : <span className="text-xl opacity-50">-</span>}
                                           </div>
                                         )}
@@ -1894,104 +1798,6 @@ export default function AutoScheduleGenerator() {
 
         </div>
       </div>
-      
-      {/* 🚀 منطقة الطباعة الخفية الموحدة للـ PDF */}
-      <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
-        {entitiesToPrint.map((entity, idx) => {
-           const isPrintTypeStudent = printMode === 'all-sections' || printMode === 'specific-class' || (printMode === 'single' && gridFilterType === 'section') || (printMode === 'custom-batch' && batchPrintType === 'section');
-           
-           const entId = String(entity.id);
-           const entName = entity.name || entity.users?.full_name || 'غير محدد';
-           const entTitle = isPrintTypeStudent ? `${formatClassName(Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name)} - ${entName}` : entName;
-
-           return (
-             <div key={idx} className="batch-pdf-page" dir="rtl" style={{ width: '1122px', height: '793px', padding: '30px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', overflow: 'hidden' }}>
-               
-               <table style={{ width: '100%', marginBottom: '15px', borderCollapse: 'collapse' }}>
-                  <tbody>
-                    <tr>
-                      <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
-                        <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 6px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
-                        <h2 style={{ fontSize: '14px', fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0, display: 'inline-block' }}>
-                          {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
-                        </h2>
-                      </td>
-                      <td style={{ textAlign: 'left', verticalAlign: 'bottom' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '6px', backgroundColor: '#10b981', color: '#ffffff', marginBottom: '6px', display: 'inline-block' }}>العام الدراسي الحالي</div>
-                        <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
-                      </td>
-                    </tr>
-                  </tbody>
-               </table>
-
-               <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '8px', tableLayout: 'fixed' }}>
-                 <thead>
-                   <tr>
-                     <th style={{ width: '100px', border: '1px solid #cbd5e1', backgroundColor: '#1e293b', color: '#ffffff', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>اليوم / الحصة</th>
-                     {dynamicPeriods.map(p => (
-                       <th key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '10px 4px', fontSize: '14px', fontWeight: 900 }}>
-                         الحصة {p}
-                       </th>
-                     ))}
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {workingDays.map((day, dIdx) => (
-                     <tr key={day}>
-                       <td style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '14px' }}>{getDayName(day)}</td>
-                       {dynamicPeriods.map((p) => {
-                         const slot = generatedSchedules.find(s => String(s.day) === String(day) && String(s.period_number) === String(p) && (isPrintTypeStudent ? String(s.section_id) === entId : String(s.teacher_id) === entId));
-                         
-                         return (
-                           <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '4px', textAlign: 'center', verticalAlign: 'middle', height: '110px' }}>
-                             {slot ? (
-                               <div style={{ padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', textAlign: 'center', height: '100%', boxSizing: 'border-box' }}>
-                                 
-                                 <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#047857', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 4px', borderRadius: '4px', marginBottom: '4px', display: 'inline-block' }} dir="ltr">
-                                    {slot.start_time || ''} - {slot.end_time || ''}
-                                 </div>
-
-                                 <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#0f172a', marginBottom: '2px', lineHeight: '1.2' }}>{isPrintTypeStudent ? slot.subject_name : slot.section_name}</div>
-                                 <div style={{ fontSize: '9px', color: '#475569', marginBottom: '4px', lineHeight: '1.2' }}>
-                                   {isPrintTypeStudent ? `أ. ${slot.teacher_name}` : slot.subject_name}
-                                 </div>
-                                 
-                                 {slot.zoom_link && (
-                                   <div style={{ marginTop: '4px' }}>
-                                      <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '9px', fontWeight: 'bold', textDecoration: 'none', padding: '4px 8px', borderRadius: '4px' }}>
-                                        رابط البث
-                                      </a>
-                                   </div>
-                                 )}
-                               </div>
-                             ) : (<span style={{ fontSize: '18px', fontWeight: 'bold', color: '#cbd5e1' }}>-</span>)}
-                           </td>
-                         );
-                       })}
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-
-               <table style={{ width: '100%', marginTop: '15px', borderTop: '2px solid #cbd5e1', paddingTop: '10px' }}>
-                  <tbody>
-                     <tr>
-                        <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
-                           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>مدرسة الرفعة النموذجية</div>
-                           <div style={{ fontSize: '10px', color: '#64748b' }}>نظام الإدارة الأكاديمية الشامل</div>
-                        </td>
-                        <td style={{ textAlign: 'left', verticalAlign: 'middle' }}>
-                           <div style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>وثيقة إلكترونية معتمدة</div>
-                        </td>
-                     </tr>
-                  </tbody>
-               </table>
-
-             </div>
-           );
-        })}
-      </div>
-
     </div>
   );
 }
