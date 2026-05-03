@@ -102,7 +102,7 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, []);
 
-  // 🚀 [هوك الطالب المُدرّع والداعم للتبديل الذكي]
+  // 🚀 [هوك الطالب المُدرّع والداعم للأوقات الذكية حسب المرحلة]
   const fetchStudentDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     
@@ -128,6 +128,21 @@ export function useDashboardSystem() {
         const student = { ...studentCore, users: userData || { full_name: 'طالب' } };
         const sectionId = studentCore.section_id;
 
+        // 🚀 تحديد مرحلة الطالب (متوسط / ثانوي) لقراءة الأوقات الصحيحة
+        let stage: 'middle' | 'high' = 'high';
+        const classNameObj = Array.isArray(studentCore.sections?.classes) ? studentCore.sections?.classes[0] : studentCore.sections?.classes;
+        const classNameStr = classNameObj?.name || '';
+        if (classNameStr && /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(classNameStr)) {
+            stage = 'middle';
+        }
+
+        const activeSystem = await getActiveSystem();
+
+        // 🚀 توجيه استعلام أوقات الحصص للجدول الصحيح
+        let periodsQuery = activeSystem === 'auto' 
+            ? supabase.from('auto_class_periods').select('*').eq('stage', stage).order('period_number')
+            : supabase.from('class_periods').select('*').order('period_number');
+
         let assignments: any[] = [];
         let exams: any[] = [];
         let attendance: any[] = [];
@@ -139,7 +154,7 @@ export function useDashboardSystem() {
            const [gradesRes, attendanceRes, periodsRes] = await Promise.all([
               supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', studentCore.id).order('completed_at', { ascending: false }).limit(5),
               supabase.from('attendance_records').select('status').eq('student_id', studentCore.id).limit(5000),
-              supabase.from('class_periods').select('*').order('period_number').limit(100)
+              periodsQuery
            ]);
            if (gradesRes.data) grades = gradesRes.data;
            if (attendanceRes.data) attendance = attendanceRes.data;
@@ -151,9 +166,7 @@ export function useDashboardSystem() {
         if (sectionId) {
             try {
                 const todayDbDay = new Date().getDay() + 1;
-                const activeSystem = await getActiveSystem();
 
-                // 🚀 جلب جدول اليوم بناءً على النظام الفعال
                 if (activeSystem === 'auto') {
                    const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
                    if (planData) {
@@ -258,7 +271,7 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, [user?.id]);
 
-  // 🚀 [تحديث جلب جدول الطالب لدعم النظامين]
+  // 🚀 [جدول الطالب الكامل - مدعوم بالأوقات الذكية]
   const fetchStudentSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`student_schedule_${user.id}`, async () => {
@@ -269,6 +282,14 @@ export function useDashboardSystem() {
         const activeSystem = await getActiveSystem();
         let scheduleData: any[] = [];
         
+        // تحديد المرحلة
+        let stage: 'middle' | 'high' = 'high';
+        const classNameObj = Array.isArray(student?.sections?.classes) ? student.sections.classes[0] : student?.sections?.classes;
+        const classNameStr = classNameObj?.name || '';
+        if (classNameStr && /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(classNameStr)) {
+            stage = 'middle';
+        }
+
         if (activeSystem === 'auto') {
             const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
             if (planData) {
@@ -302,7 +323,12 @@ export function useDashboardSystem() {
             scheduleData = data || [];
         }
 
-        const { data: periods } = await supabase.from('class_periods').select('*').order('period_number').limit(100);
+        // جلب الأوقات الذكية
+        let periodsQuery = activeSystem === 'auto' 
+            ? supabase.from('auto_class_periods').select('*').eq('stage', stage).order('period_number')
+            : supabase.from('class_periods').select('*').order('period_number');
+
+        const { data: periods } = await periodsQuery;
 
         return { student, schedule: scheduleData, periods: periods || [] };
       } catch (error) { throw error; }
@@ -325,14 +351,13 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, [user?.id]);
 
-  // 🚀 [تحديث جلب تفاصيل الأبناء لدعم النظامين]
   const fetchParentChildDetails = useCallback(async (childId: string, sectionId: string | null) => {
     try {
+      const activeSystem = await getActiveSystem();
       const todayDbDay = new Date().getDay() + 1; 
       
       let scheduleData: any[] = [];
       if (sectionId) {
-          const activeSystem = await getActiveSystem();
           if (activeSystem === 'auto') {
               const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
               if (planData) {
@@ -343,7 +368,6 @@ export function useDashboardSystem() {
                       scheduleData = raw.map(s => ({
                           ...s,
                           period: s.period_number,
-                          // 🚀 تصحيح الخطأ: إزالة كلمة .data من subjRes
                           subjects: { id: s.subject_id, name: subjRes?.find((x: any) => x.id === s.subject_id)?.name },
                           teachers: { id: s.teacher_id }
                       }));
@@ -355,10 +379,22 @@ export function useDashboardSystem() {
           }
       }
 
+      // جلب مرحلة الابن لتحديد الأوقات بدقة
+      const { data: childData } = await supabase.from('students').select('sections(classes(name))').eq('id', childId).maybeSingle();
+      let stage: 'middle' | 'high' = 'high';
+      const classNameObj = Array.isArray(childData?.sections?.classes) ? childData?.sections?.classes[0] : childData?.sections?.classes;
+      if (classNameObj?.name && /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(classNameObj.name)) {
+          stage = 'middle';
+      }
+
+      let periodsQuery = activeSystem === 'auto' 
+          ? supabase.from('auto_class_periods').select('*').eq('stage', stage).order('period_number')
+          : supabase.from('class_periods').select('*').order('period_number');
+
       const [ { data: attendance }, { data: badges }, { data: periods }, { data: exams }, { data: assignments } ] = await Promise.all([
         supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', childId).order('date', { ascending: false }),
         supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', childId).order('granted_at', { ascending: false }),
-        supabase.from('class_periods').select('*').order('period_number', { ascending: true }),
+        periodsQuery,
         supabase.from('exam_attempts').select('id, score, status, completed_at, exams(title, total_marks, max_score, subjects(id, name))').eq('student_id', childId),
         supabase.from('assignment_submissions').select('id, grade, status, submitted_at, feedback, assignments(title, total_marks, subjects(id, name))').eq('student_id', childId)
       ]);
@@ -367,7 +403,7 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, []);
 
-  // 🚀 [هوك المعلم المُدرّع والداعم للتبديل الذكي]
+  // 🚀 [هوك المعلم المُدرّع]
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
@@ -385,9 +421,12 @@ export function useDashboardSystem() {
         }
 
         const teacher = { id: teacherId, users: userData || { full_name: 'معلم' } };
-
-        // 🚀 جلب الفصول والجدول بناءً على النظام الفعال
         const activeSystem = await getActiveSystem();
+        
+        let periodsQuery = activeSystem === 'auto' 
+            ? supabase.from('auto_class_periods').select('*').order('period_number')
+            : supabase.from('class_periods').select('*').order('period_number');
+
         let scheduleData: any[] = [];
         let teacherSchedules: any[] = [];
 
@@ -477,15 +516,24 @@ export function useDashboardSystem() {
         
         const [
           { data: recentExams }, 
-          { data: periods }, 
+          { data: periodsRaw }, 
           { data: messages },
           { data: attendanceRecords }
         ] = await Promise.all([
           supabase.from('exams').select(`id, title, created_at, start_time, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(5),
-          supabase.from('class_periods').select('*').order('period_number'),
+          periodsQuery,
           supabase.from('messages').select('*, sender:sender_id(full_name, avatar_url)').eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(5),
           supabase.from('attendance_records').select('status').eq('teacher_id', teacherId).eq('date', todayStr)
         ]);
+
+        let periods = periodsRaw || [];
+        if (activeSystem === 'auto') {
+            const uniqueMap = new Map();
+            periods.forEach((p: any) => {
+                if (!uniqueMap.has(p.period_number)) uniqueMap.set(p.period_number, p);
+            });
+            periods = Array.from(uniqueMap.values());
+        }
 
         const totalAttendance = attendanceRecords?.length || 0;
         const presentCount = (attendanceRecords || []).filter(a => a.status === 'present').length || 0;
@@ -496,7 +544,7 @@ export function useDashboardSystem() {
           teacher, 
           sections, 
           schedule: scheduleData, 
-          periods: periods || [], 
+          periods: periods, 
           messages: messages || [], 
           assignmentStats,
           recentExams: (recentExams || []).map((e: any) => ({
@@ -522,7 +570,6 @@ export function useDashboardSystem() {
     }, forceRefresh); 
   }, [user?.id]);
 
-  // 🚀 [تحديث جلب جدول المعلم لدعم النظامين]
   const fetchTeacherSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
@@ -572,8 +619,22 @@ export function useDashboardSystem() {
             scheduleData = data || [];
         }
 
-        const { data: periods } = await supabase.from('class_periods').select('*').order('period_number').limit(100);
-        return { schedule: scheduleData, periods: periods || [] };
+        let periodsQuery = activeSystem === 'auto' 
+            ? supabase.from('auto_class_periods').select('*').order('period_number')
+            : supabase.from('class_periods').select('*').order('period_number');
+
+        const { data: periodsRaw } = await periodsQuery;
+        let periods = periodsRaw || [];
+        
+        if (activeSystem === 'auto') {
+            const uniqueMap = new Map();
+            periods.forEach((p: any) => {
+                if (!uniqueMap.has(p.period_number)) uniqueMap.set(p.period_number, p);
+            });
+            periods = Array.from(uniqueMap.values());
+        }
+
+        return { schedule: scheduleData, periods: periods };
       } catch (error) { throw error; }
     }, forceRefresh);
   }, [user?.id]);
