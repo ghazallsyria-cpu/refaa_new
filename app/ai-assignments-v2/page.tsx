@@ -1,4 +1,3 @@
-
 // @ts-nocheck
 /* eslint-disable react/no-unescaped-entities */
 /* eslint-disable @next/next/no-img-element */
@@ -31,8 +30,6 @@ import { Color } from '@tiptap/extension-color';
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import Latex from 'react-latex-next';
-
 import { supabase } from '@/lib/supabase';
 
 interface Option { id: string; content: string; is_correct: boolean; }
@@ -64,26 +61,6 @@ const renderHTMLWithMath = (html: string) => {
   parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
   parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
   return parsed;
-};
-
-const TypewriterRevealFast = ({ htmlContent }: { htmlContent: string }) => {
-  const [revealed, setRevealed] = useState(false);
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (htmlContent) timer = setTimeout(() => { setRevealed(true); }, 150);
-    return () => { clearTimeout(timer); setRevealed(false); };
-  }, [htmlContent]);
-  return (
-    <div className="relative">
-      <motion.div
-        initial={{ clipPath: "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
-        animate={{ clipPath: revealed ? "polygon(0 0, 100% 0, 100% 100%, 0 100%)" : "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
-        transition={{ duration: 1.5, ease: "easeOut" }}
-        className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-relaxed text-sm"
-        dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(htmlContent) }}
-      />
-    </div>
-  );
 };
 
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
@@ -195,7 +172,7 @@ export default function AssignmentBuilderV2() {
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [manualJson, setManualJson] = useState('');
-  const [skippedLog, setSkippedLog] = useState<{question_hint: string, reason: string}[]>([]); // 🚀 مصفوفة لتخزين الأسئلة المتخطاة
+  const [skippedLog, setSkippedLog] = useState<{question_hint: string, reason: string}[]>([]); 
   
   const [isSavingDB, setIsSavingDB] = useState(false);
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
@@ -210,27 +187,6 @@ export default function AssignmentBuilderV2() {
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewQ, setPreviewQ] = useState<Question | null>(null);
-
-  const handleResetBuilder = (force = false) => {
-    if (!force && (questions.length > 0 || assignmentTitle !== 'واجب جديد')) {
-      if (!confirm('هل أنت متأكد من مسح جميع الأسئلة والبيانات للبدء بدرس جديد؟')) return;
-    }
-    setEditingAssignmentId(null);
-    setQuestions([]);
-    setSkippedLog([]);
-    setAssignmentTitle('واجب جديد');
-    setSelectedTeacher('');
-    setSelectedSubject('');
-    setSelectedSections([]);
-    setIsPracticeMode(false); 
-    setAssignmentStatus('draft');
-    
-    const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1); tmrw.setHours(23, 59, 0, 0);
-    setDueDate(tmrw.toISOString().slice(0, 16));
-    setTimeLimit(0);
-    setLatePolicy('allow');
-    setMaxScore(100);
-  };
 
   useEffect(() => {
     const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1); tmrw.setHours(23, 59, 0, 0);
@@ -291,6 +247,27 @@ export default function AssignmentBuilderV2() {
   useEffect(() => {
     if (activeTab === 'manage') fetchManageList();
   }, [activeTab]);
+
+  const handleResetBuilder = (force = false) => {
+    if (!force && (questions.length > 0 || assignmentTitle !== 'واجب جديد')) {
+      if (!confirm('هل أنت متأكد من مسح جميع الأسئلة والبيانات للبدء بدرس جديد؟')) return;
+    }
+    setEditingAssignmentId(null);
+    setQuestions([]);
+    setSkippedLog([]);
+    setAssignmentTitle('واجب جديد');
+    setSelectedTeacher('');
+    setSelectedSubject('');
+    setSelectedSections([]);
+    setIsPracticeMode(false); 
+    setAssignmentStatus('draft');
+    
+    const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1); tmrw.setHours(23, 59, 0, 0);
+    setDueDate(tmrw.toISOString().slice(0, 16));
+    setTimeLimit(0);
+    setLatePolicy('allow');
+    setMaxScore(100);
+  };
 
   const fetchManageList = async () => {
     setIsManageLoading(true);
@@ -395,16 +372,19 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
-  // 🚀 تطوير البرومبت ليشمل أسئلة الرسم وتوضيح أسباب التخطي
+  // 🚀 البرومبت المطور والشامل
   const copyPrompt = () => { 
-    const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم الدقة. سأعطيك نصاً مقتطعاً من بنك أسئلة أو اختبار.
+    const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم جداً. سأعطيك نصاً مقتطعاً من بنك أسئلة أو اختبار.
 المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي. 🚨 إياك أن تتخيل أسئلة أو صور غير موجودة.
 
 قوانين التصنيف "type":
 - "multiple_choice": أسئلة الاختيار من متعدد (ضع الخيارات في مصفوفة "options").
 - "true_false": الصح والخطأ (قم بتوليد خياري "صح" و "خطأ" وحدد الصحيح).
-- "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، والمسائل الرياضية المباشرة.
-- "section_header": العناوين الرئيسية فقط (مثل: السؤال الأول).
+- "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، أذكر السبب، الأسئلة المقالية المطولة، والمسائل الرياضية المباشرة.
+- "section_header": العناوين الرئيسية والفرعية التي تسبق الأسئلة (مثل: السؤال الأول، أو: اقرأ النص التالي ثم أجب).
+
+🎨 التعامل مع الجداول والمقارنات ("type": "essay"):
+- إذا وجدت جدولاً أو سؤال مقارنة، حوله إلى نص منظم باستخدام الـ HTML (مثل <table> أو <b>) داخل "content" و "model_answer_html". لا تستخدم نصوصاً مسطحة.
 
 🎨 قوانين أسئلة "الرسم" ("type": "essay"):
 - إذا كان السؤال يطلب من الطالب صراحة "الرسم" (مثل: ارسم المنحنيات البيانية، أكمل مسار الشعاع، ارسم الدائرة)، اجعل نوعه "essay"، وأضف جملة واضحة في نهايته: "(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)".
@@ -413,7 +393,7 @@ export default function AssignmentBuilderV2() {
 - اجعله true **فقط وحصراً** إذا كان نص السؤال يشير لصورة يجب أن يراها الطالب ليحل (مثل: من الشكل المجاور، في الرسم البياني الموضح أدناه). لا تضعه true لأسئلة الرسم العادية التي يبدأ الطالب برسمها من ورقة بيضاء.
 
 🛑 الإبلاغ عن الأسئلة المتخطاة (إجباري):
-إذا واجهت سؤالاً معقداً لم تتمكن من تحويله (بسبب تداخل الجداول المعقدة جداً، أو رسومات لا يمكن فهمها من النص)، **لا تتجاهله بصمت**. بل أضف لمحة عنه في مصفوفة "skipped_questions" واذكر السبب بوضوح ليعلم المعلم.
+إذا واجهت سؤالاً معقداً لم تتمكن من تحويله (بسبب رسومات لا يمكن فهمها من النص)، لا تتجاهله بصمت. بل أضف لمحة عنه في مصفوفة "skipped_questions" واذكر السبب بوضوح ليعلم المعلم.
 
 هيكل JSON المطلوب:
 {
@@ -425,30 +405,34 @@ export default function AssignmentBuilderV2() {
   "questions": [
     {
       "type": "essay", 
-      "content": "ارسم العلاقة البيانية بين زاوية السقوط والانعكاس. <br><br> <i>(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)</i>",
+      "content": "قارن بين كذا وكذا. <br> <b>أو:</b> ارسم العلاقة البيانية... <br><br> <i>(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)</i>",
       "needs_image": false, 
-      "model_answer_html": "<b>خطوات الحل:</b> <br> نرسم خط مستقيم يمر بنقطة الأصل وميله يساوي 1.",
+      "model_answer_html": "<b>خطوات الحل:</b> <br> كذا وكذا.",
       "points": 1,
       "options": []
     }
   ]
 }
 
-إليك النص (استخرج جميع الأسئلة كاملة بدقة):`;
+إليك النص (استخرج جميع الأسئلة كاملة بدقة متناهية ولا تختصر شيئاً):`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الصارم المطور! 🚨\nلقد أضفنا ميزة التعامل مع أسئلة الرسم وإجبار الذكاء الاصطناعي على الاعتراف بالأسئلة التي عجز عنها لتتمكن من إضافتها يدوياً.'); 
+    alert('تم نسخ البرومبت الصارم المطور! 🚨\nيشمل الآن دعماً للمقارنات والمقالي المطول وجداول المقارنة.'); 
   };
 
   const processManualJson = () => {
     if (!manualJson.trim()) { alert('يرجى لصق الكود أولاً.'); return; }
     try {
-      let safeJsonStr = manualJson;
-      const firstBrace = safeJsonStr.indexOf('{');
-      const lastBrace = safeJsonStr.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) safeJsonStr = safeJsonStr.substring(firstBrace, lastBrace + 1);
-      else throw new Error('لم يتم العثور على صيغة JSON صحيحة');
+      let cleanStr = manualJson.trim();
+      if (cleanStr.startsWith('```')) {
+        cleanStr = cleanStr.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '');
+      }
 
-      const parsedData = JSON.parse(safeJsonStr);
+      const firstBrace = cleanStr.indexOf('{');
+      const lastBrace = cleanStr.lastIndexOf('}');
+      if (firstBrace === -1 || lastBrace === -1) throw new Error('لم يتم العثور على صيغة JSON صحيحة');
+
+      const parsedData = JSON.parse(cleanStr.substring(firstBrace, lastBrace + 1));
+      
       const newQuestions = (parsedData.questions || []).map((q:any) => {
         let opts = [];
         if (Array.isArray(q.options)) {
@@ -460,7 +444,7 @@ export default function AssignmentBuilderV2() {
                return { id: crypto.randomUUID(), content: opt, is_correct: !!isMatch };
             } else {
                const isCorrectVal = opt.is_correct === true || opt.is_correct === 'true' || opt.isCorrect === true || opt.isCorrect === 'true';
-               return { id: crypto.randomUUID(), content: String(opt.content || ''), is_correct: isCorrectVal };
+               return { id: crypto.randomUUID(), content: String(opt.content || opt.text || ''), is_correct: isCorrectVal };
             }
           });
           if (q.type === 'multiple_choice' && opts.length > 0 && !opts.some((o:any) => o.is_correct)) opts[0].is_correct = true;
@@ -468,7 +452,7 @@ export default function AssignmentBuilderV2() {
         const parsedPoints = Number(q.points);
         return {
           id: crypto.randomUUID(),
-          content_html: q.content || q.section_header || '',
+          content_html: q.content || q.content_html || q.section_header || '',
           model_answer_html: q.model_answer_html || '', 
           type: q.type || 'essay',
           points: isNaN(parsedPoints) ? 1 : parsedPoints, 
@@ -477,7 +461,6 @@ export default function AssignmentBuilderV2() {
         };
       });
 
-      // 🚀 إعلام المعلم بالأسئلة المتخطاة
       if (parsedData.skipped_questions && parsedData.skipped_questions.length > 0) {
         setSkippedLog(parsedData.skipped_questions);
       } else {
@@ -487,9 +470,8 @@ export default function AssignmentBuilderV2() {
       setAssignmentTitle(prev => prev === 'واجب جديد' || prev === 'بنك تدريب جديد' ? (parsedData.title || 'بنك مستورد بذكاء') : prev);
       setQuestions(prev => [...prev, ...newQuestions]); 
       setManualJson(''); 
-      setManualJsonError(null);
       setActiveTab('builder');
-    } catch (err: any) { alert('الكود المنسوخ غير صالح للأسف ❌\nيرجى التأكد من نسخ الرد بالكامل من ChatGPT وعدم انقطاعه في المنتصف.'); }
+    } catch (err: any) { alert(`الكود المنسوخ غير صالح للأسف ❌\nالخطأ: ${err.message}`); }
   };
 
   const openNewQuestion = () => {
@@ -508,7 +490,6 @@ export default function AssignmentBuilderV2() {
 
   const openPreview = (index: number) => {
     setPreviewQ(questions[index]);
-    setShowPreviewHint(false); 
     setIsPreviewOpen(true);
   };
 
@@ -776,7 +757,7 @@ export default function AssignmentBuilderV2() {
             <div className="flex items-center justify-between mb-4 mt-4">
               <h2 className="font-black text-lg text-emerald-800">مطابقة الأسئلة والأجوبة بالـ AI</h2>
               <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm active:scale-95">
-                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل الرسم)
+                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل المقالي والرسم)
               </button>
             </div>
             <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
@@ -883,57 +864,230 @@ export default function AssignmentBuilderV2() {
               )}
             </div>
 
+            {/* 🚀 قائمة الأسئلة (The Builder) */}
             <div className="space-y-4">
-              <div className="space-y-4">
-                {questions.map((q, i) => (
-                  <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                      <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
-                      <div className="flex gap-2">
-                        <button onClick={() => openPreview(i)} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
-                          <Eye className="w-4 h-4" /> معاينة
-                        </button>
-                        <button onClick={() => openEditQuestion(i)} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
-                        <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
+              {questions.map((q, i) => (
+                <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 group relative">
+                  <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                    <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => openPreview(i)} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
+                        <Eye className="w-4 h-4" /> معاينة
+                      </button>
+                      <button onClick={() => openEditQuestion(i)} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
+                      <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                  
+                  {q.needs_image && (
+                    <div className="mb-4 bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-xl flex items-center gap-3 shadow-inner animate-pulse">
+                      <ImageIcon className="w-5 h-5 text-orange-500 shrink-0" />
+                      <div>
+                        <p className="text-xs font-black">الذكاء الاصطناعي يخبرك: هذا السؤال ينقصه صورة!</p>
+                        <p className="text-[10px] font-bold opacity-80">اضغط على زر (تعديل) وقم بإرفاق الصورة من جهازك داخل نص السؤال، أو اتركها إذا كان السؤال يعتمد على رسم الطالب.</p>
                       </div>
                     </div>
-                    
-                    {q.needs_image && (
-                      <div className="mb-4 bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-xl flex items-center gap-3 shadow-inner animate-pulse">
-                        <ImageIcon className="w-5 h-5 text-orange-500 shrink-0" />
-                        <div>
-                          <p className="text-xs font-black">الذكاء الاصطناعي يخبرك: هذا السؤال ينقصه صورة!</p>
-                          <p className="text-[10px] font-bold opacity-80">اضغط على زر (تعديل) وقم بإرفاق الصورة من جهازك داخل نص السؤال، أو اتركها إذا كان السؤال يعتمد على رسم الطالب.</p>
-                        </div>
-                      </div>
-                    )}
+                  )}
 
-                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }}></div>
-                  </div>
-                ))}
+                  <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }}></div>
+                  
+                  {q.model_answer_html && (
+                     <div className="mt-4 pt-4 border-t border-slate-100 flex items-start gap-2">
+                        <Target className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                        <div className="tiptap-content prose prose-sm max-w-none font-bold text-emerald-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html) }}></div>
+                     </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
+              <Plus className="w-5 h-5" /> إضافة سؤال جديد
+            </button>
+
+            {questions.length > 0 && (
+              <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl text-white space-y-4 mt-8">
+                <div className="flex items-center justify-between">
+                   <p className="font-black">جاهز للنشر؟ ({questions.length}) سؤال</p>
+                   <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="bg-slate-800 border border-slate-700 p-2 rounded-lg text-xs font-black outline-none">
+                      <option value="draft">حفظ كمسودة (مخفي)</option>
+                      <option value="published">نشر للطلاب فوراً</option>
+                   </select>
+                </div>
+                <button onClick={saveAssignmentToDB} disabled={isSavingDB} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                  {isSavingDB ? <Loader2 className="animate-spin w-5 h-5"/> : <Save className="w-5 h-5"/>}
+                  {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'اعتماد وتوزيع الدرس'}
+                </button>
               </div>
-              <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
-                <Plus className="w-5 h-5" /> إضافة سؤال جديد
-              </button>
-            </div>
-
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
-              <label className="block text-xs font-bold text-slate-500">حالة الواجب عند الحفظ</label>
-              <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none shadow-sm">
-                <option value="draft">حفظ كمسودة (مخفي)</option>
-                <option value="published">نشر للطلاب</option>
-              </select>
-
-              <button onClick={saveAssignmentToDB} disabled={isSavingDB} className={`w-full text-white font-black text-lg py-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${editingAssignmentId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
-                {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5" /> : <Save className="w-5 h-5" />)} 
-                {editingAssignmentId ? 'حفظ التعديلات وتحديث الواجب' : 'توزيع الواجب للطلاب'}
-              </button>
-            </div>
+            )}
           </motion.div>
         )}
       </div>
+
+      {/* 🚀 Modal محرر الأسئلة (Editor) */}
+      <AnimatePresence>
+        {isEditorOpen && currentQ && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" onClick={() => setIsEditorOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, y: 100 }} 
+               animate={{ opacity: 1, y: 0 }} 
+               exit={{ opacity: 0, y: 100 }} 
+               className="fixed bottom-0 left-0 w-full sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-4xl bg-slate-100 rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]" 
+               dir="rtl"
+            >
+              <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
+                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-indigo-600"/> {editingIndex !== null ? 'تعديل السؤال' : 'سؤال جديد'}
+                </h3>
+                <button onClick={() => setIsEditorOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-slate-50 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="p-5 overflow-auto custom-scrollbar flex-1 space-y-6">
+                 
+                 <div className="flex gap-4 items-center bg-white p-4 rounded-2xl border border-slate-200">
+                    <div className="flex-1">
+                       <label className="block text-xs font-bold text-slate-500 mb-2">نوع السؤال</label>
+                       <select value={currentQ.type} onChange={(e) => setCurrentQ({...currentQ, type: e.target.value})} className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-bold outline-none focus:border-indigo-500 text-sm">
+                          <option value="essay">مقالي / رسم / استنتاج / مسألة</option>
+                          <option value="multiple_choice">اختيار من متعدد</option>
+                          <option value="true_false">صح أو خطأ</option>
+                          <option value="section_header">ترويسة / نص عام (بدون إجابة)</option>
+                       </select>
+                    </div>
+                    <div className="w-24">
+                       <label className="block text-xs font-bold text-slate-500 mb-2">الدرجة</label>
+                       <input type="number" min="0" value={currentQ.points} onChange={(e) => setCurrentQ({...currentQ, points: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-black outline-none focus:border-indigo-500 text-sm text-center" />
+                    </div>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="block text-sm font-black text-slate-700 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-500"/> نص السؤال</label>
+                    <TiptapEditor content={currentQ.content_html} onChange={(html) => setCurrentQ({...currentQ, content_html: html})} placeholder="اكتب نص السؤال هنا... يمكن لصق صور للأسئلة." />
+                 </div>
+
+                 {currentQ.type !== 'section_header' && (
+                    <div className="space-y-2">
+                       <label className="block text-sm font-black text-emerald-700 flex items-center gap-2 mt-4"><Target className="w-4 h-4"/> الإجابة النموذجية (تظهر للطالب بعد الحل)</label>
+                       <TiptapEditor content={currentQ.model_answer_html || ''} onChange={(html) => setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
+                    </div>
+                 )}
+
+                 {currentQ.type === 'multiple_choice' && (
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+                       <div className="flex justify-between items-center mb-2">
+                          <label className="text-sm font-black text-slate-700">خيارات الإجابة</label>
+                          <span className="text-xs text-rose-500 font-bold bg-rose-50 px-2 py-1 rounded-md">حدد الإجابة الصحيحة بعلامة (صح)</span>
+                       </div>
+                       {currentQ.options.map((opt, oIdx) => (
+                          <div key={opt.id} className={`flex items-center gap-2 p-2 border rounded-xl transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}>
+                             <button onClick={() => toggleCorrectOption(opt.id)} className={`p-2 rounded-lg shrink-0 ${opt.is_correct ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400 hover:bg-slate-300'}`}>
+                                <CheckSquare className="w-5 h-5"/>
+                             </button>
+                             <input type="text" value={opt.content} onChange={(e) => updateOptionContent(opt.id, e.target.value)} className={`flex-1 bg-transparent border-none outline-none font-bold text-sm ${opt.is_correct ? 'text-emerald-900' : 'text-slate-700'}`} placeholder={`الخيار رقم ${oIdx + 1}`} />
+                             <button onClick={() => removeOption(opt.id)} className="p-2 text-rose-400 hover:bg-rose-100 rounded-lg shrink-0"><Trash2 className="w-4 h-4"/></button>
+                          </div>
+                       ))}
+                       <button onClick={addOption} className="w-full py-3 bg-slate-100 text-slate-600 font-black text-xs rounded-xl hover:bg-slate-200 flex items-center justify-center gap-1 border border-slate-200 border-dashed">
+                          <Plus className="w-4 h-4"/> إضافة خيار جديد
+                       </button>
+                    </div>
+                 )}
+
+                 {currentQ.type === 'true_false' && (
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+                       <label className="text-sm font-black text-slate-700 block mb-2">حدد الإجابة الصحيحة:</label>
+                       <div className="flex gap-4">
+                          <button onClick={() => { setCurrentQ({...currentQ, options: [{id: '1', content: 'صح', is_correct: true}, {id: '2', content: 'خطأ', is_correct: false}]}) }} className={`flex-1 py-4 rounded-xl font-black text-sm border-2 transition-all ${currentQ.options.find(o => o.content === 'صح' && o.is_correct) ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                             العبارة صحيحة
+                          </button>
+                          <button onClick={() => { setCurrentQ({...currentQ, options: [{id: '1', content: 'صح', is_correct: false}, {id: '2', content: 'خطأ', is_correct: true}]}) }} className={`flex-1 py-4 rounded-xl font-black text-sm border-2 transition-all ${currentQ.options.find(o => o.content === 'خطأ' && o.is_correct) ? 'bg-rose-50 border-rose-500 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                             العبارة خاطئة
+                          </button>
+                       </div>
+                    </div>
+                 )}
+              </div>
+
+              <div className="p-5 flex gap-3 border-t border-slate-200 shrink-0 bg-white">
+                <button onClick={() => setIsEditorOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
+                <button onClick={saveQuestion} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
+                  <Save className="w-5 h-5" /> {editingIndex !== null ? 'تحديث وحفظ' : 'إضافة للدرس'}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* 🚀 Modal المعاينة (Preview) */}
+      <AnimatePresence>
+        {isPreviewOpen && previewQ && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" onClick={() => setIsPreviewOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95 }} 
+               animate={{ opacity: 1, scale: 1 }} 
+               exit={{ opacity: 0, scale: 0.95 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-2xl bg-white rounded-3xl shadow-2xl z-50 overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]" 
+               dir="rtl"
+            >
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+                <h3 className="font-black text-slate-800 flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-blue-500"/> معاينة بطاقة السؤال
+                </h3>
+                <button onClick={() => setIsPreviewOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="p-6 overflow-auto custom-scrollbar flex-1">
+                 <div className="bg-white border-2 border-slate-100 rounded-3xl p-6 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                       <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg uppercase tracking-widest">{translateType(previewQ.type)}</span>
+                       <span className="text-xs font-black text-amber-500 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">{previewQ.points} درجات</span>
+                    </div>
+
+                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 text-lg leading-relaxed mb-8" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.content_html) }} />
+
+                    {previewQ.type === 'multiple_choice' && (
+                       <div className="space-y-3">
+                          {previewQ.options.map((opt, idx) => (
+                             <div key={opt.id} className={`p-4 rounded-xl border-2 font-bold text-sm transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600'}`}>
+                                {idx + 1}. {opt.content}
+                                {opt.is_correct && <CheckCircle2 className="inline-block mr-2 w-4 h-4 text-emerald-500"/>}
+                             </div>
+                          ))}
+                       </div>
+                    )}
+
+                    {previewQ.type === 'true_false' && (
+                       <div className="flex gap-4">
+                          {previewQ.options.map(opt => (
+                             <div key={opt.id} className={`flex-1 p-4 rounded-xl border-2 font-black text-center transition-all ${opt.is_correct ? (opt.content==='صح'?'border-emerald-500 bg-emerald-50 text-emerald-700':'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                                {opt.content}
+                             </div>
+                          ))}
+                       </div>
+                    )}
+
+                    {previewQ.type === 'essay' && (
+                       <div className="w-full h-32 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center text-slate-400 font-bold text-sm">
+                          مساحة إجابة الطالب (نصية أو رسم حر)
+                       </div>
+                    )}
+
+                    {previewQ.model_answer_html && (
+                       <div className="mt-8 pt-6 border-t border-slate-200">
+                          <h4 className="font-black text-emerald-700 mb-3 flex items-center gap-2"><Target className="w-5 h-5"/> الإجابة النموذجية</h4>
+                          <div className="tiptap-content prose prose-sm max-w-none font-bold text-emerald-900 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.model_answer_html) }} />
+                       </div>
+                    )}
+                 </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
-
-
