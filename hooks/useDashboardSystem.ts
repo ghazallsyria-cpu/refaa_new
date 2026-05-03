@@ -102,7 +102,6 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, []);
 
-  // 🚀 [هوك الطالب المُدرّع والداعم للأوقات الذكية حسب المرحلة]
   const fetchStudentDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     
@@ -112,7 +111,6 @@ export function useDashboardSystem() {
         let allAutoPeriods: any[] = [];
         let classPeriods: any[] = [];
 
-        // 🚀 جلب كافة الأوقات مسبقاً لتغذية الجدول بالأوقات الصحيحة
         if (activeSystem === 'auto') {
             const { data } = await supabase.from('auto_class_periods').select('*');
             allAutoPeriods = data || [];
@@ -134,15 +132,17 @@ export function useDashboardSystem() {
           .maybeSingle();
 
         if (studentError || !studentCore) {
+           console.warn("Student record not found for this user.");
            return { student: { id: user.id, users: userData || { full_name: 'طالب' } }, assignments: [], exams: [], attendanceRate: 0, grades: [], todaysSchedule: [], periods: [] };
         }
         
         const student = { ...studentCore, users: userData || { full_name: 'طالب' } };
         const sectionId = studentCore.section_id;
 
-        // 🚀 تحديد مرحلة الطالب بدقة لتوجيه الأوقات
+        // 🚀 تحديد مرحلة الطالب
         let stage: 'middle' | 'high' = 'high';
-        const classNameObj = Array.isArray(studentCore.sections?.classes) ? studentCore.sections?.classes[0] : studentCore.sections?.classes;
+        const secData: any = studentCore.sections;
+        const classNameObj = Array.isArray(secData?.classes) ? secData.classes[0] : secData?.classes;
         const classNameStr = classNameObj?.name || '';
         if (classNameStr && /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(classNameStr)) {
             stage = 'middle';
@@ -197,7 +197,6 @@ export function useDashboardSystem() {
                             const subj = subjRes.data?.find(x => x.id === s.subject_id);
                             const teach = teachRes.data?.find(x => x.id === s.teacher_id);
                             
-                            // 🚀 حقن الوقت الدقيق
                             let startTime = s.start_time;
                             let endTime = s.end_time;
                             const pTime = allAutoPeriods.find(p => p.period_number === s.period_number && p.stage === stage);
@@ -287,7 +286,6 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, [user?.id]);
 
-  // 🚀 [جدول الطالب الكامل - مدعوم بالأوقات الذكية]
   const fetchStudentSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`student_schedule_${user.id}`, async () => {
@@ -311,7 +309,8 @@ export function useDashboardSystem() {
         
         // 🚀 تحديد المرحلة
         let stage: 'middle' | 'high' = 'high';
-        const classNameObj = Array.isArray(student?.sections?.classes) ? student.sections.classes[0] : student?.sections?.classes;
+        const secData: any = student?.sections;
+        const classNameObj = Array.isArray(secData?.classes) ? secData.classes[0] : secData?.classes;
         const classNameStr = classNameObj?.name || '';
         if (classNameStr && /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(classNameStr)) {
             stage = 'middle';
@@ -338,7 +337,6 @@ export function useDashboardSystem() {
                         const subj = subjRes.data?.find(x => x.id === s.subject_id);
                         const teach = teachRes.data?.find(x => x.id === s.teacher_id);
                         
-                        // 🚀 حقن الوقت الدقيق
                         let startTime = s.start_time;
                         let endTime = s.end_time;
                         const pTime = allAutoPeriods.find(p => p.period_number === s.period_number && p.stage === stage);
@@ -402,7 +400,8 @@ export function useDashboardSystem() {
       // جلب مرحلة الابن لتحديد الأوقات بدقة
       const { data: childData } = await supabase.from('students').select('sections(classes(name))').eq('id', childId).maybeSingle();
       let stage: 'middle' | 'high' = 'high';
-      const classNameObj = Array.isArray(childData?.sections?.classes) ? childData?.sections?.classes[0] : childData?.sections?.classes;
+      const secData: any = childData?.sections;
+      const classNameObj = Array.isArray(secData?.classes) ? secData.classes[0] : secData?.classes;
       if (classNameObj?.name && /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(classNameObj.name)) {
           stage = 'middle';
       }
@@ -460,7 +459,6 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, []);
 
-  // 🚀 [هوك المعلم المُدرّع بالكامل مع حقن التواقيت الذكية]
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
@@ -469,7 +467,6 @@ export function useDashboardSystem() {
         let allAutoPeriods: any[] = [];
         let classPeriods: any[] = [];
 
-        // 🚀 جلب كل الأوقات لضمان التوافق المطلق
         if (activeSystem === 'auto') {
             const { data } = await supabase.from('auto_class_periods').select('*');
             allAutoPeriods = data || [];
@@ -495,7 +492,6 @@ export function useDashboardSystem() {
         let scheduleData: any[] = [];
         let teacherSchedules: any[] = [];
 
-        // 1. جلب الجدول لمعرفة الفصول التي يدرسها المعلم
         if (activeSystem === 'auto') {
             const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
             if (planData) {
@@ -514,9 +510,9 @@ export function useDashboardSystem() {
                         const sec = secRes.data?.find((x: any) => x.id === s.section_id);
                         const subj = subjRes.data?.find((x: any) => x.id === s.subject_id);
                         
-                        // 🚀 التعرف على المرحلة لهذه البطاقة بالذات لتحديد وقتها المخصص
                         let itemStage = 'high';
-                        const cName = sec?.classes?.name || sec?.name || '';
+                        const cNameObj = Array.isArray(sec?.classes) ? sec.classes[0] : sec?.classes;
+                        const cName = cNameObj?.name || sec?.name || '';
                         if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(cName)) itemStage = 'middle';
 
                         let startTime = s.start_time;
@@ -530,8 +526,8 @@ export function useDashboardSystem() {
                         return {
                             ...s,
                             period: s.period_number,
-                            start_time: startTime, // حقن الوقت الدقيق
-                            end_time: endTime,     // حقن الوقت الدقيق
+                            start_time: startTime,
+                            end_time: endTime,
                             sections: { name: sec?.name, classes: sec?.classes },
                             subjects: { name: subj?.name }
                         };
@@ -544,7 +540,6 @@ export function useDashboardSystem() {
             teacherSchedules = scheduleData;
         }
         
-        // 2. 🚀 [تحديد المرحلة الأساسية للمعلم لرسم خط الزمن الخارجي للوحة]
         let midCount = 0; let highCount = 0;
         scheduleData.forEach(s => {
             const classObj = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
@@ -655,7 +650,6 @@ export function useDashboardSystem() {
     }, forceRefresh); 
   }, [user?.id]);
 
-  // 🚀 [جدول المعلم الكامل الأسبوعي - مدعوم بالتعرف الذكي على المرحلة وحقن التواقيت]
   const fetchTeacherSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
@@ -700,9 +694,9 @@ export function useDashboardSystem() {
                         const subj = subjRes.data?.find((x: any) => x.id === s.subject_id);
                         const sec = secRes.data?.find((x: any) => x.id === s.section_id);
                         
-                        // 🚀 التعرف الذكي على المرحلة وحقن الوقت هنا
                         let itemStage = 'high';
-                        const cName = sec?.classes?.name || sec?.name || '';
+                        const cNameObj = Array.isArray(sec?.classes) ? sec.classes[0] : sec?.classes;
+                        const cName = cNameObj?.name || sec?.name || '';
                         if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(cName)) itemStage = 'middle';
 
                         let startTime = s.start_time;
@@ -730,7 +724,6 @@ export function useDashboardSystem() {
             scheduleData = data || [];
         }
 
-        // 🚀 تحديد المرحلة الأساسية للمعلم لمعايرة خط الزمن (Timeline) الأيسر
         let midCount = 0; let highCount = 0;
         scheduleData.forEach(s => {
             const classObj = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
