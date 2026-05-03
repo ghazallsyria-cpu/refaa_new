@@ -33,9 +33,9 @@ const checkTeacherCollision = (scheduleArray: any[], teacherId: string, day: num
 
       if (String(s.teacher_id) !== String(teacherId) || String(s.day) !== String(day)) return false;
 
-      // 1. الفحص الدقيق بالوقت إذا كان متوفراً في قاعدة البيانات
+      // 1. الفحص الدقيق بالوقت إذا كان متوفراً
       if (s.start_time && s.end_time && periodData.start_time && periodData.end_time) {
-          return isTimeIntersecting(s.start_time, s.end_time, periodData.start_time, periodData.end_time);
+          return isTimeIntersecting(s.start_time, s.end_time, periodData.start_time, periodData.end_time) || String(s.period_number) === String(periodData.period_number);
       }
       // 2. حزام الأمان: إذا لم يوجد وقت، نمنع تطابق رقم الحصة قطعياً
       return String(s.period_number) === String(periodData.period_number);
@@ -363,7 +363,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM
+  // 🧠 THE CORE ALGORITHM (Learning Engine + Zero Drop Constraints)
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -372,7 +372,7 @@ export default function AutoScheduleGenerator() {
     setGenerating(true); setGenerationLogs([]); setUnplacedLessons([]); setActivePlanId(null);
     setDraggedItem(null); setDragOverTarget(null); setIsSwapMode(false); setSwapSource(null);
     
-    addLog("🚀 بدء التوليد... (تفعيل محرك التعلم الذكي والتسكين الجبري)");
+    addLog("🚀 بدء التوليد... (تفعيل الدرع المانع للحصص الشبحية)");
     await new Promise(r => setTimeout(r, 100)); 
     
     const domQuotas = { ...subjectQuotas };
@@ -527,7 +527,7 @@ export default function AutoScheduleGenerator() {
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && attempt < 30 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 25 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -554,7 +554,7 @@ export default function AutoScheduleGenerator() {
           for(let i=0; i<assignment.forced_waitlist; i++) {
              unplacedQueue.push({...assignment, section_id: section.id, section_name: section.full_name, stage: section.stage, id: safeGenerateId()});
              failedPlacements++;
-             subjectFailureWeights[failKey] = (subjectFailureWeights[failKey] || 0) + 1; 
+             subjectFailureWeights[failKey] = (subjectFailureWeights[failKey] || 0) + 1;
           }
 
           let remainingLessons = assignment.weekly_quota;
@@ -624,6 +624,7 @@ export default function AutoScheduleGenerator() {
                 for (const period of dayPeriods) {
                   if (isPlaced) break; 
                   
+                  // 🚀 الدرع يعمل هنا أيضاً لمنع إزاحة المعلم لمكان غير صحيح
                   const teachSlotIdx = finalSchedule.findIndex(s => String(s.teacher_id) === String(assignment.teacher_id) && String(s.day) === String(day) && (String(s.period_number) === String(period.period_number) || (s.start_time && period.start_time && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))));
                   const secSlotIdx = finalSchedule.findIndex(s => String(s.section_id) === String(section.id) && String(s.day) === String(day) && String(s.period_number) === String(period.period_number));
                   
@@ -660,6 +661,7 @@ export default function AutoScheduleGenerator() {
                             const secFreeAtAlt = !finalSchedule.some((s, idx) => idx !== secSlotIdx && String(s.section_id) === String(section.id) && String(s.day) === String(altDay) && String(s.period_number) === String(altPeriod.period_number));
                             if (!secFreeAtAlt) continue;
                             
+                            // 🚀 حماية حصص المعلم المُزاح من الاختفاء
                             if (checkTeacherCollision(finalSchedule, blockingSlot.teacher_id, altDay, altPeriod, blockingSlot.id)) continue;
 
                             const zSubjectSlots = finalSchedule.filter((s, idx) => idx !== secSlotIdx && String(s.section_id) === String(section.id) && String(s.subject_id) === String(blockingSlot.subject_id));
@@ -724,6 +726,7 @@ export default function AutoScheduleGenerator() {
                                  const secWFreeAtAlt = !finalSchedule.some((s, idx) => idx !== teachSlotIdx && String(s.section_id) === String(teacherBlockingSlot.section_id) && String(s.day) === String(altDay) && String(s.period_number) === String(altPeriod.period_number));
                                  if (!secWFreeAtAlt) continue;
                                  
+                                 // 🚀 حماية حصص المعلم المُزاح من الاختفاء
                                  if (checkTeacherCollision(finalSchedule, teacherBlockingSlot.teacher_id, altDay, altPeriod, teacherBlockingSlot.id)) continue;
 
                                  const wSubjectSlots = finalSchedule.filter((s, idx) => idx !== teachSlotIdx && String(s.section_id) === String(teacherBlockingSlot.section_id) && String(s.subject_id) === String(teacherBlockingSlot.subject_id));
@@ -859,6 +862,7 @@ export default function AutoScheduleGenerator() {
               setDraggedItem(null); return;
           }
 
+          // 🚀 الفحص الآمن بدالة checkTeacherCollision
           if (checkTeacherCollision(generatedSchedules, sourceSlot.teacher_id, targetDay, pDataTarget, sourceSlot.id, targetSlot ? targetSlot.id : null)) {
               alert(`❌ المعلم (${sourceSlot.teacher_name}) لديه حصة في فصل آخر في هذا الوقت!`);
               setDraggedItem(null); return;
@@ -913,8 +917,9 @@ export default function AutoScheduleGenerator() {
              setDraggedItem(null); return;
           }
 
+          // 🚀 الفحص الآمن
           if (checkTeacherCollision(generatedSchedules, lesson.teacher_id, targetDay, pDataTarget)) {
-            alert(`ممنوع ❌: المعلم لديه حصة في فصل آخر في نفس الوقت!`);
+            alert(`ممنوع ❌: المعلم مشغول بتدريس فصل آخر في هذا الوقت!`);
             setDraggedItem(null); return;
           }
 
@@ -1014,7 +1019,7 @@ export default function AutoScheduleGenerator() {
 
     if (occupantIndex !== -1) {
       const occupant = newSchedules[occupantIndex];
-      const confirmSwap = confirm(`هذه الحصة مشغولة بمادة (${occupant.subject_name}). هل تريد سحبها للانتظار وإدخال مادتك مكانها؟`);
+      const confirmSwap = confirm(`هذه الحصة مشغولة بمادة (${occupant.subject_name}). هل تريد سحبها وإدخال مادتك مكانها؟`);
       if (!confirmSwap) return;
       newUnplaced.push({...occupant, id: safeGenerateId()});
       newSchedules.splice(occupantIndex, 1);
@@ -1746,6 +1751,7 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
+                     {/* أزرار الطباعة والتدقيق */}
                      {displayMode === 'grid' && (
                        <>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
@@ -1827,8 +1833,7 @@ export default function AutoScheduleGenerator() {
                                     
                                     const cellKey = `${day}-${p}`;
                                     const isDragOver = dragOverTarget === cellKey;
-                                    const isBeingDragged = draggedItem?.type === 'grid' && draggedItem.day === day && draggedItem.period_number === p;
-                                    const isSource = swapSource && String(swapSource.day) === String(day) && String(swapSource.period_number) === String(p);
+                                    const isBeingDragged = draggedItem?.type === 'grid' && String(draggedItem.day) === String(day) && String(draggedItem.period_number) === String(p);
 
                                     return (
                                       <td 
@@ -1850,7 +1855,6 @@ export default function AutoScheduleGenerator() {
                                         }}
                                         className={`p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7.5rem] align-top transition-all duration-200 
                                           ${isDragOver ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset scale-[0.98] rounded-xl' : 'hover:bg-indigo-50/30'}
-                                          ${isSource ? 'ring-4 ring-rose-500 ring-inset bg-rose-100 scale-[0.98]' : ''}
                                           ${gridFilterType === 'section' ? 'cursor-pointer' : ''}
                                         `}
                                       >
