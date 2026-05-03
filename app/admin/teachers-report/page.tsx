@@ -78,6 +78,16 @@ const getTeacherStage = (teacher: any) => {
   return 'unassigned';
 };
 
+// 🚀 دالة مساعدة لمعرفة النظام الفعال حالياً (يدوي أو آلي)
+const getActiveSystem = async () => {
+  try {
+    const { data } = await supabase.from('school_settings').select('active_schedule_system').eq('id', 1).maybeSingle();
+    return data?.active_schedule_system || 'manual';
+  } catch {
+    return 'manual';
+  }
+};
+
 export default function TeachersReportPage() {
   const [localTeachers, setLocalTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,32 +136,59 @@ export default function TeachersReportPage() {
         datesToProcess = getDatesBetween(startDate, endDate);
       }
 
+      const activeSystem = await getActiveSystem();
+
+      // 🚀 تجهيز الاستعلامات بناءً على النظام הפعال
+      let schedulesQuery = supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000);
+      let periodsQuery = activeSystem === 'auto' ? supabase.from('auto_class_periods').select('*').limit(100) : supabase.from('class_periods').select('period_number, end_time').limit(100);
+
+      // 🚀 إذا كان آلي، نحتاج لجلب الخطة الفعالة أولاً
+      let effectiveSchedules: any[] = [];
+      if (activeSystem === 'auto') {
+         const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+         if (planData) {
+            const { data } = await supabase.from('auto_schedules').select('teacher_id, section_id, day_of_week, period_number').eq('plan_id', planData.id);
+            if (data) {
+                effectiveSchedules = data.map(s => ({ ...s, period: s.period_number }));
+            }
+         }
+      }
+
       // 🚀 الجلب المتوازي السريع
       const [
         { data: teachersDB },
         { data: tsDB },
-        { data: schedulesDB },
+        manualSchedulesRes,
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
         supabase.from('teachers').select('id, specialization, department_id, users(full_name), academic_departments(id, name), department_heads(id)').limit(2000),
         supabase.from('teacher_sections').select('teacher_id, sections(classes(name))').limit(10000),
-        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000),
-        supabase.from('class_periods').select('period_number, end_time').limit(100),
-        // 🚀 معالجة مشكلة الوقت: إضافة T23:59:59 لضمان جلب كامل اليوم الأخير
+        activeSystem === 'manual' ? schedulesQuery : Promise.resolve({ data: null }),
+        periodsQuery,
         supabase.from('attendance_records').select('teacher_id, date, period').gte('date', queryStartStr).lte('date', queryEndStr + 'T23:59:59').limit(50000)
       ]);
 
-      const periodsMap: Record<string, string> = {};
-      dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
+      if (activeSystem === 'manual' && manualSchedulesRes.data) {
+          effectiveSchedules = manualSchedulesRes.data;
+      }
 
-      // 🚀 الحل السحري لمشكلة التواريخ: إزالة الوقت والـ Timezone من تواريخ قاعدة البيانات
+      const getEndTime = (pNum: number, tStage: string) => {
+          if (activeSystem === 'manual') {
+              return dbPeriods?.find((p: any) => Number(p.period_number) === Number(pNum))?.end_time;
+          } else {
+              let stage = tStage === 'both' ? 'high' : (tStage === 'unassigned' ? 'high' : tStage);
+              const p = dbPeriods?.find((p: any) => Number(p.period_number) === Number(pNum) && p.stage === stage);
+              return p?.end_time || dbPeriods?.find((p: any) => Number(p.period_number) === Number(pNum))?.end_time;
+          }
+      };
+
+      // 🚀 الحل السحري لمشكلة التواريخ
       const attendanceMap = new Set((attendanceDB || []).map(a => {
         const normalizedDate = String(a.date).split('T')[0].split(' ')[0]; // اقتطاع التاريخ الصافي فقط
         return `${a.teacher_id}_${normalizedDate}_${a.period}`;
       }));
       
-      const safeSchedules = (schedulesDB || []) as any[];
       const safeTeachers = (teachersDB || []).map((t: any) => ({
         ...t,
         teacher_sections: (tsDB || []).filter(ts => String(ts.teacher_id) === String(t.id))
@@ -159,20 +196,21 @@ export default function TeachersReportPage() {
 
       const results: TeacherReport[] = safeTeachers.map((teacher: any) => {
         let expectedTotal = 0; let actualRecorded = 0;
+        const tStage = getTeacherStage(teacher);
 
         for (const dStr of datesToProcess) {
           const d = new Date(dStr + 'T12:00:00');
           const dDay = getDbDay(d.getDay());
           
           if (dDay >= 1 && dDay <= 5) { // الأحد للخميس فقط
-            const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay));
+            const daySchedules = effectiveSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay));
             
             daySchedules.forEach(sch => {
               let isPassed = false;
               
-              // 🚀 حل مشكلة الأيام المستقبلية والسابقة
+              // 🚀 حل مشكلة الأيام المستقبلية والسابقة مع دعم المراحل
               if (dStr === todayStr) {
-                const endTime = periodsMap[String(sch.period)];
+                const endTime = getEndTime(sch.period, tStage);
                 if (endTime) {
                   const [h, m] = endTime.split(':').map(Number);
                   const pEnd = new Date(now); pEnd.setHours(h, m, 0, 0);
@@ -184,7 +222,6 @@ export default function TeachersReportPage() {
 
               if (isPassed && new Date(dStr) >= SYSTEM_START_DATE) {
                 expectedTotal++;
-                // 🚀 التحقق أصبح نظيفاً ومطابقاً لـ attendanceMap
                 if (attendanceMap.has(`${teacher.id}_${dStr}_${sch.period}`)) {
                    actualRecorded++;
                 }
@@ -210,7 +247,7 @@ export default function TeachersReportPage() {
           specialization: teacher.specialization || "عام",
           department_name: deptObj?.name || "عام",
           isHOD,
-          stage: getTeacherStage(teacher),
+          stage: tStage,
           recorded: actualRecorded, missed: expectedTotal - actualRecorded, expected: expectedTotal, scheduled: 0, percent, lastRecorded: null, status,
           selected: true,
         };
@@ -264,7 +301,7 @@ export default function TeachersReportPage() {
         }
       `}</style>
 
-      {/* 🚀 الثيم الملكي המظلم (دستور الرفعة) */}
+      {/* 🚀 الثيم الملكي المظلم (دستور الرفعة) */}
       <div className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 font-cairo print:hidden min-h-screen bg-[#05070e] pt-6" dir="rtl">
         
         {/* الهيدر العلوي */}
