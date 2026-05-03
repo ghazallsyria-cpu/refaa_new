@@ -343,7 +343,8 @@ export function useDashboardSystem() {
                       scheduleData = raw.map(s => ({
                           ...s,
                           period: s.period_number,
-                          subjects: { id: s.subject_id, name: subjRes?.data?.find((x: any) => x.id === s.subject_id)?.name },
+                          // 🚀 تصحيح الخطأ: إزالة كلمة .data من subjRes
+                          subjects: { id: s.subject_id, name: subjRes?.find((x: any) => x.id === s.subject_id)?.name },
                           teachers: { id: s.teacher_id }
                       }));
                   }
