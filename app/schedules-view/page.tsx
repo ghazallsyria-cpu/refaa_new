@@ -63,7 +63,6 @@ const formatClassName = (rawName?: string) => {
 
 const uniqueDepts = ['قسم العلوم', 'قسم الرياضيات', 'قسم اللغة العربية', 'قسم اللغة الإنجليزية', 'قسم التربية الإسلامية', 'قسم الاجتماعيات', 'قسم الحاسوب', 'أقسام أخرى'];
 
-// تم تمرير allSchedules كمتغير لتعمل الدالة بشكل صحيح
 const getTeacherDept = (tId: string, allSchedules: any[]) => {
   const tSchedules = allSchedules.filter(s => String(s.teacher_id) === String(tId));
   if (tSchedules.length === 0) return 'أقسام أخرى';
@@ -425,17 +424,28 @@ export default function PublicSchedulesViewPage() {
         const containers = document.querySelectorAll(containerClass);
         if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
 
-        const paperFormat = mode === 'master-print' ? 'a3' : 'a4';
+        // 🚀 استخدام ورق A2 للجدول المجمع العملاق ليحافظ على جودته وA4 للجداول الفردية
+        const paperFormat = mode === 'master-print' ? 'a2' : 'a4';
         const pdf = new jsPDFModule('landscape', 'mm', paperFormat);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const pdfPageWidth = pdf.internal.pageSize.getWidth();
+        const pdfPageHeight = pdf.internal.pageSize.getHeight();
 
         for (let i = 0; i < containers.length; i++) {
           if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
-          const scaleValue = mode === 'master-print' ? 2.5 : 2;
-          const canvas = await html2canvasModule(el, { scale: scaleValue, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          // خفض المقياس قليلاً لتجنب امتلاء الذاكرة
+          const scaleValue = mode === 'master-print' ? 2 : 2;
+          
+          // 🚀 السماح للكاميرا بتصوير كامل المحتوى حتى لو كان مخفياً بتمديد العرض!
+          const canvas = await html2canvasModule(el, { 
+             scale: scaleValue, 
+             useCORS: true, 
+             backgroundColor: '#ffffff', 
+             logging: false,
+             windowWidth: el.scrollWidth,
+             windowHeight: el.scrollHeight
+          });
           
           const imgData = canvas.toDataURL('image/jpeg', 0.95);
           
@@ -443,8 +453,24 @@ export default function PublicSchedulesViewPage() {
               throw new Error('نفدت ذاكرة المتصفح أثناء رسم الجدول العملاق! يرجى المحاولة من جهاز كمبيوتر بدلاً من الهاتف.');
           }
 
-          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+          // 🚀 حساب النسبة والتناسب لضمان عدم القص إطلاقاً
+          const imgRatio = canvas.width / canvas.height;
+          let finalImgWidth = pdfPageWidth;
+          let finalImgHeight = pdfPageWidth / imgRatio;
 
+          // إذا كان الطول أكبر من الصفحة، نصغر العرض والطول معاً ليتسع بالكامل داخل الورقة!
+          if (finalImgHeight > pdfPageHeight) {
+             finalImgHeight = pdfPageHeight;
+             finalImgWidth = finalImgHeight * imgRatio;
+          }
+
+          // توسيط الجدول في منتصف صفحة الـ PDF
+          const marginX = (pdfPageWidth - finalImgWidth) / 2;
+          const marginY = (pdfPageHeight - finalImgHeight) / 2;
+
+          pdf.addImage(imgData, 'JPEG', marginX, marginY, finalImgWidth, finalImgHeight);
+
+          // 🚀 تحديث إحداثيات روابط الزوم لتتطابق مع التحجيم الجديد
           const links = el.querySelectorAll('a.zoom-link');
           const elementRect = el.getBoundingClientRect();
 
@@ -453,12 +479,16 @@ export default function PublicSchedulesViewPage() {
             if (elementRect.width > 0 && elementRect.height > 0) {
               const relativeX = (rect.left - elementRect.left) / elementRect.width;
               const relativeY = (rect.top - elementRect.top) / elementRect.height;
-              const pdfX = relativeX * pdfWidth; 
-              const pdfY = relativeY * pdfHeight;
+              
+              const pdfX = marginX + (relativeX * finalImgWidth); 
+              const pdfY = marginY + (relativeY * finalImgHeight);
+              const linkW = (rect.width / elementRect.width) * finalImgWidth;
+              const linkH = (rect.height / elementRect.height) * finalImgHeight;
+
               const finalUrl = normalizeUrl(link.href);
               
               if (finalUrl) {
-                 pdf.link(pdfX, pdfY, (rect.width / elementRect.width) * pdfWidth, (rect.height / elementRect.height) * pdfHeight, { url: finalUrl });
+                 pdf.link(pdfX, pdfY, linkW, linkH, { url: finalUrl });
               }
             }
           });
@@ -682,7 +712,7 @@ export default function PublicSchedulesViewPage() {
             
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={() => handlePrintCommand(filterType === 'master' ? 'master-print' : 'single')} className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2">
-                 <FileDown className="w-5 h-5" /> {filterType === 'master' ? 'طباعة المجمع (A3)' : 'تحميل الجدول الحالي'}
+                 <FileDown className="w-5 h-5" /> {filterType === 'master' ? 'طباعة المجمع (A2)' : 'تحميل الجدول الحالي'}
               </button>
               
               {!isRestricted && (
@@ -1088,8 +1118,8 @@ export default function PublicSchedulesViewPage() {
             {/* 🚀 منطقة الطباعة المخفية الخاصة بالجدول المجمع (Master Print) بصيغة فارهة */}
             {filterType === 'master' && (
               <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
-                {/* تم توسيع العرض لـ 2200px لضمان احتواء كافة الفصول براحة ودقة عالية */}
-                <div className="master-pdf-page" dir="rtl" style={{ width: '2200px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif' }}>
+                {/* 🚀 تمديد العرض ديناميكياً ليتسع لجميع الفصول مهما كان عددها */}
+                <div className="master-pdf-page" dir="rtl" style={{ width: `${Math.max(2400, 200 + sections.length * 150)}px`, padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif' }}>
                   
                   <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #1e293b', paddingBottom: '15px' }}>
                     {/* 🚀 إزالة التباعد بين الحروف للغة العربية هنا أيضاً */}
