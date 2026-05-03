@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, 
-  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2 , Crown
+  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2 , Crown, Wand2, ServerCog
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase'; // استدعاء Supabase لقراءة وتحديث الإعدادات
 
 const containerVariants: any = {
   hidden: { opacity: 0 },
@@ -27,6 +28,146 @@ const itemVariants: any = {
     transition: { type: 'spring', stiffness: 100 }
   }
 };
+
+// =========================================
+// 🚀 مكون التبديل المركزي (ScheduleSystemToggle) مدمج هنا 
+// =========================================
+function ScheduleSystemToggle() {
+  const [activeSystem, setActiveSystem] = useState<'manual' | 'auto'>('manual');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    fetchCurrentSystem();
+  }, []);
+
+  const fetchCurrentSystem = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('school_settings')
+        .select('active_schedule_system')
+        .eq('id', 1) 
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      if (data && data.active_schedule_system) {
+        setActiveSystem(data.active_schedule_system);
+      }
+    } catch (error) {
+      console.error('Error fetching system setting:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggle = async (system: 'manual' | 'auto') => {
+    if (system === activeSystem || isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      // التأكد من وجود سجل الإعدادات أو تحديثه
+      const { error } = await supabase
+        .from('school_settings')
+        .upsert({ id: 1, active_schedule_system: system }, { onConflict: 'id' });
+
+      if (error) throw error;
+
+      setActiveSystem(system);
+    } catch (error) {
+      console.error('Error updating system:', error);
+      alert('حدث خطأ أثناء تبديل النظام! يرجى التأكد من وجود جدول school_settings');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-6 bg-[#0f1423]/60 rounded-3xl w-full border border-white/5 shadow-inner min-h-[150px]">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gradient-to-br from-[#0a0f1d] to-[#131836] p-5 sm:p-6 rounded-[2rem] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-amber-500/20 w-full relative overflow-hidden group transition-all hover:border-amber-500/40">
+      {/* تأثيرات الإضاءة في الخلفية */}
+      <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-[60px] pointer-events-none transition-all duration-700 ${activeSystem === 'auto' ? 'bg-indigo-600/20' : 'bg-emerald-600/20'}`} />
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="p-2.5 bg-[#02040a] rounded-xl border border-white/10 shadow-inner">
+            <ServerCog className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-white leading-tight">التبديل المركزي للجداول</h2>
+            <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-0.5">اختر النظام المعروض للمدرسة</p>
+          </div>
+        </div>
+
+        {/* 🚀 المفتاح التفاعلي (Toggle Switch) */}
+        <div className="relative flex items-center bg-[#02040a]/80 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
+          
+          {/* الزر الأول: النظام اليدوي/القديم */}
+          <button
+            onClick={() => handleToggle('manual')}
+            disabled={isUpdating}
+            className={`relative flex-1 py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 z-10 ${
+              activeSystem === 'manual' ? 'text-emerald-50' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {activeSystem === 'manual' && (
+              <motion.div
+                layoutId="active-system-bg"
+                className="absolute inset-0 bg-emerald-600 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] border border-emerald-400/50"
+                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+            <span className="relative z-20"><CalendarDays className={`w-5 h-5 sm:w-6 sm:h-6 ${activeSystem === 'manual' ? 'text-emerald-100' : 'text-slate-600'}`} /></span>
+            <span className="relative z-20 text-[10px] sm:text-xs font-black">النظام اليدوي</span>
+          </button>
+
+          {/* الزر الثاني: النظام الآلي الذكي */}
+          <button
+            onClick={() => handleToggle('auto')}
+            disabled={isUpdating}
+            className={`relative flex-1 py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 z-10 ${
+              activeSystem === 'auto' ? 'text-indigo-50' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {activeSystem === 'auto' && (
+              <motion.div
+                layoutId="active-system-bg"
+                className="absolute inset-0 bg-indigo-600 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] border border-indigo-400/50"
+                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+            <span className="relative z-20"><Wand2 className={`w-5 h-5 sm:w-6 sm:h-6 ${activeSystem === 'auto' ? 'text-indigo-100' : 'text-slate-600'}`} /></span>
+            <span className="relative z-20 text-[10px] sm:text-xs font-black">الذكاء الاصطناعي</span>
+          </button>
+
+          {/* تأثير التحميل أثناء تبديل النظام */}
+          {isUpdating && (
+            <div className="absolute inset-0 bg-[#02040a]/50 backdrop-blur-sm rounded-xl z-30 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-white drop-shadow-md" />
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 bg-[#02040a]/40 border border-white/5 rounded-xl p-3 text-center">
+          <p className="text-[10px] sm:text-xs font-bold text-slate-400 leading-relaxed flex items-center justify-center gap-2">
+            الحالة: <span className={`font-black px-2 py-0.5 rounded shadow-sm ${activeSystem === 'auto' ? 'text-indigo-200 bg-indigo-500/20 border border-indigo-500/30' : 'text-emerald-200 bg-emerald-500/20 border border-emerald-500/30'}`}>
+              {activeSystem === 'auto' ? 'الآلي يعمل الآن' : 'اليدوي يعمل الآن'}
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+// =========================================
 
 export default function AdminDashboard() {
   const { authRole, isChecking } = useAuth() as any;
@@ -299,7 +440,7 @@ export default function AdminDashboard() {
         {/* Column 1: Wide Area - Recent Activity */}
         <motion.div 
           variants={itemVariants}
-          className="lg:col-span-2 glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden"
+          className="lg:col-span-2 glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden flex flex-col h-full"
         >
           <div className="absolute top-0 left-0 w-40 h-40 bg-amber-500/10 rounded-full blur-[80px] -ml-10 -mt-10 pointer-events-none"></div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 relative z-10 gap-4">
@@ -314,7 +455,7 @@ export default function AdminDashboard() {
             </button>
           </div>
           
-          <div className="space-y-3 sm:space-y-4 relative z-10">
+          <div className="space-y-3 sm:space-y-4 relative z-10 flex-1">
             {activitiesLoading ? (
               <div className="space-y-3 sm:space-y-4 animate-pulse">
                 {[1, 2, 3].map(i => (
@@ -328,7 +469,7 @@ export default function AdminDashboard() {
                 ))}
               </div>
             ) : recentActivities.length === 0 ? (
-              <div className="text-center py-10 sm:py-12 bg-[#0f1423]/50 rounded-2xl sm:rounded-3xl border border-dashed border-white/10">
+              <div className="text-center py-10 sm:py-12 bg-[#0f1423]/50 rounded-2xl sm:rounded-3xl border border-dashed border-white/10 h-full flex flex-col items-center justify-center">
                 <Activity className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500 mx-auto mb-3" />
                 <p className="text-sm sm:text-base font-bold text-slate-400">لا توجد نشاطات حديثة</p>
               </div>
@@ -372,7 +513,12 @@ export default function AdminDashboard() {
         </motion.div>
 
         {/* Column 2: Narrow Area - Widgets */}
-        <div className="space-y-6 lg:space-y-8 w-full">
+        <div className="space-y-6 lg:space-y-8 w-full flex flex-col h-full">
+          
+          {/* 🚀 الزر المركزي تم إضافته هنا كأول Widget للمدير */}
+          <motion.div variants={itemVariants} className="w-full">
+            <ScheduleSystemToggle />
+          </motion.div>
           
           <motion.div 
             variants={itemVariants}
@@ -416,7 +562,7 @@ export default function AdminDashboard() {
 
           <motion.div 
             variants={itemVariants}
-            className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8"
+            className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 flex-1"
           >
             <h2 className="text-lg sm:text-xl font-black text-white mb-5 sm:mb-6 flex items-center gap-2 drop-shadow-sm">
                <Target className="w-5 h-5 text-amber-500" /> إجراءات سريعة
@@ -431,7 +577,7 @@ export default function AdminDashboard() {
                 <Link 
                   key={action.name} 
                   href={action.href} 
-                  className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#0f1423]/60 hover:bg-[#0f1423] border border-white/5 hover:border-amber-500/30 hover:shadow-[0_0_15px_rgba(245,158,11,0.1)] transition-all group"
+                  className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#0f1423]/60 hover:bg-[#0f1423] border border-white/5 hover:border-amber-500/30 hover:shadow-[0_0_15px_rgba(245,158,11,0.1)] transition-all group h-full"
                 >
                   <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl ${action.bg} ${action.color} border ${action.border} mb-2 sm:mb-3 group-hover:scale-110 group-hover:-translate-y-1 transition-transform shadow-inner`}>
                     <action.icon className="h-5 w-5 sm:h-6 sm:w-6 drop-shadow-md" />
@@ -440,26 +586,6 @@ export default function AdminDashboard() {
                 </Link>
               ))}
             </div>
-          </motion.div>
-
-          <motion.div 
-            variants={itemVariants}
-            whileHover={{ scale: 1.02 }}
-            className="bg-[#02040a] rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-[0_10px_30px_rgba(0,0,0,0.8)] relative overflow-hidden group cursor-pointer border border-white/10 hover:border-amber-500/40 transition-all"
-          >
-            <div className="relative z-10">
-              <div className="h-10 w-10 sm:h-12 sm:w-12 bg-amber-500/10 rounded-xl sm:rounded-2xl flex items-center justify-center mb-4 sm:mb-6 shadow-inner border border-amber-500/30">
-                <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400 drop-shadow-md" />
-              </div>
-              <h2 className="text-lg sm:text-xl font-black mb-3 sm:mb-4 text-white">الدعم الفني والكونسيرج</h2>
-              <p className="text-slate-400 text-xs sm:text-sm mb-5 sm:mb-6 font-bold leading-relaxed">
-                هل تحتاج لتدخل سريع أو مساعدة متقدمة؟ فريق الكونسيرج الفني متاح لخدمة الإدارة العليا 24/7.
-              </p>
-              <button className="w-full bg-white/5 text-amber-400 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-black hover:bg-amber-500 hover:text-slate-950 transition-all shadow-sm active:scale-95 border border-amber-500/30 text-sm sm:text-base">
-                تواصل مع الفريق
-              </button>
-            </div>
-            <div className="absolute bottom-0 left-0 -translate-x-1/3 translate-y-1/3 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-amber-500/10 blur-[60px] group-hover:bg-amber-500/20 transition-colors pointer-events-none"></div>
           </motion.div>
 
         </div>
