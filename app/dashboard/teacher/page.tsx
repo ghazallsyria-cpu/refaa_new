@@ -506,51 +506,79 @@ const fetchData = useCallback(async () => {
                       const current = isCurrentClass(item.period);
                       const next = isNextClass(item.period);
                       
+                      let isPast = false;
+                      const periodInfo = periods.find(p => Number(p.period_number) === Number(item.period));
+                      if (periodInfo?.end_time && currentTime) {
+                        const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+                        const endTime = new Date(currentTime);
+                        endTime.setHours(endH, endM, 0, 0);
+                        isPast = currentTime > endTime;
+                      }
+                      
                       return (
                         <div key={i} className={cn("relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group", current ? "is-active z-20" : "z-10")}>
                           <div className={cn(
                             "flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500",
-                            current ? "bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 scale-110 sm:scale-125 border-[#02040a] shadow-[0_0_20px_rgba(245,158,11,0.5)]" : 
-                            next ? "bg-[#0f1423] text-amber-400 border-amber-500/50" : "bg-[#02040a] text-slate-500 border-white/10"
+                            current ? "bg-gradient-to-br from-emerald-400 to-emerald-600 text-slate-950 scale-110 sm:scale-125 border-[#02040a] shadow-[0_0_20px_rgba(16,185,129,0.5)]" : 
+                            isPast ? "bg-[#02040a]/40 text-slate-600 border-white/5 opacity-50" :
+                            next ? "bg-[#0f1423] text-amber-400 border-amber-500/50" : "bg-[#02040a] text-slate-400 border-white/10"
                           )}>
-                            {current ? <Play className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse ml-0.5 sm:ml-1" /> : <span className="text-sm sm:text-base font-black">{item.period}</span>}
+                            {current ? <Play className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse ml-0.5 sm:ml-1" /> : isPast ? <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <span className="text-sm sm:text-base font-black">{item.period}</span>}
                           </div>
 
                           <div className={cn(
-                            "w-[calc(100%-3.5rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 cursor-default backdrop-blur-md",
-                            current ? "bg-[#0f1423]/90 border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.15)] scale-[1.02]" : 
-                            next ? "bg-amber-500/5 border-amber-500/20 shadow-sm" : "bg-[#02040a]/60 border-white/5 shadow-inner hover:border-white/10"
+                            "w-[calc(100%-3.5rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 cursor-default backdrop-blur-md relative overflow-hidden",
+                            current 
+                              ? "bg-[#0f1423]/90 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.2)] scale-[1.02] ring-1 ring-emerald-500/30" 
+                              : isPast 
+                                ? "bg-[#02040a]/20 border-white/5 opacity-40 grayscale" 
+                                : next 
+                                  ? "bg-amber-500/5 border-amber-500/20 shadow-sm" 
+                                  : "bg-[#02040a]/60 border-white/5 shadow-inner hover:border-white/10"
                           )}>
-                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
-                              <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate pl-2", current ? "text-amber-400 drop-shadow-sm" : next ? "text-white" : "text-slate-300")}>{item.subjects?.name}</h3>
+                            {current && (
+                              <span className="absolute top-4 left-4 flex h-3.5 w-3.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,1)]"></span>
+                              </span>
+                            )}
+
+                            <div className={`absolute top-0 right-0 w-1 h-full ${
+                              current ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' 
+                              : isPast ? 'bg-slate-800' 
+                              : next ? 'bg-amber-400' 
+                              : 'bg-white/10'
+                            }`}></div>
+
+                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4 pr-2">
+                              <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate", current ? "text-emerald-400 drop-shadow-sm" : next ? "text-amber-400" : isPast ? "text-slate-500" : "text-slate-300")}>
+                                {item.subjects?.name}
+                              </h3>
                               <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                                 {current && (
-                                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-[9px] sm:text-[10px] font-bold text-amber-400 shadow-inner">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" /> الحصة الآن
+                                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[9px] sm:text-[10px] font-bold text-emerald-400 shadow-inner">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> تعمل الآن
                                   </span>
                                 )}
-                                {next && !current && <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] sm:text-[10px] font-bold shadow-inner">القادمة</span>}
-                                <span className={cn("text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-[#02040a] text-amber-400 border-amber-500/20" : "bg-white/5 text-slate-400 border-white/10")}>الحصة {item.period}</span>
+                                {next && !current && <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] sm:text-[10px] font-bold shadow-inner">القادمة</span>}
+                                {isPast && <span className="px-2.5 py-1 rounded-full bg-slate-900 text-slate-500 border border-white/5 text-[9px] sm:text-[10px] font-bold shadow-inner flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> انتهت</span>}
+                                <span className={cn("text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-[#02040a] text-emerald-400 border-emerald-500/20" : isPast ? "bg-transparent text-slate-600 border-slate-800" : "bg-white/5 text-slate-400 border-white/10")}>
+                                  الحصة {item.period}
+                               </span>
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap items-center justify-between pt-3 sm:pt-4 border-t border-white/5 gap-3">
-                              <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-slate-200" : "text-slate-400")}>
+                            <div className="flex flex-wrap items-center justify-between pt-3 sm:pt-4 border-t border-white/5 gap-3 pr-2">
+                              <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-emerald-100" : isPast ? "text-slate-600" : "text-slate-400")}>
                                 <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" />
                                 <span className="truncate">{item.sections?.classes?.name} - {item.sections?.name}</span>
                               </p>
-                              {(() => {
-                                const periodInfo = periods.find(p => Number(p.period_number) === Number(item.period));
-                                if (periodInfo?.start_time && periodInfo?.end_time) {
-                                  return (
-                                    <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-amber-400 border-amber-500/20" : "text-slate-500 border-white/5")} dir="ltr">
-                                      <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
-                                      {periodInfo.start_time.substring(0, 5)} - {periodInfo.end_time.substring(0, 5)}
-                                    </span>
-                                  );
-                                }
-                                return null;
-                              })()}
+                              {periodInfo?.start_time && periodInfo?.end_time && (
+                                <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-emerald-400 border-emerald-500/20" : isPast ? "text-slate-600 border-slate-800" : "text-slate-500 border-white/5")} dir="ltr">
+                                  <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
+                                  {periodInfo.start_time.substring(0, 5)} - {periodInfo.end_time.substring(0, 5)}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
