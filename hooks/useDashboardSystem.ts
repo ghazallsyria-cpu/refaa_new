@@ -403,7 +403,7 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, []);
 
-  // 🚀 [هوك المعلم المُدرّع]
+  // 🚀 [هوك المعلم المُدرّع بالكامل مع التعرف الذكي على المرحلة]
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
@@ -423,13 +423,10 @@ export function useDashboardSystem() {
         const teacher = { id: teacherId, users: userData || { full_name: 'معلم' } };
         const activeSystem = await getActiveSystem();
         
-        let periodsQuery = activeSystem === 'auto' 
-            ? supabase.from('auto_class_periods').select('*').order('period_number')
-            : supabase.from('class_periods').select('*').order('period_number');
-
         let scheduleData: any[] = [];
         let teacherSchedules: any[] = [];
 
+        // 1. جلب الجدول لمعرفة الفصول التي يدرسها المعلم
         if (activeSystem === 'auto') {
             const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
             if (planData) {
@@ -462,6 +459,20 @@ export function useDashboardSystem() {
             teacherSchedules = scheduleData;
         }
         
+        // 2. 🚀 [التعرف الذكي على المرحلة]
+        let midCount = 0; let highCount = 0;
+        scheduleData.forEach(s => {
+            const classObj = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
+            const cName = classObj?.name || s.sections?.name || s.section_name || '';
+            if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(cName)) midCount++;
+            else if (cName) highCount++;
+        });
+        const teacherPrimaryStage = midCount > highCount ? 'middle' : 'high';
+
+        let periodsQuery = activeSystem === 'auto' 
+            ? supabase.from('auto_class_periods').select('*').eq('stage', teacherPrimaryStage).order('period_number')
+            : supabase.from('class_periods').select('*').order('period_number');
+
         let sectionIds = Array.from(new Set((teacherSchedules || []).map(ts => ts.section_id).filter(Boolean)));
         
         if (sectionIds.length === 0) {
@@ -527,13 +538,6 @@ export function useDashboardSystem() {
         ]);
 
         let periods = periodsRaw || [];
-        if (activeSystem === 'auto') {
-            const uniqueMap = new Map();
-            periods.forEach((p: any) => {
-                if (!uniqueMap.has(p.period_number)) uniqueMap.set(p.period_number, p);
-            });
-            periods = Array.from(uniqueMap.values());
-        }
 
         const totalAttendance = attendanceRecords?.length || 0;
         const presentCount = (attendanceRecords || []).filter(a => a.status === 'present').length || 0;
@@ -570,6 +574,7 @@ export function useDashboardSystem() {
     }, forceRefresh); 
   }, [user?.id]);
 
+  // 🚀 [جدول المعلم الكامل - مدعوم بالتعرف الذكي على المرحلة]
   const fetchTeacherSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
@@ -619,20 +624,22 @@ export function useDashboardSystem() {
             scheduleData = data || [];
         }
 
+        // 🚀 تحديد المرحلة الأساسية للمعلم لجلب الأوقات بدقة
+        let midCount = 0; let highCount = 0;
+        scheduleData.forEach(s => {
+            const classObj = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
+            const cName = classObj?.name || s.sections?.name || s.section_name || '';
+            if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(cName)) midCount++;
+            else if (cName) highCount++;
+        });
+        const teacherPrimaryStage = midCount > highCount ? 'middle' : 'high';
+
         let periodsQuery = activeSystem === 'auto' 
-            ? supabase.from('auto_class_periods').select('*').order('period_number')
+            ? supabase.from('auto_class_periods').select('*').eq('stage', teacherPrimaryStage).order('period_number')
             : supabase.from('class_periods').select('*').order('period_number');
 
         const { data: periodsRaw } = await periodsQuery;
         let periods = periodsRaw || [];
-        
-        if (activeSystem === 'auto') {
-            const uniqueMap = new Map();
-            periods.forEach((p: any) => {
-                if (!uniqueMap.has(p.period_number)) uniqueMap.set(p.period_number, p);
-            });
-            periods = Array.from(uniqueMap.values());
-        }
 
         return { schedule: scheduleData, periods: periods };
       } catch (error) { throw error; }
