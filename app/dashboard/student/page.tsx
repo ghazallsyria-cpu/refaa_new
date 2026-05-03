@@ -1,7 +1,8 @@
 /* eslint-disable react/no-unescaped-entities */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   BookOpen, Calendar, CheckCircle2, Clock, 
   FileText, GraduationCap, LayoutDashboard, 
@@ -274,29 +275,6 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!isChecking) fetchData();
   }, [fetchData, isChecking]);
-
-  const isCurrentClass = useCallback((period: number) => {
-    if (!currentTime) return false;
-    const periodInfo = periods.find(p => p.period_number === period);
-    if (!periodInfo) return false;
-    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
-    const [endH, endM] = periodInfo.end_time.split(':').map(Number);
-    const now = currentTime;
-    const start = new Date(now); start.setHours(startH, startM, 0);
-    const end = new Date(now); end.setHours(endH, endM, 0);
-    return now >= start && now <= end;
-  }, [currentTime, periods]);
-
-  const isNextClass = useCallback((period: number) => {
-    if (!currentTime) return false;
-    const periodInfo = periods.find(p => p.period_number === period);
-    if (!periodInfo) return false;
-    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
-    const now = currentTime;
-    const start = new Date(now); start.setHours(startH, startM, 0);
-    const diff = (start.getTime() - now.getTime()) / (1000 * 60);
-    return diff > 0 && diff <= 60;
-  }, [currentTime, periods]);
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
@@ -606,7 +584,7 @@ export default function StudentDashboard() {
           
           <div className="lg:col-span-2 space-y-6 lg:space-y-8 w-full">
             
-            {/* 🚀 Today's Schedule Timeline */}
+            {/* 🚀 Today's Schedule Timeline (Live Pulse) */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
               <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 relative z-10 gap-4 text-center sm:text-right">
@@ -620,30 +598,75 @@ export default function StudentDashboard() {
                 {todaysSchedule.length > 0 ? (
                   <div className="space-y-5 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 sm:before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-blue-500/30 before:via-white/10 before:to-transparent">
                     {todaysSchedule.map((item, i) => {
-                      const current = isCurrentClass(item.period);
-                      const next = isNextClass(item.period);
+                      // 🚀 [هندسة النبض الذكي محلياً]
+                      let current = false;
+                      let next = false;
+                      let isPast = false;
+
+                      if (item.start_time && item.end_time && currentTime) {
+                          const [startH, startM] = item.start_time.split(':').map(Number);
+                          const [endH, endM] = item.end_time.split(':').map(Number);
+                          
+                          const now = currentTime;
+                          const start = new Date(now); start.setHours(startH, startM, 0);
+                          const end = new Date(now); end.setHours(endH, endM, 0);
+                          
+                          if (now >= start && now <= end) {
+                              current = true;
+                          } else if (now > end) {
+                              isPast = true;
+                          } else {
+                              const diff = (start.getTime() - now.getTime()) / (1000 * 60);
+                              if (diff > 0 && diff <= 60) next = true;
+                          }
+                      }
+
                       return (
                         <div key={i} className={cn("relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group", current ? "is-active z-20" : "z-10")}>
-                          <div className={cn("flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500", current ? "bg-gradient-to-br from-blue-400 to-indigo-500 text-white scale-110 sm:scale-125 border-[#02040a] shadow-[0_0_20px_rgba(59,130,246,0.5)]" : next ? "bg-[#0f1423] text-blue-400 border-blue-500/50" : "bg-[#02040a] text-slate-500 border-white/10")}>
-                            {current ? <Play className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse ml-0.5 sm:ml-1" /> : <span className="text-sm sm:text-base font-black">{item.period}</span>}
+                          <div className={cn("flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500", 
+                            current ? "bg-gradient-to-br from-blue-400 to-indigo-500 text-white scale-110 sm:scale-125 border-[#02040a] shadow-[0_0_20px_rgba(59,130,246,0.5)]" : 
+                            isPast ? "bg-[#02040a]/40 text-slate-600 border-white/5 opacity-50" :
+                            next ? "bg-[#0f1423] text-blue-400 border-blue-500/50" : "bg-[#02040a] text-slate-500 border-white/10"
+                          )}>
+                            {current ? <Play className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse ml-0.5 sm:ml-1" /> : isPast ? <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <span className="text-sm sm:text-base font-black">{item.period}</span>}
                           </div>
-                          <div className={cn("w-[calc(100%-3.5rem)] sm:w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 backdrop-blur-md cursor-default", current ? "bg-[#0f1423]/90 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.15)] scale-[1.02]" : next ? "bg-blue-500/5 border-blue-500/20 shadow-sm" : "bg-[#02040a]/60 border-white/5 shadow-inner hover:border-white/10")}>
-                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3">
-                              <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate pl-2", current ? "text-blue-400 drop-shadow-sm" : next ? "text-white" : "text-slate-300")}>{item.subjects?.name}</h3>
+                          
+                          <div className={cn("w-[calc(100%-3.5rem)] sm:w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 backdrop-blur-md cursor-default relative overflow-hidden", 
+                            current ? "bg-[#0f1423]/90 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.15)] scale-[1.02] ring-1 ring-blue-500/30" : 
+                            isPast ? "bg-[#02040a]/20 border-white/5 opacity-40 grayscale" :
+                            next ? "bg-blue-500/5 border-blue-500/20 shadow-sm" : "bg-[#02040a]/60 border-white/5 shadow-inner hover:border-white/10"
+                          )}>
+                            
+                            {/* 🔥 تأثير النبض في زاوية البطاقة للحصة الفعالة */}
+                            {current && (
+                              <span className="absolute top-4 right-4 flex h-3.5 w-3.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)]"></span>
+                              </span>
+                            )}
+
+                            <div className={`absolute top-0 left-0 w-1 h-full ${
+                              current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' 
+                              : isPast ? 'bg-slate-800' 
+                              : next ? 'bg-blue-400' 
+                              : 'bg-white/10'
+                            }`}></div>
+
+                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 pr-2">
+                              <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate pl-2", current ? "text-blue-400 drop-shadow-sm" : next ? "text-white" : isPast ? "text-slate-500" : "text-slate-300")}>{item.subjects?.name}</h3>
                               <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                                {current && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-[9px] sm:text-[10px] font-bold text-blue-400 shadow-inner"><div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" /> الحصة الآن</span>}
+                                {current && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-[9px] sm:text-[10px] font-bold text-blue-400 shadow-inner"><div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> الحصة الآن</span>}
                                 {next && !current && <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[9px] sm:text-[10px] font-bold shadow-inner">الحصة القادمة</span>}
-                                <span className={cn("text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-[#02040a] text-blue-400 border-blue-500/20" : "bg-white/5 text-slate-400 border-white/10")}>الحصة {item.period}</span>
+                                {isPast && <span className="px-2.5 py-1 rounded-full bg-slate-900 text-slate-500 border border-white/5 text-[9px] sm:text-[10px] font-bold shadow-inner flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> انتهت</span>}
+                                <span className={cn("text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-[#02040a] text-blue-400 border-blue-500/20" : isPast ? "bg-transparent text-slate-600 border-slate-800" : "bg-white/5 text-slate-400 border-white/10")}>الحصة {item.period}</span>
                               </div>
                             </div>
-                            <div className="flex flex-wrap items-center justify-between pt-3 sm:pt-4 border-t border-white/5 gap-3">
-                              <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-slate-200" : "text-slate-400")}><GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" /><span className="truncate">أ. {item.teachers?.users?.full_name || 'غير محدد'}</span></p>
-                              {(() => {
-                                const periodInfo = periods.find(p => p.period_number === item.period);
-                                if (periodInfo?.start_time && periodInfo?.end_time) {
-                                  return <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-blue-400 border-blue-500/20" : "text-slate-500 border-white/5")} dir="ltr"><Clock className="w-2.5 h-2.5 sm:w-3 h-3 shrink-0" />{periodInfo.start_time.substring(0, 5)} - {periodInfo.end_time.substring(0, 5)}</span>;
-                                }
-                              })()}
+                            
+                            <div className="flex flex-wrap items-center justify-between pt-3 sm:pt-4 border-t border-white/5 gap-3 pr-2">
+                              <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-blue-100" : isPast ? "text-slate-600" : "text-slate-400")}><GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" /><span className="truncate">أ. {item.teachers?.users?.full_name || 'غير محدد'}</span></p>
+                              {item.start_time && item.end_time && (
+                                <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-blue-400 border-blue-500/20" : isPast ? "text-slate-600 border-slate-800" : "text-slate-500 border-white/5")} dir="ltr"><Clock className="w-2.5 h-2.5 sm:w-3 h-3 shrink-0" />{item.start_time.substring(0, 5)} - {item.end_time.substring(0, 5)}</span>
+                              )}
                             </div>
                           </div>
                         </div>
