@@ -11,6 +11,16 @@ import { supabase } from "@/lib/supabase";
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
+// 🚀 دالة مساعدة لمعرفة النظام الفعال حالياً (يدوي أو آلي)
+const getActiveSystem = async () => {
+  try {
+    const { data } = await supabase.from('school_settings').select('active_schedule_system').eq('id', 1).maybeSingle();
+    return data?.active_schedule_system || 'manual';
+  } catch {
+    return 'manual';
+  }
+};
+
 const getTeacherName = (t: any) => {
   const u = t.users;
   if (!u) return "معلم غير محدد";
@@ -89,18 +99,50 @@ export default function TeachersMonitorPage() {
     try {
       const weekAgo = new Date(schoolTime.getTime() - 7 * 24 * 60 * 60 * 1000); 
       const currentDbDay = schoolTime.getUTCDay() === 0 ? 1 : schoolTime.getUTCDay() + 1;
+      
       const rawData = await fetchTeachersMonitorData(todayStr, currentDbDay, weekAgo.toISOString());
       
-      const { data: periods } = await supabase.from('class_periods').select('*');
-      const pMap: any = {}; periods?.forEach(p => pMap[p.period_number] = p.end_time);
+      // 🚀 قراءة المفتاح المركزي لتوجيه البوصلة
+      const activeSystem = await getActiveSystem();
+      let effectiveSchedules = rawData.allSchedules || [];
+
+      // 🚀 إذا كان النظام آلي، نحقن حصص الخوارزمية هنا فوراً!
+      if (activeSystem === 'auto') {
+         const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+         if (planData) {
+            const { data: autoScheds } = await supabase.from('auto_schedules').select('*').eq('plan_id', planData.id).eq('day_of_week', currentDbDay);
+            if (autoScheds) {
+                effectiveSchedules = autoScheds.map(s => ({ ...s, period: s.period_number }));
+            }
+         }
+      }
+
+      // 🚀 جلب الأوقات المخصصة للنظام الفعال (لدعم المراحل المختلفة في النظام الذكي)
+      let periodsQuery = activeSystem === 'auto' 
+          ? supabase.from('auto_class_periods').select('*')
+          : supabase.from('class_periods').select('*');
+      
+      const { data: periods } = await periodsQuery;
+
+      const getEndTime = (pNum: number, tStage: string) => {
+          if (activeSystem === 'manual') {
+              return periods?.find(p => Number(p.period_number) === Number(pNum))?.end_time;
+          } else {
+              let stage = tStage === 'both' ? 'high' : (tStage === 'unassigned' ? 'high' : tStage);
+              const p = periods?.find(p => Number(p.period_number) === Number(pNum) && p.stage === stage);
+              return p?.end_time || periods?.find(p => Number(p.period_number) === Number(pNum))?.end_time;
+          }
+      };
 
       const processed = rawData.teachersData.map((t: any) => {
-        const schs = rawData.allSchedules.filter((s:any) => String(s.teacher_id) === String(t.id));
+        const schs = effectiveSchedules.filter((s:any) => String(s.teacher_id) === String(t.id));
         const atts = rawData.allAttendance.filter((a:any) => String(a.teacher_id) === String(t.id));
         let exp = 0, rec = 0, mis = 0;
         
+        const tStage = getTeacherStage(t);
+
         schs.forEach((sch:any) => {
-          const end = pMap[sch.period];
+          const end = getEndTime(sch.period, tStage);
           if (end) {
             const [h, m] = end.split(':').map(Number);
             const pEnd = new Date(schoolTime); pEnd.setHours(h, m, 0, 0);
@@ -127,7 +169,7 @@ export default function TeachersMonitorPage() {
           recorded: rec, expected: exp, missed: mis, percent: pct, status, 
           assignmentsCount: rawData.allAssignments.filter((a:any) => String(a.teacher_id) === String(t.id)).length, 
           examsCount: rawData.allExams.filter((e:any) => String(e.teacher_id) === String(t.id)).length, 
-          stage: getTeacherStage(t) 
+          stage: tStage 
         };
       });
       setLocalTeachers(processed);
