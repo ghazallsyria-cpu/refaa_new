@@ -35,10 +35,11 @@ export function useAttendanceSystem() {
       const dayOfWeek = getDayOfWeek(date);
       const activeSystem = await getActiveSystem();
 
-      let uniquePeriods = [];
+      // 🚀 تم تصحيح هذا السطر لتجاوز خطأ TypeScript في Netlify
+      let uniquePeriods: any[] = [];
 
       if (activeSystem === 'auto') {
-        // 🚀 جلب الحصص من نظام الذكاء الاصطناعي
+        // جلب الحصص من نظام الذكاء الاصطناعي
         let query = supabase.from('auto_schedules').select('period_number').eq('day_of_week', dayOfWeek).order('period_number', { ascending: true });
         if (currentRole === 'teacher') query = query.eq('teacher_id', user.id);
 
@@ -81,7 +82,7 @@ export function useAttendanceSystem() {
       const uniqueSectionsMap = new Map();
 
       if (activeSystem === 'auto') {
-        // 🚀 جلب الفصول من نظام الذكاء الاصطناعي
+        // جلب الفصول من نظام الذكاء الاصطناعي
         let query = supabase.from('auto_schedules').select('section_id, section_name, subject_id, subject_name').eq('day_of_week', dayOfWeek).eq('period_number', period);
         if (currentRole === 'teacher') query = query.eq('teacher_id', user.id);
 
