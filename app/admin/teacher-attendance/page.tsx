@@ -18,6 +18,16 @@ const getDbDay = () => {
   return 1; 
 };
 
+// 🚀 دالة مساعدة لمعرفة النظام الفعال حالياً
+const getActiveSystem = async () => {
+  try {
+    const { data } = await supabase.from('school_settings').select('active_schedule_system').eq('id', 1).maybeSingle();
+    return data?.active_schedule_system || 'manual';
+  } catch {
+    return 'manual';
+  }
+};
+
 export default function TeacherAttendanceMatrix() {
   const { userRole } = useAuth() as any;
   
@@ -40,10 +50,32 @@ export default function TeacherAttendanceMatrix() {
       const targetDateStr = format(targetDateObj, 'yyyy-MM-dd'); 
       
       setDisplayDate(format(targetDateObj, 'yyyy/MM/dd')); 
+
+      const activeSystem = await getActiveSystem();
+      let todaysSchedule: any[] = [];
       
-      const [schRes, perRes, secRes, clsRes, usrRes, attRes] = await Promise.all([
-        supabase.from('schedules').select('*').eq('day_of_week', selectedDay),
-        supabase.from('class_periods').select('*').order('period_number'), 
+      // 🚀 توجيه ذكي لجلب الجداول بناءً على النظام الفعال
+      if (activeSystem === 'auto') {
+         const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+         if (planData) {
+            const { data, error } = await supabase.from('auto_schedules').select('teacher_id, section_id, period_number').eq('plan_id', planData.id).eq('day_of_week', selectedDay);
+            if (!error && data) {
+                // توحيد شكل الكائن ليتطابق مع المنطق القديم
+                todaysSchedule = data.map(s => ({ ...s, period: s.period_number }));
+            }
+         }
+      } else {
+         const { data, error } = await supabase.from('schedules').select('teacher_id, section_id, period').eq('day_of_week', selectedDay);
+         if (!error && data) todaysSchedule = data;
+      }
+
+      // 🚀 دمج الأوقات بشكل فريد لتعمل كأعمدة للجدول
+      let periodsQuery = activeSystem === 'auto' 
+          ? supabase.from('auto_class_periods').select('*').order('period_number')
+          : supabase.from('class_periods').select('*').order('period_number');
+      
+      const [perRes, secRes, clsRes, usrRes, attRes] = await Promise.all([
+        periodsQuery,
         supabase.from('sections').select('id, name, class_id'), 
         supabase.from('classes').select('id, name'), 
         supabase.from('users').select('id, full_name').in('role', ['teacher', 'admin', 'management']),
@@ -51,13 +83,19 @@ export default function TeacherAttendanceMatrix() {
       ]);
 
       setDebugInfo({
-        schedulesCount: schRes.data?.length || 0,
+        schedulesCount: todaysSchedule.length,
         periodsCount: perRes.data?.length || 0,
-        error: schRes.error?.message || perRes.error?.message || null
+        error: perRes.error?.message || null
       });
 
-      const todaysSchedule = schRes.data || [];
-      const periods = perRes.data || [];
+      let periodsRaw = perRes.data || [];
+      if (activeSystem === 'auto') {
+          const uniqueMap = new Map();
+          periodsRaw.forEach((p: any) => { if (!uniqueMap.has(p.period_number)) uniqueMap.set(p.period_number, p); });
+          periodsRaw = Array.from(uniqueMap.values());
+      }
+      const periods = periodsRaw;
+
       const sections = secRes.data || [];
       const classes = clsRes.data || [];
       const users = usrRes.data || [];
