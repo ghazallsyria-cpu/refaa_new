@@ -85,6 +85,7 @@ export default function PublicSchedulesViewPage() {
   const [restrictedName, setRestrictedName] = useState<string>('جدولك');
   const [userFullName, setUserFullName] = useState<string>('');
 
+  // 🚀 خيارات الطباعة المتقدمة
   const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
@@ -333,6 +334,7 @@ export default function PublicSchedulesViewPage() {
 
   const isStudentView = isRestricted ? activeRole === 'student' : filterType === 'section';
 
+  // 🚀 أدوات الطباعة المتقدمة
   const toggleBatchPrintId = (id: string) => {
     setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -482,7 +484,7 @@ export default function PublicSchedulesViewPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 مركز الطباعة المتقدم */}
+      {/* 🚀 مركز الطباعة المتقدم بالثيم الليلي */}
       <AnimatePresence>
         {isPrintCenterOpen && !isRestricted && (
           <>
@@ -521,7 +523,7 @@ export default function PublicSchedulesViewPage() {
                       ? sections.map(s => (
                           <div key={s.id} onClick={() => toggleBatchPrintId(s.id)} className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2 transition-all ${batchPrintIds.includes(s.id) ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 shadow-sm' : 'bg-[#131836] border-white/10 text-slate-300 hover:bg-white/5'}`}>
                              {batchPrintIds.includes(s.id) ? <CheckSquare2 className="w-4 h-4 text-indigo-400 shrink-0"/> : <Square className="w-4 h-4 text-slate-500 shrink-0"/>}
-                             <span className="text-xs font-bold truncate">{s.full_name}</span>
+                             <span className="text-xs font-bold truncate">{s.name}</span> {/* 🚀 تم التصحيح هنا لـ s.name */}
                           </div>
                       ))
                       : uniqueTeachers.map(t => (
