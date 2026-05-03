@@ -232,7 +232,7 @@ export default function SchedulePage() {
     }
   };
 
-  const openCellModal = (day: number, period: number, existingSchedule?: Schedule) => {
+  const openCellModal = (day: number, period: number, existingSchedule?: any) => {
     if (!selectedId) {
       showNotification('error', 'الرجاء اختيار الكيان أولاً');
       return;
