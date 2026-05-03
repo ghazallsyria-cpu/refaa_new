@@ -25,6 +25,23 @@ const isTimeIntersecting = (startA: string, endA: string, startB: string, endB: 
   return sA < eB && sB < eA;
 };
 
+// 🚀 الدرع المزدوج الجديد لمنع التعارضات المخفية (الحصص الشبحية)
+const checkTeacherCollision = (scheduleArray: any[], teacherId: string, day: number, periodData: any, ignoreId1: string | null = null, ignoreId2: string | null = null) => {
+  return scheduleArray.some(s => {
+      if (ignoreId1 && String(s.id) === String(ignoreId1)) return false;
+      if (ignoreId2 && String(s.id) === String(ignoreId2)) return false;
+
+      if (String(s.teacher_id) !== String(teacherId) || String(s.day) !== String(day)) return false;
+
+      // 1. الفحص الدقيق بالوقت إذا كان متوفراً في قاعدة البيانات
+      if (s.start_time && s.end_time && periodData.start_time && periodData.end_time) {
+          return isTimeIntersecting(s.start_time, s.end_time, periodData.start_time, periodData.end_time);
+      }
+      // 2. حزام الأمان: إذا لم يوجد وقت، نمنع تطابق رقم الحصة قطعياً
+      return String(s.period_number) === String(periodData.period_number);
+  });
+};
+
 const shuffleArray = (array: any[]) => {
   const newArr = [...array];
   for (let i = newArr.length - 1; i > 0; i--) {
@@ -201,7 +218,6 @@ export default function AutoScheduleGenerator() {
          tsData = tsDataWithZoom || [];
       }
 
-      // 🚀 التصحيح الأسطوري رقم 1: دمج المعلمين بمعرفاتهم لمنع اختفاء الأرقام
       const uniqueAssignmentsMap = new Map();
       tsData.forEach(ts => {
          const uniqueKey = `${ts.teacher_id}_${ts.section_id}_${ts.subject_id}`;
@@ -324,7 +340,6 @@ export default function AutoScheduleGenerator() {
 
   const addLog = (msg: string) => { setGenerationLogs(prev => [msg, ...prev]); };
 
-  // 🚀 التصحيح الأسطوري رقم 2: حساب النصاب بناءً على الـ ID لمنع تداخل الأسماء
   const teacherWorkloads = useMemo(() => {
     const loads: Record<string, { id: string, name: string, total: number, details: string[] }> = {};
     rawTeacherAssignments.forEach(ts => {
@@ -348,7 +363,7 @@ export default function AutoScheduleGenerator() {
   }, [rawTeacherAssignments, subjectQuotas, sections]);
 
   // ==========================================
-  // 🧠 THE CORE ALGORITHM (Learning Engine + Zero Drop Constraints)
+  // 🧠 THE CORE ALGORITHM
   // ==========================================
   const generateSchedule = async () => {
     if (!isBudgetSaved) { alert("يرجى اعتماد الميزانية أولاً."); return; }
@@ -417,7 +432,6 @@ export default function AutoScheduleGenerator() {
     const teacherTotalQuotas: Record<string, number> = {};
     teacherAssignments.forEach(ta => {
       if (!teacherTotalQuotas[ta.teacher_id]) teacherTotalQuotas[ta.teacher_id] = 0;
-      // 🚀 التصحيح الأسطوري رقم 3: حساب جميع الحصص الأصلية لمنع التلاعب في حدود الحمل اليومي
       teacherTotalQuotas[ta.teacher_id] += ta.original_quota; 
     });
 
@@ -504,14 +518,16 @@ export default function AutoScheduleGenerator() {
           }
 
           if (finalSchedule.some(s => String(s.section_id) === String(section.id) && String(s.day) === String(day) && String(s.period_number) === String(period.period_number))) return false;
-          if (finalSchedule.some(s => String(s.teacher_id) === String(teacherId) && String(s.day) === String(day) && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))) return false;
+          
+          // 🚀 الحماية بدرع checkTeacherCollision الذي يمنع الحصص الشبحية
+          if (checkTeacherCollision(finalSchedule, teacherId, day, period)) return false;
           
           const subjectSlots = finalSchedule.filter(s => String(s.section_id) === String(section.id) && String(s.subject_id) === String(subjectId));
           const subjectCountToday = subjectSlots.filter(s => String(s.day) === String(day)).length;
           
           if (subjectCountToday >= maxAllowedPerDay) return false;
 
-          if (enforceStrictSpread && attempt < 25 && subjectCountToday >= 1) {
+          if (enforceStrictSpread && attempt < 30 && subjectCountToday >= 1) {
               const daysUsed = new Set(subjectSlots.map(s => s.day)).size;
               if (daysUsed < allowedDaysCount) { return false; }
           }
@@ -538,12 +554,11 @@ export default function AutoScheduleGenerator() {
           for(let i=0; i<assignment.forced_waitlist; i++) {
              unplacedQueue.push({...assignment, section_id: section.id, section_name: section.full_name, stage: section.stage, id: safeGenerateId()});
              failedPlacements++;
-             subjectFailureWeights[failKey] = (subjectFailureWeights[failKey] || 0) + 1;
+             subjectFailureWeights[failKey] = (subjectFailureWeights[failKey] || 0) + 1; 
           }
 
           let remainingLessons = assignment.weekly_quota;
           
-          // 🚀 التصحيح الأسطوري رقم 4: عدم تخطي المعلمين الممنوعين ليتم إرسال حصصهم للانتظار
           if(assignment.available_days.length === 0) {
               for(let i=0; i<remainingLessons; i++) {
                   unplacedQueue.push({...assignment, section_id: section.id, section_name: section.full_name, stage: section.stage, id: safeGenerateId()});
@@ -609,7 +624,7 @@ export default function AutoScheduleGenerator() {
                 for (const period of dayPeriods) {
                   if (isPlaced) break; 
                   
-                  const teachSlotIdx = finalSchedule.findIndex(s => String(s.teacher_id) === String(assignment.teacher_id) && String(s.day) === String(day) && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time));
+                  const teachSlotIdx = finalSchedule.findIndex(s => String(s.teacher_id) === String(assignment.teacher_id) && String(s.day) === String(day) && (String(s.period_number) === String(period.period_number) || (s.start_time && period.start_time && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))));
                   const secSlotIdx = finalSchedule.findIndex(s => String(s.section_id) === String(section.id) && String(s.day) === String(day) && String(s.period_number) === String(period.period_number));
                   
                   if (section.stage === 'high' && !ignoreFairness && teacherDailyLoad[assignment.teacher_id][day] >= (teacherMaxDailyLoad[assignment.teacher_id] + relaxation)) continue;
@@ -645,8 +660,7 @@ export default function AutoScheduleGenerator() {
                             const secFreeAtAlt = !finalSchedule.some((s, idx) => idx !== secSlotIdx && String(s.section_id) === String(section.id) && String(s.day) === String(altDay) && String(s.period_number) === String(altPeriod.period_number));
                             if (!secFreeAtAlt) continue;
                             
-                            const teacherZBusyAtAlt = finalSchedule.some((s, idx) => idx !== secSlotIdx && String(s.teacher_id) === String(blockingSlot.teacher_id) && String(s.day) === String(altDay) && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
-                            if (teacherZBusyAtAlt) continue;
+                            if (checkTeacherCollision(finalSchedule, blockingSlot.teacher_id, altDay, altPeriod, blockingSlot.id)) continue;
 
                             const zSubjectSlots = finalSchedule.filter((s, idx) => idx !== secSlotIdx && String(s.section_id) === String(section.id) && String(s.subject_id) === String(blockingSlot.subject_id));
                             const zSubjectCountAltDay = zSubjectSlots.filter(s => String(s.day) === String(altDay)).length;
@@ -710,8 +724,7 @@ export default function AutoScheduleGenerator() {
                                  const secWFreeAtAlt = !finalSchedule.some((s, idx) => idx !== teachSlotIdx && String(s.section_id) === String(teacherBlockingSlot.section_id) && String(s.day) === String(altDay) && String(s.period_number) === String(altPeriod.period_number));
                                  if (!secWFreeAtAlt) continue;
                                  
-                                 const teacherYBusyAtAlt = finalSchedule.some((s, idx) => idx !== teachSlotIdx && String(s.teacher_id) === String(teacherBlockingSlot.teacher_id) && String(s.day) === String(altDay) && isTimeIntersecting(s.start_time, s.end_time, altPeriod.start_time, altPeriod.end_time));
-                                 if (teacherYBusyAtAlt) continue;
+                                 if (checkTeacherCollision(finalSchedule, teacherBlockingSlot.teacher_id, altDay, altPeriod, teacherBlockingSlot.id)) continue;
 
                                  const wSubjectSlots = finalSchedule.filter((s, idx) => idx !== teachSlotIdx && String(s.section_id) === String(teacherBlockingSlot.section_id) && String(s.subject_id) === String(teacherBlockingSlot.subject_id));
                                  const wSubjectCountAltDay = wSubjectSlots.filter(s => String(s.day) === String(altDay)).length;
@@ -761,7 +774,7 @@ export default function AutoScheduleGenerator() {
                  teacher_id: assignment.teacher_id, teacher_name: assignment.teacher_name,
                  stage: section.stage, zoom_link: assignment.zoom_link
               });
-              subjectFailureWeights[failKey] = (subjectFailureWeights[failKey] || 0) + 1; // 🚀 زيادة التقييم السلبي ليتعلم
+              subjectFailureWeights[failKey] = (subjectFailureWeights[failKey] || 0) + 1; 
             }
           }
         } 
@@ -788,7 +801,7 @@ export default function AutoScheduleGenerator() {
     saveToLocalDraft(absoluteBestSchedule, absoluteBestUnplaced);
 
     if (absoluteBestFailedCount > 0) {
-      addLog(`⚠️ اكتمل التوليد مع وجود ${absoluteBestFailedCount} حصص بالانتظار.`);
+      addLog(`⚠️ اكتمل التوليد مع وجود ${absoluteBestFailedCount} حصص بالانتظار (هذه أفضل نتيجة ممكنة رياضياً).`);
     } else {
       addLog(`🎉 إنجاز أسطوري! تم التسكين بالكامل بنسبة نجاح 100%.`);
     }
@@ -846,15 +859,7 @@ export default function AutoScheduleGenerator() {
               setDraggedItem(null); return;
           }
 
-          const teacherABusy = generatedSchedules.some(s => 
-              String(s.id) !== String(sourceSlot.id) && 
-              (!targetSlot || String(s.id) !== String(targetSlot.id)) && 
-              String(s.teacher_id) === String(sourceSlot.teacher_id) && 
-              String(s.day) === String(targetDay) && 
-              isTimeIntersecting(s.start_time, s.end_time, pDataTarget.start_time, pDataTarget.end_time)
-          );
-
-          if (teacherABusy) {
+          if (checkTeacherCollision(generatedSchedules, sourceSlot.teacher_id, targetDay, pDataTarget, sourceSlot.id, targetSlot ? targetSlot.id : null)) {
               alert(`❌ المعلم (${sourceSlot.teacher_name}) لديه حصة في فصل آخر في هذا الوقت!`);
               setDraggedItem(null); return;
           }
@@ -866,15 +871,7 @@ export default function AutoScheduleGenerator() {
                   setDraggedItem(null); return;
               }
 
-              const teacherBBusy = generatedSchedules.some(s => 
-                  String(s.id) !== String(targetSlot.id) && 
-                  String(s.id) !== String(sourceSlot.id) && 
-                  String(s.teacher_id) === String(targetSlot.teacher_id) && 
-                  String(s.day) === String(draggedItem.day) && 
-                  isTimeIntersecting(s.start_time, s.end_time, pDataSource.start_time, pDataSource.end_time)
-              );
-
-              if (teacherBBusy) {
+              if (checkTeacherCollision(generatedSchedules, targetSlot.teacher_id, draggedItem.day, pDataSource, targetSlot.id, sourceSlot.id)) {
                   alert(`❌ لا يمكن التبديل: المعلم (${targetSlot.teacher_name}) لديه حصة في فصل آخر في وقت المصدر!`);
                   setDraggedItem(null); return;
               }
@@ -916,9 +913,8 @@ export default function AutoScheduleGenerator() {
              setDraggedItem(null); return;
           }
 
-          const busySlot = generatedSchedules.find(s => String(s.teacher_id) === String(lesson.teacher_id) && String(s.day) === String(targetDay) && isTimeIntersecting(s.start_time, s.end_time, pDataTarget.start_time, pDataTarget.end_time));
-          if (busySlot) {
-            alert(`ممنوع ❌: المعلم مشغول بتدريس فصل (${busySlot.section_name}) في هذا الوقت!`);
+          if (checkTeacherCollision(generatedSchedules, lesson.teacher_id, targetDay, pDataTarget)) {
+            alert(`ممنوع ❌: المعلم لديه حصة في فصل آخر في نفس الوقت!`);
             setDraggedItem(null); return;
           }
 
@@ -981,8 +977,8 @@ export default function AutoScheduleGenerator() {
     const sectionTimeMap = new Map();
 
     generatedSchedules.forEach(slot => {
-       const tKey = `${slot.teacher_id}_${slot.day}_${slot.start_time}`;
-       const sKey = `${slot.section_id}_${slot.day}_${slot.start_time}`;
+       const tKey = `${slot.teacher_id}_${slot.day}_${slot.start_time || slot.period_number}`;
+       const sKey = `${slot.section_id}_${slot.day}_${slot.period_number}`;
 
        if (teacherTimeMap.has(tKey)) errors.push(`تضارب خطير ❌: المعلم (${slot.teacher_name}) لديه حصتين في نفس الوقت يوم ${getDayName(slot.day)}!`);
        else teacherTimeMap.set(tKey, true);
@@ -1006,9 +1002,8 @@ export default function AutoScheduleGenerator() {
     const pData = periods.find(p => p.stage === lessonToAssign.stage && p.period_number === periodNum);
     if (!pData) return;
 
-    const busySlot = generatedSchedules.find(s => String(s.teacher_id) === String(lessonToAssign.teacher_id) && s.day === day && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
-    if (busySlot) {
-      alert(`ممنوع ❌: المعلم مشغول بتدريس فصل (${busySlot.section_name}) في هذا الوقت!`);
+    if (checkTeacherCollision(generatedSchedules, lessonToAssign.teacher_id, day, pData)) {
+      alert(`ممنوع ❌: المعلم مشغول بتدريس فصل آخر في هذا الوقت!`);
       return;
     }
 
@@ -1019,7 +1014,7 @@ export default function AutoScheduleGenerator() {
 
     if (occupantIndex !== -1) {
       const occupant = newSchedules[occupantIndex];
-      const confirmSwap = confirm(`هذه الحصة مشغولة بمادة (${occupant.subject_name}). هل تريد سحبها وإدخال مادتك مكانها؟`);
+      const confirmSwap = confirm(`هذه الحصة مشغولة بمادة (${occupant.subject_name}). هل تريد سحبها للانتظار وإدخال مادتك مكانها؟`);
       if (!confirmSwap) return;
       newUnplaced.push({...occupant, id: safeGenerateId()});
       newSchedules.splice(occupantIndex, 1);
@@ -1464,105 +1459,6 @@ export default function AutoScheduleGenerator() {
         )}
       </AnimatePresence>
 
-      {/* Modal التسكين اليدوي بالنقر */}
-      <AnimatePresence>
-        {manualAssignModalOpen && lessonToAssign && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setManualAssignModalOpen(false)} />
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-               animate={{ opacity: 1, scale: 1, y: 0 }} 
-               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl z-50 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]" 
-               dir="rtl"
-            >
-              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner border border-indigo-200"><MousePointerClick className="w-5 h-5"/></div>
-                  <div>
-                    <h3 className="font-black text-slate-800 text-base md:text-lg">تسكين يدوي لحصة: {lessonToAssign.subject_name}</h3>
-                    <p className="text-[10px] md:text-xs font-bold text-slate-500 mt-0.5">{lessonToAssign.section_name} | المعلم: {lessonToAssign.teacher_name}</p>
-                  </div>
-                </div>
-                <button onClick={() => setManualAssignModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
-              </div>
-              
-              <div className="p-5 flex-1 overflow-auto bg-slate-50 custom-scrollbar">
-                 <p className="text-xs font-bold text-slate-500 mb-4 flex items-center gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                   <AlertOctagon className="w-5 h-5 text-amber-500 shrink-0" />
-                   الخانة الخضراء: متاحة | الصفراء: المعلم متوفر لكن الفصل مشغول (النقر للتبديل) | الحمراء: المعلم مشغول أو الوقت ممنوع.
-                 </p>
-                 
-                 <div className="min-w-[700px] border border-slate-200 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-center border-collapse">
-                      <thead>
-                        <tr className="bg-slate-800 text-white">
-                          <th className="p-3 text-xs font-black border-l border-white/10 w-24">اليوم</th>
-                          {dynamicPeriods.map(p => <th key={p} className="p-3 text-xs font-black border-l border-white/10 last:border-l-0">حصة {p}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {workingDays.map(day => (
-                          <tr key={day} className="border-b border-slate-200 last:border-b-0">
-                            <td className="p-3 text-xs font-black bg-slate-100 border-l border-slate-200">{getDayName(day)}</td>
-                            {dynamicPeriods.map(p => {
-                               const pData = periods.find(per => per.stage === lessonToAssign.stage && per.period_number === p);
-                               if (!pData) return <td key={p} className="bg-slate-50 p-2 border-l border-slate-200"></td>;
-
-                               const busySlot = generatedSchedules.find(s => String(s.teacher_id) === String(lessonToAssign.teacher_id) && String(s.day) === String(day) && isTimeIntersecting(s.start_time, s.end_time, pData.start_time, pData.end_time));
-                               const occupant = generatedSchedules.find(s => String(s.section_id) === String(lessonToAssign.section_id) && String(s.day) === String(day) && String(s.period_number) === String(p));
-                               
-                               const tConst = teacherConstraints[lessonToAssign.teacher_id] || [];
-                               const isAllowedTime = tConst.includes(`${day}-${p}`);
-
-                               let statusClass = "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 cursor-pointer text-emerald-700";
-                               let statusText = "متاح ✔️";
-                               
-                               if (!isAllowedTime) {
-                                  statusClass = "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60";
-                                  statusText = "وقت ممنوع";
-                               } else if (busySlot) {
-                                  statusClass = "bg-rose-50 border-rose-200 text-rose-500 cursor-not-allowed";
-                               } else if (occupant) {
-                                  statusClass = "bg-amber-50 hover:bg-amber-100 border-amber-200 cursor-pointer text-amber-700";
-                                  statusText = occupant.subject_name;
-                               }
-
-                               return (
-                                 <td 
-                                   key={p} 
-                                   onClick={() => !busySlot && isAllowedTime && handleManualCellClick(day, p)}
-                                   className={`p-1 border-l border-b border-slate-200 last:border-l-0 transition-colors ${statusClass}`}
-                                 >
-                                   <div className="flex flex-col items-center justify-center h-14 overflow-hidden text-center px-0.5">
-                                     {!isAllowedTime ? (
-                                        <span className="text-[10px] font-black">{statusText}</span>
-                                     ) : busySlot ? (
-                                        <>
-                                          <span className="text-[8px] font-black text-rose-600 bg-rose-100 px-1 rounded mb-0.5 w-full truncate">مشغول بـ:</span>
-                                          <span className="text-[8px] font-bold leading-tight line-clamp-2 w-full" title={busySlot.section_name}>{busySlot.section_name}</span>
-                                        </>
-                                     ) : (
-                                        <>
-                                          <span className="text-[10px] font-black">{statusText}</span>
-                                          {occupant && <span className="text-[8px] font-bold opacity-70 mt-1 flex items-center gap-1"><Repeat className="w-2.5 h-2.5"/> إزاحة</span>}
-                                        </>
-                                     )}
-                                   </div>
-                                 </td>
-                               );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                 </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
       {/* 🚀 Modal مصفوفة إعدادات المعلم الدقيقة (Matrix UI) */}
       <AnimatePresence>
         {isTeacherModalOpen && selectedTeacherObj && (
@@ -1711,6 +1607,7 @@ export default function AutoScheduleGenerator() {
                 {sortedClassNames.map(className => {
                   const sampleSection = sections.find(s => s.class_name === className);
                   const stage = sampleSection?.stage || 'high';
+                  // 🚀 السعة الفعلية (المتوسط 25، الثانوي 30)
                   const MAX_WEEKLY = stage === 'middle' ? 25 : 30;
 
                   const totalQuotasForClass = groupedSubjectsByClass[className].reduce((sum, item) => {
@@ -1849,22 +1746,8 @@ export default function AutoScheduleGenerator() {
                      <button onClick={() => setDisplayMode('grid')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid className="w-4 h-4" /> شبكي</button>
                      <button onClick={() => setDisplayMode('raw')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${displayMode === 'raw' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4" /> خام</button>
                      
-                     {/* 🚀 أزرار واجهة التحكم */}
                      {displayMode === 'grid' && (
                        <>
-                         <button 
-                           onClick={() => {
-                             if(gridFilterType !== 'section') {
-                                alert("❌ خاصية التبديل اليدوي تعمل فقط عند عرض جدول لفصل محدد.");
-                                return;
-                             }
-                             setIsSwapMode(!isSwapMode);
-                             setSwapSource(null);
-                           }} 
-                           className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${isSwapMode ? 'bg-rose-500 text-white shadow-md animate-pulse border border-rose-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'}`}
-                         >
-                           <ArrowLeftRight className="w-4 h-4" /> تبديل تفاعلي
-                         </button>
                          <button onClick={generateAuditReport} className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
                            <Activity className="w-4 h-4" /> فحص الجودة
                          </button>
@@ -1879,20 +1762,6 @@ export default function AutoScheduleGenerator() {
                    </div>
                  )}
               </div>
-
-              {/* 🚀 بانر الإرشادات للتبديل التفاعلي */}
-              <AnimatePresence>
-                {isSwapMode && (
-                   <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} exit={{opacity:0, height:0}} className="bg-rose-50 border-b border-rose-200 p-3 flex flex-col md:flex-row md:items-center gap-3 shrink-0">
-                      <div className="bg-rose-500 text-white p-2 rounded-full w-fit"><ArrowLeftRight className="w-4 h-4"/></div>
-                      <div>
-                         <p className="text-sm font-black text-rose-800">وضع التبديل التفاعلي مُفعل</p>
-                         <p className="text-xs font-bold text-rose-600">انقر على الحصة التي تريد نقلها، ثم انقر على خانة (فارغة) أو (حصة أخرى) ليتم التبديل بينهما. النظام سيفحص التعارض تلقائياً.</p>
-                      </div>
-                      <button onClick={()=>{setIsSwapMode(false); setSwapSource(null);}} className="md:mr-auto bg-white border border-rose-200 text-rose-600 px-4 py-2 rounded-xl text-xs font-black hover:bg-rose-100 transition-colors w-fit">إلغاء التبديل</button>
-                   </motion.div>
-                )}
-              </AnimatePresence>
               
               <div className="flex-1 bg-slate-50/30 relative">
                 {generatedSchedules.length === 0 ? (
@@ -1902,7 +1771,7 @@ export default function AutoScheduleGenerator() {
                   </div>
                 ) : displayMode === 'raw' ? (
                   <div className="p-5 h-[600px] overflow-y-auto custom-scrollbar space-y-3">
-                     {generatedSchedules.slice(0, 150).map((slot, i) => (
+                     {generatedSchedules.map((slot, i) => (
                        <div key={i} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center font-black text-white shrink-0 bg-slate-800"><span className="text-[9px]">يوم</span><span className="text-base leading-none">{slot.day}</span></div>
@@ -1960,20 +1829,10 @@ export default function AutoScheduleGenerator() {
                                     const isDragOver = dragOverTarget === cellKey;
                                     const isBeingDragged = draggedItem?.type === 'grid' && draggedItem.day === day && draggedItem.period_number === p;
                                     const isSource = swapSource && String(swapSource.day) === String(day) && String(swapSource.period_number) === String(p);
-                                    const isValidTarget = isSwapMode && swapSource && !isSource;
 
                                     return (
                                       <td 
                                         key={p} 
-                                        onClick={() => {
-                                          if (!isSwapMode || gridFilterType !== 'section') return;
-                                          if (!swapSource) {
-                                             if (slot) setSwapSource({day, period_number: p, slot});
-                                          } else {
-                                             if (isSource) setSwapSource(null); 
-                                             else executeInteractiveSwap(day, p, slot);
-                                          }
-                                        }}
                                         onDragOver={(e) => {
                                             if (gridFilterType !== 'section') return;
                                             e.preventDefault(); 
@@ -1991,8 +1850,6 @@ export default function AutoScheduleGenerator() {
                                         }}
                                         className={`p-2 border-l border-slate-300 last:border-l-0 relative h-auto min-h-[7.5rem] align-top transition-all duration-200 
                                           ${isDragOver ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset scale-[0.98] rounded-xl' : 'hover:bg-indigo-50/30'}
-                                          ${isSwapMode && !swapSource && slot ? 'cursor-pointer hover:bg-rose-50 hover:ring-2 hover:ring-rose-200 hover:ring-inset' : ''}
-                                          ${isValidTarget ? 'cursor-pointer hover:bg-emerald-50 hover:ring-2 hover:ring-emerald-400 hover:ring-inset bg-slate-50/50' : ''}
                                           ${isSource ? 'ring-4 ring-rose-500 ring-inset bg-rose-100 scale-[0.98]' : ''}
                                           ${gridFilterType === 'section' ? 'cursor-pointer' : ''}
                                         `}
