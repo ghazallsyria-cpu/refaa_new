@@ -256,7 +256,6 @@ export default function PublicSchedulesViewPage() {
           const uniqueSecsMap = new Map();
           const uniqueTeachMap = new Map();
 
-          // 🚀 الترتيب الدقيق المتسلسل: نضمن استخراج المستوى (Level) لترتيب الفصول (السادس للثاني عشر)
           formattedSchedules.forEach(s => {
             if (!uniqueSecsMap.has(s.section_id)) {
                const sec = sectionsData.find(x => String(x.id) === s.section_id);
@@ -269,7 +268,6 @@ export default function PublicSchedulesViewPage() {
             }
           });
 
-          // 🚀 الفرز باستخدام الـ Level أولاً، ثم أبجدياً إذا تساوى المستوى
           const secsArray = Array.from(uniqueSecsMap.values()).sort((a, b) => {
              if (a.level !== b.level) return a.level - b.level;
              return String(a.name).localeCompare(String(b.name));
@@ -396,7 +394,6 @@ export default function PublicSchedulesViewPage() {
         const containers = document.querySelectorAll(containerClass);
         if (!containers || containers.length === 0) throw new Error('لم يتم العثور على جداول مبنية للطباعة.');
 
-        // 🚀 استخدام A3 عالية الدقة للجدول المجمع
         const paperFormat = mode === 'master-print' ? 'a3' : 'a4';
         const pdf = new jsPDFModule('landscape', 'mm', paperFormat);
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -406,11 +403,19 @@ export default function PublicSchedulesViewPage() {
           if (i > 0) pdf.addPage(); 
           const el = containers[i] as HTMLElement;
 
-          // 🚀 رفع دقة الرسم (Scale) لـ 4 للجدول المجمع لضمان وضوح فائق
-          const scaleValue = mode === 'master-print' ? 4 : 2;
+          // 🚀 تم خفض الـ Scale للجدول المجمع إلى 2.5 لحماية هواتف الآيفون من انهيار الذاكرة العشوائية (Memory Crash)
+          const scaleValue = mode === 'master-print' ? 2.5 : 2;
           const canvas = await html2canvasModule(el, { scale: scaleValue, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          const imgData = canvas.toDataURL('image/png', 1.0);
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          
+          // 🚀 الاعتماد على JPEG بدلاً من PNG لتقليص الحجم ومنع خطأ Wrong PNG Signature
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          
+          // حماية إضافية في حال فشل الكانفاس في رسم الصورة
+          if (!imgData || imgData === 'data:,') {
+              throw new Error('نفدت ذاكرة المتصفح أثناء رسم الجدول العملاق! يرجى المحاولة من جهاز كمبيوتر بدلاً من الهاتف.');
+          }
+
+          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
           // تطبيق الروابط في الـ PDF
           const links = el.querySelectorAll('a.zoom-link');
@@ -440,7 +445,7 @@ export default function PublicSchedulesViewPage() {
         pdf.save(fileName);
       } catch (error: any) { 
         console.error(error);
-        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF.'); 
+        alert(error.message || 'حدث خطأ أثناء بناء وتصدير ملف الـ PDF. يرجى المحاولة من جهاز كمبيوتر.'); 
       } finally { 
         setIsGeneratingPDF(false); 
         setEntitiesToPrint([]); 
@@ -731,15 +736,15 @@ export default function PublicSchedulesViewPage() {
                                   return (
                                     <td key={sec.id} className="p-2 border-l border-white/5 align-middle h-20">
                                       {slot ? (
-                                        <div className="bg-[#02040a]/60 border border-indigo-500/20 rounded-xl p-2 text-center h-full flex flex-col justify-center gap-1 shadow-sm hover:border-indigo-400 hover:bg-indigo-900/20 transition-all relative">
+                                        <div className="bg-[#02040a]/60 border border-indigo-500/20 rounded-xl p-2 text-center h-full flex flex-col justify-center gap-1 shadow-sm hover:border-indigo-400 hover:bg-indigo-900/20 transition-all relative group">
                                           <div className="text-[9px] text-amber-400 font-mono font-black bg-slate-900/80 rounded px-1.5 py-0.5 mx-auto w-max" dir="ltr">
                                             {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                           </div>
                                           <span className="text-xs sm:text-sm font-black text-emerald-300 line-clamp-1" title={safeString(slot.subject_name)}>{safeString(slot.subject_name)}</span>
                                           <span className="text-[10px] text-slate-400 font-bold line-clamp-1" title={safeString(slot.teacher_name)}>أ. {safeString(slot.teacher_name)}</span>
                                           {slot.zoom_link && (
-                                            <a href={normalizeUrl(slot.zoom_link)} target="_blank" rel="noopener noreferrer" className="absolute top-1 right-1 text-blue-400 hover:text-blue-300" title="رابط زوم">
-                                              <Video className="w-3.5 h-3.5" />
+                                            <a href={normalizeUrl(slot.zoom_link)} target="_blank" rel="noopener noreferrer" className="absolute top-1 left-1 bg-blue-600 hover:bg-blue-500 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity" title="رابط البث">
+                                              <Video className="w-3 h-3" />
                                             </a>
                                           )}
                                         </div>
@@ -923,7 +928,8 @@ export default function PublicSchedulesViewPage() {
                           <tbody>
                             <tr>
                               <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
-                                <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 6px 0', color: '#0f172a' }}>الجدول الدراسي الأسبوعي</h1>
+                                {/* 🚀 إزالة التباعد بين الحروف لحل مشكلة تفكك اللغة العربية */}
+                                <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 6px 0', color: '#0f172a', letterSpacing: 'normal' }}>الجدول الدراسي الأسبوعي</h1>
                                 <h2 style={{ fontSize: '14px', fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0, display: 'inline-block' }}>
                                   {isPrintTypeStudent ? `الفصل: ${entTitle}` : `المعلم: ${entTitle}`}
                                 </h2>
@@ -957,7 +963,7 @@ export default function PublicSchedulesViewPage() {
                                  return (
                                    <td key={p} style={{ border: '1px solid #cbd5e1', backgroundColor: dIdx % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '4px', textAlign: 'center', verticalAlign: 'middle', height: '110px' }}>
                                      {slot ? (
-                                       <div style={{ padding: '6px', border: `1px solid ${printTheme.cardBorder}`, borderRadius: '6px', backgroundColor: printTheme.cardBg, textAlign: 'center', height: '100%', boxSizing: 'border-box' }}>
+                                       <div style={{ padding: '6px', border: `1px solid ${printTheme.cardBorder}`, borderRadius: '6px', backgroundColor: printTheme.cardBg, textAlign: 'center', height: '100%', boxSizing: 'border-box', position: 'relative' }}>
                                          
                                          <div style={{ fontSize: '9px', fontWeight: 'bold', color: printTheme.timeText, backgroundColor: printTheme.timeBg, border: `1px solid ${printTheme.timeBorder}`, padding: '2px 4px', borderRadius: '4px', marginBottom: '4px', display: 'inline-block' }} dir="ltr">
                                             {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
@@ -1000,10 +1006,12 @@ export default function PublicSchedulesViewPage() {
             {/* 🚀 منطقة الطباعة المخفية الخاصة بالجدول المجمع (Master Print) بصيغة فارهة */}
             {filterType === 'master' && (
               <div style={{ position: 'fixed', top: '-20000px', left: '-20000px', opacity: 0, pointerEvents: 'none', zIndex: -50 }} aria-hidden="true">
+                {/* تم توسيع العرض لـ 2200px لضمان احتواء كافة الفصول براحة ودقة عالية */}
                 <div className="master-pdf-page" dir="rtl" style={{ width: '2200px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif' }}>
                   
                   <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #1e293b', paddingBottom: '15px' }}>
-                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 10px 0', color: '#0f172a' }}>الجدول المدرسي المجمع (العام)</h1>
+                    {/* 🚀 إزالة التباعد بين الحروف للغة العربية هنا أيضاً */}
+                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 10px 0', color: '#0f172a', letterSpacing: 'normal' }}>الجدول المدرسي المجمع (العام)</h1>
                     <div style={{ display: 'inline-block', fontSize: '14px', fontWeight: 'bold', padding: '6px 16px', borderRadius: '8px', backgroundColor: '#10b981', color: '#ffffff' }}>
                        العام الدراسي الحالي - {new Date().toLocaleDateString('ar-EG')}
                     </div>
@@ -1039,12 +1047,16 @@ export default function PublicSchedulesViewPage() {
                                 return (
                                   <td key={sec.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#ffffff', padding: '6px', textAlign: 'center', verticalAlign: 'middle', height: '70px' }}>
                                     {slot ? (
-                                      <div style={{ padding: '4px', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#f8fafc', height: '100%', boxSizing: 'border-box' }}>
+                                      <div style={{ padding: '4px', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#f8fafc', height: '100%', boxSizing: 'border-box', position: 'relative' }}>
                                          <div style={{ fontSize: '11px', fontWeight: 900, color: '#047857', marginBottom: '2px', lineHeight: '1.2' }}>{safeString(slot.subject_name)}</div>
                                          <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', lineHeight: '1.2' }}>أ. {safeString(slot.teacher_name)}</div>
+                                         
+                                         {/* 🚀 إضافة زر زوم في الطباعة المجمعة */}
                                          {slot.zoom_link && (
                                             <div style={{ marginTop: '3px' }}>
-                                                <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#10b981', color: '#ffffff', fontSize: '8px', fontWeight: 'bold', textDecoration: 'none', padding: '2px 4px', borderRadius: '3px' }}>بث Zoom</a>
+                                                <a href={normalizeUrl(slot.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#3b82f6', color: '#ffffff', fontSize: '8px', fontWeight: 'bold', textDecoration: 'none', padding: '2px 4px', borderRadius: '3px' }}>
+                                                  رابط Zoom
+                                                </a>
                                             </div>
                                          )}
                                       </div>
