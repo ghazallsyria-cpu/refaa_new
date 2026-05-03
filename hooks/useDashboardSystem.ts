@@ -108,6 +108,19 @@ export function useDashboardSystem() {
     
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
+        const activeSystem = await getActiveSystem();
+        let allAutoPeriods: any[] = [];
+        let classPeriods: any[] = [];
+
+        // 🚀 جلب كافة الأوقات مسبقاً لتغذية الجدول بالأوقات الصحيحة
+        if (activeSystem === 'auto') {
+            const { data } = await supabase.from('auto_class_periods').select('*');
+            allAutoPeriods = data || [];
+        } else {
+            const { data } = await supabase.from('class_periods').select('*').order('period_number');
+            classPeriods = data || [];
+        }
+
         const { data: studentCore, error: studentError } = await supabase
           .from('students')
           .select('*, sections(id, name, classes(name))')
@@ -121,14 +134,13 @@ export function useDashboardSystem() {
           .maybeSingle();
 
         if (studentError || !studentCore) {
-           console.warn("Student record not found for this user.");
            return { student: { id: user.id, users: userData || { full_name: 'طالب' } }, assignments: [], exams: [], attendanceRate: 0, grades: [], todaysSchedule: [], periods: [] };
         }
         
         const student = { ...studentCore, users: userData || { full_name: 'طالب' } };
         const sectionId = studentCore.section_id;
 
-        // 🚀 تحديد مرحلة الطالب (متوسط / ثانوي) لقراءة الأوقات الصحيحة
+        // 🚀 تحديد مرحلة الطالب بدقة لتوجيه الأوقات
         let stage: 'middle' | 'high' = 'high';
         const classNameObj = Array.isArray(studentCore.sections?.classes) ? studentCore.sections?.classes[0] : studentCore.sections?.classes;
         const classNameStr = classNameObj?.name || '';
@@ -136,29 +148,23 @@ export function useDashboardSystem() {
             stage = 'middle';
         }
 
-        const activeSystem = await getActiveSystem();
-
-        // 🚀 توجيه استعلام أوقات الحصص للجدول الصحيح
-        let periodsQuery = activeSystem === 'auto' 
-            ? supabase.from('auto_class_periods').select('*').eq('stage', stage).order('period_number')
-            : supabase.from('class_periods').select('*').order('period_number');
+        let periods = activeSystem === 'auto' 
+            ? allAutoPeriods.filter(p => p.stage === stage).sort((a,b) => a.period_number - b.period_number)
+            : classPeriods;
 
         let assignments: any[] = [];
         let exams: any[] = [];
         let attendance: any[] = [];
         let grades: any[] = [];
         let todaysSchedule: any[] = [];
-        let periods: any[] = [];
 
         try {
-           const [gradesRes, attendanceRes, periodsRes] = await Promise.all([
+           const [gradesRes, attendanceRes] = await Promise.all([
               supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', studentCore.id).order('completed_at', { ascending: false }).limit(5),
-              supabase.from('attendance_records').select('status').eq('student_id', studentCore.id).limit(5000),
-              periodsQuery
+              supabase.from('attendance_records').select('status').eq('student_id', studentCore.id).limit(5000)
            ]);
            if (gradesRes.data) grades = gradesRes.data;
            if (attendanceRes.data) attendance = attendanceRes.data;
-           if (periodsRes.data) periods = periodsRes.data;
         } catch (e) {
            console.error("Error fetching general student info:", e);
         }
@@ -190,12 +196,22 @@ export function useDashboardSystem() {
                          todaysSchedule = autoScheds.map(s => {
                             const subj = subjRes.data?.find(x => x.id === s.subject_id);
                             const teach = teachRes.data?.find(x => x.id === s.teacher_id);
+                            
+                            // 🚀 حقن الوقت الدقيق
+                            let startTime = s.start_time;
+                            let endTime = s.end_time;
+                            const pTime = allAutoPeriods.find(p => p.period_number === s.period_number && p.stage === stage);
+                            if (pTime) {
+                                startTime = pTime.start_time;
+                                endTime = pTime.end_time;
+                            }
+
                             return {
                                id: s.id,
                                day_of_week: s.day_of_week,
                                period: s.period_number,
-                               start_time: s.start_time,
-                               end_time: s.end_time,
+                               start_time: startTime,
+                               end_time: endTime,
                                subjects: { name: subj?.name },
                                teachers: { users: { full_name: teach?.full_name } }
                             };
@@ -276,19 +292,34 @@ export function useDashboardSystem() {
     if (!user?.id) return null;
     return withCache(`student_schedule_${user.id}`, async () => {
       try {
+        const activeSystem = await getActiveSystem();
+        let allAutoPeriods: any[] = [];
+        let classPeriods: any[] = [];
+
+        if (activeSystem === 'auto') {
+            const { data } = await supabase.from('auto_class_periods').select('*');
+            allAutoPeriods = data || [];
+        } else {
+            const { data } = await supabase.from('class_periods').select('*').order('period_number');
+            classPeriods = data || [];
+        }
+
         const { data: student } = await supabase.from('students').select('section_id, sections(name, classes(name))').or(`id.eq.${user.id},user_id.eq.${user.id}`).maybeSingle();
         if (!student || !student.section_id) return null;
 
-        const activeSystem = await getActiveSystem();
         let scheduleData: any[] = [];
         
-        // تحديد المرحلة
+        // 🚀 تحديد المرحلة
         let stage: 'middle' | 'high' = 'high';
         const classNameObj = Array.isArray(student?.sections?.classes) ? student.sections.classes[0] : student?.sections?.classes;
         const classNameStr = classNameObj?.name || '';
         if (classNameStr && /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(classNameStr)) {
             stage = 'middle';
         }
+
+        let periods = activeSystem === 'auto' 
+            ? allAutoPeriods.filter(p => p.stage === stage).sort((a,b) => a.period_number - b.period_number)
+            : classPeriods;
 
         if (activeSystem === 'auto') {
             const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -306,12 +337,22 @@ export function useDashboardSystem() {
                     scheduleData = raw.map(s => {
                         const subj = subjRes.data?.find(x => x.id === s.subject_id);
                         const teach = teachRes.data?.find(x => x.id === s.teacher_id);
+                        
+                        // 🚀 حقن الوقت الدقيق
+                        let startTime = s.start_time;
+                        let endTime = s.end_time;
+                        const pTime = allAutoPeriods.find(p => p.period_number === s.period_number && p.stage === stage);
+                        if (pTime) {
+                            startTime = pTime.start_time;
+                            endTime = pTime.end_time;
+                        }
+
                         return {
                             id: s.id,
                             day_of_week: s.day_of_week,
                             period: s.period_number,
-                            start_time: s.start_time,
-                            end_time: s.end_time,
+                            start_time: startTime,
+                            end_time: endTime,
                             subjects: { name: subj?.name },
                             teachers: { zoom_link: teach?.zoom_link }
                         };
@@ -323,14 +364,7 @@ export function useDashboardSystem() {
             scheduleData = data || [];
         }
 
-        // جلب الأوقات الذكية
-        let periodsQuery = activeSystem === 'auto' 
-            ? supabase.from('auto_class_periods').select('*').eq('stage', stage).order('period_number')
-            : supabase.from('class_periods').select('*').order('period_number');
-
-        const { data: periods } = await periodsQuery;
-
-        return { student, schedule: scheduleData, periods: periods || [] };
+        return { student, schedule: scheduleData, periods: periods };
       } catch (error) { throw error; }
     }, forceRefresh);
   }, [user?.id]);
@@ -354,29 +388,15 @@ export function useDashboardSystem() {
   const fetchParentChildDetails = useCallback(async (childId: string, sectionId: string | null) => {
     try {
       const activeSystem = await getActiveSystem();
-      const todayDbDay = new Date().getDay() + 1; 
-      
-      let scheduleData: any[] = [];
-      if (sectionId) {
-          if (activeSystem === 'auto') {
-              const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
-              if (planData) {
-                  const { data: raw } = await supabase.from('auto_schedules').select('*').eq('plan_id', planData.id).eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period_number').limit(100);
-                  if (raw && raw.length > 0) {
-                      const subjIds = [...new Set(raw.map(s => s.subject_id))];
-                      const { data: subjRes } = await supabase.from('subjects').select('id, name').in('id', subjIds);
-                      scheduleData = raw.map(s => ({
-                          ...s,
-                          period: s.period_number,
-                          subjects: { id: s.subject_id, name: subjRes?.find((x: any) => x.id === s.subject_id)?.name },
-                          teachers: { id: s.teacher_id }
-                      }));
-                  }
-              }
-          } else {
-              const { data } = await supabase.from('schedules').select('*, subjects(id, name), teachers(id)').eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period', { ascending: true });
-              scheduleData = data || [];
-          }
+      let allAutoPeriods: any[] = [];
+      let classPeriods: any[] = [];
+
+      if (activeSystem === 'auto') {
+          const { data } = await supabase.from('auto_class_periods').select('*');
+          allAutoPeriods = data || [];
+      } else {
+          const { data } = await supabase.from('class_periods').select('*').order('period_number');
+          classPeriods = data || [];
       }
 
       // جلب مرحلة الابن لتحديد الأوقات بدقة
@@ -387,27 +407,77 @@ export function useDashboardSystem() {
           stage = 'middle';
       }
 
-      let periodsQuery = activeSystem === 'auto' 
-          ? supabase.from('auto_class_periods').select('*').eq('stage', stage).order('period_number')
-          : supabase.from('class_periods').select('*').order('period_number');
+      let periods = activeSystem === 'auto' 
+          ? allAutoPeriods.filter(p => p.stage === stage).sort((a,b) => a.period_number - b.period_number)
+          : classPeriods;
 
-      const [ { data: attendance }, { data: badges }, { data: periods }, { data: exams }, { data: assignments } ] = await Promise.all([
+      const todayDbDay = new Date().getDay() + 1; 
+      let scheduleData: any[] = [];
+      
+      if (sectionId) {
+          if (activeSystem === 'auto') {
+              const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
+              if (planData) {
+                  const { data: raw } = await supabase.from('auto_schedules').select('*').eq('plan_id', planData.id).eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period_number').limit(100);
+                  if (raw && raw.length > 0) {
+                      const subjIds = [...new Set(raw.map(s => s.subject_id))];
+                      const { data: subjRes } = await supabase.from('subjects').select('id, name').in('id', subjIds);
+                      scheduleData = raw.map(s => {
+                          let startTime = s.start_time;
+                          let endTime = s.end_time;
+                          const pNum = s.period_number || s.period;
+                          const pTime = allAutoPeriods.find(p => p.period_number === pNum && p.stage === stage);
+                          if (pTime) {
+                              startTime = pTime.start_time;
+                              endTime = pTime.end_time;
+                          }
+
+                          return {
+                              ...s,
+                              period: s.period_number,
+                              start_time: startTime,
+                              end_time: endTime,
+                              subjects: { id: s.subject_id, name: subjRes?.find((x: any) => x.id === s.subject_id)?.name },
+                              teachers: { id: s.teacher_id }
+                          }
+                      });
+                  }
+              }
+          } else {
+              const { data } = await supabase.from('schedules').select('*, subjects(id, name), teachers(id)').eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period', { ascending: true });
+              scheduleData = data || [];
+          }
+      }
+
+      const [ { data: attendance }, { data: badges }, { data: exams }, { data: assignments } ] = await Promise.all([
         supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', childId).order('date', { ascending: false }),
         supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', childId).order('granted_at', { ascending: false }),
-        periodsQuery,
         supabase.from('exam_attempts').select('id, score, status, completed_at, exams(title, total_marks, max_score, subjects(id, name))').eq('student_id', childId),
         supabase.from('assignment_submissions').select('id, grade, status, submitted_at, feedback, assignments(title, total_marks, subjects(id, name))').eq('student_id', childId)
       ]);
 
-      return { attendance: attendance || [], badges: badges || [], periods: periods || [], schedule: scheduleData, exams: exams || [], assignments: assignments || [] };
+      return { attendance: attendance || [], badges: badges || [], periods: periods, schedule: scheduleData, exams: exams || [], assignments: assignments || [] };
     } catch (error) { throw error; }
   }, []);
 
-  // 🚀 [هوك المعلم المُدرّع بالكامل مع التعرف الذكي على المرحلة]
+  // 🚀 [هوك المعلم المُدرّع بالكامل مع حقن التواقيت الذكية]
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
+        const activeSystem = await getActiveSystem();
+        let allAutoPeriods: any[] = [];
+        let classPeriods: any[] = [];
+
+        // 🚀 جلب كل الأوقات لضمان التوافق المطلق
+        if (activeSystem === 'auto') {
+            const { data } = await supabase.from('auto_class_periods').select('*');
+            allAutoPeriods = data || [];
+        } else {
+            const { data } = await supabase.from('class_periods').select('*').order('period_number');
+            classPeriods = data || [];
+        }
+
         const { data: userData } = await supabase.from('users').select('full_name, avatar_url').eq('id', user.id).maybeSingle();
 
         let teacherId = user.id; 
@@ -421,7 +491,6 @@ export function useDashboardSystem() {
         }
 
         const teacher = { id: teacherId, users: userData || { full_name: 'معلم' } };
-        const activeSystem = await getActiveSystem();
         
         let scheduleData: any[] = [];
         let teacherSchedules: any[] = [];
@@ -444,9 +513,25 @@ export function useDashboardSystem() {
                     scheduleData = raw.map(s => {
                         const sec = secRes.data?.find((x: any) => x.id === s.section_id);
                         const subj = subjRes.data?.find((x: any) => x.id === s.subject_id);
+                        
+                        // 🚀 التعرف على المرحلة لهذه البطاقة بالذات لتحديد وقتها المخصص
+                        let itemStage = 'high';
+                        const cName = sec?.classes?.name || sec?.name || '';
+                        if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(cName)) itemStage = 'middle';
+
+                        let startTime = s.start_time;
+                        let endTime = s.end_time;
+                        const pTime = allAutoPeriods.find(p => p.period_number === s.period_number && p.stage === itemStage);
+                        if (pTime) {
+                            startTime = pTime.start_time;
+                            endTime = pTime.end_time;
+                        }
+
                         return {
                             ...s,
                             period: s.period_number,
+                            start_time: startTime, // حقن الوقت الدقيق
+                            end_time: endTime,     // حقن الوقت الدقيق
                             sections: { name: sec?.name, classes: sec?.classes },
                             subjects: { name: subj?.name }
                         };
@@ -459,7 +544,7 @@ export function useDashboardSystem() {
             teacherSchedules = scheduleData;
         }
         
-        // 2. 🚀 [التعرف الذكي على المرحلة]
+        // 2. 🚀 [تحديد المرحلة الأساسية للمعلم لرسم خط الزمن الخارجي للوحة]
         let midCount = 0; let highCount = 0;
         scheduleData.forEach(s => {
             const classObj = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
@@ -469,9 +554,9 @@ export function useDashboardSystem() {
         });
         const teacherPrimaryStage = midCount > highCount ? 'middle' : 'high';
 
-        let periodsQuery = activeSystem === 'auto' 
-            ? supabase.from('auto_class_periods').select('*').eq('stage', teacherPrimaryStage).order('period_number')
-            : supabase.from('class_periods').select('*').order('period_number');
+        let periods = activeSystem === 'auto' 
+            ? allAutoPeriods.filter(p => p.stage === teacherPrimaryStage).sort((a,b) => a.period_number - b.period_number)
+            : classPeriods;
 
         let sectionIds = Array.from(new Set((teacherSchedules || []).map(ts => ts.section_id).filter(Boolean)));
         
@@ -527,17 +612,13 @@ export function useDashboardSystem() {
         
         const [
           { data: recentExams }, 
-          { data: periodsRaw }, 
           { data: messages },
           { data: attendanceRecords }
         ] = await Promise.all([
           supabase.from('exams').select(`id, title, created_at, start_time, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(5),
-          periodsQuery,
           supabase.from('messages').select('*, sender:sender_id(full_name, avatar_url)').eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(5),
           supabase.from('attendance_records').select('status').eq('teacher_id', teacherId).eq('date', todayStr)
         ]);
-
-        let periods = periodsRaw || [];
 
         const totalAttendance = attendanceRecords?.length || 0;
         const presentCount = (attendanceRecords || []).filter(a => a.status === 'present').length || 0;
@@ -574,11 +655,23 @@ export function useDashboardSystem() {
     }, forceRefresh); 
   }, [user?.id]);
 
-  // 🚀 [جدول المعلم الكامل - مدعوم بالتعرف الذكي على المرحلة]
+  // 🚀 [جدول المعلم الكامل الأسبوعي - مدعوم بالتعرف الذكي على المرحلة وحقن التواقيت]
   const fetchTeacherSchedule = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
       try {
+        const activeSystem = await getActiveSystem();
+        let allAutoPeriods: any[] = [];
+        let classPeriods: any[] = [];
+
+        if (activeSystem === 'auto') {
+            const { data } = await supabase.from('auto_class_periods').select('*');
+            allAutoPeriods = data || [];
+        } else {
+            const { data } = await supabase.from('class_periods').select('*').order('period_number');
+            classPeriods = data || [];
+        }
+
         let teacherId = user.id; 
         const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         if (tByUserId?.id) {
@@ -588,7 +681,6 @@ export function useDashboardSystem() {
             if (tById?.id) teacherId = tById.id;
         }
         
-        const activeSystem = await getActiveSystem();
         let scheduleData: any[] = [];
 
         if (activeSystem === 'auto') {
@@ -607,12 +699,26 @@ export function useDashboardSystem() {
                     scheduleData = raw.map(s => {
                         const subj = subjRes.data?.find((x: any) => x.id === s.subject_id);
                         const sec = secRes.data?.find((x: any) => x.id === s.section_id);
+                        
+                        // 🚀 التعرف الذكي على المرحلة وحقن الوقت هنا
+                        let itemStage = 'high';
+                        const cName = sec?.classes?.name || sec?.name || '';
+                        if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(cName)) itemStage = 'middle';
+
+                        let startTime = s.start_time;
+                        let endTime = s.end_time;
+                        const pTime = allAutoPeriods.find(p => p.period_number === s.period_number && p.stage === itemStage);
+                        if (pTime) {
+                            startTime = pTime.start_time;
+                            endTime = pTime.end_time;
+                        }
+
                         return {
                             id: s.id,
                             day_of_week: s.day_of_week,
                             period: s.period_number,
-                            start_time: s.start_time,
-                            end_time: s.end_time,
+                            start_time: startTime,
+                            end_time: endTime,
                             subjects: { name: subj?.name },
                             sections: { id: sec?.id, name: sec?.name, classes: sec?.classes }
                         };
@@ -624,7 +730,7 @@ export function useDashboardSystem() {
             scheduleData = data || [];
         }
 
-        // 🚀 تحديد المرحلة الأساسية للمعلم لجلب الأوقات بدقة
+        // 🚀 تحديد المرحلة الأساسية للمعلم لمعايرة خط الزمن (Timeline) الأيسر
         let midCount = 0; let highCount = 0;
         scheduleData.forEach(s => {
             const classObj = Array.isArray(s.sections?.classes) ? s.sections?.classes[0] : s.sections?.classes;
@@ -634,12 +740,9 @@ export function useDashboardSystem() {
         });
         const teacherPrimaryStage = midCount > highCount ? 'middle' : 'high';
 
-        let periodsQuery = activeSystem === 'auto' 
-            ? supabase.from('auto_class_periods').select('*').eq('stage', teacherPrimaryStage).order('period_number')
-            : supabase.from('class_periods').select('*').order('period_number');
-
-        const { data: periodsRaw } = await periodsQuery;
-        let periods = periodsRaw || [];
+        let periods = activeSystem === 'auto' 
+            ? allAutoPeriods.filter(p => p.stage === teacherPrimaryStage).sort((a,b) => a.period_number - b.period_number)
+            : classPeriods;
 
         return { schedule: scheduleData, periods: periods };
       } catch (error) { throw error; }
