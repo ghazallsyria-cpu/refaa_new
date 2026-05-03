@@ -145,7 +145,7 @@ function ScheduleSystemToggle() {
               />
             )}
             <span className="relative z-20"><Wand2 className={`w-5 h-5 sm:w-6 sm:h-6 ${activeSystem === 'auto' ? 'text-indigo-100' : 'text-slate-600'}`} /></span>
-            <span className="relative z-20 text-[10px] sm:text-xs font-black">الذكاء الاصطناعي</span>
+            <span className="relative z-20 text-[10px] sm:text-xs font-black">الجدول المتطور</span>
           </button>
 
           {/* تأثير التحميل أثناء تبديل النظام */}
