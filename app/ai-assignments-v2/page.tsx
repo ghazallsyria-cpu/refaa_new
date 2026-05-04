@@ -45,6 +45,7 @@ const renderHTMLWithMath = (html: string) => {
       const parser = new DOMParser();
       const doc = parser.parseFromString(parsed, 'text/html');
       
+      // 🚀 إصلاح عرض الصور والفيديوهات بشكل آمن
       const images = doc.querySelectorAll('img');
       images.forEach((img) => {
         if (img.src && img.src.startsWith('http')) {
@@ -149,9 +150,11 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
   if (!editor) return null;
   const insertMath = (symbol: string) => { editor.chain().focus().insertContent(` ${symbol} `).run(); };
 
+  // 🚀 أداة إدراج رابط فيديو (YouTube)
   const insertVideo = () => {
     const url = prompt('أدخل رابط الفيديو (مثال: يوتيوب):');
     if (url) {
+      // استخراج الـ ID من رابط اليوتيوب لتحويله لصيغة التضمين (Embed)
       const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
       const match = url.match(regExp);
       let embedUrl = url;
@@ -206,7 +209,6 @@ export default function AssignmentBuilderV2() {
   const [teachers, setTeachers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [sections, setSections] = useState([]);
-  const [currentTeacherId, setCurrentTeacherId] = useState('');
   
   const [activeTab, setActiveTab] = useState<'builder' | 'import' | 'manage'>('builder');
   
@@ -228,7 +230,6 @@ export default function AssignmentBuilderV2() {
   const [manualJson, setManualJson] = useState('');
   const [skippedLog, setSkippedLog] = useState<{question_hint: string, reason: string}[]>([]); 
   
-  // 🚀 رادار الصور المحصّن
   const [filterNeedsImage, setFilterNeedsImage] = useState<boolean>(false);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   
@@ -258,7 +259,7 @@ export default function AssignmentBuilderV2() {
     setQuestions([]);
     setSkippedLog([]);
     setAssignmentTitle('واجب جديد');
-    setSelectedTeacher(currentTeacherId || '');
+    setSelectedTeacher('');
     setSelectedSubject('');
     setSelectedSections([]);
     setIsPracticeMode(false); 
@@ -276,19 +277,6 @@ export default function AssignmentBuilderV2() {
     setDueDate(tmrw.toISOString().slice(0, 16));
   }, []);
 
-  // 🚀 جلب الآيدي الخاص بالمعلم الحالي (إذا كان معلماً) لتعيينه افتراضياً
-  useEffect(() => {
-    if (currentRole === 'teacher' && user) {
-      supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle().then(({data}) => {
-        if(data) {
-           setCurrentTeacherId(data.id);
-           setSelectedTeacher(data.id);
-        }
-      });
-    }
-  }, [currentRole, user]);
-
-  // 🚀 جلب قائمة المعلمين (متاحة للجميع لتمكين التوزيع المتعدد للمعلمين)
   useEffect(() => {
     if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
     const fetchTeachers = async () => {
@@ -300,34 +288,22 @@ export default function AssignmentBuilderV2() {
     fetchTeachers();
   }, [currentRole]);
 
-  // 🚀 جلب المواد بذكاء بناءً على المالك أو التوزيع الذكي
   useEffect(() => {
     const fetchSubjects = async () => {
       if (selectedTeacher) {
-        // مادة لمعلم محدد
         const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
         const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
         setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      } else if (currentRole === 'admin' || currentRole === 'management') {
+        const { data } = await supabase.from('subjects').select('id, name').order('name');
+        setSubjects(data || []);
       } else {
-        // توزيع ذكي
-        if (currentRole === 'teacher' && currentTeacherId) {
-            // المعلم يريد توزيع درسه، نظهر له مواده فقط ليشاركها
-            const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', currentTeacherId);
-            const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
-            setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-        } else if (currentRole === 'admin' || currentRole === 'management') {
-            // الإدارة ترى كل المواد للتوزيع
-            const { data } = await supabase.from('subjects').select('id, name').order('name');
-            setSubjects(data || []);
-        } else {
-            setSubjects([]);
-        }
+        setSubjects([]);
       }
     };
-    if (currentRole !== 'teacher' || currentTeacherId) fetchSubjects();
-  }, [selectedTeacher, currentRole, currentTeacherId]);
+    fetchSubjects();
+  }, [selectedTeacher, currentRole]);
 
-  // 🚀 جلب الصفوف مع إظهار اسم المعلم بجوار الصف أثناء التوزيع الذكي
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
@@ -340,8 +316,7 @@ export default function AssignmentBuilderV2() {
           return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
         }).filter(Boolean);
         setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-      } else {
-        // 🚀 وضع التوزيع الذكي المطور: إظهار كافة صفوف المادة مرفقاً باسم المعلم!
+      } else if (currentRole === 'admin' || currentRole === 'management') {
         const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) ), teachers ( users ( full_name ) )`).eq('subject_id', selectedSubject);
         const formatted = (data || []).map((sec: any) => {
           if (!sec.sections) return null;
@@ -356,7 +331,7 @@ export default function AssignmentBuilderV2() {
       }
     };
     fetchSections();
-  }, [selectedTeacher, selectedSubject]);
+  }, [selectedTeacher, selectedSubject, currentRole]);
 
   useEffect(() => {
     if (activeTab === 'manage') fetchManageList();
@@ -389,7 +364,7 @@ export default function AssignmentBuilderV2() {
         return {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
-          teachers: { users: { full_name: teacher?.users?.full_name || 'توزيع ذكي (مشاركة متعددة)' } },
+          teachers: { users: { full_name: teacher?.users?.full_name || 'توزيع ذكي (متعدد)' } },
           question_count: assign.assignment_questions_v2?.length || 0 
         };
       });
@@ -456,8 +431,8 @@ export default function AssignmentBuilderV2() {
         content_html: q.content_html,
         model_answer_html: q.model_answer_html || '',
         points: q.points,
-        // 🚀 إصلاح أمني لمتغير الصور
-        needs_image: q.needs_image === true || String(q.needs_image).toLowerCase() === 'true',
+        // 🚀 إصلاح جذري: ضمان قراءة needs_image كقيمة منطقية (Boolean)
+        needs_image: !!q.needs_image,
         options: (q.options || []).map((o: any) => ({ ...o, is_correct: o.is_correct === true || o.is_correct === 'true' }))
       }));
       
@@ -467,6 +442,7 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
+  // 🚀 تطوير البرومبت ليشمل الروابط والفيديوهات 🚀
   const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم الدقة. سأعطيك نصاً مقتطعاً من بنك أسئلة أو اختبار.
 المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي. 🚨 إياك أن تتخيل أسئلة أو صور غير موجودة.
@@ -510,7 +486,7 @@ export default function AssignmentBuilderV2() {
 
 إليك النص (استخرج جميع الأسئلة كاملة بدقة):`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الصارم المطور! 🚨\nلقد أضفنا ميزة التعامل مع الروابط والفيديوهات وأسئلة الرسم بدقة عالية.'); 
+    alert('تم نسخ البرومبت الصارم المطور! 🚨\nلقد أضفنا ميزة التعامل مع الروابط والفيديوهات وأسئلة الرسم.'); 
   };
 
   const processManualJson = () => {
@@ -545,23 +521,20 @@ export default function AssignmentBuilderV2() {
                const isMatch = cleanModel && cleanOpt === cleanModel;
                return { id: crypto.randomUUID(), content: opt, is_correct: !!isMatch };
             } else {
-               const isCorrectVal = opt.is_correct === true || String(opt.is_correct).toLowerCase() === 'true';
+               const isCorrectVal = opt.is_correct === true || opt.is_correct === 'true' || opt.isCorrect === true || opt.isCorrect === 'true';
                return { id: crypto.randomUUID(), content: String(opt.content || ''), is_correct: isCorrectVal };
             }
           });
           if (q.type === 'multiple_choice' && opts.length > 0 && !opts.some((o:any) => o.is_correct)) opts[0].is_correct = true;
         }
         const parsedPoints = Number(q.points);
-        // 🚀 إصلاح استخراج احتياج الصورة بشكل آمن
-        const isNeedsImage = q.needs_image === true || String(q.needs_image).toLowerCase() === 'true' || q.needsImage === true || String(q.needsImage).toLowerCase() === 'true';
-
         return {
           id: crypto.randomUUID(),
           content_html: q.content || q.section_header || '',
           model_answer_html: q.model_answer_html || '', 
           type: q.type || 'essay',
           points: isNaN(parsedPoints) ? 1 : parsedPoints, 
-          needs_image: isNeedsImage,
+          needs_image: !!q.needs_image,
           options: opts,
         };
       });
@@ -593,7 +566,7 @@ export default function AssignmentBuilderV2() {
 
   const openEditQuestion = (index: number) => {
     const questionToEdit = JSON.parse(JSON.stringify(questions[index]));
-    // ضمان التوافق للتشيك بوكس
+    // 🚀 تحصين إضافي لقيمة الصورة أثناء التعديل
     questionToEdit.needs_image = !!questionToEdit.needs_image; 
     setCurrentQ(questionToEdit);
     setEditingIndex(index);
@@ -654,7 +627,7 @@ export default function AssignmentBuilderV2() {
             return {
               ...q,
               content_html: q.content_html + `<br><img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; border-radius: 12px; margin-top: 10px; display: block;" />`,
-              needs_image: false
+              needs_image: false // نزيل التنبيه لأن المعلم رفع الصورة
             };
           }
           return q;
@@ -684,22 +657,26 @@ export default function AssignmentBuilderV2() {
 
       let teacherSectionMap = new Map<string, string[]>();
 
-      if (!selectedTeacher) {
-        // 🚀 توزيع ذكي شامل: للجميع (مدير ومعلم)
-        const { data: tsData } = await supabase.from('teacher_sections').select('teacher_id, section_id').eq('subject_id', selectedSubject).in('section_id', selectedSections);
-        const foundSections = new Set();
-        if (tsData) {
-          tsData.forEach(ts => {
-            if (!teacherSectionMap.has(ts.teacher_id)) teacherSectionMap.set(ts.teacher_id, []);
-            teacherSectionMap.get(ts.teacher_id)!.push(ts.section_id);
-            foundSections.add(ts.section_id);
-          });
+      if (currentRole === 'admin' || currentRole === 'management') {
+        if (!selectedTeacher) {
+          const { data: tsData } = await supabase.from('teacher_sections').select('teacher_id, section_id').eq('subject_id', selectedSubject).in('section_id', selectedSections);
+          const foundSections = new Set();
+          if (tsData) {
+            tsData.forEach(ts => {
+              if (!teacherSectionMap.has(ts.teacher_id)) teacherSectionMap.set(ts.teacher_id, []);
+              teacherSectionMap.get(ts.teacher_id)!.push(ts.section_id);
+              foundSections.add(ts.section_id);
+            });
+          }
+          const missingSections = selectedSections.filter(s => !foundSections.has(s));
+          if (missingSections.length > 0) teacherSectionMap.set('unassigned', missingSections);
+        } else {
+          teacherSectionMap.set(selectedTeacher, selectedSections);
         }
-        const missingSections = selectedSections.filter(s => !foundSections.has(s));
-        if (missingSections.length > 0) teacherSectionMap.set('unassigned', missingSections);
       } else {
-        // توزيع لمالك محدد
-        teacherSectionMap.set(selectedTeacher, selectedSections);
+        const { data: tData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (tData?.id) teacherSectionMap.set(tData.id, selectedSections);
+        else teacherSectionMap.set('unassigned', selectedSections);
       }
 
       if (editingAssignmentId) {
@@ -717,7 +694,7 @@ export default function AssignmentBuilderV2() {
         const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
         await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
-        // 🚀 حفظ محصن للأسئلة
+        // 🚀 ضمان حفظ حالة needs_image في قاعدة البيانات
         const questionsPayload = questions.map((q, index) => ({ 
           assignment_id: editingAssignmentId, question_type: q.type, content_html: q.content_html, model_answer_html: q.model_answer_html, points: q.points, 
           options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), order_index: index + 1,
@@ -739,6 +716,7 @@ export default function AssignmentBuilderV2() {
           const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
           await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
+          // 🚀 ضمان حفظ حالة needs_image في قاعدة البيانات
           const questionsPayload = questions.map((q, index) => ({ 
             assignment_id: finalAssignmentId, question_type: q.type, content_html: q.content_html, model_answer_html: q.model_answer_html, points: q.points, 
             options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), order_index: index + 1,
@@ -758,8 +736,8 @@ export default function AssignmentBuilderV2() {
     return types[t] || t;
   };
 
-  // 🚀 فلترة الأسئلة التي تحتاج صور بذكاء
-  const questionsNeedingImages = questions.filter(q => q.needs_image === true);
+  // 🚀 فلترة الأسئلة التي تحتاج إلى صور
+  const questionsNeedingImages = questions.filter(q => !!q.needs_image);
   const displayedQuestions = filterNeedsImage ? questionsNeedingImages : questions;
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center">غير مصرح لك.</div>;
@@ -802,12 +780,9 @@ export default function AssignmentBuilderV2() {
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'إعداد درس جديد'}
           </button>
-          {/* 🚀 إخفاء زر استيراد AI من الواجهة للمعلم 🚀 */}
-          {(currentRole === 'admin' || currentRole === 'management') && (
-            <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <FileJson className="w-4 h-4" /> استيراد AI
-            </button>
-          )}
+          <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <FileJson className="w-4 h-4" /> استيراد AI
+          </button>
           <button onClick={() => setActiveTab('manage')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'manage' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <Database className="w-4 h-4" /> السجلات
           </button>
@@ -883,7 +858,7 @@ export default function AssignmentBuilderV2() {
           </motion.div>
         )}
 
-        {activeTab === 'import' && (currentRole === 'admin' || currentRole === 'management') && (
+        {activeTab === 'import' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
             
             {skippedLog.length > 0 && (
@@ -953,18 +928,23 @@ export default function AssignmentBuilderV2() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 🚀 القائمة أصبحت متاحة للجميع لتفعيل التوزيع المتعدد 🚀 */}
-                <div>
-                  <select 
-                    value={selectedTeacher} 
-                    onChange={e => { setSelectedTeacher(e.target.value); setSelectedSubject(''); setSelectedSections([]); }} 
-                    className="w-full p-3.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-black outline-none focus:border-indigo-500 shadow-inner"
-                  >
-                    <option value="">توزيع ذكي (مشاركة مع زملائك لنفس المادة)</option>
-                    {teachers.map((t:any) => <option key={t.id} value={t.id}>{currentRole === 'teacher' && t.id === currentTeacherId ? 'حسابي (أنا)' : `المعلم: ${t.full_name}`}</option>)}
-                  </select>
-                  <p className="text-[10px] text-slate-500 font-bold mt-1.5 px-1">* لإضافة الدرس لمعلمين متعددين في نفس الوقت، اترك الخيار على (توزيع ذكي).</p>
-                </div>
+                {(currentRole === 'admin' || currentRole === 'management') ? (
+                  <div>
+                    <select 
+                      value={selectedTeacher} 
+                      onChange={e => { setSelectedTeacher(e.target.value); setSelectedSubject(''); setSelectedSections([]); }} 
+                      className="w-full p-3.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-black outline-none focus:border-indigo-500 shadow-inner"
+                    >
+                      <option value="">توزيع ذكي (متعدد المعلمين / شامل)</option>
+                      {teachers.map((t:any) => <option key={t.id} value={t.id}>المعلم: {t.full_name}</option>)}
+                    </select>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1.5 px-1">* لإضافة الدرس لمعلمين متعددين في نفس الوقت، اترك الخيار على (توزيع ذكي).</p>
+                  </div>
+                ) : (
+                  <div className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-500 flex items-center gap-2 h-[52px]">
+                    <UserCheck className="w-5 h-5" /> يتم الإسناد لحسابك تلقائياً
+                  </div>
+                )}
                 
                 <div className="h-[52px]">
                   <select value={selectedSubject} onChange={e => { setSelectedSubject(e.target.value); setSelectedSections([]); }} className="w-full h-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
@@ -1077,11 +1057,9 @@ export default function AssignmentBuilderV2() {
                 <button onClick={openNewQuestion} className="flex-1 border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
                   <Plus className="w-5 h-5" /> إضافة سؤال يدوياً
                 </button>
-                {(currentRole === 'admin' || currentRole === 'management') && (
-                   <button onClick={() => setIsImportModalOpen(true)} className="flex-1 border-2 border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors shadow-inner">
-                     <FileJson className="w-5 h-5" /> دمج كود (JSON)
-                   </button>
-                )}
+                <button onClick={() => setIsImportModalOpen(true)} className="flex-1 border-2 border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors shadow-inner">
+                  <FileJson className="w-5 h-5" /> دمج كود (JSON)
+                </button>
               </div>
             </div>
 
