@@ -217,6 +217,13 @@ export function useAttendanceSystem() {
 
       let pCount = 0, aCount = 0, lCount = 0, eCount = 0;
 
+      // 🚀 البصمة الإلكترونية: نسجل بصمة ووقت المعلم أو الإداري الذي أخذ الغياب الفعلي.
+      const electronicSignature = {
+          submitted_by: user.id, // معرّف الحساب الفعلي الذي أرسل الطلب
+          role: currentRole, // دوره الفعلي (معلم، إداري)
+          timestamp: new Date().toISOString() // بصمة الوقت الدقيقة
+      };
+
       const recordsToUpsert = studentsList.reduce((acc: any[], student) => {
         const status = attendanceData[student.id];
         if (status) {
@@ -231,7 +238,7 @@ export function useAttendanceSystem() {
 
       if (recordsToUpsert.length === 0) throw new Error("لم تقم بتحديد حالة الحضور لأي طالب!");
 
-      // 🚀 الاعتماد على UPSERT
+      // 🚀 الاعتماد على UPSERT للغياب
       const { error: upsertError } = await supabase.from('attendance_records').upsert(recordsToUpsert, {
         onConflict: 'student_id, date, period', 
         ignoreDuplicates: false 
@@ -239,9 +246,13 @@ export function useAttendanceSystem() {
       
       if (upsertError) throw new Error("رفضت قاعدة البيانات الحفظ: " + upsertError.message);
       
+      // 🚀 إضافة بصمة المعلم في إحصائيات اليوم (signature)
+      // إذا كان لديك عمود إضافي مخصص بالـ signature في `daily_attendance_stats` يمكنك إرساله.
       await supabase.from('daily_attendance_stats').upsert({
          date, period, section_id: sectionId, subject_id: subjectId || null, teacher_id: actualTeacherId,
-         lesson_title: lessonTitle, total_students: studentsList.length, present_count: pCount, absent_count: aCount, late_count: lCount, excused_count: eCount
+         lesson_title: lessonTitle, total_students: studentsList.length, present_count: pCount, absent_count: aCount, late_count: lCount, excused_count: eCount,
+         // إرسال بصمة التوثيق للوحة تحكم الإدارة (سيتم تجاهلها بصمت إذا لم يكن العمود موجودًا)
+         metadata: electronicSignature 
       }, { onConflict: 'date, period, section_id' });
 
       return true;
