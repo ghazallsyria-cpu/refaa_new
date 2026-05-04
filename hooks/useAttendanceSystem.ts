@@ -240,21 +240,20 @@ export function useAttendanceSystem() {
          lesson_title: lessonTitle, total_students: studentsList.length, present_count: pCount, absent_count: aCount, late_count: lCount, excused_count: eCount
       }, { onConflict: 'date, period, section_id' });
 
-      // 🚀 البصمة الإلكترونية (حضور المعلم) المطابقة تماماً للهيكلية
+      // 🚀 البصمة الإلكترونية (حضور المعلم) المطابقة تماماً للهيكلية بدون أخطاء الـ Typescript
       try {
          const teacherSignature = {
              teacher_id: actualTeacherId,
              date: date,
-             period_number: period, // بالهيكلية اسمها period_number
+             period_number: period, 
              section_id: sectionId,
              subject_id: subjectId || null,
              status: 'present'
-             // recorded_at يُضاف تلقائياً بتوقيت الكويت حسب إعدادات الجدول
          };
          
          await supabase.from('teacher_attendance_records').insert([teacherSignature]);
          
-         // إغلاق جلسة الحضور (اختياري، يفيد في التقارير الإدارية)
+         // إغلاق جلسة الحضور (مع استخدام await لتجنب الخطأ)
          await supabase.from('attendance_sessions').insert([{
              teacher_id: actualTeacherId,
              section_id: sectionId,
@@ -262,7 +261,7 @@ export function useAttendanceSystem() {
              period_number: period,
              date: date,
              status: 'submitted'
-         }]).catch(() => {}); // نتجاوز الأخطاء بصمت إذا تم تسجيلها مسبقاً
+         }]);
 
       } catch (sigError) {
          console.log("Teacher signature note:", sigError);
