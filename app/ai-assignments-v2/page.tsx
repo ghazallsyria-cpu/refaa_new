@@ -154,14 +154,14 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <AnimatePresence>
           {isUploading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin"/>
             </motion.div>
           )}
         </AnimatePresence>
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">{placeholder}</div>
         )}
-        <EditorContent editor={editor} />
+        <EditorContent editor="{editor}"/>
       </div>
     </div>
   );
@@ -196,7 +196,6 @@ export default function AssignmentBuilderV2() {
   const [manualJson, setManualJson] = useState('');
   const [skippedLog, setSkippedLog] = useState<{question_hint: string, reason: string}[]>([]); 
   
-  // 🚀 حالة رادار الصور
   const [filterNeedsImage, setFilterNeedsImage] = useState<boolean>(false);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   
@@ -204,7 +203,6 @@ export default function AssignmentBuilderV2() {
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  // 🚀 حالة نافذة دمج الـ JSON المنبثقة
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -457,16 +455,12 @@ export default function AssignmentBuilderV2() {
     try {
       let safeJsonStr = manualJson.trim();
       
-      // 🚀 إصلاح الـ Regex بحيلة برمجية تمنع محرر الأكواد من كسر السطر 🚀
-      const t = String.fromCharCode(96); // رمز `
-      const tripleBacktick = t + t + t;
+      const t = String.fromCharCode(96);
+      const triple = t + t + t;
       
-      if (safeJsonStr.startsWith(tripleBacktick)) {
-        // قص الـ ```json أو 
-``` من البداية
-        safeJsonStr = safeJsonStr.replace(new RegExp('^' + tripleBacktick + '[a-z]*\\n?', 'i'), '');
-        // قص الـ ``` من النهاية
-        safeJsonStr = safeJsonStr.replace(new RegExp('\\n?' + tripleBacktick + '$', 'i'), '');
+      if (safeJsonStr.startsWith(triple)) {
+        safeJsonStr = safeJsonStr.replace(new RegExp('^' + triple + '[a-z]*\\n?', 'i'), '');
+        safeJsonStr = safeJsonStr.replace(new RegExp('\\n?' + triple + '$', 'i'), '');
       }
 
       const firstBrace = safeJsonStr.indexOf('{');
@@ -514,10 +508,9 @@ export default function AssignmentBuilderV2() {
 
       setAssignmentTitle(prev => prev === 'واجب جديد' || prev === 'بنك تدريب جديد' ? (parsedData.title || 'بنك مستورد بذكاء') : prev);
       
-      // 🚀 دمج الأسئلة بدلاً من استبدالها 🚀
       setQuestions(prev => [...prev, ...newQuestions]); 
       setManualJson(''); 
-      setIsImportModalOpen(false); // إغلاق النافذة
+      setIsImportModalOpen(false);
       setActiveTab('builder');
       
       setGlobalMessage({ text: `تم دمج ${newQuestions.length} سؤال بنجاح!`, type: 'success' });
@@ -534,7 +527,6 @@ export default function AssignmentBuilderV2() {
 
   const openEditQuestion = (index: number) => {
     const questionToEdit = JSON.parse(JSON.stringify(questions[index]));
-    // لا نمسح احتياج الصورة هنا، نتركه للمعلم ليقرر
     setCurrentQ(questionToEdit);
     setEditingIndex(index);
     setIsEditorOpen(true);
@@ -626,7 +618,6 @@ export default function AssignmentBuilderV2() {
 
       if (currentRole === 'admin' || currentRole === 'management') {
         if (!selectedTeacher) {
-          // 🚀 توزيع ذكي شامل (لعدة معلمين في نفس الوقت)
           const { data: tsData } = await supabase.from('teacher_sections').select('teacher_id, section_id').eq('subject_id', selectedSubject).in('section_id', selectedSections);
           const foundSections = new Set();
           if (tsData) {
@@ -639,7 +630,6 @@ export default function AssignmentBuilderV2() {
           const missingSections = selectedSections.filter(s => !foundSections.has(s));
           if (missingSections.length > 0) teacherSectionMap.set('unassigned', missingSections);
         } else {
-          // توزيع لمعلم واحد فقط تم اختياره
           teacherSectionMap.set(selectedTeacher, selectedSections);
         }
       } else {
@@ -649,8 +639,7 @@ export default function AssignmentBuilderV2() {
       }
 
       if (editingAssignmentId) {
-        // 🚀 تحديث الواجب الحالي (تحديث النسخة المركزية)
-        const finalTeacherId = selectedTeacher || null; // إذا كان التوزيع ذكياً نجعل المالك null لتتشارك فيه الأقسام
+        const finalTeacherId = selectedTeacher || null; 
         
         const { error: assignErr } = await supabase.from('assignments_v2').update({ 
           title: assignmentTitle, description: descriptionPayload, subject_id: selectedSubject, teacher_id: finalTeacherId, status: assignmentStatus, is_practice_mode: isPracticeMode, due_date: finalDueDate
@@ -671,7 +660,6 @@ export default function AssignmentBuilderV2() {
         await supabase.from('assignment_questions_v2').insert(questionsPayload);
 
       } else {
-        // 🚀 إنشاء جديد: إذا كان توزيع ذكي نقوم بنسخه للمعلمين
         for (const [tId, sIds] of Array.from(teacherSectionMap.entries())) {
           const dbTeacherId = tId === 'unassigned' ? null : tId;
 
@@ -693,7 +681,7 @@ export default function AssignmentBuilderV2() {
         }
       }
 
-      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب بنجاح!' : 'تم توزيع الواجب للطلاب بنجاح!', type: 'success' });
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب وتوزيعه بنجاح!' : 'تم إنشاء الواجب وتوزيعه للطلاب بنجاح!', type: 'success' });
       setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}); handleResetBuilder(true); }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ. تأكد من اكتمال البيانات.'); } finally { setIsSavingDB(false); }
   };
@@ -703,7 +691,6 @@ export default function AssignmentBuilderV2() {
     return types[t] || t;
   };
 
-  // 🚀 فلترة الأسئلة التي تحتاج إلى صور
   const questionsNeedingImages = questions.filter(q => q.needs_image);
   const displayedQuestions = filterNeedsImage ? questionsNeedingImages : questions;
 
@@ -761,7 +748,7 @@ export default function AssignmentBuilderV2() {
                 <Database className="w-6 h-6 text-rose-500"/> إدارة الدروس والبنوك المكتملة
               </h2>
               <button onClick={fetchManageList} className="p-2 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100 transition-colors">
-                <RefreshCcw ${isManageLoading ''}`} 'animate-spin' : ? className="{`w-5" h-5/>
+                <RefreshCcw className="{`w-5" h-5 ${isManageLoading ? 'animate-spin' : ''}`}/>
               </button>
             </div>
 
@@ -967,7 +954,7 @@ export default function AssignmentBuilderV2() {
               )}
             </div>
 
-            {/* 🚀 رادار الصور (The Missing Image Radar) */}
+            
             {questionsNeedingImages.length > 0 && (
               <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl shadow-inner flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3 text-amber-800">
@@ -986,7 +973,7 @@ export default function AssignmentBuilderV2() {
               </div>
             )}
 
-            {/* قائمة الأسئلة */}
+            
             <div className="space-y-4">
               <div className="space-y-4">
                 {displayedQuestions.map((q, i) => (
@@ -1002,7 +989,7 @@ export default function AssignmentBuilderV2() {
                       </div>
                     </div>
                     
-                    {/* 🚀 إشعار الـ AI بنقص الصورة */}
+                    
                     {q.needs_image && (
                       <div className="mb-4 bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-xl flex items-center gap-3 shadow-inner animate-pulse">
                         <ImageIcon className="w-5 h-5 text-orange-500 shrink-0"/>
@@ -1018,7 +1005,7 @@ export default function AssignmentBuilderV2() {
                 ))}
               </div>
               
-              {/* 🚀 أزرار إضافة الأسئلة مدمجة بذكاء */}
+              
               <div className="flex flex-col sm:flex-row gap-3">
                 <button onClick={openNewQuestion} className="flex-1 border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
                   <Plus className="w-5 h-5"/> إضافة سؤال يدوياً
@@ -1045,7 +1032,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* 🚀 Modal الاستيراد الذكي المنبثق أثناء التعديل */}
+      
       <AnimatePresence>
         {isImportModalOpen && (
           <>
@@ -1091,7 +1078,7 @@ export default function AssignmentBuilderV2() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Modal محرر الأسئلة (Editor) */}
+      
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -1128,7 +1115,7 @@ export default function AssignmentBuilderV2() {
                     </div>
                  </div>
 
-                 {/* 🚀 إزالة/إضافة احتياج للصورة يدوياً من المحرر */}
+                 
                  <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
                     <div>
                       <label className="block text-sm font-black text-slate-700">هل يحتاج السؤال إلى صورة للحل؟</label>
@@ -1145,7 +1132,7 @@ export default function AssignmentBuilderV2() {
                  {currentQ.type !== 'section_header' && (
                     <div className="space-y-2">
                        <label className="block text-sm font-black text-emerald-700 flex items-center gap-2 mt-4"><Target className="w-4 h-4"/> الإجابة النموذجية (تظهر للطالب بعد الحل)</label>
-                       <TiptapEditor ''} content="{currentQ.model_answer_html" onChange="{(html)" ||> setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
+                       <TiptapEditor content="{currentQ.model_answer_html" || ''} onChange="{(html)"> setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
                     </div>
                  )}
 
@@ -1194,9 +1181,9 @@ export default function AssignmentBuilderV2() {
             </motion.div>
           </>
         )}
-      </AnimatePresence>
+      </TiptapEditor></TiptapEditor></AnimatePresence>
 
-      {/* 🚀 Modal الرفع المباشر السريع (Quick Upload) - كانت مفقودة! */}
+      
       <AnimatePresence>
         {uploadingImageId && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
