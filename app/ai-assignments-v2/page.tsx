@@ -198,6 +198,7 @@ export default function AssignmentBuilderV2() {
   
   // 🚀 حالة رادار الصور
   const [filterNeedsImage, setFilterNeedsImage] = useState<boolean>(false);
+  const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   
   const [isSavingDB, setIsSavingDB] = useState(false);
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
@@ -215,6 +216,8 @@ export default function AssignmentBuilderV2() {
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewQ, setPreviewQ] = useState<Question | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleResetBuilder = (force = false) => {
     if (!force && (questions.length > 0 || assignmentTitle !== 'واجب جديد')) {
@@ -282,7 +285,6 @@ export default function AssignmentBuilderV2() {
         }).filter(Boolean);
         setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
       } else if (currentRole === 'admin' || currentRole === 'management') {
-        // 🚀 تعديل التوزيع الذكي: جلب جميع صفوف المادة وعرض اسم المعلم بجوار كل صف لتسهيل الاختيار
         const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) ), teachers ( users ( full_name ) )`).eq('subject_id', selectedSubject);
         const formatted = (data || []).map((sec: any) => {
           if (!sec.sections) return null;
@@ -293,7 +295,6 @@ export default function AssignmentBuilderV2() {
             name: `${className || ''} - ${sec.sections.name}${teacherName}`
           };
         }).filter(Boolean);
-        // إزالة التكرار
         setSections(Array.from(new Map(formatted.map((item: any) => [item.id, item])).values()));
       }
     };
@@ -372,7 +373,7 @@ export default function AssignmentBuilderV2() {
       const { data: sData } = await supabase.from('assignment_sections_v2').select('*').eq('assignment_id', assign.id);
       
       setAssignmentTitle(assign.title);
-      setSelectedTeacher(assign.teacher_id || ''); // إذا كان التوزيع ذكياً سيصبح '' وهو المطلوب
+      setSelectedTeacher(assign.teacher_id || ''); 
       setSelectedSubject(assign.subject_id);
       setAssignmentStatus(assign.status);
       setIsPracticeMode(assign.is_practice_mode);
@@ -456,18 +457,25 @@ export default function AssignmentBuilderV2() {
     try {
       let safeJsonStr = manualJson.trim();
       
-      // 🚀 إصلاح آمن جداً للـ Regex لا يمكن كسره 🚀
-      const startMark = '```json';
-      const startMark2 = '
-```';
-      if (safeJsonStr.startsWith(startMark)) safeJsonStr = safeJsonStr.substring(startMark.length);
-      else if (safeJsonStr.startsWith(startMark2)) safeJsonStr = safeJsonStr.substring(startMark2.length);
-      if (safeJsonStr.endsWith(startMark2)) safeJsonStr = safeJsonStr.substring(0, safeJsonStr.length - startMark2.length);
+      // 🚀 إصلاح الـ Regex بحيلة برمجية تمنع محرر الأكواد من كسر السطر 🚀
+      const t = String.fromCharCode(96); // رمز `
+      const tripleBacktick = t + t + t;
+      
+      if (safeJsonStr.startsWith(tripleBacktick)) {
+        // قص الـ ```json أو 
+``` من البداية
+        safeJsonStr = safeJsonStr.replace(new RegExp('^' + tripleBacktick + '[a-z]*\\n?', 'i'), '');
+        // قص الـ ``` من النهاية
+        safeJsonStr = safeJsonStr.replace(new RegExp('\\n?' + tripleBacktick + '$', 'i'), '');
+      }
 
       const firstBrace = safeJsonStr.indexOf('{');
       const lastBrace = safeJsonStr.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) safeJsonStr = safeJsonStr.substring(firstBrace, lastBrace + 1);
-      else throw new Error('لم يتم العثور على صيغة JSON صحيحة');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+          safeJsonStr = safeJsonStr.substring(firstBrace, lastBrace + 1);
+      } else {
+          throw new Error('لم يتم العثور على صيغة JSON صحيحة');
+      }
 
       const parsedData = JSON.parse(safeJsonStr);
       const newQuestions = (parsedData.questions || []).map((q:any) => {
@@ -572,6 +580,35 @@ export default function AssignmentBuilderV2() {
     }
   };
   const updateOptionContent = (optId: string, val: string) => { if(currentQ) setCurrentQ({...currentQ, options: currentQ.options.map(o => o.id === optId ? { ...o, content: val } : o)}); };
+
+  const handleQuickImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, questionId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImageId(questionId);
+    try {
+      const data = await uploadImageToCloudinary(file);
+      if (data.secure_url) {
+        setQuestions(prev => prev.map(q => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              content_html: q.content_html + `<br><img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; border-radius: 12px; margin-top: 10px; display: block;" />`,
+              needs_image: false
+            };
+          }
+          return q;
+        }));
+        setGlobalMessage({ text: 'تم دمج الصورة بالسؤال بنجاح!', type: 'success' });
+        setTimeout(() => setGlobalMessage({text:'', type:''}), 3000);
+      }
+    } catch (err: any) {
+      alert('فشل رفع الصورة: ' + err.message);
+    } finally {
+      setUploadingImageId(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const saveAssignmentToDB = async () => {
     if (!assignmentTitle || questions.length === 0 || !selectedSubject || selectedSections.length === 0) {
@@ -724,7 +761,7 @@ export default function AssignmentBuilderV2() {
                 <Database className="w-6 h-6 text-rose-500"/> إدارة الدروس والبنوك المكتملة
               </h2>
               <button onClick={fetchManageList} className="p-2 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100 transition-colors">
-                <RefreshCcw className="{`w-5" h-5 ${isManageLoading ? 'animate-spin' : ''}`}/>
+                <RefreshCcw ${isManageLoading ''}`} 'animate-spin' : ? className="{`w-5" h-5/>
               </button>
             </div>
 
@@ -930,7 +967,7 @@ export default function AssignmentBuilderV2() {
               )}
             </div>
 
-            
+            {/* 🚀 رادار الصور (The Missing Image Radar) */}
             {questionsNeedingImages.length > 0 && (
               <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl shadow-inner flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3 text-amber-800">
@@ -949,7 +986,7 @@ export default function AssignmentBuilderV2() {
               </div>
             )}
 
-            
+            {/* قائمة الأسئلة */}
             <div className="space-y-4">
               <div className="space-y-4">
                 {displayedQuestions.map((q, i) => (
@@ -965,7 +1002,7 @@ export default function AssignmentBuilderV2() {
                       </div>
                     </div>
                     
-                    
+                    {/* 🚀 إشعار الـ AI بنقص الصورة */}
                     {q.needs_image && (
                       <div className="mb-4 bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-xl flex items-center gap-3 shadow-inner animate-pulse">
                         <ImageIcon className="w-5 h-5 text-orange-500 shrink-0"/>
@@ -981,7 +1018,7 @@ export default function AssignmentBuilderV2() {
                 ))}
               </div>
               
-              
+              {/* 🚀 أزرار إضافة الأسئلة مدمجة بذكاء */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <button onClick={openNewQuestion} className="flex-1 border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
                   <Plus className="w-5 h-5"/> إضافة سؤال يدوياً
@@ -1008,7 +1045,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      
+      {/* 🚀 Modal الاستيراد الذكي المنبثق أثناء التعديل */}
       <AnimatePresence>
         {isImportModalOpen && (
           <>
@@ -1054,7 +1091,7 @@ export default function AssignmentBuilderV2() {
         )}
       </AnimatePresence>
 
-      
+      {/* 🚀 Modal محرر الأسئلة (Editor) */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -1091,7 +1128,7 @@ export default function AssignmentBuilderV2() {
                     </div>
                  </div>
 
-                 
+                 {/* 🚀 إزالة/إضافة احتياج للصورة يدوياً من المحرر */}
                  <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
                     <div>
                       <label className="block text-sm font-black text-slate-700">هل يحتاج السؤال إلى صورة للحل؟</label>
@@ -1108,7 +1145,7 @@ export default function AssignmentBuilderV2() {
                  {currentQ.type !== 'section_header' && (
                     <div className="space-y-2">
                        <label className="block text-sm font-black text-emerald-700 flex items-center gap-2 mt-4"><Target className="w-4 h-4"/> الإجابة النموذجية (تظهر للطالب بعد الحل)</label>
-                       <TiptapEditor content="{currentQ.model_answer_html" || ''} onChange="{(html)"> setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
+                       <TiptapEditor ''} content="{currentQ.model_answer_html" onChange="{(html)" ||> setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
                     </div>
                  )}
 
@@ -1157,73 +1194,16 @@ export default function AssignmentBuilderV2() {
             </motion.div>
           </>
         )}
-      </TiptapEditor></TiptapEditor></AnimatePresence>
+      </AnimatePresence>
 
-      
+      {/* 🚀 Modal الرفع المباشر السريع (Quick Upload) - كانت مفقودة! */}
       <AnimatePresence>
-        {isPreviewOpen && previewQ && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" onClick={() => setIsPreviewOpen(false)} />
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }} 
-               animate={{ opacity: 1, scale: 1 }} 
-               exit={{ opacity: 0, scale: 0.95 }} 
-               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-2xl bg-white rounded-3xl shadow-2xl z-50 overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]" 
-               dir="rtl"
-            >
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
-                <h3 className="font-black text-slate-800 flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-blue-500"/> معاينة بطاقة السؤال
-                </h3>
-                <button onClick={() => setIsPreviewOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"><X className="w-5 h-5"/></button>
-              </div>
-              
-              <div className="p-6 overflow-auto custom-scrollbar flex-1">
-                 <div className="bg-white border-2 border-slate-100 rounded-3xl p-6 shadow-sm">
-                    <div className="flex justify-between items-center mb-6">
-                       <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg uppercase tracking-widest">{translateType(previewQ.type)}</span>
-                       <span className="text-xs font-black text-amber-500 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">{previewQ.points} درجات</span>
-                    </div>
-
-                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 text-lg leading-relaxed mb-8" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.content_html) }} />
-
-                    {previewQ.type === 'multiple_choice' && (
-                       <div className="space-y-3">
-                          {previewQ.options.map((opt, idx) => (
-                             <div key={opt.id} className={`p-4 rounded-xl border-2 font-bold text-sm transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600'}`}>
-                                {idx + 1}. {opt.content}
-                                {opt.is_correct && <CheckCircle2 className="inline-block mr-2 w-4 h-4 text-emerald-500"/>}
-                             </div>
-                          ))}
-                       </div>
-                    )}
-
-                    {previewQ.type === 'true_false' && (
-                       <div className="flex gap-4">
-                          {previewQ.options.map(opt => (
-                             <div key={opt.id} className={`flex-1 p-4 rounded-xl border-2 font-black text-center transition-all ${opt.is_correct ? (opt.content==='صح'?'border-emerald-500 bg-emerald-50 text-emerald-700':'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                                {opt.content}
-                             </div>
-                          ))}
-                       </div>
-                    )}
-
-                    {previewQ.type === 'essay' && (
-                       <div className="w-full h-32 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center text-slate-400 font-bold text-sm">
-                          مساحة إجابة الطالب (نصية أو رسم حر)
-                       </div>
-                    )}
-
-                    {previewQ.model_answer_html && (
-                       <div className="mt-8 pt-6 border-t border-slate-200">
-                          <h4 className="font-black text-emerald-700 mb-3 flex items-center gap-2"><Target className="w-5 h-5"/> الإجابة النموذجية</h4>
-                          <div className="tiptap-content prose prose-sm max-w-none font-bold text-emerald-900 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.model_answer_html) }} />
-                       </div>
-                    )}
-                 </div>
-              </div>
-            </motion.div>
-          </>
+        {uploadingImageId && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
+            <Loader2 className="w-16 h-16 animate-spin text-amber-500 mb-4"/>
+            <h2 className="text-xl font-black mb-2 animate-pulse">جاري معالجة ورفع الصورة السحرية...</h2>
+            <p className="text-sm font-bold opacity-70">يتم الآن دمج الصورة مع بنك الأسئلة</p>
+          </motion.div>
         )}
       </AnimatePresence>
 
