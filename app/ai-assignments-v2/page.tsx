@@ -253,7 +253,6 @@ export default function AssignmentBuilderV2() {
     if (activeTab === 'manage') fetchManageList();
   }, [activeTab]);
 
-  // 🚀 المحرك المنيع لاستدعاء السجلات (The Bulletproof Fetch) 🚀
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
@@ -262,7 +261,6 @@ export default function AssignmentBuilderV2() {
       if (currentRole === 'teacher') {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         if (teacherProfile) {
-          // 🚀 الحل السحري: نجلب للمعلم الواجبات المرتبطة برقمه، *أو* المرتبطة بالفصول التي يدرسها (التوزيع الذكي)
           const { data: tsData } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherProfile.id);
           const sectionIds = tsData ? tsData.map(ts => ts.section_id) : [];
           
@@ -663,7 +661,7 @@ export default function AssignmentBuilderV2() {
         const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
         await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
-        // 🚀 إصلاح خطأ `i` المدمر هنا (استبدلناه بـ index)
+        // 🚀 2. حفظ الأسئلة بدقة (استخدام index لحفظ الترتيب الصحيح)
         const questionsPayload = questions.map((q, index) => ({ 
           assignment_id: editingAssignmentId, 
           question_type: q.type, 
