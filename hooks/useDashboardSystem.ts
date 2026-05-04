@@ -121,7 +121,7 @@ export function useDashboardSystem() {
 
         const { data: studentCore, error: studentError } = await supabase
           .from('students')
-          .select('*, sections(id, name, classes(name))')
+          .select('*, sections(id, name, classes(name))') // 🚀 تم استدعاء المسار هنا كجزء من سجل الطالب
           .or(`id.eq.${user.id},user_id.eq.${user.id}`)
           .maybeSingle();
 
