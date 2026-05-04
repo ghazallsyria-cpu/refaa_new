@@ -10,7 +10,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap, Lightbulb, Network, Info, Calendar, Settings, Filter, UploadCloud
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap, Lightbulb, Network, Info, Calendar, Settings, Filter, UploadCloud, Video
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -44,12 +44,20 @@ const renderHTMLWithMath = (html: string) => {
     try {
       const parser = new DOMParser();
       const doc = parser.parseFromString(parsed, 'text/html');
+      
+      // 🚀 إصلاح عرض الصور والفيديوهات بشكل آمن
       const images = doc.querySelectorAll('img');
       images.forEach((img) => {
         if (img.src && img.src.startsWith('http')) {
           img.setAttribute('crossorigin', 'anonymous');
         }
       });
+
+      const iframes = doc.querySelectorAll('iframe');
+      iframes.forEach(iframe => {
+        iframe.classList.add('w-full', 'aspect-video', 'rounded-xl', 'shadow-md', 'my-4');
+      });
+
       parsed = doc.body.innerHTML;
     } catch (e) {}
   }
@@ -83,6 +91,16 @@ const TypewriterRevealFast = ({ htmlContent }: { htmlContent: string }) => {
       />
     </div>
   );
+};
+
+const uploadImageToCloudinary = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data;
 };
 
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
@@ -132,6 +150,21 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
   if (!editor) return null;
   const insertMath = (symbol: string) => { editor.chain().focus().insertContent(` ${symbol} `).run(); };
 
+  // 🚀 أداة إدراج رابط فيديو (YouTube)
+  const insertVideo = () => {
+    const url = prompt('أدخل رابط الفيديو (مثال: يوتيوب):');
+    if (url) {
+      // استخراج الـ ID من رابط اليوتيوب لتحويله لصيغة التضمين (Embed)
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = url.match(regExp);
+      let embedUrl = url;
+      if (match && match[2].length === 11) {
+        embedUrl = `https://www.youtube.com/embed/${match[2]}`;
+      }
+      editor.chain().focus().insertContent(`<iframe src="${embedUrl}" width="560" height="315" frameborder="0" allowfullscreen></iframe>`).run();
+    }
+  };
+
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-inner flex flex-col relative">
       <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap gap-1 items-center">
@@ -144,6 +177,7 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'left' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignLeft className="w-4 h-4"/></button>
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
         <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200"><TableIcon className="w-4 h-4"/></button>
+        <button onClick={insertVideo} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200" title="إدراج فيديو يوتيوب"><Video className="w-4 h-4 text-rose-500"/></button>
       </div>
       <div className="bg-indigo-50 border-b border-indigo-100 p-2 flex flex-wrap gap-2 items-center overflow-x-auto hide-scrollbar">
         <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
@@ -158,7 +192,7 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
             </motion.div>
           )}
         </AnimatePresence>
-        {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
+        {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && !editor.isActive('iframe') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">{placeholder}</div>
         )}
         <EditorContent editor={editor} />
@@ -196,7 +230,6 @@ export default function AssignmentBuilderV2() {
   const [manualJson, setManualJson] = useState('');
   const [skippedLog, setSkippedLog] = useState<{question_hint: string, reason: string}[]>([]); 
   
-  // 🚀 حالة رادار الصور
   const [filterNeedsImage, setFilterNeedsImage] = useState<boolean>(false);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   
@@ -398,7 +431,8 @@ export default function AssignmentBuilderV2() {
         content_html: q.content_html,
         model_answer_html: q.model_answer_html || '',
         points: q.points,
-        needs_image: false,
+        // 🚀 إصلاح جذري: ضمان قراءة needs_image كقيمة منطقية (Boolean)
+        needs_image: !!q.needs_image,
         options: (q.options || []).map((o: any) => ({ ...o, is_correct: o.is_correct === true || o.is_correct === 'true' }))
       }));
       
@@ -408,6 +442,7 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
+  // 🚀 تطوير البرومبت ليشمل الروابط والفيديوهات 🚀
   const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم الدقة. سأعطيك نصاً مقتطعاً من بنك أسئلة أو اختبار.
 المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي. 🚨 إياك أن تتخيل أسئلة أو صور غير موجودة.
@@ -416,7 +451,10 @@ export default function AssignmentBuilderV2() {
 - "multiple_choice": أسئلة الاختيار من متعدد (ضع الخيارات في مصفوفة "options").
 - "true_false": الصح والخطأ (قم بتوليد خياري "صح" و "خطأ" وحدد الصحيح).
 - "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، والمسائل الرياضية المباشرة.
-- "section_header": العناوين الرئيسية فقط (مثل: السؤال الأول).
+- "section_header": العناوين الرئيسية فقط (مثل: السؤال الأول، أو "شاهد هذا الفيديو ثم أجب").
+
+🎬 التعامل مع روابط الفيديو:
+- إذا وجدت رابط فيديو (يوتيوب أو غيره) في الملف، لا تتجاهله. ضعه داخل "content" الخاص بـ "section_header" باستخدام <iframe> ليعرض كفيديو ضمن الدرس.
 
 🎨 قوانين أسئلة "الرسم" ("type": "essay"):
 - إذا كان السؤال يطلب من الطالب صراحة "الرسم" (مثل: ارسم المنحنيات البيانية، أكمل مسار الشعاع، ارسم الدائرة)، اجعل نوعه "essay"، وأضف جملة واضحة في نهايته: "(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)".
@@ -448,7 +486,7 @@ export default function AssignmentBuilderV2() {
 
 إليك النص (استخرج جميع الأسئلة كاملة بدقة):`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الصارم المطور! 🚨\nلقد أضفنا ميزة التعامل مع أسئلة الرسم وإجبار الذكاء الاصطناعي على الاعتراف بالأسئلة التي عجز عنها لتتمكن من إضافتها يدوياً.'); 
+    alert('تم نسخ البرومبت الصارم المطور! 🚨\nلقد أضفنا ميزة التعامل مع الروابط والفيديوهات وأسئلة الرسم.'); 
   };
 
   const processManualJson = () => {
@@ -528,6 +566,8 @@ export default function AssignmentBuilderV2() {
 
   const openEditQuestion = (index: number) => {
     const questionToEdit = JSON.parse(JSON.stringify(questions[index]));
+    // 🚀 تحصين إضافي لقيمة الصورة أثناء التعديل
+    questionToEdit.needs_image = !!questionToEdit.needs_image; 
     setCurrentQ(questionToEdit);
     setEditingIndex(index);
     setIsEditorOpen(true);
@@ -587,7 +627,7 @@ export default function AssignmentBuilderV2() {
             return {
               ...q,
               content_html: q.content_html + `<br><img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; border-radius: 12px; margin-top: 10px; display: block;" />`,
-              needs_image: false
+              needs_image: false // نزيل التنبيه لأن المعلم رفع الصورة
             };
           }
           return q;
@@ -654,9 +694,11 @@ export default function AssignmentBuilderV2() {
         const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
         await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
+        // 🚀 ضمان حفظ حالة needs_image في قاعدة البيانات
         const questionsPayload = questions.map((q, index) => ({ 
           assignment_id: editingAssignmentId, question_type: q.type, content_html: q.content_html, model_answer_html: q.model_answer_html, points: q.points, 
-          options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), order_index: index + 1 
+          options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), order_index: index + 1,
+          needs_image: !!q.needs_image
         }));
         await supabase.from('assignment_questions_v2').insert(questionsPayload);
 
@@ -674,15 +716,17 @@ export default function AssignmentBuilderV2() {
           const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
           await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
+          // 🚀 ضمان حفظ حالة needs_image في قاعدة البيانات
           const questionsPayload = questions.map((q, index) => ({ 
             assignment_id: finalAssignmentId, question_type: q.type, content_html: q.content_html, model_answer_html: q.model_answer_html, points: q.points, 
-            options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), order_index: index + 1 
+            options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), order_index: index + 1,
+            needs_image: !!q.needs_image
           }));
           await supabase.from('assignment_questions_v2').insert(questionsPayload);
         }
       }
 
-      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب بنجاح!' : 'تم توزيع الواجب للطلاب بنجاح!', type: 'success' });
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب وتوزيعه بنجاح!' : 'تم إنشاء الواجب وتوزيعه للطلاب بنجاح!', type: 'success' });
       setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}); handleResetBuilder(true); }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ. تأكد من اكتمال البيانات.'); } finally { setIsSavingDB(false); }
   };
@@ -692,7 +736,8 @@ export default function AssignmentBuilderV2() {
     return types[t] || t;
   };
 
-  const questionsNeedingImages = questions.filter(q => q.needs_image);
+  // 🚀 فلترة الأسئلة التي تحتاج إلى صور
+  const questionsNeedingImages = questions.filter(q => !!q.needs_image);
   const displayedQuestions = filterNeedsImage ? questionsNeedingImages : questions;
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center">غير مصرح لك.</div>;
@@ -708,6 +753,7 @@ export default function AssignmentBuilderV2() {
         .tiptap-content td, .tiptap-content th, .ProseMirror td, .ProseMirror th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
         .tiptap-content th, .ProseMirror th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
         .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
+        .tiptap-content iframe { width: 100% !important; aspect-ratio: 16/9; border-radius: 12px; margin: 15px 0; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .tiptap-content p { margin-bottom: 0.5em !important; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -840,7 +886,7 @@ export default function AssignmentBuilderV2() {
             <div className="flex items-center justify-between mb-4 mt-4">
               <h2 className="font-black text-lg text-emerald-800">مطابقة الأسئلة والأجوبة بالـ AI</h2>
               <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm active:scale-95">
-                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل الرسم)
+                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل الرسم والفيديو)
               </button>
             </div>
             <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
@@ -1249,6 +1295,17 @@ export default function AssignmentBuilderV2() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* 🚀 Modal الرفع المباشر السريع (Quick Upload) */}
+      <AnimatePresence>
+        {uploadingImageId && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
+            <Loader2 className="w-16 h-16 animate-spin text-amber-500 mb-4" />
+            <h2 className="text-xl font-black mb-2 animate-pulse">جاري معالجة ورفع الصورة السحرية...</h2>
+            <p className="text-sm font-bold opacity-70">يتم الآن دمج الصورة مع بنك الأسئلة</p>
+          </motion.div>
         )}
       </AnimatePresence>
 
