@@ -187,6 +187,7 @@ export default function AssignmentBuilderV2() {
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false); // 🚀 النافذة المنبثقة للاستيراد السريع
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
 
@@ -248,7 +249,6 @@ export default function AssignmentBuilderV2() {
     fetchSections();
   }, [selectedTeacher, selectedSubject, currentRole]);
 
-  // 🚀 جلب السجلات القديمة المحصن (Bulletproof Fetch)
   useEffect(() => {
     if (activeTab === 'manage') fetchManageList();
   }, [activeTab]);
@@ -271,7 +271,6 @@ export default function AssignmentBuilderV2() {
         setManageAssignments([]); setTeacherStats([]); setIsManageLoading(false); return;
       }
 
-      // جلب البيانات المرتبطة بطلبات منفصلة لتجنب أي انهيار في العلاقات
       const assignmentIds = assignments.map(a => a.id);
       
       const [subjectsRes, teachersRes, questionsRes] = await Promise.all([
@@ -493,7 +492,12 @@ export default function AssignmentBuilderV2() {
       setQuestions(prev => [...prev, ...newQuestions]); 
       setManualJson(''); 
       setGlobalMessage({ text: `تم استيراد ${newQuestions.length} سؤال بنجاح!`, type: 'success' });
-      setTimeout(() => { setGlobalMessage({text:'', type:''}); setActiveTab('builder'); }, 2000);
+      
+      setTimeout(() => { 
+        setGlobalMessage({text:'', type:''}); 
+        setActiveTab('builder'); 
+        setIsImportModalOpen(false); // 🚀 إغلاق نافذة الاستيراد السريع إذا كانت مفتوحة
+      }, 2000);
 
     } catch (err: any) {
       alert(`عذراً، حدث خطأ في قراءة الكود: \n${err.message}\nتأكد من نسخ الكائن كاملاً من القوس { إلى القوس }`);
@@ -962,9 +966,15 @@ export default function AssignmentBuilderV2() {
               )}
             </div>
 
-            <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
-              <Plus className="w-5 h-5" /> إضافة سؤال جديد يدوياً
-            </button>
+            {/* 🚀 أزرار إضافة الأسئلة */}
+            <div className="flex flex-col sm:flex-row gap-3 mt-4">
+              <button onClick={openNewQuestion} className="flex-1 border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
+                <Plus className="w-5 h-5" /> إضافة سؤال يدوياً
+              </button>
+              <button onClick={() => setIsImportModalOpen(true)} className="flex-1 border-2 border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
+                <FileJson className="w-5 h-5" /> دمج أسئلة إضافية عبر كود (JSON)
+              </button>
+            </div>
 
             {questions.length > 0 && (
               <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl text-white space-y-4 mt-8">
@@ -984,6 +994,52 @@ export default function AssignmentBuilderV2() {
           </motion.div>
         )}
       </div>
+
+      {/* 🚀 Modal الاستيراد السريع (JSON) داخل وضع الإنشاء */}
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" onClick={() => setIsImportModalOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95 }} 
+               animate={{ opacity: 1, scale: 1 }} 
+               exit={{ opacity: 0, scale: 0.95 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-2xl bg-white rounded-3xl shadow-2xl z-50 overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]" 
+               dir="rtl"
+            >
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50 shrink-0">
+                <h3 className="font-black text-emerald-800 flex items-center gap-2">
+                  <FileJson className="w-5 h-5 text-emerald-600"/> لصق كود الأسئلة الإضافية (JSON)
+                </h3>
+                <button onClick={() => setIsImportModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-white rounded-full transition-colors"><X className="w-5 h-5"/></button>
+              </div>
+              
+              <div className="p-6 overflow-auto custom-scrollbar flex-1 space-y-4">
+                 <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 shadow-inner">
+                    <Info className="w-5 h-5 shrink-0 text-amber-500" />
+                    <p className="text-xs font-bold text-amber-800">
+                      سيتم إضافة هذه الأسئلة إلى نهاية الدرس الحالي دون مسح الأسئلة الموجودة مسبقاً.
+                    </p>
+                 </div>
+                 <textarea 
+                    value={manualJson} 
+                    onChange={(e) => setManualJson(e.target.value)} 
+                    placeholder="الصق كود الـ JSON هنا..." 
+                    className="w-full h-48 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" 
+                    dir="ltr"
+                 ></textarea>
+              </div>
+
+              <div className="p-5 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
+                <button onClick={() => setIsImportModalOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
+                <button onClick={processManualJson} className="flex-[2] py-3.5 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
+                  <ClipboardPaste className="w-5 h-5" /> دمج الأسئلة مع الدرس الحالي
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* 🚀 Modal محرر الأسئلة (Editor) */}
       <AnimatePresence>
