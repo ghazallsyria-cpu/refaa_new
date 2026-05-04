@@ -253,6 +253,7 @@ export default function AssignmentBuilderV2() {
     if (activeTab === 'manage') fetchManageList();
   }, [activeTab]);
 
+  // 🚀 المحرك المنيع لاستدعاء السجلات (The Bulletproof Fetch) 🚀
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
@@ -260,8 +261,26 @@ export default function AssignmentBuilderV2() {
       
       if (currentRole === 'teacher') {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
-        else query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
+        if (teacherProfile) {
+          // 🚀 الحل السحري: نجلب للمعلم الواجبات المرتبطة برقمه، *أو* المرتبطة بالفصول التي يدرسها (التوزيع الذكي)
+          const { data: tsData } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherProfile.id);
+          const sectionIds = tsData ? tsData.map(ts => ts.section_id) : [];
+          
+          if (sectionIds.length > 0) {
+              const { data: assignSecData } = await supabase.from('assignment_sections_v2').select('assignment_id').in('section_id', sectionIds);
+              const assignIds = assignSecData ? assignSecData.map(as => as.assignment_id) : [];
+              
+              if (assignIds.length > 0) {
+                  query = query.or(`teacher_id.eq.${teacherProfile.id},id.in.(${assignIds.join(',')})`);
+              } else {
+                  query = query.eq('teacher_id', teacherProfile.id);
+              }
+          } else {
+              query = query.eq('teacher_id', teacherProfile.id);
+          }
+        } else {
+          query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
+        }
       }
       
       const { data: assignments, error: assignErr } = await query;
@@ -326,7 +345,7 @@ export default function AssignmentBuilderV2() {
       const { data: sData } = await supabase.from('assignment_sections_v2').select('*').eq('assignment_id', assign.id);
       
       setAssignmentTitle(assign.title);
-      setSelectedTeacher(assign.teacher_id || ''); // 🚀 تحديث المعلم المختار في الـ State ليظهر في القائمة المنسدلة
+      setSelectedTeacher(assign.teacher_id || ''); 
       setSelectedSubject(assign.subject_id);
       setAssignmentStatus(assign.status);
       setIsPracticeMode(assign.is_practice_mode);
@@ -627,7 +646,7 @@ export default function AssignmentBuilderV2() {
       }
 
       if (editingAssignmentId) {
-        // 🚀 أثناء التعديل، نحدث اسم المعلم في قاعدة البيانات إذا تم تغييره
+        // 🚀 1. الحفظ السليم والتعديل القوي للأسئلة
         await supabase.from('assignments_v2').update({ 
            title: assignmentTitle, 
            description: descriptionPayload, 
@@ -644,8 +663,15 @@ export default function AssignmentBuilderV2() {
         const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
         await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
+        // 🚀 إصلاح خطأ `i` المدمر هنا (استبدلناه بـ index)
         const questionsPayload = questions.map((q, index) => ({ 
-          assignment_id: editingAssignmentId, question_type: q.type, content_html: q.content_html, model_answer_html: q.model_answer_html, points: q.points, options: q.options, order_index: i + 1 
+          assignment_id: editingAssignmentId, 
+          question_type: q.type, 
+          content_html: q.content_html, 
+          model_answer_html: q.model_answer_html, 
+          points: q.points, 
+          options: (q.options || []).map(o => ({ ...o, is_correct: Boolean(o.is_correct) })), 
+          order_index: index + 1 // 👈 The Ultimate Fix
         }));
         await supabase.from('assignment_questions_v2').insert(questionsPayload);
 
@@ -665,7 +691,13 @@ export default function AssignmentBuilderV2() {
           await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
           const questionsPayload = questions.map((q, index) => ({ 
-            assignment_id: finalAssignmentId, question_type: q.type, content_html: q.content_html, model_answer_html: q.model_answer_html, points: q.points, options: q.options, order_index: index + 1 
+            assignment_id: finalAssignmentId, 
+            question_type: q.type, 
+            content_html: q.content_html, 
+            model_answer_html: q.model_answer_html, 
+            points: q.points, 
+            options: (q.options || []).map(o => ({ ...o, is_correct: Boolean(o.is_correct) })), 
+            order_index: index + 1 
           }));
           await supabase.from('assignment_questions_v2').insert(questionsPayload);
         }
@@ -870,7 +902,6 @@ export default function AssignmentBuilderV2() {
                 <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
               </div>
               
-              {/* 🚀 القائمة المنسدلة للمعلمين التي كانت مفقودة للإدارة */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {(currentRole === 'admin' || currentRole === 'management') ? (
                   <select 
