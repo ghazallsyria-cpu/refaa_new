@@ -486,7 +486,6 @@ export default function AssignmentBuilderV2() {
     try {
       let cleanStr = manualJson.trim();
       
-      // 🚀 إصلاح خطأ الـ Regex هنا (Unterminated regexp literal) 🚀
       if (cleanStr.startsWith('```')) {
         cleanStr = cleanStr.replace(new RegExp('^```[a-z]*\\n?', 'i'), '');
         cleanStr = cleanStr.replace(new RegExp('\\n?
