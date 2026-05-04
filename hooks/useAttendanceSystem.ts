@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+كimport { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
@@ -37,7 +37,7 @@ export function useAttendanceSystem() {
       let uniquePeriods: any[] = [];
 
       if (activeSystem === 'auto') {
-        // 🚀 جلب الخطة الأحدث المعتمدة لتجنب التداخل
+        // 🚀 جلب الخطة الأحدث المعتمدة
         const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
         
         if (planData) {
@@ -89,11 +89,9 @@ export function useAttendanceSystem() {
       const uniqueSectionsMap = new Map();
 
       if (activeSystem === 'auto') {
-        // 🚀 جلب الخطة الأحدث المعتمدة
         const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
         
         if (planData) {
-          // نجلب المعرفات فقط لأن الأعمدة النصية غير موجودة في قاعدة بيانات auto_schedules
           let query = supabase.from('auto_schedules')
             .select('section_id, subject_id')
             .eq('plan_id', planData.id)
@@ -106,7 +104,6 @@ export function useAttendanceSystem() {
           if (error) throw error;
 
           if (autoSchedules && autoSchedules.length > 0) {
-            // جلب الأسماء الحقيقية للفصول والمواد بضربة واحدة سريعة (Manual Join)
             const sectionIds = Array.from(new Set(autoSchedules.map(s => s.section_id)));
             const subjectIds = Array.from(new Set(autoSchedules.map(s => s.subject_id)));
 
@@ -134,7 +131,6 @@ export function useAttendanceSystem() {
           }
         }
       } else {
-        // النظام القديم
         let query = supabase.from('schedules').select('section_id, subject_id, sections(id, name, classes(name)), subjects(name)').eq('day_of_week', dayOfWeek).eq('period', period);
         if (currentRole === 'teacher') query = query.eq('teacher_id', user.id);
 
@@ -199,11 +195,11 @@ export function useAttendanceSystem() {
     try {
       let actualTeacherId = user.id;
 
+      // تحديد المعلم الفعلي من الجداول إذا كان الذي يسجل هو الإدارة
       if (currentRole === 'admin' || currentRole === 'management') {
          const activeSystem = await getActiveSystem();
          
          if (activeSystem === 'auto') {
-             // 🚀 جلب معرف المعلم من الخطة الحديثة للإدارة
              const { data: planData } = await supabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
              if (planData) {
                const { data: sched } = await supabase.from('auto_schedules').select('teacher_id').eq('plan_id', planData.id).eq('section_id', sectionId).eq('day_of_week', getDayOfWeek(date)).eq('period_number', period).maybeSingle();
@@ -216,13 +212,6 @@ export function useAttendanceSystem() {
       }
 
       let pCount = 0, aCount = 0, lCount = 0, eCount = 0;
-
-      // 🚀 البصمة الإلكترونية: نسجل بصمة ووقت المعلم أو الإداري الذي أخذ الغياب الفعلي.
-      const electronicSignature = {
-          submitted_by: user.id, // معرّف الحساب الفعلي الذي أرسل الطلب
-          role: currentRole, // دوره الفعلي (معلم، إداري)
-          timestamp: new Date().toISOString() // بصمة الوقت الدقيقة
-      };
 
       const recordsToUpsert = studentsList.reduce((acc: any[], student) => {
         const status = attendanceData[student.id];
@@ -238,25 +227,52 @@ export function useAttendanceSystem() {
 
       if (recordsToUpsert.length === 0) throw new Error("لم تقم بتحديد حالة الحضور لأي طالب!");
 
-      // 🚀 الاعتماد على UPSERT للغياب
+      // 🚀 حفظ حضور الطلاب
       const { error: upsertError } = await supabase.from('attendance_records').upsert(recordsToUpsert, {
         onConflict: 'student_id, date, period', 
         ignoreDuplicates: false 
       });
-      
       if (upsertError) throw new Error("رفضت قاعدة البيانات الحفظ: " + upsertError.message);
       
-      // 🚀 إضافة بصمة المعلم في إحصائيات اليوم (signature)
-      // إذا كان لديك عمود إضافي مخصص بالـ signature في `daily_attendance_stats` يمكنك إرساله.
+      // 🚀 حفظ الإحصائيات للمدير (بدون حقول مخترعة لضمان عدم الانهيار)
       await supabase.from('daily_attendance_stats').upsert({
          date, period, section_id: sectionId, subject_id: subjectId || null, teacher_id: actualTeacherId,
-         lesson_title: lessonTitle, total_students: studentsList.length, present_count: pCount, absent_count: aCount, late_count: lCount, excused_count: eCount,
-         // إرسال بصمة التوثيق للوحة تحكم الإدارة (سيتم تجاهلها بصمت إذا لم يكن العمود موجودًا)
-         metadata: electronicSignature 
+         lesson_title: lessonTitle, total_students: studentsList.length, present_count: pCount, absent_count: aCount, late_count: lCount, excused_count: eCount
       }, { onConflict: 'date, period, section_id' });
 
+      // 🚀 البصمة الإلكترونية (حضور المعلم) المطابقة تماماً للهيكلية
+      try {
+         const teacherSignature = {
+             teacher_id: actualTeacherId,
+             date: date,
+             period_number: period, // بالهيكلية اسمها period_number
+             section_id: sectionId,
+             subject_id: subjectId || null,
+             status: 'present'
+             // recorded_at يُضاف تلقائياً بتوقيت الكويت حسب إعدادات الجدول
+         };
+         
+         await supabase.from('teacher_attendance_records').insert([teacherSignature]);
+         
+         // إغلاق جلسة الحضور (اختياري، يفيد في التقارير الإدارية)
+         await supabase.from('attendance_sessions').insert([{
+             teacher_id: actualTeacherId,
+             section_id: sectionId,
+             subject_id: subjectId || null,
+             period_number: period,
+             date: date,
+             status: 'submitted'
+         }]).catch(() => {}); // نتجاوز الأخطاء بصمت إذا تم تسجيلها مسبقاً
+
+      } catch (sigError) {
+         console.log("Teacher signature note:", sigError);
+      }
+
       return true;
-    } catch (error: any) { console.error('Error saving attendance:', error); throw new Error(error.message || 'حدث خطأ مجهول'); }
+    } catch (error: any) { 
+      console.error('Error saving attendance:', error); 
+      throw new Error(error.message || 'حدث خطأ مجهول'); 
+    }
   }, [user, currentRole]);
 
   const fetchStudentAttendance = useCallback(async () => { return null; }, []);
