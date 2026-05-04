@@ -67,7 +67,7 @@ const uploadImageToCloudinary = async (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
-  const res = await fetch(`[https://api.cloudinary.com/v1_1/$](https://api.cloudinary.com/v1_1/$){process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return data;
@@ -188,14 +188,14 @@ export default function AssignmentBuilderV2() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [currentQ, setCurrentQ] = useState<Question null |>(null);
+  const [currentQ, setCurrentQ] = useState<Question | null>(null);
 
   const [manageAssignments, setManageAssignments] = useState<any[]>([]);
   const [teacherStats, setTeacherStats] = useState<{name: string, count: number}[]>([]); 
   const [isManageLoading, setIsManageLoading] = useState(false);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewQ, setPreviewQ] = useState<Question null |>(null);
+  const [previewQ, setPreviewQ] = useState<Question | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -263,7 +263,7 @@ export default function AssignmentBuilderV2() {
     try {
       let isTeacher = currentRole === 'teacher';
       let teacherId = null;
-      let allowedAssignmentIds = [];
+      let allowedAssignmentIds: string[] = [];
 
       if (isTeacher) {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
@@ -293,14 +293,14 @@ export default function AssignmentBuilderV2() {
       }
 
       if (isTeacher) {
-         assignments = assignments.filter(a => a.teacher_id === teacherId || allowedAssignmentIds.includes(a.id));
+         assignments = assignments.filter((a: any) => a.teacher_id === teacherId || allowedAssignmentIds.includes(a.id));
       }
 
       if (assignments.length === 0) {
          setManageAssignments([]); setTeacherStats([]); setIsManageLoading(false); return;
       }
 
-      const assignmentIds = assignments.map(a => a.id);
+      const assignmentIds = assignments.map((a: any) => a.id);
       
       const [subjectsRes, teachersRes] = await Promise.all([
         supabase.from('subjects').select('id, name'),
@@ -318,9 +318,9 @@ export default function AssignmentBuilderV2() {
       const subjectsList = subjectsRes.data || [];
       const teachersList = teachersRes.data || [];
 
-      const mergedData = assignments.map(assign => {
-        const sub = subjectsList.find(s => String(s.id) === String(assign.subject_id));
-        const teacher = teachersList.find(t => String(t.id) === String(assign.teacher_id));
+      const mergedData = assignments.map((assign: any) => {
+        const sub = subjectsList.find((s: any) => String(s.id) === String(assign.subject_id));
+        const teacher = teachersList.find((t: any) => String(t.id) === String(assign.teacher_id));
         const qCount = questionsList.filter(q => String(q.assignment_id) === String(assign.id)).length;
         
         let tName = 'عام (مشاركة متعددة)';
@@ -338,7 +338,7 @@ export default function AssignmentBuilderV2() {
 
       if (currentRole === 'admin' || currentRole === 'management') {
         const statsMap = new Map();
-        mergedData.forEach(assign => {
+        mergedData.forEach((assign: any) => {
           const tName = assign.teachers?.users?.full_name || 'توزيع ذكي (متعدد)';
           statsMap.set(tName, (statsMap.get(tName) || 0) + 1);
         });
@@ -486,12 +486,12 @@ export default function AssignmentBuilderV2() {
     try {
       let cleanStr = manualJson.trim();
       
-      // 🚀 إصلاح خطأ الـ Regex والتعامل مع النصوص بحذر 🚀
-      if (cleanStr.startsWith('```')) {
-        const startRegex = new RegExp('^```[a-z]*\\n?', 'i');
-        const endRegex = new RegExp('\\n?
-```$', 'i');
-        cleanStr = cleanStr.replace(startRegex, '').replace(endRegex, '');
+      // 🚀 إصلاح الـ Regex بحيلة برمجية تمنع محرر الأكواد من كسر السطر 🚀
+      const t = '`';
+      const tripleBacktick = t + t + t;
+      if (cleanStr.startsWith(tripleBacktick)) {
+        cleanStr = cleanStr.replace(new RegExp('^' + tripleBacktick + '[a-z]*\\n?', 'i'), '');
+        cleanStr = cleanStr.replace(new RegExp('\\n?' + tripleBacktick + '$', 'i'), '');
       }
 
       const firstBrace = cleanStr.indexOf('{');
