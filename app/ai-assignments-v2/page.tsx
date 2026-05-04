@@ -63,7 +63,6 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// --- أداة الرفع المباشر لـ Cloudinary ---
 const uploadImageToCloudinary = async (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
@@ -230,11 +229,9 @@ export default function AssignmentBuilderV2() {
     fetchSubjects();
   }, [selectedTeacher, currentRole]);
 
-  // 🚀 النظام الذكي المعدل لجلب الصفوف مع إظهار اسم المعلم عند الحاجة!
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
-      
       if (selectedTeacher) {
         const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
         const extracted = (data || []).map((item: any) => {
@@ -244,16 +241,13 @@ export default function AssignmentBuilderV2() {
         }).filter(Boolean);
         setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
       } else if (currentRole === 'admin' || currentRole === 'management') {
-        // 🚀 توزيع ذكي: نجلب جميع صفوف المادة، ونرفق معها (اسم المعلم) لكي يختار المدير من يريد بكل سهولة!
         const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) ), teachers ( users ( full_name ) )`).eq('subject_id', selectedSubject); 
-        
         const extracted = (data || []).map((item: any) => {
           if (!item.sections) return null;
           const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
           const teacherName = item.teachers?.users?.full_name ? ` (أ. ${item.teachers.users.full_name})` : '';
           return { id: item.sections.id, name: (className ? `${className} - ${item.sections.name}` : item.sections.name) + teacherName };
         }).filter(Boolean);
-        
         setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
       }
     };
@@ -261,55 +255,73 @@ export default function AssignmentBuilderV2() {
   }, [selectedTeacher, selectedSubject, currentRole]);
 
   useEffect(() => {
-    if (activeTab === 'manage') fetchManageList();
-  }, [activeTab]);
+    if (activeTab === 'manage' && user) fetchManageList();
+  }, [activeTab, user]);
 
+  // 🚀 المحرك المنيع لاستدعاء السجلات (Bulletproof Chunked Fetch) 🚀
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
-      let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false }).limit(1000);
-      
-      if (currentRole === 'teacher') {
+      let isTeacher = currentRole === 'teacher';
+      let teacherId = null;
+      let allowedAssignmentIds = [];
+
+      // 1. تحديد صلاحيات المعلم بدقة
+      if (isTeacher) {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (teacherProfile) {
-          const { data: tsData } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherProfile.id);
+        teacherId = teacherProfile?.id;
+
+        if (teacherId) {
+          const { data: tsData } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherId);
           const sectionIds = tsData ? tsData.map(ts => ts.section_id) : [];
           
           if (sectionIds.length > 0) {
               const { data: assignSecData } = await supabase.from('assignment_sections_v2').select('assignment_id').in('section_id', sectionIds);
-              const assignIds = assignSecData ? assignSecData.map(as => as.assignment_id) : [];
-              
-              if (assignIds.length > 0) {
-                  query = query.or(`teacher_id.eq.${teacherProfile.id},id.in.(${assignIds.join(',')})`);
-              } else {
-                  query = query.eq('teacher_id', teacherProfile.id);
-              }
-          } else {
-              query = query.eq('teacher_id', teacherProfile.id);
+              allowedAssignmentIds = assignSecData ? assignSecData.map(as => as.assignment_id) : [];
           }
-        } else {
-          query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
         }
       }
       
-      const { data: assignments, error: assignErr } = await query;
+      // 2. جلب جميع الدروس بحد أقصى آمن
+      let { data: assignments, error: assignErr } = await supabase
+        .from('assignments_v2')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200); // 👈 حماية من الانهيار
+        
       if (assignErr) throw assignErr;
 
       if (!assignments || assignments.length === 0) {
         setManageAssignments([]); setTeacherStats([]); setIsManageLoading(false); return;
       }
 
+      // 3. فلترة الدروس لتظهر للمعلم فقط ما يخصه
+      if (isTeacher) {
+         assignments = assignments.filter(a => a.teacher_id === teacherId || allowedAssignmentIds.includes(a.id));
+      }
+
+      if (assignments.length === 0) {
+         setManageAssignments([]); setTeacherStats([]); setIsManageLoading(false); return;
+      }
+
       const assignmentIds = assignments.map(a => a.id);
       
-      const [subjectsRes, teachersRes, questionsRes] = await Promise.all([
+      const [subjectsRes, teachersRes] = await Promise.all([
         supabase.from('subjects').select('id, name'),
-        supabase.from('teachers').select('id, users(full_name)'),
-        supabase.from('assignment_questions_v2').select('assignment_id').in('assignment_id', assignmentIds)
+        supabase.from('teachers').select('id, users(full_name)')
       ]);
+
+      // 🚀 التقطيع الذكي (Chunking) لمنع خطأ 414 URI Too Long 🚀
+      let questionsList: any[] = [];
+      const chunkSize = 40; // جلب الأسئلة على دفعات
+      for (let i = 0; i < assignmentIds.length; i += chunkSize) {
+         const chunk = assignmentIds.slice(i, i + chunkSize);
+         const { data } = await supabase.from('assignment_questions_v2').select('assignment_id').in('assignment_id', chunk);
+         if (data) questionsList = [...questionsList, ...data];
+      }
 
       const subjectsList = subjectsRes.data || [];
       const teachersList = teachersRes.data || [];
-      const questionsList = questionsRes.data || [];
 
       const mergedData = assignments.map(assign => {
         const sub = subjectsList.find(s => String(s.id) === String(assign.subject_id));
@@ -618,7 +630,6 @@ export default function AssignmentBuilderV2() {
   };
   const updateOptionContent = (optId: string, val: string) => { if(currentQ) setCurrentQ({...currentQ, options: currentQ.options.map(o => o.id === optId ? { ...o, content: val } : o)}); };
 
-  // 🚀 المحرك المعزز لحفظ وتوزيع الدروس التفاعلية (بدون تكرار) 🚀
   const saveAssignmentToDB = async () => {
     if (!assignmentTitle || questions.length === 0 || !selectedSubject || selectedSections.length === 0) {
       alert('يرجى إكمال بيانات الواجب واختيار المادة والصفوف أولاً.'); return;
@@ -633,17 +644,33 @@ export default function AssignmentBuilderV2() {
         const { data: t } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
         finalTeacherId = t?.id;
       } else if (selectedTeacher) {
-        finalTeacherId = selectedTeacher; // حفظ المعلم المحدد
+        finalTeacherId = selectedTeacher; 
       }
-      // إذا كان selectedTeacher فارغاً (توزيع ذكي)، سيبقى finalTeacherId قيمته null، مما يجعل الدرس متشاركاً!
+
+      let teacherSectionMap = new Map<string, string[]>();
+
+      if ((currentRole === 'admin' || currentRole === 'management') && !selectedTeacher) {
+        const { data: tsData } = await supabase.from('teacher_sections').select('teacher_id, section_id').eq('subject_id', selectedSubject).in('section_id', selectedSections);
+        const foundSections = new Set();
+        if (tsData) {
+          tsData.forEach(ts => {
+            if (!teacherSectionMap.has(ts.teacher_id)) teacherSectionMap.set(ts.teacher_id, []);
+            teacherSectionMap.get(ts.teacher_id)!.push(ts.section_id);
+            foundSections.add(ts.section_id);
+          });
+        }
+        const missingSections = selectedSections.filter(s => !foundSections.has(s));
+        if (missingSections.length > 0) teacherSectionMap.set('unassigned', missingSections);
+      } else {
+        teacherSectionMap.set(finalTeacherId || 'unassigned', selectedSections);
+      }
 
       if (editingAssignmentId) {
-        // 🚀 1. تحديث النسخة المركزية الموحدة
         await supabase.from('assignments_v2').update({ 
            title: assignmentTitle, 
            description: descriptionPayload, 
            subject_id: selectedSubject, 
-           teacher_id: finalTeacherId, // سيتم التحديث إلى null إذا اختار المدير التوزيع الذكي
+           teacher_id: finalTeacherId, 
            status: assignmentStatus, 
            is_practice_mode: isPracticeMode, 
            due_date: finalDueDate 
@@ -652,7 +679,6 @@ export default function AssignmentBuilderV2() {
         await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
         await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
 
-        // ربط الصفوف المحددة (سواء لمعلم واحد أو معلمين متعددين)
         const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
         await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
@@ -668,33 +694,30 @@ export default function AssignmentBuilderV2() {
         await supabase.from('assignment_questions_v2').insert(questionsPayload);
 
       } else {
-        // 🚀 2. إنشاء نسخة مركزية واحدة جديدة
-        const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
-          title: assignmentTitle, 
-          description: descriptionPayload, 
-          subject_id: selectedSubject, 
-          teacher_id: finalTeacherId, 
-          due_date: finalDueDate, 
-          status: assignmentStatus, 
-          is_practice_mode: isPracticeMode 
-        }).select().single();
-        
-        if (assignErr) throw assignErr;
-        const finalAssignmentId = assignData.id;
+        for (const [tId, sIds] of Array.from(teacherSectionMap.entries())) {
+          const dbTeacherId = tId === 'unassigned' ? null : tId;
 
-        const sectionsPayload = selectedSections.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
-        await supabase.from('assignment_sections_v2').insert(sectionsPayload);
+          const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
+            title: assignmentTitle, description: descriptionPayload, subject_id: selectedSubject, teacher_id: dbTeacherId, due_date: finalDueDate, status: assignmentStatus, is_practice_mode: isPracticeMode 
+          }).select().single();
+          
+          if (assignErr) throw assignErr;
+          const finalAssignmentId = assignData.id;
 
-        const questionsPayload = questions.map((q, index) => ({ 
-          assignment_id: finalAssignmentId, 
-          question_type: q.type, 
-          content_html: q.content_html, 
-          model_answer_html: q.model_answer_html, 
-          points: q.points, 
-          options: (q.options || []).map(o => ({ ...o, is_correct: Boolean(o.is_correct) })), 
-          order_index: index + 1 
-        }));
-        await supabase.from('assignment_questions_v2').insert(questionsPayload);
+          const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
+          await supabase.from('assignment_sections_v2').insert(sectionsPayload);
+
+          const questionsPayload = questions.map((q, index) => ({ 
+            assignment_id: finalAssignmentId, 
+            question_type: q.type, 
+            content_html: q.content_html, 
+            model_answer_html: q.model_answer_html, 
+            points: q.points, 
+            options: (q.options || []).map(o => ({ ...o, is_correct: Boolean(o.is_correct) })), 
+            order_index: index + 1 
+          }));
+          await supabase.from('assignment_questions_v2').insert(questionsPayload);
+        }
       }
 
       setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب وتوزيعه بنجاح!' : 'تم إنشاء الواجب وتوزيعه للطلاب بنجاح!', type: 'success' });
