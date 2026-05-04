@@ -486,10 +486,12 @@ export default function AssignmentBuilderV2() {
     try {
       let cleanStr = manualJson.trim();
       
+      // 🚀 إصلاح خطأ الـ Regex والتعامل مع النصوص بحذر 🚀
       if (cleanStr.startsWith('```')) {
-        cleanStr = cleanStr.replace(new RegExp('^```[a-z]*\\n?', 'i'), '');
-        cleanStr = cleanStr.replace(new RegExp('\\n?
-```$', 'i'), '');
+        const startRegex = new RegExp('^```[a-z]*\\n?', 'i');
+        const endRegex = new RegExp('\\n?
+```$', 'i');
+        cleanStr = cleanStr.replace(startRegex, '').replace(endRegex, '');
       }
 
       const firstBrace = cleanStr.indexOf('{');
