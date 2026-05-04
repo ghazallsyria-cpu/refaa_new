@@ -154,14 +154,14 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <AnimatePresence>
           {isUploading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin"/>
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
             </motion.div>
           )}
         </AnimatePresence>
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">{placeholder}</div>
         )}
-        <EditorContent editor="{editor}"/>
+        <EditorContent editor={editor} />
       </div>
     </div>
   );
@@ -196,6 +196,7 @@ export default function AssignmentBuilderV2() {
   const [manualJson, setManualJson] = useState('');
   const [skippedLog, setSkippedLog] = useState<{question_hint: string, reason: string}[]>([]); 
   
+  // 🚀 حالة رادار الصور
   const [filterNeedsImage, setFilterNeedsImage] = useState<boolean>(false);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   
@@ -681,7 +682,7 @@ export default function AssignmentBuilderV2() {
         }
       }
 
-      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب وتوزيعه بنجاح!' : 'تم إنشاء الواجب وتوزيعه للطلاب بنجاح!', type: 'success' });
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الواجب بنجاح!' : 'تم توزيع الواجب للطلاب بنجاح!', type: 'success' });
       setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}); handleResetBuilder(true); }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ. تأكد من اكتمال البيانات.'); } finally { setIsSavingDB(false); }
   };
@@ -716,7 +717,7 @@ export default function AssignmentBuilderV2() {
       <AnimatePresence>
         {globalMessage.text && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-xl font-bold text-white flex items-center gap-3 ${globalMessage.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
-            <CheckCircle2 className="w-5 h-5"/> {globalMessage.text}
+            <CheckCircle2 className="w-5 h-5" /> {globalMessage.text}
           </motion.div>
         )}
       </AnimatePresence>
@@ -724,20 +725,20 @@ export default function AssignmentBuilderV2() {
       <div className="max-w-4xl mx-auto space-y-6">
         
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
-          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8"/></div>
+          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
           <h1 className="text-2xl font-black text-slate-900">غرفة التحكم والإنشاء (V2)</h1>
           <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والواجبات الرسمية.</p>
         </div>
 
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ListOrdered className="w-4 h-4"/> {editingAssignmentId ? 'تعديل الدرس' : 'إعداد درس جديد'}
+            <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'إعداد درس جديد'}
           </button>
           <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <FileJson className="w-4 h-4"/> استيراد AI
+            <FileJson className="w-4 h-4" /> استيراد AI
           </button>
           <button onClick={() => setActiveTab('manage')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'manage' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Database className="w-4 h-4"/> السجلات
+            <Database className="w-4 h-4" /> السجلات
           </button>
         </div>
 
@@ -745,10 +746,10 @@ export default function AssignmentBuilderV2() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h2 className="font-black text-xl text-slate-800 flex items-center gap-2">
-                <Database className="w-6 h-6 text-rose-500"/> إدارة الدروس والبنوك المكتملة
+                <Database className="w-6 h-6 text-rose-500" /> إدارة الدروس والبنوك المكتملة
               </h2>
               <button onClick={fetchManageList} className="p-2 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100 transition-colors">
-                <RefreshCcw className="{`w-5" h-5 ${isManageLoading ? 'animate-spin' : ''}`}/>
+                <RefreshCcw className={`w-5 h-5 ${isManageLoading ? 'animate-spin' : ''}`} />
               </button>
             </div>
 
@@ -761,7 +762,7 @@ export default function AssignmentBuilderV2() {
                   {teacherStats.map((stat, i) => (
                     <div key={i} className="flex items-center justify-between gap-4 bg-white p-3 rounded-xl shadow-sm border border-indigo-50 min-w-[200px] shrink-0">
                       <div className="flex items-center gap-2">
-                        <GraduationCap className="w-4 h-4 text-indigo-400"/>
+                        <GraduationCap className="w-4 h-4 text-indigo-400" />
                         <span className="font-bold text-slate-700 text-sm">{stat.name}</span>
                       </div>
                       <span className="bg-indigo-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-sm">{stat.count} ملف</span>
@@ -798,10 +799,10 @@ export default function AssignmentBuilderV2() {
                     
                     <div className="flex items-center gap-2 border-t md:border-t-0 md:border-r border-slate-200 pt-4 md:pt-0 md:pr-4 shrink-0">
                       <button onClick={() => handleEditAssignment(assign)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-xs hover:bg-indigo-100 transition-colors">
-                        <Edit3 className="w-4 h-4"/> تعديل
+                        <Edit3 className="w-4 h-4" /> تعديل
                       </button>
                       <button onClick={() => handleDeleteAssignment(assign.id)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-xs hover:bg-rose-100 transition-colors">
-                        <Trash2 className="w-4 h-4"/> حذف جذري
+                        <Trash2 className="w-4 h-4" /> حذف جذري
                       </button>
                     </div>
                   </div>
@@ -830,7 +831,7 @@ export default function AssignmentBuilderV2() {
             )}
 
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex gap-3 shadow-inner">
-              <Info className="w-5 h-5 shrink-0 text-amber-500"/>
+              <Info className="w-5 h-5 shrink-0 text-amber-500" />
               <div className="text-sm font-bold">
                 <p className="font-black mb-1 text-amber-900">نصيحة ذهبية لضمان دقة 100% بدون تخطي:</p>
                 لا تنسخ أكثر من (صفحة إلى صفحتين) من ملف الـ PDF في كل مرة تطلب فيها من ChatGPT توليد الكود. إذا نسخت نصوصاً طويلة جداً، سيتخيل الذكاء الاصطناعي ويتجاهل بعض الجداول والأسئلة بسبب نفاد ذاكرته المؤقتة. النظام هنا سيقوم بدمج جميع الدفعات التي تستوردها داخل نفس الدرس!
@@ -839,12 +840,12 @@ export default function AssignmentBuilderV2() {
             <div className="flex items-center justify-between mb-4 mt-4">
               <h2 className="font-black text-lg text-emerald-800">مطابقة الأسئلة والأجوبة بالـ AI</h2>
               <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm active:scale-95">
-                <Copy className="w-4 h-4"/> انسخ البرومبت المطور (يشمل الرسم)
+                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل الرسم)
               </button>
             </div>
             <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
             <button onClick={processManualJson} className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl hover:bg-emerald-700 flex justify-center items-center gap-2 shadow-md transition-all active:scale-95">
-              <ClipboardPaste className="w-5 h-5"/> استيراد الكود وبناء البطاقات
+              <ClipboardPaste className="w-5 h-5" /> استيراد الكود وبناء البطاقات
             </button>
           </motion.div>
         )}
@@ -857,21 +858,21 @@ export default function AssignmentBuilderV2() {
                 <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner w-full sm:w-auto flex-1 max-w-md">
                   {currentRole === 'teacher' ? (
                     <div className="flex-1 py-3 rounded-xl font-black text-sm bg-slate-800 text-white shadow-md flex justify-center items-center gap-2 cursor-default">
-                      <FileText className="w-4 h-4"/> وضع الواجب الرسمي (مفعل دائماً)
+                      <FileText className="w-4 h-4" /> وضع الواجب الرسمي (مفعل دائماً)
                     </div>
                   ) : (
                     <>
                       <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                        <Gamepad2 className="w-4 h-4"/> بنك تدريب وتحدي
+                        <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
                       </button>
                       <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                        <FileText className="w-4 h-4"/> واجب رسمي
+                        <FileText className="w-4 h-4" /> واجب رسمي
                       </button>
                     </>
                   )}
                 </div>
                 <button onClick={() => handleResetBuilder(false)} className="w-full sm:w-auto px-5 py-3 bg-rose-50 text-rose-600 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-rose-100 transition-colors border border-rose-200 shadow-sm shrink-0">
-                  <RefreshCcw className="w-4 h-4"/> إفراغ المحتوى
+                  <RefreshCcw className="w-4 h-4" /> إفراغ المحتوى
                 </button>
               </div>
 
@@ -895,7 +896,7 @@ export default function AssignmentBuilderV2() {
                   </div>
                 ) : (
                   <div className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-500 flex items-center gap-2 h-[52px]">
-                    <UserCheck className="w-5 h-5"/> يتم الإسناد لحسابك تلقائياً
+                    <UserCheck className="w-5 h-5" /> يتم الإسناد لحسابك تلقائياً
                   </div>
                 )}
                 
@@ -922,7 +923,7 @@ export default function AssignmentBuilderV2() {
               {!isPracticeMode && (
                 <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 shadow-inner space-y-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Settings className="w-5 h-5 text-amber-600"/>
+                    <Settings className="w-5 h-5 text-amber-600" />
                     <h3 className="font-black text-amber-800">إعدادات الواجب الرسمي المتقدمة</h3>
                   </div>
                   
@@ -954,11 +955,11 @@ export default function AssignmentBuilderV2() {
               )}
             </div>
 
-            
+            {/* 🚀 رادار الصور (The Missing Image Radar) */}
             {questionsNeedingImages.length > 0 && (
               <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl shadow-inner flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3 text-amber-800">
-                  <div className="bg-amber-100 p-2 rounded-xl"><ImageIcon className="w-6 h-6 text-amber-600"/></div>
+                  <div className="bg-amber-100 p-2 rounded-xl"><ImageIcon className="w-6 h-6 text-amber-600" /></div>
                   <div>
                     <h4 className="font-black text-sm">رادار الصور النشط</h4>
                     <p className="text-xs font-bold mt-0.5">اكتشف الذكاء الاصطناعي <span className="bg-amber-200 px-1.5 rounded text-amber-900">{questionsNeedingImages.length}</span> سؤال تعتمد على صور المنهج لكي تُحل.</p>
@@ -968,12 +969,12 @@ export default function AssignmentBuilderV2() {
                   onClick={() => setFilterNeedsImage(!filterNeedsImage)} 
                   className={`px-4 py-2 rounded-xl font-black text-xs transition-colors flex items-center gap-2 border ${filterNeedsImage ? 'bg-amber-500 text-white border-amber-600 shadow-md' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-100'}`}
                 >
-                  <Filter className="w-4 h-4"/> {filterNeedsImage ? 'عرض كل الأسئلة' : 'تصفية: المفقود فقط'}
+                  <Filter className="w-4 h-4" /> {filterNeedsImage ? 'عرض كل الأسئلة' : 'تصفية: المفقود فقط'}
                 </button>
               </div>
             )}
 
-            
+            {/* قائمة الأسئلة */}
             <div className="space-y-4">
               <div className="space-y-4">
                 {displayedQuestions.map((q, i) => (
@@ -982,17 +983,17 @@ export default function AssignmentBuilderV2() {
                       <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
                       <div className="flex gap-2">
                         <button onClick={() => openPreview(i)} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
-                          <Eye className="w-4 h-4"/> معاينة
+                          <Eye className="w-4 h-4" /> معاينة
                         </button>
-                        <button onClick={() => openEditQuestion(i)} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4"/></button>
-                        <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4"/></button>
+                        <button onClick={() => openEditQuestion(i)} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
+                        <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
                     
-                    
+                    {/* 🚀 إشعار الـ AI بنقص الصورة */}
                     {q.needs_image && (
                       <div className="mb-4 bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-xl flex items-center gap-3 shadow-inner animate-pulse">
-                        <ImageIcon className="w-5 h-5 text-orange-500 shrink-0"/>
+                        <ImageIcon className="w-5 h-5 text-orange-500 shrink-0" />
                         <div>
                           <p className="text-xs font-black">الذكاء الاصطناعي يخبرك: هذا السؤال ينقصه صورة!</p>
                           <p className="text-[10px] font-bold opacity-80">اضغط على زر (تعديل) وقم بإرفاق الصورة من جهازك داخل نص السؤال، أو اتركها إذا كان السؤال يعتمد على رسم الطالب.</p>
@@ -1005,13 +1006,13 @@ export default function AssignmentBuilderV2() {
                 ))}
               </div>
               
-              
+              {/* 🚀 أزرار إضافة الأسئلة مدمجة بذكاء */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <button onClick={openNewQuestion} className="flex-1 border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
-                  <Plus className="w-5 h-5"/> إضافة سؤال يدوياً
+                  <Plus className="w-5 h-5" /> إضافة سؤال يدوياً
                 </button>
                 <button onClick={() => setIsImportModalOpen(true)} className="flex-1 border-2 border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors shadow-inner">
-                  <FileJson className="w-5 h-5"/> دمج كود (JSON)
+                  <FileJson className="w-5 h-5" /> دمج كود (JSON)
                 </button>
               </div>
             </div>
@@ -1024,7 +1025,7 @@ export default function AssignmentBuilderV2() {
               </select>
 
               <button onClick={saveAssignmentToDB} disabled={isSavingDB} className={`w-full text-white font-black text-lg py-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${editingAssignmentId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
-                {isSavingDB ? <Loader2 className="animate-spin w-5 h-5"/> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5"/> : <Save className="w-5 h-5"/>)} 
+                {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5" /> : <Save className="w-5 h-5" />)} 
                 {editingAssignmentId ? 'حفظ التعديلات وتحديث الواجب' : 'اعتماد وتوزيع الواجب'}
               </button>
             </div>
@@ -1032,7 +1033,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      
+      {/* 🚀 Modal الاستيراد الذكي المنبثق أثناء التعديل */}
       <AnimatePresence>
         {isImportModalOpen && (
           <>
@@ -1046,14 +1047,14 @@ export default function AssignmentBuilderV2() {
             >
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50 shrink-0">
                 <h3 className="font-black text-emerald-800 flex items-center gap-2">
-                  <FileJson className="w-5 h-5 text-emerald-600"/> دمج أسئلة عبر JSON
+                  <FileJson className="w-5 h-5 text-emerald-600" /> دمج أسئلة عبر JSON
                 </h3>
-                <button onClick={() => setIsImportModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-white rounded-full transition-colors"><X className="w-5 h-5"/></button>
+                <button onClick={() => setIsImportModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-white rounded-full transition-colors"><X className="w-5 h-5" /></button>
               </div>
               
               <div className="p-6 overflow-auto custom-scrollbar flex-1 space-y-4">
                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 shadow-inner">
-                    <Info className="w-5 h-5 shrink-0 text-amber-500"/>
+                    <Info className="w-5 h-5 shrink-0 text-amber-500" />
                     <p className="text-xs font-bold text-amber-800">
                       سيتم إضافة هذه الأسئلة إلى نهاية الدرس الحالي دون مسح الأسئلة الموجودة مسبقاً.
                     </p>
@@ -1070,7 +1071,7 @@ export default function AssignmentBuilderV2() {
               <div className="p-5 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
                 <button onClick={() => setIsImportModalOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
                 <button onClick={processManualJson} className="flex-[2] py-3.5 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
-                  <ClipboardPaste className="w-5 h-5"/> دمج الأسئلة مع الدرس الحالي
+                  <ClipboardPaste className="w-5 h-5" /> دمج الأسئلة مع الدرس الحالي
                 </button>
               </div>
             </motion.div>
@@ -1078,7 +1079,7 @@ export default function AssignmentBuilderV2() {
         )}
       </AnimatePresence>
 
-      
+      {/* 🚀 Modal محرر الأسئلة (Editor) */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -1092,9 +1093,9 @@ export default function AssignmentBuilderV2() {
             >
               <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
                 <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                  <Edit3 className="w-5 h-5 text-indigo-600"/> {editingIndex !== null ? 'تعديل السؤال' : 'سؤال جديد'}
+                  <Edit3 className="w-5 h-5 text-indigo-600" /> {editingIndex !== null ? 'تعديل السؤال' : 'سؤال جديد'}
                 </h3>
-                <button onClick={() => setIsEditorOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-slate-50 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+                <button onClick={() => setIsEditorOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-slate-50 rounded-full transition-colors"><X className="w-5 h-5" /></button>
               </div>
               
               <div className="p-5 overflow-auto custom-scrollbar flex-1 space-y-6">
@@ -1115,7 +1116,7 @@ export default function AssignmentBuilderV2() {
                     </div>
                  </div>
 
-                 
+                 {/* 🚀 إزالة/إضافة احتياج للصورة يدوياً من المحرر */}
                  <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
                     <div>
                       <label className="block text-sm font-black text-slate-700">هل يحتاج السؤال إلى صورة للحل؟</label>
@@ -1125,14 +1126,14 @@ export default function AssignmentBuilderV2() {
                  </div>
 
                  <div className="space-y-2">
-                    <label className="block text-sm font-black text-slate-700 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-500"/> نص السؤال</label>
-                    <TiptapEditor content="{currentQ.content_html}" onChange="{(html)"> setCurrentQ({...currentQ, content_html: html})} placeholder="اكتب نص السؤال هنا... يمكن لصق صور للأسئلة." />
+                    <label className="block text-sm font-black text-slate-700 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-500" /> نص السؤال</label>
+                    <TiptapEditor content={currentQ.content_html} onChange={(html) => setCurrentQ({...currentQ, content_html: html})} placeholder="اكتب نص السؤال هنا... يمكن لصق صور للأسئلة." />
                  </div>
 
                  {currentQ.type !== 'section_header' && (
                     <div className="space-y-2">
-                       <label className="block text-sm font-black text-emerald-700 flex items-center gap-2 mt-4"><Target className="w-4 h-4"/> الإجابة النموذجية (تظهر للطالب بعد الحل)</label>
-                       <TiptapEditor content="{currentQ.model_answer_html" || ''} onChange="{(html)"> setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
+                       <label className="block text-sm font-black text-emerald-700 flex items-center gap-2 mt-4"><Target className="w-4 h-4" /> الإجابة النموذجية (تظهر للطالب بعد الحل)</label>
+                       <TiptapEditor content={currentQ.model_answer_html || ''} onChange={(html) => setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
                     </div>
                  )}
 
@@ -1145,14 +1146,14 @@ export default function AssignmentBuilderV2() {
                        {currentQ.options.map((opt, oIdx) => (
                           <div key={opt.id} className={`flex items-center gap-2 p-2 border rounded-xl transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}>
                              <button onClick={() => toggleCorrectOption(opt.id)} className={`p-2 rounded-lg shrink-0 ${opt.is_correct ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400 hover:bg-slate-300'}`}>
-                                <CheckSquare className="w-5 h-5"/>
+                                <CheckSquare className="w-5 h-5" />
                              </button>
                              <input type="text" value={opt.content} onChange={(e) => updateOptionContent(opt.id, e.target.value)} className={`flex-1 bg-transparent border-none outline-none font-bold text-sm ${opt.is_correct ? 'text-emerald-900' : 'text-slate-700'}`} placeholder={`الخيار رقم ${oIdx + 1}`} />
-                             <button onClick={() => removeOption(opt.id)} className="p-2 text-rose-400 hover:bg-rose-100 rounded-lg shrink-0"><Trash2 className="w-4 h-4"/></button>
+                             <button onClick={() => removeOption(opt.id)} className="p-2 text-rose-400 hover:bg-rose-100 rounded-lg shrink-0"><Trash2 className="w-4 h-4" /></button>
                           </div>
                        ))}
                        <button onClick={addOption} className="w-full py-3 bg-slate-100 text-slate-600 font-black text-xs rounded-xl hover:bg-slate-200 flex items-center justify-center gap-1 border border-slate-200 border-dashed">
-                          <Plus className="w-4 h-4"/> إضافة خيار جديد
+                          <Plus className="w-4 h-4" /> إضافة خيار جديد
                        </button>
                     </div>
                  )}
@@ -1175,22 +1176,79 @@ export default function AssignmentBuilderV2() {
               <div className="p-5 flex gap-3 border-t border-slate-200 shrink-0 bg-white">
                 <button onClick={() => setIsEditorOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
                 <button onClick={saveQuestion} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
-                  <Save className="w-5 h-5"/> {editingIndex !== null ? 'تحديث وحفظ' : 'إضافة للدرس'}
+                  <Save className="w-5 h-5" /> {editingIndex !== null ? 'تحديث وحفظ' : 'إضافة للدرس'}
                 </button>
               </div>
             </motion.div>
           </>
         )}
-      </TiptapEditor></TiptapEditor></AnimatePresence>
+      </AnimatePresence>
 
-      
+      {/* 🚀 Modal المعاينة (Preview) */}
       <AnimatePresence>
-        {uploadingImageId && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
-            <Loader2 className="w-16 h-16 animate-spin text-amber-500 mb-4"/>
-            <h2 className="text-xl font-black mb-2 animate-pulse">جاري معالجة ورفع الصورة السحرية...</h2>
-            <p className="text-sm font-bold opacity-70">يتم الآن دمج الصورة مع بنك الأسئلة</p>
-          </motion.div>
+        {isPreviewOpen && previewQ && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" onClick={() => setIsPreviewOpen(false)} />
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95 }} 
+               animate={{ opacity: 1, scale: 1 }} 
+               exit={{ opacity: 0, scale: 0.95 }} 
+               className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-2xl bg-white rounded-3xl shadow-2xl z-50 overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]" 
+               dir="rtl"
+            >
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+                <h3 className="font-black text-slate-800 flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-blue-500" /> معاينة بطاقة السؤال
+                </h3>
+                <button onClick={() => setIsPreviewOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              
+              <div className="p-6 overflow-auto custom-scrollbar flex-1">
+                 <div className="bg-white border-2 border-slate-100 rounded-3xl p-6 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                       <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg uppercase tracking-widest">{translateType(previewQ.type)}</span>
+                       <span className="text-xs font-black text-amber-500 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">{previewQ.points} درجات</span>
+                    </div>
+
+                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 text-lg leading-relaxed mb-8" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.content_html) }} />
+
+                    {previewQ.type === 'multiple_choice' && (
+                       <div className="space-y-3">
+                          {previewQ.options.map((opt, idx) => (
+                             <div key={opt.id} className={`p-4 rounded-xl border-2 font-bold text-sm transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600'}`}>
+                                {idx + 1}. {opt.content}
+                                {opt.is_correct && <CheckCircle2 className="inline-block mr-2 w-4 h-4 text-emerald-500" />}
+                             </div>
+                          ))}
+                       </div>
+                    )}
+
+                    {previewQ.type === 'true_false' && (
+                       <div className="flex gap-4">
+                          {previewQ.options.map(opt => (
+                             <div key={opt.id} className={`flex-1 p-4 rounded-xl border-2 font-black text-center transition-all ${opt.is_correct ? (opt.content==='صح'?'border-emerald-500 bg-emerald-50 text-emerald-700':'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                                {opt.content}
+                             </div>
+                          ))}
+                       </div>
+                    )}
+
+                    {previewQ.type === 'essay' && (
+                       <div className="w-full h-32 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center text-slate-400 font-bold text-sm">
+                          مساحة إجابة الطالب (نصية أو رسم حر)
+                       </div>
+                    )}
+
+                    {previewQ.model_answer_html && (
+                       <div className="mt-8 pt-6 border-t border-slate-200">
+                          <h4 className="font-black text-emerald-700 mb-3 flex items-center gap-2"><Target className="w-5 h-5" /> الإجابة النموذجية</h4>
+                          <div className="tiptap-content prose prose-sm max-w-none font-bold text-emerald-900 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.model_answer_html) }} />
+                       </div>
+                    )}
+                 </div>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
