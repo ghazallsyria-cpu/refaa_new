@@ -67,7 +67,7 @@ const uploadImageToCloudinary = async (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+  const res = await fetch(`[https://api.cloudinary.com/v1_1/$](https://api.cloudinary.com/v1_1/$){process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return data;
@@ -138,14 +138,14 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <AnimatePresence>
           {isUploading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin"/>
             </motion.div>
           )}
         </AnimatePresence>
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">{placeholder}</div>
         )}
-        <EditorContent editor={editor} />
+        <EditorContent editor="{editor}"/>
       </div>
     </div>
   );
@@ -188,14 +188,14 @@ export default function AssignmentBuilderV2() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [currentQ, setCurrentQ] = useState<Question | null>(null);
+  const [currentQ, setCurrentQ] = useState<Question null |>(null);
 
   const [manageAssignments, setManageAssignments] = useState<any[]>([]);
   const [teacherStats, setTeacherStats] = useState<{name: string, count: number}[]>([]); 
   const [isManageLoading, setIsManageLoading] = useState(false);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewQ, setPreviewQ] = useState<Question | null>(null);
+  const [previewQ, setPreviewQ] = useState<Question null |>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -258,7 +258,6 @@ export default function AssignmentBuilderV2() {
     if (activeTab === 'manage' && user) fetchManageList();
   }, [activeTab, user]);
 
-  // 🚀 المحرك المنيع لاستدعاء السجلات (Bulletproof Chunked Fetch) 🚀
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
@@ -266,7 +265,6 @@ export default function AssignmentBuilderV2() {
       let teacherId = null;
       let allowedAssignmentIds = [];
 
-      // 1. تحديد صلاحيات المعلم بدقة
       if (isTeacher) {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         teacherId = teacherProfile?.id;
@@ -282,12 +280,11 @@ export default function AssignmentBuilderV2() {
         }
       }
       
-      // 2. جلب جميع الدروس بحد أقصى آمن
       let { data: assignments, error: assignErr } = await supabase
         .from('assignments_v2')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(200); // 👈 حماية من الانهيار
+        .limit(200); 
         
       if (assignErr) throw assignErr;
 
@@ -295,7 +292,6 @@ export default function AssignmentBuilderV2() {
         setManageAssignments([]); setTeacherStats([]); setIsManageLoading(false); return;
       }
 
-      // 3. فلترة الدروس لتظهر للمعلم فقط ما يخصه
       if (isTeacher) {
          assignments = assignments.filter(a => a.teacher_id === teacherId || allowedAssignmentIds.includes(a.id));
       }
@@ -311,9 +307,8 @@ export default function AssignmentBuilderV2() {
         supabase.from('teachers').select('id, users(full_name)')
       ]);
 
-      // 🚀 التقطيع الذكي (Chunking) لمنع خطأ 414 URI Too Long 🚀
       let questionsList: any[] = [];
-      const chunkSize = 40; // جلب الأسئلة على دفعات
+      const chunkSize = 40;
       for (let i = 0; i < assignmentIds.length; i += chunkSize) {
          const chunk = assignmentIds.slice(i, i + chunkSize);
          const { data } = await supabase.from('assignment_questions_v2').select('assignment_id').in('assignment_id', chunk);
@@ -490,9 +485,12 @@ export default function AssignmentBuilderV2() {
     
     try {
       let cleanStr = manualJson.trim();
+      
+      // 🚀 إصلاح خطأ الـ Regex هنا (Unterminated regexp literal) 🚀
       if (cleanStr.startsWith('```')) {
-        cleanStr = cleanStr.replace(/^
-```[a-z]*\n?/i, '').replace(/\n?```$/i, '');
+        cleanStr = cleanStr.replace(new RegExp('^```[a-z]*\\n?', 'i'), '');
+        cleanStr = cleanStr.replace(new RegExp('\\n?
+```$', 'i'), '');
       }
 
       const firstBrace = cleanStr.indexOf('{');
@@ -755,7 +753,7 @@ export default function AssignmentBuilderV2() {
       <AnimatePresence>
         {globalMessage.text && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-xl font-bold text-white flex items-center gap-3 ${globalMessage.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
-            <CheckCircle2 className="w-5 h-5" /> {globalMessage.text}
+            <CheckCircle2 className="w-5 h-5"/> {globalMessage.text}
           </motion.div>
         )}
       </AnimatePresence>
@@ -763,20 +761,20 @@ export default function AssignmentBuilderV2() {
       <div className="max-w-4xl mx-auto space-y-6">
         
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
-          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
+          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8"/></div>
           <h1 className="text-2xl font-black text-slate-900">غرفة التحكم والإنشاء (V2)</h1>
           <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والواجبات الرسمية.</p>
         </div>
 
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ListOrdered className="w-4 h-4" /> المنشئ ({questions.length})
+            <ListOrdered className="w-4 h-4"/> المنشئ ({questions.length})
           </button>
           <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <FileJson className="w-4 h-4" /> استيراد AI
+            <FileJson className="w-4 h-4"/> استيراد AI
           </button>
           <button onClick={() => setActiveTab('manage')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'manage' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Database className="w-4 h-4" /> السجلات
+            <Database className="w-4 h-4"/> السجلات
           </button>
         </div>
 
@@ -784,10 +782,10 @@ export default function AssignmentBuilderV2() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h2 className="font-black text-xl text-slate-800 flex items-center gap-2">
-                <Database className="w-6 h-6 text-rose-500" /> إدارة الدروس والبنوك المكتملة
+                <Database className="w-6 h-6 text-rose-500"/> إدارة الدروس والبنوك المكتملة
               </h2>
               <button onClick={fetchManageList} className="p-2 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100 transition-colors">
-                <RefreshCcw className={`w-5 h-5 ${isManageLoading ? 'animate-spin' : ''}`} />
+                <RefreshCcw className="{`w-5" h-5 ${isManageLoading ? 'animate-spin' : ''}`}/>
               </button>
             </div>
 
@@ -800,7 +798,7 @@ export default function AssignmentBuilderV2() {
                   {teacherStats.map((stat, i) => (
                     <div key={i} className="flex items-center justify-between gap-4 bg-white p-3 rounded-xl shadow-sm border border-indigo-50 min-w-[200px] shrink-0">
                       <div className="flex items-center gap-2">
-                        <GraduationCap className="w-4 h-4 text-indigo-400" />
+                        <GraduationCap className="w-4 h-4 text-indigo-400"/>
                         <span className="font-bold text-slate-700 text-sm">{stat.name}</span>
                       </div>
                       <span className="bg-indigo-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-sm">{stat.count} ملف</span>
@@ -837,10 +835,10 @@ export default function AssignmentBuilderV2() {
                     
                     <div className="flex items-center gap-2 border-t md:border-t-0 md:border-r border-slate-200 pt-4 md:pt-0 md:pr-4 shrink-0">
                       <button onClick={() => handleEditAssignment(assign)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-xs hover:bg-indigo-100 transition-colors">
-                        <Edit3 className="w-4 h-4" /> تعديل
+                        <Edit3 className="w-4 h-4"/> تعديل
                       </button>
                       <button onClick={() => handleDeleteAssignment(assign.id)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-xs hover:bg-rose-100 transition-colors">
-                        <Trash2 className="w-4 h-4" /> حذف جذري
+                        <Trash2 className="w-4 h-4"/> حذف جذري
                       </button>
                     </div>
                   </div>
@@ -869,7 +867,7 @@ export default function AssignmentBuilderV2() {
             )}
 
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex gap-3 shadow-inner">
-              <Info className="w-5 h-5 shrink-0 text-amber-500" />
+              <Info className="w-5 h-5 shrink-0 text-amber-500"/>
               <div className="text-sm font-bold">
                 <p className="font-black mb-1 text-amber-900">نصيحة ذهبية لضمان دقة 100% بدون تخطي:</p>
                 لا تنسخ أكثر من (صفحة إلى صفحتين) من ملف الـ PDF في كل مرة تطلب فيها من ChatGPT توليد الكود. إذا نسخت نصوصاً طويلة جداً، سيتخيل الذكاء الاصطناعي ويتجاهل بعض الجداول والأسئلة بسبب نفاد ذاكرته المؤقتة. النظام هنا سيقوم بدمج جميع الدفعات التي تستوردها داخل نفس الدرس!
@@ -878,12 +876,12 @@ export default function AssignmentBuilderV2() {
             <div className="flex items-center justify-between mb-4 mt-4">
               <h2 className="font-black text-lg text-emerald-800">مطابقة الأسئلة والأجوبة بالـ AI</h2>
               <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm active:scale-95">
-                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل المقالي والرسم)
+                <Copy className="w-4 h-4"/> انسخ البرومبت المطور (يشمل المقالي والرسم)
               </button>
             </div>
             <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
             <button onClick={processManualJson} className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl hover:bg-emerald-700 flex justify-center items-center gap-2 shadow-md transition-all active:scale-95">
-              <ClipboardPaste className="w-5 h-5" /> استيراد الكود وبناء البطاقات
+              <ClipboardPaste className="w-5 h-5"/> استيراد الكود وبناء البطاقات
             </button>
           </motion.div>
         )}
@@ -896,21 +894,21 @@ export default function AssignmentBuilderV2() {
                 <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner w-full sm:w-auto flex-1 max-w-md">
                   {currentRole === 'teacher' ? (
                     <div className="flex-1 py-3 rounded-xl font-black text-sm bg-slate-800 text-white shadow-md flex justify-center items-center gap-2 cursor-default">
-                      <FileText className="w-4 h-4" /> وضع الواجب الرسمي (مفعل دائماً)
+                      <FileText className="w-4 h-4"/> وضع الواجب الرسمي (مفعل دائماً)
                     </div>
                   ) : (
                     <>
                       <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                        <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
+                        <Gamepad2 className="w-4 h-4"/> بنك تدريب وتحدي
                       </button>
                       <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                        <FileText className="w-4 h-4" /> واجب رسمي
+                        <FileText className="w-4 h-4"/> واجب رسمي
                       </button>
                     </>
                   )}
                 </div>
                 <button onClick={() => handleResetBuilder(false)} className="w-full sm:w-auto px-5 py-3 bg-rose-50 text-rose-600 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-rose-100 transition-colors border border-rose-200 shadow-sm shrink-0">
-                  <RefreshCcw className="w-4 h-4" /> إفراغ المحتوى
+                  <RefreshCcw className="w-4 h-4"/> إفراغ المحتوى
                 </button>
               </div>
 
@@ -934,7 +932,7 @@ export default function AssignmentBuilderV2() {
                   </div>
                 ) : (
                   <div className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-500 flex items-center gap-2 h-[52px]">
-                    <UserCheck className="w-5 h-5" /> يتم الإسناد لحسابك تلقائياً
+                    <UserCheck className="w-5 h-5"/> يتم الإسناد لحسابك تلقائياً
                   </div>
                 )}
                 
@@ -961,7 +959,7 @@ export default function AssignmentBuilderV2() {
               {!isPracticeMode && (
                 <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 shadow-inner space-y-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Settings className="w-5 h-5 text-amber-600" />
+                    <Settings className="w-5 h-5 text-amber-600"/>
                     <h3 className="font-black text-amber-800">إعدادات الواجب الرسمي المتقدمة</h3>
                   </div>
                   
@@ -993,11 +991,11 @@ export default function AssignmentBuilderV2() {
               )}
             </div>
 
-            {/* 🚀 رادار الصور (The Missing Image Radar) */}
+            
             {questionsNeedingImages.length > 0 && (
               <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl shadow-inner flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3 text-amber-800">
-                  <div className="bg-amber-100 p-2 rounded-xl"><ImageIcon className="w-6 h-6 text-amber-600" /></div>
+                  <div className="bg-amber-100 p-2 rounded-xl"><ImageIcon className="w-6 h-6 text-amber-600"/></div>
                   <div>
                     <h4 className="font-black text-sm">رادار الصور النشط</h4>
                     <p className="text-xs font-bold mt-0.5">اكتشف الذكاء الاصطناعي <span className="bg-amber-200 px-1.5 rounded text-amber-900">{questionsNeedingImages.length}</span> سؤال تعتمد على صور المنهج لكي تُحل.</p>
@@ -1007,12 +1005,12 @@ export default function AssignmentBuilderV2() {
                   onClick={() => setFilterNeedsImage(!filterNeedsImage)} 
                   className={`px-4 py-2 rounded-xl font-black text-xs transition-colors flex items-center gap-2 border ${filterNeedsImage ? 'bg-amber-500 text-white border-amber-600 shadow-md' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-100'}`}
                 >
-                  <Filter className="w-4 h-4" /> {filterNeedsImage ? 'عرض كل الأسئلة' : 'تصفية: المفقود فقط'}
+                  <Filter className="w-4 h-4"/> {filterNeedsImage ? 'عرض كل الأسئلة' : 'تصفية: المفقود فقط'}
                 </button>
               </div>
             )}
 
-            {/* قائمة الأسئلة */}
+            
             <div className="space-y-4">
               <AnimatePresence>
                 {displayedQuestions.map((q, i) => (
@@ -1023,18 +1021,18 @@ export default function AssignmentBuilderV2() {
                       </span>
                       <div className="flex gap-1 opacity-100 transition-opacity">
                          <button onClick={() => openPreview(questions.indexOf(q))} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
-                           <Eye className="w-4 h-4" /> معاينة
+                           <Eye className="w-4 h-4"/> معاينة
                          </button>
-                         <button onClick={() => openEditQuestion(questions.indexOf(q))} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
-                         <button onClick={() => deleteQuestion(questions.indexOf(q))} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
+                         <button onClick={() => openEditQuestion(questions.indexOf(q))} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4"/></button>
+                         <button onClick={() => deleteQuestion(questions.indexOf(q))} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4"/></button>
                       </div>
                     </div>
 
-                    {/* 🚀 أداة الرفع السريع للصورة المفقودة */}
+                    
                     {q.needs_image && (
                       <div className="mb-4 bg-orange-100/50 border border-orange-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-inner">
                         <div className="flex items-center gap-3 text-orange-800">
-                          <AlertCircle className="w-5 h-5 text-orange-600 shrink-0" />
+                          <AlertCircle className="w-5 h-5 text-orange-600 shrink-0"/>
                           <div className="text-xs font-bold">هذا السؤال يتطلب صورة مرافقة ليتمكن الطالب من الحل (مثال: من الشكل المجاور).</div>
                         </div>
                         
@@ -1047,7 +1045,7 @@ export default function AssignmentBuilderV2() {
                              disabled={uploadingImageId === q.id}
                           />
                           <button disabled={uploadingImageId === q.id} className="w-full sm:w-auto px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-lg shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
-                             {uploadingImageId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                             {uploadingImageId === q.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <UploadCloud className="w-4 h-4"/>}
                              {uploadingImageId === q.id ? 'جاري الرفع...' : 'رفع الصورة المفقودة'}
                           </button>
                         </div>
@@ -1058,7 +1056,7 @@ export default function AssignmentBuilderV2() {
                     
                     {q.model_answer_html && (
                       <div className="mt-3 pt-3 border-t border-slate-100 flex items-start gap-2">
-                         <Target className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                         <Target className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"/>
                          <div className="tiptap-content prose prose-sm max-w-none text-[10px] font-bold text-emerald-700" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html) }} />
                       </div>
                     )}
@@ -1068,19 +1066,19 @@ export default function AssignmentBuilderV2() {
               
               {displayedQuestions.length === 0 && filterNeedsImage && (
                  <div className="text-center p-10 bg-emerald-50 border-2 border-dashed border-emerald-200 rounded-2xl text-emerald-600 font-black">
-                   <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                   <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50"/>
                    رائع! لا يوجد أي أسئلة تحتاج إلى صور في هذا الدرس.
                  </div>
               )}
             </div>
 
-            {/* 🚀 أزرار إضافة الأسئلة */}
+            
             <div className="flex flex-col sm:flex-row gap-3 mt-4">
               <button onClick={openNewQuestion} className="flex-1 border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
-                <Plus className="w-5 h-5" /> إضافة سؤال يدوياً
+                <Plus className="w-5 h-5"/> إضافة سؤال يدوياً
               </button>
               <button onClick={() => setIsImportModalOpen(true)} className="flex-1 border-2 border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 font-black py-4 rounded-[1.5rem] flex justify-center items-center gap-2 transition-colors">
-                <FileJson className="w-5 h-5" /> دمج أسئلة إضافية عبر كود (JSON)
+                <FileJson className="w-5 h-5"/> دمج أسئلة إضافية عبر كود (JSON)
               </button>
             </div>
 
@@ -1103,7 +1101,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* 🚀 Modal الاستيراد السريع (JSON) داخل وضع الإنشاء */}
+      
       <AnimatePresence>
         {isImportModalOpen && (
           <>
@@ -1124,7 +1122,7 @@ export default function AssignmentBuilderV2() {
               
               <div className="p-6 overflow-auto custom-scrollbar flex-1 space-y-4">
                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 shadow-inner">
-                    <Info className="w-5 h-5 shrink-0 text-amber-500" />
+                    <Info className="w-5 h-5 shrink-0 text-amber-500"/>
                     <p className="text-xs font-bold text-amber-800">
                       سيتم إضافة هذه الأسئلة إلى نهاية الدرس الحالي دون مسح الأسئلة الموجودة مسبقاً.
                     </p>
@@ -1141,7 +1139,7 @@ export default function AssignmentBuilderV2() {
               <div className="p-5 flex gap-3 border-t border-slate-100 shrink-0 bg-white">
                 <button onClick={() => setIsImportModalOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
                 <button onClick={processManualJson} className="flex-[2] py-3.5 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
-                  <ClipboardPaste className="w-5 h-5" /> دمج الأسئلة مع الدرس الحالي
+                  <ClipboardPaste className="w-5 h-5"/> دمج الأسئلة مع الدرس الحالي
                 </button>
               </div>
             </motion.div>
@@ -1149,7 +1147,7 @@ export default function AssignmentBuilderV2() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Modal محرر الأسئلة (Editor) */}
+      
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -1186,7 +1184,7 @@ export default function AssignmentBuilderV2() {
                     </div>
                  </div>
 
-                 {/* 🚀 إزالة/إضافة احتياج للصورة يدوياً من المحرر */}
+                 
                  <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
                     <div>
                       <label className="block text-sm font-black text-slate-700">هل يحتاج السؤال إلى صورة للحل؟</label>
@@ -1197,13 +1195,13 @@ export default function AssignmentBuilderV2() {
 
                  <div className="space-y-2">
                     <label className="block text-sm font-black text-slate-700 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-500"/> نص السؤال</label>
-                    <TiptapEditor content={currentQ.content_html} onChange={(html) => setCurrentQ({...currentQ, content_html: html})} placeholder="اكتب نص السؤال هنا... يمكن لصق صور للأسئلة." />
+                    <TiptapEditor content="{currentQ.content_html}" onChange="{(html)"> setCurrentQ({...currentQ, content_html: html})} placeholder="اكتب نص السؤال هنا... يمكن لصق صور للأسئلة." />
                  </div>
 
                  {currentQ.type !== 'section_header' && (
                     <div className="space-y-2">
                        <label className="block text-sm font-black text-emerald-700 flex items-center gap-2 mt-4"><Target className="w-4 h-4"/> الإجابة النموذجية (تظهر للطالب بعد الحل)</label>
-                       <TiptapEditor content={currentQ.model_answer_html || ''} onChange={(html) => setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
+                       <TiptapEditor content="{currentQ.model_answer_html" || ''} onChange="{(html)"> setCurrentQ({...currentQ, model_answer_html: html})} placeholder="اكتب الإجابة النموذجية أو خطوات الحل هنا..." />
                     </div>
                  )}
 
@@ -1246,15 +1244,15 @@ export default function AssignmentBuilderV2() {
               <div className="p-5 flex gap-3 border-t border-slate-200 shrink-0 bg-white">
                 <button onClick={() => setIsEditorOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 border border-slate-200 font-black rounded-xl hover:bg-slate-200 transition-colors active:scale-95 text-sm shadow-sm">إلغاء</button>
                 <button onClick={saveQuestion} className="flex-[2] py-3.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
-                  <Save className="w-5 h-5" /> {editingIndex !== null ? 'تحديث وحفظ' : 'إضافة للدرس'}
+                  <Save className="w-5 h-5"/> {editingIndex !== null ? 'تحديث وحفظ' : 'إضافة للدرس'}
                 </button>
               </div>
             </motion.div>
           </>
         )}
-      </AnimatePresence>
+      </TiptapEditor></TiptapEditor></AnimatePresence>
 
-      {/* 🚀 Modal المعاينة (Preview) */}
+      
       <AnimatePresence>
         {isPreviewOpen && previewQ && (
           <>
