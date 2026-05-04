@@ -177,7 +177,6 @@ export default function AssignmentBuilderV2() {
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   
-  // 🚀 حالات الرادار والتصفية الجديدة
   const [filterNeedsImage, setFilterNeedsImage] = useState<boolean>(false);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
 
@@ -200,7 +199,251 @@ export default function AssignmentBuilderV2() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- محرك الاستيراد الذكي ---
+  useEffect(() => {
+    const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1); tmrw.setHours(23, 59, 0, 0);
+    setDueDate(tmrw.toISOString().slice(0, 16));
+  }, []);
+
+  useEffect(() => {
+    if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
+    const fetchTeachers = async () => {
+      const { data } = await supabase.from('teachers').select(`id, users ( full_name )`);
+      const formattedTeachers = (data || []).map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'بدون اسم' }));
+      formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
+      setTeachers(formattedTeachers);
+    };
+    fetchTeachers();
+  }, [currentRole]);
+
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      if (selectedTeacher) {
+        const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
+        const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
+        setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      } else if (currentRole === 'admin' || currentRole === 'management') {
+        const { data } = await supabase.from('subjects').select('id, name').order('name');
+        setSubjects(data || []);
+      }
+    };
+    fetchSubjects();
+  }, [selectedTeacher, currentRole]);
+
+  useEffect(() => {
+    const fetchSections = async () => {
+      if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
+      if (selectedTeacher) {
+        const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
+        const extracted = (data || []).map((item: any) => {
+          if (!item.sections) return null;
+          const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
+          return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
+        }).filter(Boolean);
+        setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      } else if (currentRole === 'admin' || currentRole === 'management') {
+        const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
+        setSections((data || []).map(sec => ({ id: sec.id, name: `${sec.classes?.name || ''} - ${sec.name}` })));
+      }
+    };
+    fetchSections();
+  }, [selectedTeacher, selectedSubject, currentRole]);
+
+  // 🚀 جلب السجلات القديمة المحصن (Bulletproof Fetch)
+  useEffect(() => {
+    if (activeTab === 'manage') fetchManageList();
+  }, [activeTab]);
+
+  const fetchManageList = async () => {
+    setIsManageLoading(true);
+    try {
+      let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false }).limit(1000);
+      
+      if (currentRole === 'teacher') {
+        const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
+        else query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
+      }
+      
+      const { data: assignments, error: assignErr } = await query;
+      if (assignErr) throw assignErr;
+
+      if (!assignments || assignments.length === 0) {
+        setManageAssignments([]); setTeacherStats([]); setIsManageLoading(false); return;
+      }
+
+      // جلب البيانات المرتبطة بطلبات منفصلة لتجنب أي انهيار في العلاقات
+      const assignmentIds = assignments.map(a => a.id);
+      
+      const [subjectsRes, teachersRes, questionsRes] = await Promise.all([
+        supabase.from('subjects').select('id, name'),
+        supabase.from('teachers').select('id, users(full_name)'),
+        supabase.from('assignment_questions_v2').select('assignment_id').in('assignment_id', assignmentIds)
+      ]);
+
+      const subjectsList = subjectsRes.data || [];
+      const teachersList = teachersRes.data || [];
+      const questionsList = questionsRes.data || [];
+
+      const mergedData = assignments.map(assign => {
+        const sub = subjectsList.find(s => String(s.id) === String(assign.subject_id));
+        const teacher = teachersList.find(t => String(t.id) === String(assign.teacher_id));
+        const qCount = questionsList.filter(q => String(q.assignment_id) === String(assign.id)).length;
+        
+        let tName = 'توزيع ذكي (متعدد)';
+        if (teacher?.users?.full_name) tName = teacher.users.full_name;
+        else if (Array.isArray(teacher?.users) && teacher.users.length > 0) tName = teacher.users[0].full_name;
+
+        return {
+          ...assign,
+          subjects: { name: sub?.name || 'مادة غير محددة' },
+          teachers: { users: { full_name: tName } },
+          question_count: qCount 
+        };
+      });
+
+      if (currentRole === 'admin' || currentRole === 'management') {
+        const statsMap = new Map();
+        mergedData.forEach(assign => {
+          const tName = assign.teachers?.users?.full_name || 'توزيع ذكي (متعدد)';
+          statsMap.set(tName, (statsMap.get(tName) || 0) + 1);
+        });
+        const statsArr = Array.from(statsMap, ([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count);
+        setTeacherStats(statsArr);
+      }
+
+      setManageAssignments(mergedData);
+    } catch (err: any) { 
+      console.error(err); 
+      alert("حدث خطأ أثناء جلب السجلات. الرجاء المحاولة مرة أخرى.");
+    } finally { 
+      setIsManageLoading(false); 
+    }
+  };
+
+  const handleEditAssignment = async (assign: any) => {
+    try {
+      const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', assign.id).order('order_index', { ascending: true });
+      const { data: sData } = await supabase.from('assignment_sections_v2').select('*').eq('assignment_id', assign.id);
+      
+      setAssignmentTitle(assign.title);
+      setSelectedSubject(assign.subject_id);
+      setAssignmentStatus(assign.status);
+      setIsPracticeMode(assign.is_practice_mode);
+      setSelectedSections((sData || []).map((s:any) => s.section_id));
+      
+      if (assign.due_date) {
+        const d = new Date(assign.due_date);
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        setDueDate(d.toISOString().slice(0, 16));
+      }
+      try {
+         if (assign.description && assign.description.startsWith('{')) {
+            const parsedDesc = JSON.parse(assign.description);
+            setTimeLimit(parsedDesc.timeLimit || 0);
+            setLatePolicy(parsedDesc.latePolicy || 'allow');
+            setMaxScore(parsedDesc.maxScore || 100);
+         }
+      } catch(e) {}
+      
+      const formattedQs = (qData || []).map((q:any) => ({
+        id: crypto.randomUUID(),
+        type: q.question_type,
+        content_html: q.content_html,
+        model_answer_html: q.model_answer_html || '',
+        points: q.points,
+        needs_image: false, 
+        options: (q.options || []).map((o: any) => ({ ...o, is_correct: o.is_correct === true || o.is_correct === 'true' }))
+      }));
+      
+      setQuestions(formattedQs);
+      setEditingAssignmentId(assign.id); 
+      setActiveTab('builder');
+    } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
+  };
+
+  const handleDeleteAssignment = async (id: string) => {
+    if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟')) return;
+    setIsManageLoading(true);
+    try {
+      await supabase.from('assignment_questions_v2').delete().eq('assignment_id', id);
+      await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
+      await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
+      await supabase.from('assignments_v2').delete().eq('id', id);
+      fetchManageList();
+      setGlobalMessage({ text: 'تم الحذف بنجاح!', type: 'success' });
+      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 4000);
+    } catch (err) { alert('حدث خطأ أثناء الحذف.'); setIsManageLoading(false); }
+  };
+
+  const toggleSection = (id: string) => setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const handleResetBuilder = (force = false) => {
+    if (!force && (questions.length > 0 || assignmentTitle !== 'واجب جديد')) {
+      if (!confirm('هل أنت متأكد من مسح جميع الأسئلة والبيانات للبدء بدرس جديد؟')) return;
+    }
+    setEditingAssignmentId(null);
+    setQuestions([]);
+    setSkippedLog([]);
+    setAssignmentTitle('واجب جديد');
+    setSelectedTeacher('');
+    setSelectedSubject('');
+    setSelectedSections([]);
+    setIsPracticeMode(false); 
+    setAssignmentStatus('draft');
+    
+    const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1); tmrw.setHours(23, 59, 0, 0);
+    setDueDate(tmrw.toISOString().slice(0, 16));
+    setTimeLimit(0);
+    setLatePolicy('allow');
+    setMaxScore(100);
+  };
+
+  const copyPrompt = () => { 
+    const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم جداً. سأعطيك نصاً مقتطعاً من بنك أسئلة أو اختبار.
+المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي. 🚨 إياك أن تتخيل أسئلة أو صور غير موجودة.
+
+قوانين التصنيف "type":
+- "multiple_choice": أسئلة الاختيار من متعدد (ضع الخيارات في مصفوفة "options").
+- "true_false": الصح والخطأ (قم بتوليد خياري "صح" و "خطأ" وحدد الصحيح).
+- "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، أذكر السبب، الأسئلة المقالية المطولة، والمسائل الرياضية المباشرة.
+- "section_header": العناوين الرئيسية والفرعية التي تسبق الأسئلة (مثل: السؤال الأول، أو: اقرأ النص التالي ثم أجب).
+
+🎨 التعامل مع الجداول والمقارنات ("type": "essay"):
+- إذا وجدت جدولاً أو سؤال مقارنة، حوله إلى نص منظم باستخدام الـ HTML (مثل <table> أو <b>) داخل "content" و "model_answer_html". لا تستخدم نصوصاً مسطحة.
+
+🎨 قوانين أسئلة "الرسم" ("type": "essay"):
+- إذا كان السؤال يطلب من الطالب صراحة "الرسم" (مثل: ارسم المنحنيات البيانية، أكمل مسار الشعاع، ارسم الدائرة)، اجعل نوعه "essay"، وأضف جملة واضحة في نهايته: "(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)".
+
+📸 رادار الصور ("needs_image"): 
+- اجعله true **فقط وحصراً** إذا كان نص السؤال يشير لصورة يجب أن يراها الطالب ليحل (مثل: من الشكل المجاور، في الرسم البياني الموضح أدناه). لا تضعه true لأسئلة الرسم العادية التي يبدأ الطالب برسمها من ورقة بيضاء.
+
+🛑 الإبلاغ عن الأسئلة المتخطاة (إجباري):
+إذا واجهت سؤالاً معقداً لم تتمكن من تحويله (بسبب رسومات لا يمكن فهمها من النص)، لا تتجاهله بصمت. بل أضف لمحة عنه في مصفوفة "skipped_questions" واذكر السبب بوضوح ليعلم المعلم.
+
+هيكل JSON المطلوب:
+{
+  "title": "عنوان الدرس",
+  "total_extracted_questions": 0,
+  "skipped_questions": [
+    { "question_hint": "السؤال الرابع فقرة ب", "reason": "السؤال عبارة عن خريطة مفاهيمية معقدة تحتاج لبرمجة خاصة." }
+  ],
+  "questions": [
+    {
+      "type": "essay", 
+      "content": "قارن بين كذا وكذا. <br> <b>أو:</b> ارسم العلاقة البيانية... <br><br> <i>(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)</i>",
+      "needs_image": false, 
+      "model_answer_html": "<b>خطوات الحل:</b> <br> كذا وكذا.",
+      "points": 1,
+      "options": []
+    }
+  ]
+}
+
+إليك النص (استخرج جميع الأسئلة كاملة بدقة متناهية ولا تختصر شيئاً):`;
+    navigator.clipboard.writeText(basePromptText); 
+    alert('تم نسخ البرومبت الصارم المطور! 🚨\nيشمل الآن دعماً للمقارنات والمقالي المطول وجداول المقارنة.'); 
+  };
+
   const processManualJson = () => {
     if (!manualJson.trim()) { alert('يرجى لصق الكود أولاً.'); return; }
     
@@ -257,7 +500,6 @@ export default function AssignmentBuilderV2() {
     }
   };
 
-  // 🚀 وظيفة الرفع السريع للصور المفقودة (The Missing Image Fixer)
   const handleQuickImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, questionId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -268,7 +510,6 @@ export default function AssignmentBuilderV2() {
       if (data.secure_url) {
         setQuestions(prev => prev.map(q => {
           if (q.id === questionId) {
-            // إضافة الصورة لنص السؤال وتغيير حالته
             return {
               ...q,
               content_html: q.content_html + `<br><img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; border-radius: 12px; margin-top: 10px; display: block;" />`,
@@ -284,105 +525,8 @@ export default function AssignmentBuilderV2() {
       alert('فشل رفع الصورة: ' + err.message);
     } finally {
       setUploadingImageId(null);
-      // إعادة تعيين الـ input ليسمح برفع نفس الصورة مجدداً إن لزم
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  };
-
-  // --- باقي الدوال ---
-  useEffect(() => {
-    if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
-    const fetchTeachers = async () => {
-      const { data } = await supabase.from('teachers').select(`id, users ( full_name )`);
-      const formattedTeachers = (data || []).map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'بدون اسم' }));
-      formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
-      setTeachers(formattedTeachers);
-    };
-    fetchTeachers();
-  }, [currentRole]);
-
-  useEffect(() => {
-    const fetchSubjects = async () => {
-      if (selectedTeacher) {
-        const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
-        const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
-        setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-      } else if (currentRole === 'admin' || currentRole === 'management') {
-        const { data } = await supabase.from('subjects').select('id, name').order('name');
-        setSubjects(data || []);
-      }
-    };
-    fetchSubjects();
-  }, [selectedTeacher, currentRole]);
-
-  useEffect(() => {
-    const fetchSections = async () => {
-      if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
-      if (selectedTeacher) {
-        const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
-        const extracted = (data || []).map((item: any) => {
-          if (!item.sections) return null;
-          const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
-          return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
-        }).filter(Boolean);
-        setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-      } else if (currentRole === 'admin' || currentRole === 'management') {
-        const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
-        setSections((data || []).map(sec => ({ id: sec.id, name: `${sec.classes?.name || ''} - ${sec.name}` })));
-      }
-    };
-    fetchSections();
-  }, [selectedTeacher, selectedSubject, currentRole]);
-
-  const handleResetBuilder = (force = false) => {
-    if (!force && questions.length > 0) if (!confirm('مسح الدرس الحالي والبدء من جديد؟')) return;
-    setQuestions([]); setSkippedLog([]); setAssignmentTitle('واجب جديد'); setEditingAssignmentId(null);
-  };
-
-  const copyPrompt = () => { 
-    const basePromptText = `أنت خبير تعليمي متمرس ومبرمج JSON صارم جداً. سأعطيك نصاً مقتطعاً من بنك أسئلة أو اختبار.
-المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي. 🚨 إياك أن تتخيل أسئلة أو صور غير موجودة.
-
-قوانين التصنيف "type":
-- "multiple_choice": أسئلة الاختيار من متعدد (ضع الخيارات في مصفوفة "options").
-- "true_false": الصح والخطأ (قم بتوليد خياري "صح" و "خطأ" وحدد الصحيح).
-- "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، أذكر السبب، الأسئلة المقالية المطولة، والمسائل الرياضية المباشرة.
-- "section_header": العناوين الرئيسية والفرعية التي تسبق الأسئلة (مثل: السؤال الأول، أو: اقرأ النص التالي ثم أجب).
-
-🎨 التعامل مع الجداول والمقارنات ("type": "essay"):
-- إذا وجدت جدولاً أو سؤال مقارنة، حوله إلى نص منظم باستخدام الـ HTML (مثل <table> أو <b>) داخل "content" و "model_answer_html". لا تستخدم نصوصاً مسطحة.
-
-🎨 قوانين أسئلة "الرسم" ("type": "essay"):
-- إذا كان السؤال يطلب من الطالب صراحة "الرسم" (مثل: ارسم المنحنيات البيانية، أكمل مسار الشعاع، ارسم الدائرة)، اجعل نوعه "essay"، وأضف جملة واضحة في نهايته: "(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)".
-
-📸 رادار الصور ("needs_image"): 
-- اجعله true **فقط وحصراً** إذا كان نص السؤال يشير لصورة يجب أن يراها الطالب ليحل (مثل: من الشكل المجاور، في الرسم البياني الموضح أدناه). لا تضعه true لأسئلة الرسم العادية التي يبدأ الطالب برسمها من ورقة بيضاء.
-
-🛑 الإبلاغ عن الأسئلة المتخطاة (إجباري):
-إذا واجهت سؤالاً معقداً لم تتمكن من تحويله (بسبب رسومات لا يمكن فهمها من النص)، لا تتجاهله بصمت. بل أضف لمحة عنه في مصفوفة "skipped_questions" واذكر السبب بوضوح ليعلم المعلم.
-
-هيكل JSON المطلوب:
-{
-  "title": "عنوان الدرس",
-  "total_extracted_questions": 0,
-  "skipped_questions": [
-    { "question_hint": "السؤال الرابع فقرة ب", "reason": "السؤال عبارة عن خريطة مفاهيمية معقدة تحتاج لبرمجة خاصة." }
-  ],
-  "questions": [
-    {
-      "type": "essay", 
-      "content": "قارن بين كذا وكذا. <br> <b>أو:</b> ارسم العلاقة البيانية... <br><br> <i>(يمكنك استخدام السبورة الذكية لرسم الإجابة وإرفاقها)</i>",
-      "needs_image": false, 
-      "model_answer_html": "<b>خطوات الحل:</b> <br> كذا وكذا.",
-      "points": 1,
-      "options": []
-    }
-  ]
-}
-
-إليك النص (استخرج جميع الأسئلة كاملة بدقة متناهية ولا تختصر شيئاً):`;
-    navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الصارم المطور! 🚨');
   };
 
   const openNewQuestion = () => {
@@ -441,7 +585,7 @@ export default function AssignmentBuilderV2() {
 
   const saveAssignmentToDB = async () => {
     if (!assignmentTitle || questions.length === 0 || !selectedSubject || selectedSections.length === 0) {
-      alert('يرجى اختيار المادة والصفوف وإضافة أسئلة أولاً.'); return;
+      alert('يرجى إكمال بيانات الواجب واختيار المادة والصفوف أولاً.'); return;
     }
     setIsSavingDB(true);
     try {
@@ -474,21 +618,21 @@ export default function AssignmentBuilderV2() {
 
       setGlobalMessage({ text: 'تم الحفظ والتوزيع بنجاح!', type: 'success' });
       setTimeout(() => { setGlobalMessage({text:'', type:''}); setActiveTab('manage'); handleResetBuilder(true); }, 2000);
-    } catch (err) { alert('خطأ في الحفظ: ' + err.message); } finally { setIsSavingDB(false); }
+    } catch (err: any) { alert('حدث خطأ أثناء الحفظ. تأكد من اكتمال البيانات.'); } finally { setIsSavingDB(false); }
   };
 
   const translateType = (t: string) => {
-    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي/رسم', 'section_header': 'عنوان' };
+    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / رسم / تفاعلي', 'section_header': 'ترويسة/نص عام' };
     return types[t] || t;
   };
 
-  // 🚀 الحسابات المعروضة في ਰادار الصور
   const questionsNeedingImages = questions.filter(q => q.needs_image);
   const displayedQuestions = filterNeedsImage ? questionsNeedingImages : questions;
 
+  if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center">غير مصرح لك.</div>;
+
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-4 font-cairo text-slate-800 pb-32" dir="rtl">
-      {/* ستايل المكونات */}
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
         .katex { direction: ltr !important; text-align: left !important; }
@@ -515,12 +659,11 @@ export default function AssignmentBuilderV2() {
       <div className="max-w-4xl mx-auto space-y-6">
         
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
-          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Sparkles className="w-8 h-8" /></div>
-          <h1 className="text-2xl font-black text-slate-900">غرفة استيراد الأسئلة الذكية</h1>
-          <p className="text-sm text-slate-500 font-bold mt-2">قم بتحويل ملفات الـ PDF إلى بنوك أسئلة تفاعلية في ثوانٍ.</p>
+          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
+          <h1 className="text-2xl font-black text-slate-900">غرفة التحكم والإنشاء (V2)</h1>
+          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والواجبات الرسمية.</p>
         </div>
 
-        {/* التبويبات */}
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <ListOrdered className="w-4 h-4" /> المنشئ ({questions.length})
@@ -533,173 +676,313 @@ export default function AssignmentBuilderV2() {
           </button>
         </div>
 
-        <AnimatePresence mode="wait">
-          {activeTab === 'import' && (
-            <motion.div key="import" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
-              <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 shadow-inner">
-                <Info className="w-5 h-5 text-amber-500 shrink-0" />
-                <p className="text-xs font-bold text-amber-800">
-                  انسخ النص من ملف الـ PDF واطلبه من ChatGPT باستخدام البرومبت أدناه، ثم الصق كود الـ JSON الناتج هنا واضغط "استيراد".
-                </p>
-              </div>
-              <div className="flex justify-between items-center">
-                <h2 className="font-black text-lg text-emerald-800">لصق كود JSON المستخرج</h2>
-                <button onClick={copyPrompt} className="text-xs bg-emerald-50 text-emerald-700 font-black py-2 px-4 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors">نسخ البرومبت</button>
-              </div>
-              <textarea 
-                value={manualJson} 
-                onChange={(e) => setManualJson(e.target.value)} 
-                placeholder="الصق الكود هنا... تبدأ بـ { وتنتهي بـ }" 
-                className="w-full h-64 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-mono text-sm outline-none focus:border-emerald-500 transition-colors"
-                dir="ltr"
-              />
-              <button onClick={processManualJson} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl hover:bg-emerald-700 shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-                <ClipboardPaste className="w-6 h-6" /> استيراد الأسئلة الآن
+        {activeTab === 'manage' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h2 className="font-black text-xl text-slate-800 flex items-center gap-2">
+                <Database className="w-6 h-6 text-rose-500" /> إدارة الدروس والبنوك المكتملة
+              </h2>
+              <button onClick={fetchManageList} className="p-2 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100 transition-colors">
+                <RefreshCcw className={`w-5 h-5 ${isManageLoading ? 'animate-spin' : ''}`} />
               </button>
-            </motion.div>
-          )}
+            </div>
 
-          {activeTab === 'builder' && (
-            <motion.div key="builder" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 space-y-4">
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex-1 min-w-[200px]">
-                    <label className="block text-xs font-bold text-slate-400 mb-1">اسم الواجب / الدرس</label>
-                    <input value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
-                  </div>
-                  <div className="w-full md:w-auto flex items-end gap-2">
-                     <button onClick={() => setIsPracticeMode(!isPracticeMode)} className={`px-4 py-3 rounded-xl font-black text-xs transition-all border ${isPracticeMode ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                        {isPracticeMode ? 'وضع التدريب (بطل)' : 'واجب رسمي (درجات)'}
-                     </button>
-                     <button onClick={() => handleResetBuilder()} className="p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100"><RefreshCcw className="w-5 h-5"/></button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
-                      <option value="">اختر المادة...</option>
-                      {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                   </select>
-                   {!isPracticeMode && (
-                      <input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
-                   )}
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                   <p className="text-xs font-bold text-slate-400 mb-2">الفصول المستهدفة:</p>
-                   <div className="flex flex-wrap gap-2">
-                      {sections.map(s => (
-                        <button key={s.id} onClick={() => toggleSection(s.id)} className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border ${selectedSections.includes(s.id) ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'}`}>
-                           {s.name}
-                        </button>
-                      ))}
-                   </div>
+            {(currentRole === 'admin' || currentRole === 'management') && teacherStats.length > 0 && (
+              <div className="mb-6 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-inner">
+                <h3 className="text-sm font-black text-indigo-800 mb-3 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4"/> إحصائيات رفع الواجبات والدروس
+                </h3>
+                <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
+                  {teacherStats.map((stat, i) => (
+                    <div key={i} className="flex items-center justify-between gap-4 bg-white p-3 rounded-xl shadow-sm border border-indigo-50 min-w-[200px] shrink-0">
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="w-4 h-4 text-indigo-400" />
+                        <span className="font-bold text-slate-700 text-sm">{stat.name}</span>
+                      </div>
+                      <span className="bg-indigo-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-sm">{stat.count} ملف</span>
+                    </div>
+                  ))}
                 </div>
               </div>
+            )}
 
-              {/* 🚀 رادار الصور (The Missing Image Radar) */}
-              {questionsNeedingImages.length > 0 && (
-                <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl shadow-inner flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 text-amber-800">
-                    <div className="bg-amber-100 p-2 rounded-xl"><ImageIcon className="w-6 h-6 text-amber-600" /></div>
+            {isManageLoading ? (
+              <div className="text-center p-10 text-slate-400 font-bold animate-pulse">جاري جلب السجلات...</div>
+            ) : manageAssignments.length === 0 ? (
+              <div className="text-center p-10 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-slate-500">لا توجد واجبات أو دروس محفوظة في النظام حتى الآن.</div>
+            ) : (
+              <div className="space-y-4">
+                {manageAssignments.map((assign) => (
+                  <div key={assign.id} className="border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow bg-slate-50/50 flex flex-col md:flex-row justify-between gap-4">
                     <div>
-                      <h4 className="font-black text-sm">رادار الصور النشط</h4>
-                      <p className="text-xs font-bold mt-0.5">اكتشف الذكاء الاصطناعي <span className="bg-amber-200 px-1.5 rounded text-amber-900">{questionsNeedingImages.length}</span> سؤال تعتمد على صور المنهج لكي تُحل.</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${assign.is_practice_mode ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {assign.is_practice_mode ? 'بنك تدريب' : 'واجب رسمي'}
+                        </span>
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${assign.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                          {assign.status === 'published' ? 'منشور' : 'مسودة'}
+                        </span>
+                        {assign.subjects?.name && <span className="text-[10px] font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded-lg">{assign.subjects.name}</span>}
+                      </div>
+                      <h3 className="font-black text-lg text-slate-800 mb-1">{assign.title}</h3>
+                      <div className="text-xs font-bold text-slate-500 flex items-center gap-4">
+                        <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> المعلم: {assign.teachers?.users?.full_name || 'غير محدد'}</span>
+                        <span className="flex items-center gap-1"><ListOrdered className="w-3 h-3"/> {assign.question_count || 0} أسئلة</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 border-t md:border-t-0 md:border-r border-slate-200 pt-4 md:pt-0 md:pr-4 shrink-0">
+                      <button onClick={() => handleEditAssignment(assign)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-xs hover:bg-indigo-100 transition-colors">
+                        <Edit3 className="w-4 h-4" /> تعديل
+                      </button>
+                      <button onClick={() => handleDeleteAssignment(assign.id)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-xs hover:bg-rose-100 transition-colors">
+                        <Trash2 className="w-4 h-4" /> حذف جذري
+                      </button>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => setFilterNeedsImage(!filterNeedsImage)} 
-                    className={`px-4 py-2 rounded-xl font-black text-xs transition-colors flex items-center gap-2 border ${filterNeedsImage ? 'bg-amber-500 text-white border-amber-600 shadow-md' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-100'}`}
-                  >
-                    <Filter className="w-4 h-4" /> {filterNeedsImage ? 'عرض كل الأسئلة' : 'تصفية: المفقود فقط'}
-                  </button>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === 'import' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
+            
+            {skippedLog.length > 0 && (
+               <div className="bg-rose-50 border-2 border-rose-200 p-4 rounded-xl shadow-inner mb-4">
+                  <h3 className="text-rose-800 font-black flex items-center gap-2 mb-2"><AlertCircle className="w-5 h-5"/> تقرير الذكاء الاصطناعي: أسئلة لم يتم استخراجها</h3>
+                  <p className="text-xs font-bold text-rose-600 mb-3">هناك أسئلة في الملف المرفق عجز الذكاء الاصطناعي عن تحويلها بسبب التعقيد البصري. يرجى إضافتها يدوياً إذا رغبت:</p>
+                  <ul className="space-y-2">
+                     {skippedLog.map((log, idx) => (
+                        <li key={idx} className="bg-white p-3 rounded-lg border border-rose-100 flex flex-col sm:flex-row gap-2 justify-between">
+                           <span className="font-black text-slate-800 text-sm">{log.question_hint}</span>
+                           <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{log.reason}</span>
+                        </li>
+                     ))}
+                  </ul>
+               </div>
+            )}
+
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex gap-3 shadow-inner">
+              <Info className="w-5 h-5 shrink-0 text-amber-500" />
+              <div className="text-sm font-bold">
+                <p className="font-black mb-1 text-amber-900">نصيحة ذهبية لضمان دقة 100% بدون تخطي:</p>
+                لا تنسخ أكثر من (صفحة إلى صفحتين) من ملف الـ PDF في كل مرة تطلب فيها من ChatGPT توليد الكود. إذا نسخت نصوصاً طويلة جداً، سيتخيل الذكاء الاصطناعي ويتجاهل بعض الجداول والأسئلة بسبب نفاد ذاكرته المؤقتة. النظام هنا سيقوم بدمج جميع الدفعات التي تستوردها داخل نفس الدرس!
+              </div>
+            </div>
+            <div className="flex items-center justify-between mb-4 mt-4">
+              <h2 className="font-black text-lg text-emerald-800">مطابقة الأسئلة والأجوبة بالـ AI</h2>
+              <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm active:scale-95">
+                <Copy className="w-4 h-4" /> انسخ البرومبت المطور (يشمل المقالي والرسم)
+              </button>
+            </div>
+            <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
+            <button onClick={processManualJson} className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl hover:bg-emerald-700 flex justify-center items-center gap-2 shadow-md transition-all active:scale-95">
+              <ClipboardPaste className="w-5 h-5" /> استيراد الكود وبناء البطاقات
+            </button>
+          </motion.div>
+        )}
+
+        {activeTab === 'builder' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+            <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
+              
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+                <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner w-full sm:w-auto flex-1 max-w-md">
+                  {currentRole === 'teacher' ? (
+                    <div className="flex-1 py-3 rounded-xl font-black text-sm bg-slate-800 text-white shadow-md flex justify-center items-center gap-2 cursor-default">
+                      <FileText className="w-4 h-4" /> وضع الواجب الرسمي (مفعل دائماً)
+                    </div>
+                  ) : (
+                    <>
+                      <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+                        <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
+                      </button>
+                      <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+                        <FileText className="w-4 h-4" /> واجب رسمي
+                      </button>
+                    </>
+                  )}
                 </div>
-              )}
-
-              {/* قائمة الأسئلة */}
-              <div className="space-y-4">
-                <AnimatePresence>
-                  {displayedQuestions.map((q, i) => (
-                    <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} key={q.id} className={`p-5 rounded-2xl shadow-sm border group relative transition-colors ${q.needs_image ? 'bg-amber-50/30 border-amber-300' : 'bg-white border-slate-200'}`}>
-                      <div className="flex justify-between items-center mb-3">
-                        <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-widest ${q.needs_image ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
-                          {i+1}. {translateType(q.type)}
-                        </span>
-                        <div className="flex gap-1 opacity-100 transition-opacity">
-                           <button onClick={() => openPreview(questions.indexOf(q))} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
-                             <Eye className="w-4 h-4" /> معاينة
-                           </button>
-                           <button onClick={() => openEditQuestion(questions.indexOf(q))} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
-                           <button onClick={() => deleteQuestion(questions.indexOf(q))} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      </div>
-
-                      {/* 🚀 أداة الرفع السريع للصورة المفقودة */}
-                      {q.needs_image && (
-                        <div className="mb-4 bg-orange-100/50 border border-orange-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-inner">
-                          <div className="flex items-center gap-3 text-orange-800">
-                            <AlertCircle className="w-5 h-5 text-orange-600 shrink-0" />
-                            <div className="text-xs font-bold">هذا السؤال يتطلب صورة مرافقة ليتمكن الطالب من الحل (مثال: من الشكل المجاور).</div>
-                          </div>
-                          
-                          <div className="relative shrink-0 w-full sm:w-auto">
-                            <input 
-                               type="file" 
-                               accept="image/*" 
-                               onChange={(e) => handleQuickImageUpload(e, q.id)}
-                               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                               disabled={uploadingImageId === q.id}
-                            />
-                            <button disabled={uploadingImageId === q.id} className="w-full sm:w-auto px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-lg shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
-                               {uploadingImageId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-                               {uploadingImageId === q.id ? 'جاري الرفع...' : 'رفع الصورة المفقودة'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="tiptap-content prose prose-sm max-w-none font-bold text-indigo-950 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }} />
-                      
-                      {q.model_answer_html && (
-                        <div className="mt-3 pt-3 border-t border-slate-100 flex items-start gap-2">
-                           <Target className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                           <div className="tiptap-content prose prose-sm max-w-none text-[10px] font-bold text-emerald-700" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html) }} />
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                
-                {displayedQuestions.length === 0 && filterNeedsImage && (
-                   <div className="text-center p-10 bg-emerald-50 border-2 border-dashed border-emerald-200 rounded-2xl text-emerald-600 font-black">
-                     <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                     رائع! لا يوجد أي أسئلة تحتاج إلى صور في هذا الدرس.
-                   </div>
-                )}
+                <button onClick={() => handleResetBuilder(false)} className="w-full sm:w-auto px-5 py-3 bg-rose-50 text-rose-600 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-rose-100 transition-colors border border-rose-200 shadow-sm shrink-0">
+                  <RefreshCcw className="w-4 h-4" /> إفراغ المحتوى
+                </button>
               </div>
 
-              <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
-                <Plus className="w-5 h-5" /> إضافة سؤال جديد يدوياً
-              </button>
-
-              {questions.length > 0 && (
-                <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl text-white space-y-4">
-                  <div className="flex items-center justify-between">
-                     <p className="font-black">جاهز للنشر؟ ({questions.length}) سؤال</p>
-                     <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value)} className="bg-slate-800 border border-slate-700 p-2 rounded-lg text-xs font-black outline-none">
-                        <option value="draft">حفظ كمسودة</option>
-                        <option value="published">نشر للطلاب فوراً</option>
-                     </select>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2">عنوان الواجب / الدرس</label>
+                <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(currentRole === 'admin' || currentRole === 'management') ? (
+                  <div className="w-full p-3.5 bg-indigo-50/80 text-indigo-700 border border-indigo-200 rounded-xl font-bold flex items-center gap-3 shadow-inner">
+                    <Network className="w-5 h-5 shrink-0"/> 
+                    <span className="text-xs leading-relaxed">
+                      <strong>نظام التوزيع الذكي:</strong> حدد المادة والصفوف، وسيقوم النظام أوتوماتيكياً بتقسيم الواجب وإرساله لحسابات معلمي هذه المادة.
+                    </span>
                   </div>
-                  <button onClick={saveAssignmentToDB} disabled={isSavingDB} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2">
-                    {isSavingDB ? <Loader2 className="animate-spin w-5 h-5"/> : <Save className="w-5 h-5"/>}
-                    {editingAssignmentId ? 'تحديث البيانات' : 'اعتماد وتوزيع الدرس'}
-                  </button>
+                ) : (
+                  <div className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-500 flex items-center gap-2">
+                    <UserCheck className="w-5 h-5" /> يتم الإسناد لحسابك تلقائياً
+                  </div>
+                )}
+                <select value={selectedSubject} onChange={e => { setSelectedSubject(e.target.value); setSelectedSections([]); }} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
+                  <option value="">اختر المادة لتظهر الصفوف المستهدفة...</option>
+                  {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                <label className="block text-xs font-bold text-slate-500 mb-3">اختر الصفوف المستهدفة:</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                  {!selectedSubject ? <span className="text-sm font-bold text-slate-400 col-span-full text-center py-4">يرجى اختيار المادة أولاً</span> : sections.map((sec:any) => (
+                    <label key={sec.id} className="flex items-center gap-3 cursor-pointer p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all shadow-sm">
+                      <input type="checkbox" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} className="accent-indigo-600 w-5 h-5 cursor-pointer rounded" />
+                      <span className="text-sm font-bold text-slate-700">{sec.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {!isPracticeMode && (
+                <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 shadow-inner space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Settings className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-black text-amber-800">إعدادات الواجب الرسمي المتقدمة</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-amber-700 mb-2">تاريخ ووقت إغلاق التسليم (الديدلاين)</label>
+                      <input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-3 bg-white border border-amber-200 rounded-xl font-bold text-slate-700 outline-none focus:border-amber-500" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-amber-700 mb-2">سياسة التأخير (بعد انقضاء الوقت)</label>
+                      <select value={latePolicy} onChange={e => setLatePolicy(e.target.value as any)} className="w-full p-3 bg-white border border-amber-200 rounded-xl font-bold text-slate-700 outline-none focus:border-amber-500">
+                        <option value="allow">السماح بالتسليم المتأخر (مع وضع علامة متأخر)</option>
+                        <option value="block">إغلاق الواجب تماماً وعدم السماح بالدخول</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-amber-700 mb-2">الدرجة العظمى في كشف الدرجات</label>
+                      <input type="number" min="1" value={maxScore} onChange={e => setMaxScore(Number(e.target.value))} className="w-full p-3 bg-white border border-amber-200 rounded-xl font-black text-center text-slate-700 outline-none focus:border-amber-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-amber-700 mb-2">الوقت المسموح بالدقائق (0 = مفتوح)</label>
+                      <input type="number" min="0" value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))} className="w-full p-3 bg-white border border-amber-200 rounded-xl font-black text-center text-slate-700 outline-none focus:border-amber-500" placeholder="مثال: 45 دقيقة" />
+                    </div>
+                  </div>
                 </div>
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+
+            {/* 🚀 رادار الصور (The Missing Image Radar) */}
+            {questionsNeedingImages.length > 0 && (
+              <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl shadow-inner flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3 text-amber-800">
+                  <div className="bg-amber-100 p-2 rounded-xl"><ImageIcon className="w-6 h-6 text-amber-600" /></div>
+                  <div>
+                    <h4 className="font-black text-sm">رادار الصور النشط</h4>
+                    <p className="text-xs font-bold mt-0.5">اكتشف الذكاء الاصطناعي <span className="bg-amber-200 px-1.5 rounded text-amber-900">{questionsNeedingImages.length}</span> سؤال تعتمد على صور المنهج لكي تُحل.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setFilterNeedsImage(!filterNeedsImage)} 
+                  className={`px-4 py-2 rounded-xl font-black text-xs transition-colors flex items-center gap-2 border ${filterNeedsImage ? 'bg-amber-500 text-white border-amber-600 shadow-md' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-100'}`}
+                >
+                  <Filter className="w-4 h-4" /> {filterNeedsImage ? 'عرض كل الأسئلة' : 'تصفية: المفقود فقط'}
+                </button>
+              </div>
+            )}
+
+            {/* قائمة الأسئلة */}
+            <div className="space-y-4">
+              <AnimatePresence>
+                {displayedQuestions.map((q, i) => (
+                  <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} key={q.id} className={`p-5 rounded-2xl shadow-sm border group relative transition-colors ${q.needs_image ? 'bg-amber-50/30 border-amber-300' : 'bg-white border-slate-200'}`}>
+                    <div className="flex justify-between items-center mb-3">
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-widest ${q.needs_image ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
+                        {i+1}. {translateType(q.type)}
+                      </span>
+                      <div className="flex gap-1 opacity-100 transition-opacity">
+                         <button onClick={() => openPreview(questions.indexOf(q))} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
+                           <Eye className="w-4 h-4" /> معاينة
+                         </button>
+                         <button onClick={() => openEditQuestion(questions.indexOf(q))} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
+                         <button onClick={() => deleteQuestion(questions.indexOf(q))} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+
+                    {/* 🚀 أداة الرفع السريع للصورة المفقودة */}
+                    {q.needs_image && (
+                      <div className="mb-4 bg-orange-100/50 border border-orange-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-inner">
+                        <div className="flex items-center gap-3 text-orange-800">
+                          <AlertCircle className="w-5 h-5 text-orange-600 shrink-0" />
+                          <div className="text-xs font-bold">هذا السؤال يتطلب صورة مرافقة ليتمكن الطالب من الحل (مثال: من الشكل المجاور).</div>
+                        </div>
+                        
+                        <div className="relative shrink-0 w-full sm:w-auto">
+                          <input 
+                             type="file" 
+                             accept="image/*" 
+                             onChange={(e) => handleQuickImageUpload(e, q.id)}
+                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                             disabled={uploadingImageId === q.id}
+                          />
+                          <button disabled={uploadingImageId === q.id} className="w-full sm:w-auto px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-lg shadow-md flex items-center justify-center gap-2 disabled:opacity-50">
+                             {uploadingImageId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                             {uploadingImageId === q.id ? 'جاري الرفع...' : 'رفع الصورة المفقودة'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="tiptap-content prose prose-sm max-w-none font-bold text-indigo-950 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }} />
+                    
+                    {q.model_answer_html && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex items-start gap-2">
+                         <Target className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                         <div className="tiptap-content prose prose-sm max-w-none text-[10px] font-bold text-emerald-700" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html) }} />
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              
+              {displayedQuestions.length === 0 && filterNeedsImage && (
+                 <div className="text-center p-10 bg-emerald-50 border-2 border-dashed border-emerald-200 rounded-2xl text-emerald-600 font-black">
+                   <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                   رائع! لا يوجد أي أسئلة تحتاج إلى صور في هذا الدرس.
+                 </div>
+              )}
+            </div>
+
+            <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
+              <Plus className="w-5 h-5" /> إضافة سؤال جديد يدوياً
+            </button>
+
+            {questions.length > 0 && (
+              <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl text-white space-y-4 mt-8">
+                <div className="flex items-center justify-between">
+                   <p className="font-black">جاهز للنشر؟ ({questions.length}) سؤال</p>
+                   <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="bg-slate-800 border border-slate-700 p-2 rounded-lg text-xs font-black outline-none">
+                      <option value="draft">حفظ كمسودة (مخفي)</option>
+                      <option value="published">نشر للطلاب فوراً</option>
+                   </select>
+                </div>
+                <button onClick={saveAssignmentToDB} disabled={isSavingDB} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                  {isSavingDB ? <Loader2 className="animate-spin w-5 h-5"/> : <Save className="w-5 h-5"/>}
+                  {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'اعتماد وتوزيع الدرس'}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        )}
       </div>
 
       {/* 🚀 Modal محرر الأسئلة (Editor) */}
