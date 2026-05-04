@@ -66,12 +66,11 @@ export default function StudentDashboard() {
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
   
-  // 🚀 حارس لمنع تكرار الطلبات واستنزاف قاعدة البيانات (In-flight guard)
   const isFetchingRef = useRef(false);
 
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [excuseForm, setExcuseForm] = useState({
-    absent_dates: [format(new Date(), 'yyyy-MM-dd')], // مصفوفة التواريخ
+    absent_dates: [format(new Date(), 'yyyy-MM-dd')],
     duration_type: 'full_day',
     target_periods: [] as number[],
     reason: '',
@@ -89,80 +88,82 @@ export default function StudentDashboard() {
   const { fetchStudentDashboardData, updateStudentTrack } = useDashboardSystem();
 
   const fetchData = useCallback(async () => {
-    // 🚀 الإغلاق المُحكم لمنع الطلبات المزدوجة
     if (!user?.id || authRole !== 'student' || isFetchingRef.current) return;
     
     isFetchingRef.current = true;
     try {
       setLoading(true);
-      const data = await fetchStudentDashboardData();
+      
+      // 1. جلب البيانات الأساسية من الهوك
+      const data = await fetchStudentDashboardData(true); // نمرر true لتحديث الكاش
       
       if (data) {
         setStudentData(data.student);
-        setUpcomingExams(data.exams);
-        setUpcomingAssignments(data.assignments);
-        setTodaysSchedule(data.todaysSchedule);
-        setPeriods(data.periods);
+        setUpcomingExams(data.exams || []);
+        setUpcomingAssignments(data.assignments || []);
+        setTodaysSchedule(data.todaysSchedule || []);
+        setPeriods(data.periods || []);
 
-        try {
-            const studentId = data.student?.id;
-            if (studentId) {
-                const [
-                  { data: badgesData },
-                  { data: dbGrades },
-                  { count: absentCount, error: absErr },
-                  { count: totalCount },
-                  { data: excusesData }
-                ] = await Promise.all([
-                  supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
-                  supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
-                  supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
-                  supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
-                  supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false })
-                ]);
-                
-                if (badgesData) setMyBadges(badgesData);
-                if (excusesData) setExcuses(excusesData);
+        const studentId = data.student?.id;
+        
+        if (studentId) {
+            // 2. جلب بيانات الطالب المعمقة بشكل مباشر وقوي
+            const [
+              badgesRes,
+              gradesRes,
+              absentCountRes,
+              totalCountRes,
+              excusesRes,
+              trackRes
+            ] = await Promise.all([
+              supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
+              supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
+              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
+              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
+              supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
+              supabase.from('students').select('next_year_track, track_selection_date, sections(name, classes(name))').eq('id', studentId).maybeSingle()
+            ]);
+            
+            if (badgesRes.data) setMyBadges(badgesRes.data);
+            if (excusesRes.data) setExcuses(excusesRes.data);
 
-                if (dbGrades && dbGrades.length > 0) {
-                    const formattedGrades = dbGrades.map((g: any) => ({
-                        ...g,
-                        exam: { ...g.exams, subject: g.exams?.subjects }
-                    }));
-                    setRecentGrades(formattedGrades);
-                } else {
-                    setRecentGrades(data.grades || []);
-                }
+            if (trackRes.data) {
+                setStudentData((prev: any) => ({ ...prev, ...trackRes.data }));
+            }
 
-                if (!absErr && absentCount !== null) {
-                  setAbsentPeriods(absentCount);
-                  setFullDaysAbsent(Math.floor(absentCount / 5)); 
-                  
-                  if (totalCount && totalCount > 0) {
-                    const calculatedRate = Math.round(((totalCount - absentCount) / totalCount) * 100);
-                    setAttendanceStats({ rate: calculatedRate });
-                  } else {
-                    setAttendanceStats({ rate: 100 });
-                  }
-                }
+            if (gradesRes.data && gradesRes.data.length > 0) {
+                const formattedGrades = gradesRes.data.map((g: any) => ({
+                    ...g,
+                    exam: { ...g.exams, subject: g.exams?.subjects }
+                }));
+                setRecentGrades(formattedGrades);
             } else {
                 setRecentGrades(data.grades || []);
             }
-        } catch (e) {
-            console.error("Direct fetch failed", e);
-            setRecentGrades(data.grades || []);
+
+            if (!absentCountRes.error && absentCountRes.count !== null) {
+              setAbsentPeriods(absentCountRes.count);
+              setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
+              
+              if (totalCountRes.count && totalCountRes.count > 0) {
+                const calculatedRate = Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100);
+                setAttendanceStats({ rate: calculatedRate });
+              } else {
+                setAttendanceStats({ rate: 100 });
+              }
+            }
         }
       }
     } catch (error) {
       console.error('Error fetching student dashboard data:', error);
     } finally {
       setLoading(false);
-      isFetchingRef.current = false; // 🚀 فتح الباب مجدداً بعد انتهاء الطلب
+      isFetchingRef.current = false;
     }
   }, [fetchStudentDashboardData, user?.id, authRole]);
 
   // ==========================================
-  // 🚀 دوال محرك الأعذار الطبية المتعددة
+  // 🚀 دوال محرك الأعذار الطبية
   // ==========================================
   
   const handleAddDate = () => {
@@ -228,8 +229,8 @@ export default function StudentDashboard() {
         student_id: studentData.id,
         submitted_by: user.id,
         submitter_role: 'student',
-        excuse_date: excuseForm.absent_dates[0], // للاستخدام القديم (إن وجد)
-        absent_dates: excuseForm.absent_dates,   // المصفوفة الجديدة لدعم الأيام المتعددة
+        excuse_date: excuseForm.absent_dates[0],
+        absent_dates: excuseForm.absent_dates,
         duration_type: excuseForm.duration_type,
         target_periods: excuseForm.duration_type === 'partial_day' ? excuseForm.target_periods : [],
         reason: excuseForm.reason,
@@ -273,8 +274,8 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    if (!isChecking) fetchData();
-  }, [fetchData, isChecking]);
+    if (!isChecking && user) fetchData();
+  }, [fetchData, isChecking, user]);
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
@@ -320,11 +321,19 @@ export default function StudentDashboard() {
     );
   }
 
-  const isTenthGrade = studentData?.sections?.classes?.name?.includes('العاشر');
+  // 🚀 استخراج ذكي ودقيق للبيانات لمنع فراغ الشاشة
+  const rawFullName = studentData?.users?.full_name || studentData?.user?.full_name || studentData?.full_name || user?.user_metadata?.full_name || 'بطلنا';
+  const nameParts = rawFullName.split(' ');
+  const displayFirstName = nameParts.length > 1 && nameParts[0].length <= 2 ? `${nameParts[0]} ${nameParts[1]}` : nameParts[0];
+  
+  const classNameStr = String(studentData?.sections?.classes?.name || studentData?.section?.classes?.name || studentData?.class_name || '');
+  const sectionNameStr = String(studentData?.sections?.name || studentData?.section?.name || studentData?.section_name || 'غير محدد');
+  const isTenthGrade = classNameStr.includes('العاشر') || classNameStr.includes('عاشر') || classNameStr.includes('10');
   const hasSelectedTrack = !!studentData?.next_year_track;
+  
   const unlockedGrades = recentGrades.filter(g => !checkIsLocked(g.exam));
   const avgScore = unlockedGrades.length > 0 ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length) : 0;
-  const avatarUrl = studentData?.users?.avatar_url || studentData?.avatar_url;
+  const avatarUrl = studentData?.users?.avatar_url || studentData?.user?.avatar_url || studentData?.avatar_url;
 
   let warningLevel = 0;
   let warningTitle = "";
@@ -381,7 +390,7 @@ export default function StudentDashboard() {
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-right w-full">
               <Link href={`/students/${user.id}`} className="relative group shrink-0">
                 <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-4 border-white/10 shadow-[0_0_30px_rgba(59,130,246,0.2)] bg-[#0f1423] backdrop-blur-md flex items-center justify-center transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3 group-hover:border-blue-500/50">
-                  {avatarUrl ? <img src={avatarUrl} alt={studentData?.users?.full_name} className="w-full h-full object-cover" /> : <span className="text-4xl sm:text-5xl font-black text-blue-400 drop-shadow-md">{studentData?.users?.full_name?.charAt(0) || 'ط'}</span>}
+                  {avatarUrl ? <img src={avatarUrl} alt={rawFullName} className="w-full h-full object-cover" /> : <span className="text-4xl sm:text-5xl font-black text-blue-400 drop-shadow-md">{rawFullName.charAt(0)}</span>}
                 </div>
                 <div className="absolute inset-0 bg-blue-500/20 rounded-[2.5rem] blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
                 <div className="absolute bottom-2 left-2 w-5 h-5 sm:w-6 sm:h-6 bg-emerald-400 border-4 border-[#02040a] rounded-full z-20 shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse"></div>
@@ -393,11 +402,11 @@ export default function StudentDashboard() {
                   <span>لوحة تحكم الطالب</span>
                 </div>
                 <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black mb-2 tracking-tight drop-shadow-lg leading-tight text-white">
-                  مرحباً بك، {studentData?.users?.full_name?.split(' ')[0] || 'بطلنا'} 👋
+                  مرحباً بك، {displayFirstName} 👋
                 </h1>
                 <p className="text-slate-300 text-sm sm:text-base font-bold flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-5">
                   <GraduationCap className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 shrink-0" />
-                  <span>مسجل في <strong className="text-white mx-1 drop-shadow-sm">{studentData?.sections?.classes?.name}</strong> شعبة <strong className="text-white mx-1 drop-shadow-sm">{studentData?.sections?.name}</strong></span>
+                  <span>مسجل في <strong className="text-white mx-1 drop-shadow-sm">{classNameStr || 'صف غير محدد'}</strong> شعبة <strong className="text-white mx-1 drop-shadow-sm">{sectionNameStr}</strong></span>
                 </p>
                 
                 <Link href={`/students/${user.id}`} className="inline-flex items-center justify-center sm:justify-start gap-2 text-slate-300 hover:text-white font-bold text-sm bg-white/5 px-6 py-3 rounded-2xl border border-white/10 transition-all hover:bg-white/10 shadow-sm active:scale-95 w-full sm:w-auto">
