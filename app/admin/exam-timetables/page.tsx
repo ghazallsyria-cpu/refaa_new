@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   CalendarDays, Clock, BookOpen, Plus, Edit3, Trash2, 
-  ShieldCheck, Loader2, LayoutGrid, X
+  ShieldCheck, Loader2, LayoutGrid, X, CheckCircle2 // <-- تم إضافة CheckCircle2 هنا 🚀
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -116,7 +116,7 @@ export default function ExamTimetablesAdmin() {
         subject_id: exam.subject_id,
         class_level: exam.class_level,
         exam_date: exam.exam_date,
-        start_time: exam.start_time.substring(0, 5), // قص الثواني إن وجدت
+        start_time: exam.start_time.substring(0, 5), 
         end_time: exam.end_time.substring(0, 5)
       });
     } else {
