@@ -9,7 +9,8 @@ import {
   Clock, FileText, Plus, Search, 
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
-  AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2, Sparkles
+  AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2, Sparkles,
+  ShieldCheck, MapPin, FileKey, CalendarDays, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -37,6 +38,11 @@ export default function TeacherDashboard() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
+
+  // 🚀 حالات المنظومة الجديدة (الكنترول والاختبارات)
+  const [invigilationDuties, setInvigilationDuties] = useState<any[]>([]);
+  const [finalExamsTimetable, setFinalExamsTimetable] = useState<any[]>([]);
+  const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
   const [attendanceStatus, setAttendanceStatus] = useState<{
     isActive: boolean;
@@ -68,7 +74,6 @@ export default function TeacherDashboard() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  // 🚀 [تعديل جراحي] الاعتماد على الوقت المحقون في الكرت مباشرة بدلاً من البحث
   const isCurrentClass = useCallback((startTime?: string, endTime?: string) => {
     if (!currentTime || !startTime || !endTime) return false;
     const [startH, startM] = startTime.split(':').map(Number);
@@ -81,7 +86,6 @@ export default function TeacherDashboard() {
     return now >= start && now <= end;
   }, [currentTime]);
 
-  // 🚀 [تعديل جراحي] الاعتماد على الوقت المحقون
   const isNextClass = useCallback((startTime?: string) => {
     if (!currentTime || !startTime) return false;
     const [startH, startM] = startTime.split(':').map(Number);
@@ -93,7 +97,7 @@ export default function TeacherDashboard() {
     return diff > 0 && diff <= 60;
   }, [currentTime]);
 
-const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!user?.id || isFetchedRef.current) return;
     
     isFetchedRef.current = true;
@@ -117,6 +121,7 @@ const fetchData = useCallback(async () => {
         }
 
         if (data.teacher?.id) {
+            // نظام غياب الطلاب
             const { data: absences } = await supabase
               .from('attendance_records')
               .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -143,6 +148,44 @@ const fetchData = useCallback(async () => {
                 studentAbsences.get(sid).count++;
               });
               setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
+            }
+
+            // 🚀 جلب بيانات المنظومة الامتحانية الجديدة للمعلم (مفلترة بالمواد)
+            try {
+               const currentYear = '2025-2026';
+               const currentSemester = 'الفصل الدراسي الثاني';
+               
+               // 1. استخراج معرفات المواد التي يدرسها المعلم (لتقييد رؤية النماذج)
+               let mySubjectIds: string[] = [];
+               const { data: myAssignments } = await supabase.from('teacher_assignments').select('subject_id').eq('teacher_id', data.teacher.id);
+               if (myAssignments) mySubjectIds = [...mySubjectIds, ...myAssignments.map((a: any) => a.subject_id)];
+               if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
+               mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); // تنظيف التكرار
+
+               const [invigRes, finalExamsRes] = await Promise.all([
+                  supabase.from('committee_invigilators').select('id, exam_committees(name, location, capacity)').eq('teacher_id', user.id),
+                  supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5)
+               ]);
+
+               if (invigRes.data) setInvigilationDuties(invigRes.data);
+               if (finalExamsRes.data) setFinalExamsTimetable(finalExamsRes.data);
+
+               // 2. جلب نماذج الإجابات (فقط للمواد التي تخص هذا المعلم!)
+               if (mySubjectIds.length > 0) {
+                   const { data: keysRes } = await supabase.from('exam_answer_keys')
+                     .select('*, subjects(name)')
+                     .eq('is_published', true)
+                     .eq('academic_year', currentYear)
+                     .eq('semester', currentSemester)
+                     .in('subject_id', mySubjectIds) // 🚀 السحر هنا: فلترة حسب مواد المعلم
+                     .order('created_at', { ascending: false })
+                     .limit(5);
+                   if (keysRes) setAnswerKeys(keysRes);
+               } else {
+                   setAnswerKeys([]);
+               }
+            } catch (examErr) {
+               console.error("Error fetching exam system data:", examErr);
             }
 
             // نظام الإنذار الإداري
@@ -180,7 +223,6 @@ const fetchData = useCallback(async () => {
                   if (recordedKeys.has(key)) {
                     totalRecorded++;
                   } else {
-                    // 🚀 نقرأ الوقت من الكرت مباشرة لضمان توافق النظام الآلي
                     if (slot.end_time) {
                       const [h, m] = slot.end_time.split(':').map(Number);
                       const endTime = new Date(now);
@@ -320,6 +362,39 @@ const fetchData = useCallback(async () => {
                    </div>
                 </div>
               )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 🚀 بانر تكليف المراقبة الجديد (Invigilation Duty Banner) */}
+        <AnimatePresence>
+          {invigilationDuties.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-indigo-900 via-[#131836] to-[#0f1423] p-6 sm:p-8 border border-indigo-500/40 shadow-[0_0_40px_rgba(99,102,241,0.2)]">
+               <div className="absolute -left-10 -top-10 w-40 h-40 bg-indigo-500/20 blur-3xl rounded-full pointer-events-none"></div>
+               <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 justify-between">
+                  <div className="flex items-center gap-5 text-center md:text-right">
+                     <div className="p-4 bg-indigo-500/20 border border-indigo-500/30 rounded-2xl shadow-inner shrink-0">
+                        <ShieldCheck className="h-8 w-8 text-indigo-400" />
+                     </div>
+                     <div>
+                        <h3 className="text-xl sm:text-2xl font-black text-white mb-1 flex items-center gap-2 justify-center md:justify-start">تكليف رسمي بمراقبة اللجان <Sparkles className="w-5 h-5 text-indigo-400"/></h3>
+                        <p className="text-sm font-bold text-indigo-200">لقد تم تكليفك من قبل إدارة المدرسة لتكون مراقباً في الاختبارات النهائية.</p>
+                     </div>
+                  </div>
+                  <div className="flex flex-col gap-3 w-full md:w-auto">
+                     {invigilationDuties.map((duty, idx) => (
+                        <div key={idx} className="bg-[#02040a]/60 px-5 py-3 rounded-2xl border border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-inner">
+                           <div className="flex items-center gap-2">
+                              <span className="text-sm font-black text-white">{duty.exam_committees?.name}</span>
+                           </div>
+                           <div className="flex gap-2">
+                              {duty.exam_committees?.location && <span className="text-[10px] font-bold px-3 py-1.5 bg-indigo-500/10 text-indigo-300 rounded-lg flex items-center gap-1"><MapPin className="w-3 h-3"/> {duty.exam_committees.location}</span>}
+                              <span className="text-[10px] font-bold px-3 py-1.5 bg-white/5 text-slate-300 rounded-lg flex items-center gap-1"><Users className="w-3 h-3"/> {duty.exam_committees?.capacity} طالب</span>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -622,6 +697,38 @@ const fetchData = useCallback(async () => {
               </div>
             </motion.div>
 
+            {/* 📅 جدول الاختبارات النهائية للمعلم */}
+            {finalExamsTimetable.length > 0 && (
+                <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+                  <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
+                    <h2 className="text-xl sm:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm">
+                      <div className="p-2.5 bg-indigo-500/10 rounded-xl sm:rounded-2xl border border-indigo-500/20 shadow-inner"><CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400 drop-shadow-md" /></div> جدول الاختبارات النهائية
+                    </h2>
+                  </div>
+                  <div className="p-5 sm:p-6 lg:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 bg-transparent">
+                      {finalExamsTimetable.map((ex, idx) => {
+                          const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
+                          return (
+                          <div key={idx} className={`bg-[#0f1423]/60 border border-white/5 p-5 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
+                              <div>
+                                  <span className="text-[9px] font-black px-2 py-1 bg-indigo-500/10 text-indigo-300 rounded mb-2 inline-block">الصف {ex.class_level}</span>
+                                  <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2">
+                                      {ex.subjects?.name}
+                                      {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                                  </p>
+                                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
+                              </div>
+                              <div className="bg-[#02040a] px-3 py-2 rounded-xl border border-white/5 shadow-inner flex flex-col items-center justify-center shrink-0">
+                                  <span className="text-[10px] text-slate-500 font-bold uppercase">الوقت</span>
+                                  <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
+                              </div>
+                          </div>
+                          );
+                      })}
+                  </div>
+                </motion.div>
+            )}
+
             {/* Assignment Stats */}
             <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
@@ -661,11 +768,38 @@ const fetchData = useCallback(async () => {
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="teacher" />
 
+            {/* 🔑 خزانة نماذج الإجابات للمعلم */}
+            {answerKeys.length > 0 && (
+                <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md border border-emerald-500/30 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden shadow-[0_0_20px_rgba(16,185,129,0.05)]">
+                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full pointer-events-none"></div>
+                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right">
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
+                      <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> نماذج الإجابات
+                    </h2>
+                  </div>
+                  <div className="divide-y divide-white/5 bg-transparent p-3">
+                      {answerKeys.map(keyObj => (
+                          <a href={keyObj.file_url} target="_blank" rel="noreferrer" key={keyObj.id} className="flex items-center justify-between p-3 sm:p-4 rounded-[1rem] border border-white/5 hover:border-emerald-500/30 hover:bg-[#0f1423] transition-all mb-2 group shadow-inner">
+                              <div className="flex items-center gap-3 min-w-0">
+                                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-colors shrink-0">
+                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                      <p className="font-black text-white text-xs sm:text-sm truncate drop-shadow-sm">{keyObj.title}</p>
+                                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1 bg-[#02040a] px-2 py-0.5 rounded border border-white/5 inline-block">{keyObj.subjects?.name} • الصف {keyObj.class_level}</p>
+                                  </div>
+                              </div>
+                          </a>
+                      ))}
+                  </div>
+                </motion.div>
+            )}
+
             {/* Recent Exams */}
             <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><FileText className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400 drop-shadow-sm" /></div> الاختبارات الأخيرة
+                  <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><FileText className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400 drop-shadow-sm" /></div> الاختبارات الدورية
                 </h2>
               </div>
               <div className="divide-y divide-white/5 bg-transparent">
