@@ -135,12 +135,13 @@ export default function ExamCommitteesControl() {
     setIsCommitteeModalOpen(true);
   };
 
+  // 🚀 تحديث جلب البيانات لاستخراج اسم الصف والشعبة الفعلي
   const openViewModal = async (committee: any) => {
     setIsLoading(true);
     setSelectedCommittee(committee);
     try {
       const { data: students } = await supabase.from('student_seat_allocations')
-        .select(`seat_number, students ( id, users(full_name, avatar_url), sections(classes(level)) )`)
+        .select(`seat_number, students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )`)
         .eq('committee_id', committee.id)
         .order('seat_number', { ascending: true });
         
@@ -182,10 +183,11 @@ export default function ExamCommitteesControl() {
     try { await supabase.from('committee_invigilators').delete().eq('id', id); fetchData(); } catch (error) { alert('حدث خطأ أثناء الإزالة'); }
   };
 
+  // 🚀 تحديث دالة الطباعة لجلب اسم الصف والشعبة الفعلي
   const fetchPrintData = async (committeeId: string) => {
     setIsPrinting(true);
     const { data } = await supabase.from('student_seat_allocations')
-      .select(`seat_number, students ( id, users(full_name, avatar_url), sections(classes(level)) )`)
+      .select(`seat_number, students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )`)
       .eq('committee_id', committeeId)
       .order('seat_number', { ascending: true });
     
@@ -197,12 +199,16 @@ export default function ExamCommitteesControl() {
   const exportToExcel = async (committeeId: string) => {
     const data = await fetchPrintData(committeeId);
     if (data.students.length === 0) { alert('اللجنة فارغة!'); setIsPrinting(false); return; }
-    const excelData = data.students.map(s => ({
-      'رقم الجلوس': s.seat_number,
-      'اسم الطالب': s.students?.users?.full_name || 'غير معروف',
-      'الصف': s.students?.sections?.classes?.level === 10 ? 'العاشر' : 'الحادي عشر',
-      'التوقيع': '' 
-    }));
+    const excelData = data.students.map(s => {
+      const clsName = s.students?.sections?.classes?.name || 'صف غير محدد';
+      const secName = s.students?.sections?.name ? ` - ${s.students?.sections?.name}` : '';
+      return {
+        'رقم الجلوس': s.seat_number,
+        'اسم الطالب': s.students?.users?.full_name || 'غير معروف',
+        'الصف': `${clsName}${secName}`,
+        'التوقيع': '' 
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, data.committee.name);
@@ -234,7 +240,7 @@ export default function ExamCommitteesControl() {
           backgroundColor: '#ffffff'
         });
         
-        const imgData = canvas.toDataURL('image/jpeg', 0.85);
+        const imgData = canvas.toDataURL('image/jpeg', 0.85); 
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
@@ -252,7 +258,7 @@ export default function ExamCommitteesControl() {
         alert('حدث خطأ أثناء معالجة الصور. يرجى المحاولة لاحقاً أو من جهاز كمبيوتر.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
-    }, 3000); 
+    }, 2500); 
   };
 
   if (currentRole !== 'admin' && currentRole !== 'management') {
@@ -287,7 +293,7 @@ export default function ExamCommitteesControl() {
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
       
-      {/* 🚀 شاشة التحميل الصلبة (Solid Overlay) المخصصة لخداع المتصفح */}
+      {/* شاشة التحميل */}
       { (isEngineLoading || isPrinting) && (
         <div className="fixed inset-0 bg-slate-900 z-[100] flex flex-col items-center justify-center text-white">
           <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
@@ -436,8 +442,6 @@ export default function ExamCommitteesControl() {
         )}
       </div>
 
-      {/* النوافذ المنبثقة مبنية بدون تأثيرات معقدة لضمان الاستقرار التام */}
-      
       {/* نافذة إعدادات اللجنة */}
       {isCommitteeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
@@ -503,7 +507,6 @@ export default function ExamCommitteesControl() {
                     const teacherName = String(t?.full_name || 'بدون اسم');
                     const initialChar = teacherName.charAt(0) || 'م';
 
-                    // خدعة ذكية لكاسر كاش الصور لتفادي خطأ السفاري الأمني
                     const safeAvatarUrl = t?.avatar_url ? `${t.avatar_url}?t=${new Date().getTime()}` : null;
 
                     return (
@@ -628,7 +631,12 @@ export default function ExamCommitteesControl() {
                            const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
                            const stdName = String(s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب');
                            const stdInitial = stdName.charAt(0) || 'ط';
-                           const classLvl = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
+                           
+                           // 🚀 جلب اسم الصف واسم الشعبة الفعليين بشكل احترافي
+                           const clsName = s.students?.sections?.classes?.name || s.students?.sections?.[0]?.classes?.name || 'صف غير محدد';
+                           const secName = s.students?.sections?.name || s.students?.sections?.[0]?.name || '';
+                           const fullClassName = `${clsName} ${secName ? '- ' + secName : ''}`;
+
                            const safeStdAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
                            return (
@@ -642,7 +650,7 @@ export default function ExamCommitteesControl() {
                                   )}
                                   <span className="truncate">{stdName}</span>
                                </td>
-                               <td className="p-3 border-b border-slate-100 font-bold text-slate-500">{classLvl === 10 ? 'العاشر' : 'الحادي عشر'}</td>
+                               <td className="p-3 border-b border-slate-100 font-bold text-slate-500">{fullClassName}</td>
                              </tr>
                            )
                          })}
@@ -659,13 +667,14 @@ export default function ExamCommitteesControl() {
 
       {/* 
         =========================================================
-        🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
-        الآن متوافقة 100% مع أجهزة آبل وتم إصلاح التنسيق والباركود
+        🖨️ قوالب الطباعة الموضوعة بشكل مرئي تماماً لخداع المتصفح 
+        وإلغاء التباعد المزعج للحروف (tracking-wider) 
+        وإضافة QR Code احترافي + اسم المدرسة
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 90, width: '100%', backgroundColor: 'white' }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo mx-auto" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
             
             {printType === 'door_sheet' && (
               <div className="min-h-[1122px] bg-white">
@@ -698,20 +707,24 @@ export default function ExamCommitteesControl() {
                       <th className="border border-slate-900 p-3 text-lg font-black w-12 text-center">م</th>
                       <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">رقم الجلوس</th>
                       <th className="border border-slate-900 p-3 text-lg font-black">اسم الطالب الرباعي</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black w-24 text-center">الصف</th>
+                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">الصف</th>
                       <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">التوقيع</th>
                     </tr>
                   </thead>
                   <tbody>
                     {printData.students.map((s:any, idx:number) => {
                       const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
-                      const stdClass = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
+                      // 🚀 جلب اسم الصف واسم الشعبة الفعلي
+                      const clsName = s.students?.sections?.classes?.name || s.students?.sections?.[0]?.classes?.name || 'صف غير محدد';
+                      const secName = s.students?.sections?.name || s.students?.sections?.[0]?.name || '';
+                      const fullClassName = `${clsName} ${secName ? '- ' + secName : ''}`;
+
                       return (
                         <tr key={s.seat_number} className="even:bg-slate-50">
                           <td className="border border-slate-900 p-3 text-center font-bold text-lg">{idx + 1}</td>
                           <td className="border border-slate-900 p-3 text-center font-black text-xl tracking-widest">{s.seat_number}</td>
                           <td className="border border-slate-900 p-3 font-bold text-lg">{stdName}</td>
-                          <td className="border border-slate-900 p-3 text-center font-bold text-lg">{stdClass === 10 ? 'العاشر' : 'الحادي عشر'}</td>
+                          <td className="border border-slate-900 p-3 text-center font-bold text-lg">{fullClassName}</td>
                           <td className="border border-slate-900 p-3 text-center"></td>
                         </tr>
                       )
@@ -726,15 +739,22 @@ export default function ExamCommitteesControl() {
                 {printData.students.map((s:any) => {
                    const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
                    const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
-                   const stdClass = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
-                   // 🚀 إضافة كود الـ QR Code (يقرأ رقم الجلوس مباشرة بدون أي مكتبات إضافية)
-                   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${s.seat_number}&margin=0`;
+                   // 🚀 جلب اسم الصف والشعبة الفعلي
+                   const clsName = s.students?.sections?.classes?.name || s.students?.sections?.[0]?.classes?.name || 'صف غير محدد';
+                   const secName = s.students?.sections?.name || s.students?.sections?.[0]?.name || '';
+                   const fullClassName = `${clsName} ${secName ? '- ' + secName : ''}`;
+                   
+                   // رابط QR Code يحمل بروتوكول نظام المدرسة
+                   const qrPayload = `raf-exam-seat:${s.seat_number}`;
+                   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                    return (
                       <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-5 relative overflow-hidden flex flex-col items-center text-center shadow-sm" style={{ pageBreakInside: 'avoid' }}>
                         <div className="absolute top-0 left-0 w-full h-8 bg-slate-900"></div>
-                        {/* إزالة كلاس tracking-wider المزعج الذي كان يقطع الحروف العربية */}
-                        <h2 className="text-xl font-black mt-4 mb-2">{printData.committee.name}</h2>
+                        
+                        {/* 🚀 إزالة كلاس tracking-wider الذي كان يقطع الحروف وإضافة اسم المدرسة */}
+                        <p className="text-[10px] font-black text-slate-400 mt-5 mb-0.5">مدرسة الرفعة النموذجية</p>
+                        <h2 className="text-xl font-black mb-3">{printData.committee.name}</h2>
                         
                         <div className="w-20 h-20 mb-3 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center shrink-0">
                           {stdAvatar ? ( 
@@ -744,20 +764,21 @@ export default function ExamCommitteesControl() {
                           )}
                         </div>
                         
-                        <h1 className="text-2xl font-black mb-2 text-indigo-900">{stdName}</h1>
+                        <h1 className="text-2xl font-black mb-2 text-indigo-900 line-clamp-2 min-h-[64px] flex items-center justify-center">{stdName}</h1>
                         
                         <div className="bg-slate-100 w-full py-2 rounded-xl mb-3 border border-slate-300">
                           <p className="text-sm font-bold text-slate-500 mb-1">الصف والمرحلة</p>
-                          <p className="text-xl font-black">{stdClass === 10 ? 'الصف العاشر' : 'الصف الحادي عشر'}</p>
+                          <p className="text-xl font-black">{fullClassName}</p>
                         </div>
                         
                         <div className="bg-slate-900 text-white w-full p-4 rounded-xl shadow-md mt-auto flex items-center justify-between">
                           <div className="text-right">
-                             <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس الامتحاني</p>
+                             <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس</p>
                              <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
                           </div>
-                          <div className="w-16 h-16 bg-white p-1 rounded-lg shrink-0 overflow-hidden">
-                             <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
+                          {/* 🚀 إضافة الـ QR Code بجانب رقم الجلوس */}
+                          <div className="w-[60px] h-[60px] bg-white p-1 rounded-lg shrink-0 overflow-hidden border border-slate-300">
+                             <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR Code" className="w-full h-full object-contain" />
                           </div>
                         </div>
                       </div>
