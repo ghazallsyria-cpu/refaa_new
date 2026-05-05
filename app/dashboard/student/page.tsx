@@ -9,7 +9,8 @@ import {
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
   AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users,
-  Siren, Info, MessageSquare, Sparkles, Stethoscope, UploadCloud, X, Plus, Trash2
+  Siren, Info, MessageSquare, Sparkles, Stethoscope, UploadCloud, X, Plus, Trash2,
+  Ticket, Timer, FileKey, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -66,6 +67,11 @@ export default function StudentDashboard() {
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
   
+  // 🚀 حالات منظومة الاختبارات التفاعلية (الميزة الجديدة)
+  const [seatAllocation, setSeatAllocation] = useState<any>(null);
+  const [examTimetables, setExamTimetables] = useState<any[]>([]);
+  const [answerKeys, setAnswerKeys] = useState<any[]>([]);
+
   const isFetchingRef = useRef(false);
 
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -95,7 +101,7 @@ export default function StudentDashboard() {
       setLoading(true);
       
       // 1. جلب البيانات الأساسية من الهوك
-      const data = await fetchStudentDashboardData(true); // نمرر true لتحديث الكاش
+      const data = await fetchStudentDashboardData(true); 
       
       if (data) {
         setStudentData(data.student);
@@ -151,6 +157,25 @@ export default function StudentDashboard() {
               } else {
                 setAttendanceStats({ rate: 100 });
               }
+            }
+
+            // 🚀 3. جلب بيانات المنظومة الامتحانية بشكل معزول تماماً عن المنطق القديم
+            try {
+               const classLevelStr = trackRes.data?.sections?.classes?.name || data.student?.sections?.classes?.name || data.student?.class_name || '';
+               const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : null;
+               
+               if (cLevel) {
+                  const [allocRes, timeRes, keysRes] = await Promise.all([
+                    supabase.from('student_seat_allocations').select('seat_number, exam_committees(name, location)').eq('student_id', studentId).maybeSingle(),
+                    supabase.from('exam_timetables').select('*, subjects(name)').eq('class_level', cLevel).order('exam_date', { ascending: true }).order('start_time', { ascending: true }),
+                    supabase.from('exam_answer_keys').select('*, subjects(name)').eq('class_level', cLevel).eq('is_published', true).order('created_at', { ascending: false })
+                  ]);
+                  if (allocRes.data) setSeatAllocation(allocRes.data);
+                  if (timeRes.data) setExamTimetables(timeRes.data);
+                  if (keysRes.data) setAnswerKeys(keysRes.data);
+               }
+            } catch (examErr) {
+               console.error('Error fetching exam system data:', examErr);
             }
         }
       }
@@ -283,6 +308,24 @@ export default function StudentDashboard() {
       return format(new Date(dateStr), formatStr, { locale: arSA });
     } catch (e) { return fallback; }
   };
+
+  // 🚀 هندسة العداد التنازلي للاختبار
+  const nextOfficialExam = examTimetables.find(ex => {
+      const exDate = new Date(`${ex.exam_date}T${ex.start_time}`);
+      return currentTime && exDate > currentTime;
+  });
+
+  let countdownStr = '';
+  if (nextOfficialExam && currentTime) {
+      const exDate = new Date(`${nextOfficialExam.exam_date}T${nextOfficialExam.start_time}`);
+      const diff = exDate.getTime() - currentTime.getTime();
+      if (diff > 0) {
+          const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+          const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+          const m = Math.floor((diff / 1000 / 60) % 60);
+          countdownStr = `${d > 0 ? d + ' يوم و ' : ''}${h} ساعة و ${m} دقيقة`;
+      }
+  }
 
   if (isChecking) {
     return (
@@ -540,6 +583,49 @@ export default function StudentDashboard() {
           )}
         </AnimatePresence>
 
+        {/* 🚀 بطاقة الهوية الامتحانية والعداد (الميزة الجديدة) */}
+        {(seatAllocation || nextOfficialExam) && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-br from-[#131836] via-[#0f1423] to-[#02040a] p-6 sm:p-8 border border-indigo-500/30 shadow-[0_0_40px_rgba(99,102,241,0.15)] flex flex-col md:flex-row gap-6 items-center justify-between">
+              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
+
+              {/* 💳 الهوية */}
+              {seatAllocation && (
+                  <div className="flex items-center gap-4 relative z-10 w-full md:w-auto bg-[#02040a]/60 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <div className="p-3 bg-indigo-500/20 rounded-2xl border border-indigo-500/30"><Ticket className="w-8 h-8 text-indigo-400" /></div>
+                      <div>
+                          <p className="text-[10px] sm:text-xs text-indigo-300 font-black uppercase tracking-widest mb-1">هويتك الامتحانية</p>
+                          <div className="flex items-end gap-3">
+                              <p className="text-3xl sm:text-4xl font-black text-white drop-shadow-md tracking-widest">{seatAllocation.seat_number}</p>
+                              <div className="mb-1">
+                                  <p className="text-xs font-bold text-slate-300 bg-white/5 px-2 py-1 rounded-md border border-white/5">{seatAllocation.exam_committees?.name}</p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
+              {/* ⏳ العداد */}
+              {nextOfficialExam ? (
+                  <div className="flex flex-col items-center md:items-end text-center md:text-right relative z-10 w-full md:w-auto">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] sm:text-xs font-black mb-3">
+                          <Timer className="w-4 h-4 animate-pulse" /> الاختبار القادم: {nextOfficialExam.subjects?.name}
+                      </div>
+                      <div className="text-2xl sm:text-3xl font-black text-white drop-shadow-md" dir="rtl">
+                          {countdownStr}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-2 font-bold">في {safeFormat(nextOfficialExam.exam_date, 'EEEE d MMM')} الساعة {nextOfficialExam.start_time.substring(0,5)}</p>
+                  </div>
+              ) : examTimetables.length > 0 ? (
+                  <div className="flex flex-col items-center md:items-end text-center md:text-right relative z-10 w-full md:w-auto">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] sm:text-xs font-black mb-3">
+                          <CheckCircle2 className="w-4 h-4" /> اكتملت الاختبارات
+                      </div>
+                      <p className="text-sm font-bold text-slate-400">لقد أنهيت جميع اختباراتك المجدولة بنجاح.</p>
+                  </div>
+              ) : null}
+            </motion.div>
+        )}
+
         {/* Track Selection (For 10th Grade) */}
         {isTenthGrade && !hasSelectedTrack && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2.5rem] glass-panel border border-amber-500/30 p-6 sm:p-8 shadow-[0_0_30px_rgba(245,158,11,0.15)] relative overflow-hidden">
@@ -723,13 +809,45 @@ export default function StudentDashboard() {
                 )}
               </div>
             </div>
+
+            {/* 📅 جدول الاختبارات البانورامي (الميزة الجديدة) */}
+            {examTimetables.length > 0 && (
+                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden mt-6 lg:mt-8">
+                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+                      <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
+                    </h2>
+                  </div>
+                  <div className="p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      {examTimetables.map((ex, idx) => {
+                          const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
+                          return (
+                          <div key={idx} className={`bg-[#0f1423]/60 border border-white/5 p-4 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
+                              <div>
+                                  <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2">
+                                      {ex.subjects?.name}
+                                      {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                                  </p>
+                                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
+                              </div>
+                              <div className="bg-[#02040a] px-3 py-2 rounded-xl border border-white/5 shadow-inner flex flex-col items-center justify-center shrink-0">
+                                  <span className="text-[10px] text-slate-500 font-bold uppercase">الوقت</span>
+                                  <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
+                              </div>
+                          </div>
+                          );
+                      })}
+                  </div>
+                </div>
+            )}
+
           </div>
 
           {/* 🌟 Column 2: Narrow Area */}
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
-            {/* 🩺 سجل الغياب والأعذار الطبية (الميزة الجديدة) */}
+            {/* 🩺 سجل الغياب والأعذار الطبية */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
               <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4">
@@ -840,11 +958,37 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* Upcoming Exams */}
+            {/* 📚 نماذج الإجابات الرسمية (الميزة الجديدة) */}
+            {answerKeys.length > 0 && (
+                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden mt-6 lg:mt-8">
+                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+                      <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" /></div> نماذج الإجابات الرسمية
+                    </h2>
+                  </div>
+                  <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
+                      {answerKeys.map(keyObj => (
+                          <a href={keyObj.file_url} target="_blank" rel="noreferrer" key={keyObj.id} className="flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-emerald-500/30 hover:bg-[#0f1423] transition-all mb-2 group shadow-inner">
+                              <div className="flex items-center gap-3 min-w-0">
+                                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-colors shrink-0">
+                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                      <p className="font-black text-white text-xs sm:text-sm truncate drop-shadow-sm">{keyObj.title}</p>
+                                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1 bg-[#02040a] px-2 py-0.5 rounded border border-white/5 inline-block">{keyObj.subjects?.name}</p>
+                                  </div>
+                              </div>
+                          </a>
+                      ))}
+                  </div>
+                </div>
+            )}
+
+            {/* Upcoming Exams (القديمة للاختبارات الدورية) */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2 bg-rose-500/10 rounded-xl border border-rose-500/20 shadow-inner"><Bell className="h-4 w-4 sm:h-5 sm:w-5 text-rose-400 drop-shadow-md" /></div> اختبارات قادمة
+                  <div className="p-2 bg-rose-500/10 rounded-xl border border-rose-500/20 shadow-inner"><Bell className="h-4 w-4 sm:h-5 sm:w-5 text-rose-400 drop-shadow-md" /></div> اختبارات دورية قادمة
                 </h2>
               </div>
               <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
