@@ -68,11 +68,12 @@ export default function ExamCommitteesControl() {
       const stats: any = {};
       if (allocs) { allocs.forEach((a: any) => { stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; }); }
 
+      // 🚀 تنظيف البيانات لضمان عدم حدوث أي انهيار
       const formattedTeachers = (tchrs || []).map((t: any) => {
         const u = Array.isArray(t.users) ? t.users[0] : t.users;
         const subjects = t.teacher_subjects?.map((s:any) => s.subjects?.name).filter(Boolean).join('، ') || 'غير محدد';
         return {
-          id: t.id,
+          id: t.id || Math.random().toString(),
           full_name: u?.full_name || 'بدون اسم',
           avatar_url: u?.avatar_url || null,
           subjectsStr: subjects
@@ -92,6 +93,7 @@ export default function ExamCommitteesControl() {
     }
   }, [currentRole]);
 
+  // استخراج مواد المعلم المختار وعرض الملاحظة
   const selectedTeacherData = teachers.find(t => t.id === selectedTeacherId);
   const selectedTeacherSubjects = selectedTeacherData?.subjectsStr || 'غير محدد';
 
@@ -211,7 +213,6 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة الآمن للأجهزة المحمولة
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
@@ -256,7 +257,7 @@ export default function ExamCommitteesControl() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center max-w-md w-full">
-          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6"><ShieldCheck className="w-12 h-12 text-rose-500"/></div>
+          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6"><ShieldCheck className="w-12 h-12 text-rose-500" /></div>
           <h1 className="text-2xl font-black text-slate-800 mb-2">منطقة محظورة! 🛑</h1>
           <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">عذراً، هذه الغرفة مخصصة لمدير النظام والإدارة العليا فقط.</p>
           <button onClick={() => router.back()} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all shadow-md active:scale-95">العودة للخلف</button>
@@ -267,55 +268,55 @@ export default function ExamCommitteesControl() {
 
   // 🚀 خوارزمية الفرز والبحث الآمنة 100% والمضادة للانهيار
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => i.teacher_id === tId);
+  
+  // فلترة آمنة بدون أي احتمالية لانهيار السلسلة
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
        const term = String(teacherSearchTerm || '').toLowerCase();
-       const matchesName = String(t.full_name || '').toLowerCase().includes(term);
-       const matchesSubj = String(t.subjectsStr || '').toLowerCase().includes(term);
+       const matchesName = String(t?.full_name || '').toLowerCase().includes(term);
+       const matchesSubj = String(t?.subjectsStr || '').toLowerCase().includes(term);
        return matchesName || matchesSubj;
     })
     .sort((a, b) => {
-       const aCount = getTeacherAssignments(a.id).length;
-       const bCount = getTeacherAssignments(b.id).length;
+       const aCount = getTeacherAssignments(String(a?.id)).length;
+       const bCount = getTeacherAssignments(String(b?.id)).length;
        if (aCount !== bCount) return aCount - bCount; 
-       return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ar');
+       return String(a?.full_name || '').localeCompare(String(b?.full_name || ''), 'ar');
     });
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
       
-      
-      <AnimatePresence>
-        {(isEngineLoading || isPrinting) && (
-          <motion.div key="loader-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
-            <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6"/>
-            <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 🚀 شاشة التحميل */}
+      { (isEngineLoading || isPrinting) && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white transition-opacity">
+          <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
+          <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto space-y-8 relative">
         
         <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden">
-          <div className="absolute -left-10 -top-10 text-indigo-50/50 pointer-events-none"><ShieldCheck className="w-64 h-64"/></div>
+          <div className="absolute -left-10 -top-10 text-indigo-50/50 pointer-events-none"><ShieldCheck className="w-64 h-64" /></div>
           
           <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-8 border-b border-slate-100 pb-8">
             <div>
               <h1 className="text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
-                <LayoutGrid className="w-8 h-8 text-indigo-600"/> غرفة كنترول الامتحانات
+                <LayoutGrid className="w-8 h-8 text-indigo-600" /> غرفة كنترول الامتحانات
               </h1>
               <p className="text-slate-500 font-bold text-sm">إدارة اللجان، التوزيع، وإحصائيات عدالة المراقبة.</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <button onClick={() => openCommitteeModal()} className="px-5 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-emerald-200">
-                <Plus className="w-4 h-4"/> إضافة لجنة
+                <Plus className="w-4 h-4" /> إضافة لجنة
               </button>
               <button onClick={handleDistribute} disabled={committees.length === 0} className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-50">
-                <Users className="w-4 h-4"/> الخلط الأبجدي للطلاب
+                <Users className="w-4 h-4" /> الخلط الأبجدي للطلاب
               </button>
               {committees.length > 0 && (
                 <button onClick={handleNuclearReset} className="px-5 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-rose-200">
-                  <Trash2 className="w-4 h-4"/> تصفير شامل
+                  <Trash2 className="w-4 h-4" /> تصفير شامل
                 </button>
               )}
             </div>
@@ -323,21 +324,21 @@ export default function ExamCommitteesControl() {
 
           <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center gap-4">
-                <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100"><Users className="w-6 h-6 text-slate-500"/></div>
+                <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100"><Users className="w-6 h-6 text-slate-500" /></div>
                 <div>
                    <p className="text-xs font-bold text-slate-500 mb-1">إجمالي المعلمين</p>
                    <p className="text-2xl font-black text-slate-800">{totalTeachers}</p>
                 </div>
              </div>
              <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl flex items-center gap-4">
-                <div className="p-3 bg-white rounded-xl shadow-sm border border-indigo-100"><CheckCircle2 className="w-6 h-6 text-indigo-500"/></div>
+                <div className="p-3 bg-white rounded-xl shadow-sm border border-indigo-100"><CheckCircle2 className="w-6 h-6 text-indigo-500" /></div>
                 <div>
                    <p className="text-xs font-bold text-indigo-500 mb-1">تم تكليفهم (يستحقون الراحة)</p>
                    <p className="text-2xl font-black text-indigo-800">{uniqueAssignedTeachers}</p>
                 </div>
              </div>
              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center gap-4">
-                <div className="p-3 bg-white rounded-xl shadow-sm border border-emerald-100"><BarChart2 className="w-6 h-6 text-emerald-500"/></div>
+                <div className="p-3 bg-white rounded-xl shadow-sm border border-emerald-100"><BarChart2 className="w-6 h-6 text-emerald-500" /></div>
                 <div className="flex-1">
                    <p className="text-xs font-bold text-emerald-600 mb-1 flex justify-between">
                      <span>نسبة التغطية العادلة</span>
@@ -352,7 +353,7 @@ export default function ExamCommitteesControl() {
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center p-20"><Loader2 className="w-12 h-12 animate-spin text-indigo-500"/></div>
+          <div className="flex justify-center p-20"><Loader2 className="w-12 h-12 animate-spin text-indigo-500" /></div>
         ) : committees.length === 0 ? (
           <div className="text-center p-20 bg-white rounded-3xl border border-slate-200 border-dashed">
             <h3 className="text-xl font-black text-slate-400 mb-4">لم يتم إعداد اللجان بعد</h3>
@@ -368,7 +369,7 @@ export default function ExamCommitteesControl() {
               const isFull = studentsCount >= committee.capacity;
 
               return (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} key={committee.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group">
+                <div key={committee.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group">
                   <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-4 relative">
                     <div>
                       <h3 className="text-xl font-black text-slate-800">{committee.name}</h3>
@@ -401,7 +402,7 @@ export default function ExamCommitteesControl() {
                               {invigAvatar ? (
                                  <img src={invigAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
                               ) : (
-                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0)}</div>
+                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0) || 'م'}</div>
                               )}
                               <span className="text-xs font-bold text-slate-700 truncate">{invigName}</span>
                             </div>
@@ -411,7 +412,7 @@ export default function ExamCommitteesControl() {
                       })}
                       {committeeInvigs.length < 2 && (
                         <button onClick={() => { setSelectedCommittee(committee); setIsAssignModalOpen(true); }} className="w-full p-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-50 flex items-center justify-center gap-2 transition-colors">
-                          <UserPlus className="w-4 h-4"/> اختيار مراقب
+                          <UserPlus className="w-4 h-4" /> اختيار مراقب
                         </button>
                       )}
                     </div>
@@ -428,268 +429,230 @@ export default function ExamCommitteesControl() {
                       <Contact className="w-3 h-3"/> هويات المراقبين
                     </button>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
         )}
       </div>
 
+      {/* 🚀 النوافذ المنبثقة مبنية بدون تأثيرات معقدة لضمان الاستقرار التام */}
       
-      <AnimatePresence>
-        {isCommitteeModalOpen && (
-          <motion.div 
-            key="modal-committee-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => setIsCommitteeModalOpen(false)}
-          >
-            <motion.div 
-              key="modal-committee-content"
-              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
-              onClick={(e) => e.stopPropagation()}
-              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                  <Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'إعدادات اللجنة' : 'لجنة جديدة'}
-                </h3>
-                <button onClick={() => setIsCommitteeModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
+      {/* نافذة إعدادات اللجنة */}
+      {isCommitteeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                <Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'إعدادات اللجنة' : 'لجنة جديدة'}
+              </h3>
+              <button onClick={() => setIsCommitteeModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-2">اسم اللجنة</label>
+                <input type="text" value={editCommitteeData.name} onChange={e => setEditCommitteeData({...editCommitteeData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: لجنة 1" />
               </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-600 mb-2">اسم اللجنة</label>
-                  <input type="text" value={editCommitteeData.name} onChange={e => setEditCommitteeData({...editCommitteeData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: لجنة 1" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                   <div>
-                     <label className="block text-sm font-bold text-slate-600 mb-2">السعة القصوى</label>
-                     <input type="number" min="1" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
-                   </div>
-                   <div>
-                     <label className="block text-sm font-bold text-slate-600 mb-2">المكان (اختياري)</label>
-                     <input type="text" value={editCommitteeData.location} onChange={e => setEditCommitteeData({...editCommitteeData, location: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: المسرح" />
-                   </div>
-                </div>
-                <button onClick={handleSaveCommittee} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md mt-4">حفظ التغييرات</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      
-      <AnimatePresence>
-        {isAssignModalOpen && selectedCommittee && (
-          <motion.div 
-            key="modal-assign-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}
-          >
-            <motion.div 
-              key="modal-assign-content"
-              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
-              onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]"
-            >
-              
-              <div className="flex justify-between items-center mb-6 shrink-0">
-                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                  <UserPlus className="w-6 h-6 text-indigo-600"/> تكليف مراقب ({selectedCommittee.name})
-                </h3>
-                <button onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
-              </div>
-              
-              <div className="flex-1 overflow-hidden flex flex-col min-h-[400px]">
-                <div className="relative mb-4 shrink-0">
-                   <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                      <Search className="h-5 w-5 text-slate-400"/>
-                   </div>
-                   <input
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-colors"
-                      placeholder="ابحث عن اسم معلم، أو مادة يدرسها..."
-                      value={teacherSearchTerm}
-                      onChange={(e) => setTeacherSearchTerm(e.target.value)}
-                   />
-                </div>
-
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
-                   {sortedAndFilteredTeachers.map((t, index) => {
-                      const tId = t?.id || `temp-${index}`;
-                      const assignedComms = getTeacherAssignments(tId);
-                      const isInThisCommittee = assignedComms.some(c => c?.committee_id === selectedCommittee?.id);
-                      const isSelected = selectedTeacherId === tId;
-                      const teacherName = String(t?.full_name || 'بدون اسم');
-                      const initialChar = teacherName.charAt(0) || 'م';
-
-                      return (
-                         <div 
-                            key={tId} 
-                            onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)}
-                            className={cn(
-                               "p-3 rounded-xl border flex items-center justify-between transition-all",
-                               isInThisCommittee ? "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed" : 
-                               isSelected ? "bg-indigo-50 border-indigo-500 cursor-pointer shadow-sm ring-1 ring-indigo-500" :
-                               "bg-white border-slate-200 hover:border-indigo-300 cursor-pointer hover:shadow-sm"
-                            )}
-                         >
-                            <div className="flex items-center gap-3">
-                               {t?.avatar_url ? (
-                                  <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
-                               ) : (
-                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{initialChar}</div>
-                               )}
-                               <div>
-                                  <p className="text-sm font-black text-slate-800">{teacherName}</p>
-                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={t?.subjectsStr}>المواد: {t?.subjectsStr}</p>
-                               </div>
-                            </div>
-                            <div className="shrink-0 text-left">
-                               {isInThisCommittee ? (
-                                  <span className="text-[10px] font-black text-slate-500 bg-slate-200 px-2 py-1 rounded border border-slate-300">موجود باللجنة</span>
-                               ) : assignedComms.length === 0 ? (
-                                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">🟢 متاح (لم يُكلف)</span>
-                               ) : (
-                                  <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">🟠 مكلف بـ {assignedComms.length} لجنة</span>
-                               )}
-                            </div>
-                         </div>
-                      );
-                   })}
-                   {sortedAndFilteredTeachers.length === 0 && (
-                      <p className="text-center text-sm font-bold text-slate-400 py-8">لا يوجد معلمين يطابقون البحث.</p>
-                   )}
-                </div>
-
-                <AnimatePresence>
-                  {selectedTeacherId && (
-                     <motion.div key="academic-note" initial={{ opacity:0, height: 0 }} animate={{ opacity:1, height:'auto' }} exit={{ opacity:0, height:0 }} className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start gap-3 mt-4 shrink-0 overflow-hidden">
-                        <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5"/>
-                        <div>
-                           <p className="text-xs font-black text-amber-800 mb-1">معلومات أكاديمية للإدارة:</p>
-                           <p className="text-[11px] font-bold text-amber-700 leading-relaxed">
-                              هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{selectedTeacherSubjects}</span>.
-                              يُرجى عدم وضعه في لجان يُمتحن فيها تلاميذه لضمان نزاهة المراقبة.
-                           </p>
-                        </div>
-                     </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div className="pt-4 shrink-0">
-                  <button onClick={handleAddInvigilator} disabled={!selectedTeacherId} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 disabled:opacity-50 shadow-md flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-5 h-5"/> تأكيد وتكليف المعلم
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      
-      <AnimatePresence>
-        {isViewModalOpen && selectedCommittee && (
-          <motion.div 
-            key="modal-view-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
-            onClick={() => setIsViewModalOpen(false)}
-          >
-            <motion.div 
-              key="modal-view-content"
-              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
-              onClick={(e) => e.stopPropagation()}
-              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col"
-            >
-              <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
-                <div>
-                  <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-                    <DoorOpen className="w-6 h-6 text-indigo-600"/> استعراض {selectedCommittee.name}
-                  </h3>
-                  <p className="text-xs font-bold text-slate-400 mt-1">السعة: {selectedCommittee.capacity} | الموقع: {selectedCommittee.location || 'غير محدد'}</p>
-                </div>
-                <button onClick={() => setIsViewModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-6 h-6"/></button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
                  <div>
-                    <h4 className="text-sm font-black text-indigo-900 bg-indigo-50 px-3 py-2 rounded-lg inline-block mb-3">طاقم المراقبة</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                       {viewCommitteeDetails.invigs.length > 0 ? viewCommitteeDetails.invigs.map((invig, idx) => {
-                          const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
-                          const invName = String(invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف');
-                          const invInitial = invName.charAt(0) || 'م';
-                          return (
-                            <div key={invig.id || `inv-${idx}`} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                               {invAvatar ? (
-                                  <img src={invAvatar} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
-                               ) : (
-                                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{invInitial}</div>
-                               )}
-                               <div>
-                                  <p className="text-sm font-black text-slate-800">{invName}</p>
-                                  <p className="text-[10px] font-bold text-slate-500">مراقب لجنة</p>
-                               </div>
-                            </div>
-                          )
-                       }) : <p className="text-sm font-bold text-rose-500">لم يتم تعيين مراقبين لهذه اللجنة بعد.</p>}
+                   <label className="block text-sm font-bold text-slate-600 mb-2">السعة القصوى</label>
+                   <input type="number" min="1" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
+                 </div>
+                 <div>
+                   <label className="block text-sm font-bold text-slate-600 mb-2">المكان (اختياري)</label>
+                   <input type="text" value={editCommitteeData.location} onChange={e => setEditCommitteeData({...editCommitteeData, location: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: المسرح" />
+                 </div>
+              </div>
+              <button onClick={handleSaveCommittee} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md mt-4">حفظ التغييرات</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة اختيار المراقبين */}
+      {isAssignModalOpen && selectedCommittee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}>
+          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                <UserPlus className="w-6 h-6 text-indigo-600"/> تكليف مراقب ({selectedCommittee.name})
+              </h3>
+              <button onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <div className="flex-1 overflow-hidden flex flex-col min-h-[400px]">
+              <div className="relative mb-4 shrink-0">
+                 <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-slate-400" />
+                 </div>
+                 <input
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-colors"
+                    placeholder="ابحث عن اسم معلم، أو مادة يدرسها..."
+                    value={teacherSearchTerm}
+                    onChange={(e) => setTeacherSearchTerm(e.target.value)}
+                 />
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
+                 {sortedAndFilteredTeachers.map((t, index) => {
+                    const tId = String(t?.id || `temp-${index}`);
+                    const assignedComms = getTeacherAssignments(tId);
+                    const isInThisCommittee = assignedComms.some(c => c?.committee_id === selectedCommittee?.id);
+                    const isSelected = selectedTeacherId === tId;
+                    const teacherName = String(t?.full_name || 'بدون اسم');
+                    const initialChar = teacherName.charAt(0) || 'م';
+
+                    return (
+                       <div 
+                          key={tId} 
+                          onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)}
+                          className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                             isInThisCommittee ? "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed" : 
+                             isSelected ? "bg-indigo-50 border-indigo-500 cursor-pointer shadow-sm ring-1 ring-indigo-500" :
+                             "bg-white border-slate-200 hover:border-indigo-300 cursor-pointer hover:shadow-sm"
+                          }`}
+                       >
+                          <div className="flex items-center gap-3">
+                             {t?.avatar_url ? (
+                                <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
+                             ) : (
+                                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{initialChar}</div>
+                             )}
+                             <div>
+                                <p className="text-sm font-black text-slate-800">{teacherName}</p>
+                                <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={t?.subjectsStr}>المواد: {t?.subjectsStr}</p>
+                             </div>
+                          </div>
+                          <div className="shrink-0 text-left">
+                             {isInThisCommittee ? (
+                                <span className="text-[10px] font-black text-slate-500 bg-slate-200 px-2 py-1 rounded border border-slate-300">موجود باللجنة</span>
+                             ) : assignedComms.length === 0 ? (
+                                <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">🟢 متاح (لم يُكلف)</span>
+                             ) : (
+                                <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">🟠 مكلف بـ {assignedComms.length} لجنة</span>
+                             )}
+                          </div>
+                       </div>
+                    );
+                 })}
+                 {sortedAndFilteredTeachers.length === 0 && (
+                    <p className="text-center text-sm font-bold text-slate-400 py-8">لا يوجد معلمين يطابقون البحث.</p>
+                 )}
+              </div>
+
+              {selectedTeacherId && (
+                 <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start gap-3 mt-4 shrink-0 overflow-hidden">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                       <p className="text-xs font-black text-amber-800 mb-1">معلومات أكاديمية للإدارة:</p>
+                       <p className="text-[11px] font-bold text-amber-700 leading-relaxed">
+                          هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{selectedTeacherSubjects}</span>.
+                          يُرجى عدم وضعه في لجان يُمتحن فيها تلاميذه لضمان نزاهة المراقبة.
+                       </p>
                     </div>
                  </div>
+              )}
 
-                 <div>
-                    <h4 className="text-sm font-black text-emerald-900 bg-emerald-50 px-3 py-2 rounded-lg flex justify-between items-center mb-3">
-                       <span>قائمة الطلاب الموزعين</span>
-                       <span className="text-xs font-bold text-emerald-600">{viewCommitteeDetails.students.length} طالب</span>
-                    </h4>
-                    
-                    {viewCommitteeDetails.students.length > 0 ? (
-                       <table className="w-full border-collapse border border-slate-200 text-right text-sm rounded-xl overflow-hidden shadow-sm">
-                         <thead className="bg-slate-100">
-                           <tr>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">رقم الجلوس</th>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">اسم الطالب</th>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">الصف</th>
-                           </tr>
-                         </thead>
-                         <tbody>
-                           {viewCommitteeDetails.students.map((s, idx) => {
-                             const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
-                             const stdName = String(s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب');
-                             const stdInitial = stdName.charAt(0) || 'ط';
-                             const classLvl = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
-                             return (
-                               <tr key={s.seat_number || `std-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
-                                 <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
-                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
-                                    {stdAvatar ? (
-                                      <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
-                                    ) : (
-                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
-                                    )}
-                                    <span className="truncate">{stdName}</span>
-                                 </td>
-                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-500">{classLvl === 10 ? 'العاشر' : 'الحادي عشر'}</td>
-                               </tr>
-                             )
-                           })}
-                         </tbody>
-                       </table>
-                    ) : (
-                       <p className="text-sm font-bold text-slate-500 text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">هذه اللجنة فارغة، لم يتم توزيع الطلاب بعد.</p>
-                    )}
-                 </div>
+              <div className="pt-4 shrink-0">
+                <button onClick={handleAddInvigilator} disabled={!selectedTeacherId} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 disabled:opacity-50 shadow-md flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-5 h-5" /> تأكيد وتكليف المعلم
+                </button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      )}
 
-      
+      {/* نافذة عرض تفاصيل اللجنة */}
+      {isViewModalOpen && selectedCommittee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)}>
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
+              <div>
+                <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                  <DoorOpen className="w-6 h-6 text-indigo-600"/> استعراض {selectedCommittee.name}
+                </h3>
+                <p className="text-xs font-bold text-slate-400 mt-1">السعة: {selectedCommittee.capacity} | الموقع: {selectedCommittee.location || 'غير محدد'}</p>
+              </div>
+              <button onClick={() => setIsViewModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-6 h-6"/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+               <div>
+                  <h4 className="text-sm font-black text-indigo-900 bg-indigo-50 px-3 py-2 rounded-lg inline-block mb-3">طاقم المراقبة</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                     {viewCommitteeDetails.invigs.length > 0 ? viewCommitteeDetails.invigs.map((invig, idx) => {
+                        const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
+                        const invName = String(invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف');
+                        const invInitial = invName.charAt(0) || 'م';
+                        return (
+                          <div key={invig.id || `inv-${idx}`} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                             {invAvatar ? (
+                                <img src={invAvatar} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
+                             ) : (
+                                <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{invInitial}</div>
+                             )}
+                             <div>
+                                <p className="text-sm font-black text-slate-800">{invName}</p>
+                                <p className="text-[10px] font-bold text-slate-500">مراقب لجنة</p>
+                             </div>
+                          </div>
+                        )
+                     }) : <p className="text-sm font-bold text-rose-500">لم يتم تعيين مراقبين لهذه اللجنة بعد.</p>}
+                  </div>
+               </div>
+
+               <div>
+                  <h4 className="text-sm font-black text-emerald-900 bg-emerald-50 px-3 py-2 rounded-lg flex justify-between items-center mb-3">
+                     <span>قائمة الطلاب الموزعين</span>
+                     <span className="text-xs font-bold text-emerald-600">{viewCommitteeDetails.students.length} طالب</span>
+                  </h4>
+                  
+                  {viewCommitteeDetails.students.length > 0 ? (
+                     <table className="w-full border-collapse border border-slate-200 text-right text-sm rounded-xl overflow-hidden shadow-sm">
+                       <thead className="bg-slate-100">
+                         <tr>
+                           <th className="p-3 border-b border-slate-200 font-black text-slate-700">رقم الجلوس</th>
+                           <th className="p-3 border-b border-slate-200 font-black text-slate-700">اسم الطالب</th>
+                           <th className="p-3 border-b border-slate-200 font-black text-slate-700">الصف</th>
+                         </tr>
+                       </thead>
+                       <tbody>
+                         {viewCommitteeDetails.students.map((s, idx) => {
+                           const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
+                           const stdName = String(s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب');
+                           const stdInitial = stdName.charAt(0) || 'ط';
+                           const classLvl = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
+                           return (
+                             <tr key={s.seat_number || `std-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
+                               <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
+                               <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
+                                  {stdAvatar ? (
+                                    <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
+                                  )}
+                                  <span className="truncate">{stdName}</span>
+                               </td>
+                               <td className="p-3 border-b border-slate-100 font-bold text-slate-500">{classLvl === 10 ? 'العاشر' : 'الحادي عشر'}</td>
+                             </tr>
+                           )
+                         })}
+                       </tbody>
+                     </table>
+                  ) : (
+                     <p className="text-sm font-bold text-slate-500 text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">هذه اللجنة فارغة، لم يتم توزيع الطلاب بعد.</p>
+                  )}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 قوالب الطباعة المخفية بثبات لتعمل على الآيفون والكمبيوتر */}
       {printData && (
-        <div style={{ position: 'fixed', top: '100vh', left: 0, opacity: 0.01, pointerEvents: 'none', zIndex: -9999 }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, opacity: 0.01, pointerEvents: 'none', zIndex: -9999 }}>
           <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
             
             {printType === 'door_sheet' && (
@@ -797,7 +760,7 @@ export default function ExamCommitteesControl() {
                          {invAvatar ? ( 
                             <img src={invAvatar} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
                          ) : ( 
-                            <UserPlus className="w-8 h-8 text-slate-300"/> 
+                            <UserPlus className="w-8 h-8 text-slate-300" /> 
                          )}
                       </div>
 
