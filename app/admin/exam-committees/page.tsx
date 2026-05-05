@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, FileText, Printer, ShieldCheck, 
-  Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact
+  Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact, BarChart2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -56,11 +56,14 @@ export default function ExamCommitteesControl() {
     try {
       const { data: comms } = await supabase.from('exam_committees').select('*').eq('academic_year', currentYear).eq('semester', currentSemester).order('name');
       
-      const { data: tchrs } = await supabase.from('teachers').select(`
+      // 🚀 تم إصلاح العلاقة الجداول إلى teacher_subjects كما في قاعدة بياناتك!
+      const { data: tchrs, error: tErr } = await supabase.from('teachers').select(`
         id, 
         users(full_name, avatar_url),
-        teacher_assignments(subjects(name))
+        teacher_subjects(subjects(name))
       `);
+
+      if (tErr) console.error("Error fetching teachers:", tErr);
       
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, users(full_name, avatar_url)');
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id').eq('academic_year', currentYear).eq('semester', currentSemester);
@@ -68,8 +71,20 @@ export default function ExamCommitteesControl() {
       const stats: any = {};
       if (allocs) { allocs.forEach((a: any) => { stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; }); }
 
+      // 🚀 تجهيز مصفوفة المعلمين لتعمل بسلاسة تامة مع البحث
+      const formattedTeachers = (tchrs || []).map((t: any) => {
+        const u = Array.isArray(t.users) ? t.users[0] : t.users;
+        const subjects = t.teacher_subjects?.map((s:any) => s.subjects?.name).filter(Boolean).join('، ') || 'غير محدد';
+        return {
+          id: t.id,
+          full_name: u?.full_name || 'بدون اسم',
+          avatar_url: u?.avatar_url || null,
+          subjectsStr: subjects
+        };
+      });
+
       setCommittees(comms || []);
-      setTeachers(tchrs || []);
+      setTeachers(formattedTeachers);
       setInvigilators(invigs || []);
       setAllocationsStats(stats);
     } catch (error) { console.error('Error fetching data:', error); } finally { setIsLoading(false); }
@@ -81,12 +96,9 @@ export default function ExamCommitteesControl() {
     }
   }, [currentRole]);
 
-  // 🚀 استخبارات المعلم بأمان
+  // استخبارات المعلم المحدد
   const selectedTeacherData = teachers.find(t => t.id === selectedTeacherId);
-  const selectedTeacherSubjects = selectedTeacherData?.teacher_assignments
-    ?.map((a: any) => a.subjects?.name)
-    .filter(Boolean)
-    .join('، ') || 'غير محدد';
+  const selectedTeacherSubjects = selectedTeacherData?.subjectsStr || 'غير محدد';
 
   const totalTeachers = teachers.length;
   const uniqueAssignedTeachers = new Set(invigilators.map(i => i.teacher_id)).size;
@@ -204,30 +216,27 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة الجبار والمتوافق مع الجوال (Fixed Viewport issue)
+  // 🚀 محرك الطباعة بعد الإصلاح الشامل (لحل مشكلة الجوال)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
     if (type === 'invigilator_ids' && data.invigilators.length === 0) { alert('لا يوجد مراقبون في هذه اللجنة لطباعة هوياتهم!'); setIsPrinting(false); return; }
 
-    setPrintData(data); setPrintType(type);
+    setPrintData(data); 
+    setPrintType(type);
 
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
-        // حيلة لحل مشكلة متصفحات الجوال بجعل السكرول في الأعلى لحظة التصوير
-        window.scrollTo(0, 0); 
+        window.scrollTo(0, 0); // إصلاح أساسي للآيفون
 
         const canvas = await html2canvas(printRef.current, { 
-          scale: 2, 
+          scale: 1.5, // تقليل الحجم لعدم استهلاك ذاكرة الجوال
           useCORS: true,
-          allowTaint: true,
           logging: false,
-          scrollX: 0,
-          scrollY: 0,
-          windowWidth: 800 // عرض ثابت لضمان عدم تشوه التصميم على الجوال
+          windowWidth: 800 // تثبيت العرض لعدم تشوه البطاقات
         });
-
+        
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -241,14 +250,13 @@ export default function ExamCommitteesControl() {
 
         pdf.save(`${fileName}.pdf`);
       } catch (err: any) { 
-        console.error("PDF Print Error:", err);
-        alert(`حدث خطأ أثناء إنشاء ملف الـ PDF. التفاصيل: ${err.message || 'مشكلة في التوافق'}`); 
+        console.error("PDF Engine Error:", err);
+        alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة مرة أخرى.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
-    }, 2000); 
+    }, 2500); 
   };
 
-  // 🛡️ حماية الغرفة
   if (currentRole !== 'admin' && currentRole !== 'management') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
@@ -262,26 +270,20 @@ export default function ExamCommitteesControl() {
     );
   }
 
-  // 🚀 خوارزمية الفرز والبحث الآمنة والمضادة للانهيار
+  // 🚀 خوارزمية الفرز والبحث الآمنة 100%
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => i.teacher_id === tId);
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
-       // استخراج آمن تماماً للبيانات
-       const fullName = (t.users?.full_name || t.users?.[0]?.full_name || '').toLowerCase();
        const term = (teacherSearchTerm || '').toLowerCase();
-       const subjStr = (t.teacher_assignments?.map((a:any) => a.subjects?.name).join(' ') || '').toLowerCase();
-
-       const matchesName = fullName.includes(term);
-       const matchesSubj = subjStr.includes(term);
+       const matchesName = t.full_name.toLowerCase().includes(term);
+       const matchesSubj = t.subjectsStr.toLowerCase().includes(term);
        return matchesName || matchesSubj;
     })
     .sort((a, b) => {
        const aCount = getTeacherAssignments(a.id).length;
        const bCount = getTeacherAssignments(b.id).length;
        if (aCount !== bCount) return aCount - bCount; 
-       const aName = (a.users?.full_name || a.users?.[0]?.full_name || '');
-       const bName = (b.users?.full_name || b.users?.[0]?.full_name || '');
-       return aName.localeCompare(bName, 'ar');
+       return a.full_name.localeCompare(b.full_name, 'ar');
     });
 
   return (
@@ -401,7 +403,7 @@ export default function ExamCommitteesControl() {
                           <div key={invig.id} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                             <div className="flex items-center gap-2 overflow-hidden">
                               {invigAvatar ? (
-                                 <img src={invigAvatar} className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
+                                 <img src={invigAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
                               ) : (
                                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0)}</div>
                               )}
@@ -501,13 +503,7 @@ export default function ExamCommitteesControl() {
                    {sortedAndFilteredTeachers.map(t => {
                       const assignedComms = getTeacherAssignments(t.id);
                       const isInThisCommittee = assignedComms.some(c => c.committee_id === selectedCommittee.id);
-                      
                       const isSelected = selectedTeacherId === t.id;
-                      const teacherName = t.users?.full_name || t.users?.[0]?.full_name || t.full_name || 'غير معروف';
-                      const teacherAvatar = t.users?.avatar_url || t.users?.[0]?.avatar_url || t.avatar_url;
-                      
-                      // حماية إضافية للبيانات المفقودة من Supabase Join
-                      const subjectsList = t.teacher_assignments?.map((a:any) => a.subjects?.name).filter(Boolean).join('، ') || t.subjectsStr || 'غير محدد';
 
                       return (
                          <div 
@@ -521,14 +517,14 @@ export default function ExamCommitteesControl() {
                             )}
                          >
                             <div className="flex items-center gap-3">
-                               {teacherAvatar ? (
-                                  <img src={teacherAvatar} className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
+                               {t.avatar_url ? (
+                                  <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{teacherName.charAt(0)}</div>
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{t.full_name.charAt(0)}</div>
                                )}
                                <div>
-                                  <p className="text-sm font-black text-slate-800">{teacherName}</p>
-                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={subjectsList}>المواد: {subjectsList}</p>
+                                  <p className="text-sm font-black text-slate-800">{t.full_name}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={t.subjectsStr}>المواد: {t.subjectsStr}</p>
                                </div>
                             </div>
                             <div className="shrink-0 text-left">
@@ -600,7 +596,7 @@ export default function ExamCommitteesControl() {
                           return (
                             <div key={invig.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                                {invAvatar ? (
-                                  <img src={invAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
+                                  <img src={invAvatar} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
                                ) : (
                                   <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{invName.charAt(0)}</div>
                                )}
@@ -639,7 +635,7 @@ export default function ExamCommitteesControl() {
                                  <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
                                  <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
                                     {stdAvatar ? (
-                                      <img src={stdAvatar} className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
+                                      <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
                                     ) : (
                                       <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdName.charAt(0)}</div>
                                     )}
@@ -664,15 +660,15 @@ export default function ExamCommitteesControl() {
       {/* 
         =========================================================
         🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
-        تم إصلاح مشكلة الجوال بالاعتماد على fixed و opacity
+        تم الحل الجذري لمشكلة الجوال بإبعاد القالب 200vw خارج الشاشة!
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
+        <div style={{ position: 'absolute', top: 0, left: '200vw', width: '210mm', backgroundColor: 'white', zIndex: -10 }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm' }}>
             
             {printType === 'door_sheet' && (
-              <div className="min-h-[1122px]">
+              <div className="min-h-[1122px] bg-white">
                 <div className="text-center mb-8 border-b-2 border-slate-900 pb-6 flex items-center justify-between">
                   <div className="text-right">
                     <h2 className="text-xl font-black">دولة الكويت</h2>
@@ -726,7 +722,7 @@ export default function ExamCommitteesControl() {
             )}
 
             {printType === 'desk_cards' && (
-              <div className="grid grid-cols-2 gap-8 min-h-[1122px]">
+              <div className="grid grid-cols-2 gap-8 bg-white min-h-[1122px]">
                 {printData.students.map((s:any) => {
                    const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
                    const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
@@ -758,7 +754,7 @@ export default function ExamCommitteesControl() {
             )}
 
             {printType === 'invigilator_ids' && (
-              <div className="flex flex-wrap gap-8 justify-center min-h-[1122px]">
+              <div className="flex flex-wrap gap-8 justify-center bg-white min-h-[1122px]">
                 {printData.invigilators.map((invig:any) => {
                   const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
                   const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
