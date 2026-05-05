@@ -30,7 +30,6 @@ export default function ExamCommitteesControl() {
   
   const [isLoading, setIsLoading] = useState(true);
   
-  // 🚀 حالات النوافذ المنبثقة
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -68,10 +67,8 @@ export default function ExamCommitteesControl() {
       const stats: any = {};
       if (allocs) { allocs.forEach((a: any) => { stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; }); }
 
-      // 🚀 إصلاح مصفوفة المعلمين (Flattening) لتجنب أخطاء البحث وحماية الصفحة من الانهيار
       const formattedTeachers = (tchrs || []).map((t: any) => {
         const u = Array.isArray(t.users) ? t.users[0] : t.users;
-        // 🚀 السحر هنا: قراءة teacher_subjects بدلاً من الخطأ السابق
         const subjects = t.teacher_subjects?.map((s:any) => s.subjects?.name).filter(Boolean).join('، ') || 'غير محدد';
         return {
           id: t.id,
@@ -213,7 +210,7 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة بعد الإصلاح الشامل (لحل مشكلة متصفحات الجوال iOS Safari)
+  // 🚀 محرك الطباعة المحسن للهواتف (تم التعديل ليناسب Safari/iOS)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
@@ -225,20 +222,20 @@ export default function ExamCommitteesControl() {
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
-        window.scrollTo(0, 0); // إصلاح أساسي للآيفون لتجنب أخطاء Canvas
-
+        window.scrollTo(0, 0); 
         const canvas = await html2canvas(printRef.current, { 
-          scale: 1.5, // دقة مناسبة للجوالات لتجنب استنزاف الرام
+          scale: 1.5, 
           useCORS: true,
+          allowTaint: true,
           logging: false,
-          windowWidth: 800 // تثبيت العرض لضمان عدم تشوه التصميم
+          windowWidth: 1024 
         });
         
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 0.9); // استخدام JPEG لتخفيف الحمل على الذاكرة
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         
         let fileName = 'مستند';
         if (type === 'door_sheet') fileName = `كشف_مناداة_${data.committee.name}`;
@@ -248,13 +245,12 @@ export default function ExamCommitteesControl() {
         pdf.save(`${fileName}.pdf`);
       } catch (err: any) { 
         console.error("PDF Engine Error:", err);
-        alert('عذراً، متصفح الجوال قد يواجه صعوبة في معالجة الصور الكبيرة. يرجى المحاولة من جهاز كمبيوتر.'); 
+        alert('حدث خطأ أثناء معالجة الصور. يرجى المحاولة باستخدام متصفح كروم أو من جهاز كمبيوتر.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
-    }, 2000); 
+    }, 2500); 
   };
 
-  // 🛡️ حماية الغرفة
   if (currentRole !== 'admin' && currentRole !== 'management') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
@@ -273,7 +269,6 @@ export default function ExamCommitteesControl() {
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
        const term = (teacherSearchTerm || '').toLowerCase();
-       // حماية صارمة باستخدام || '' لمنع أي انهيار
        const matchesName = (t.full_name || '').toLowerCase().includes(term);
        const matchesSubj = (t.subjectsStr || '').toLowerCase().includes(term);
        return matchesName || matchesSubj;
@@ -282,7 +277,6 @@ export default function ExamCommitteesControl() {
        const aCount = getTeacherAssignments(a.id).length;
        const bCount = getTeacherAssignments(b.id).length;
        if (aCount !== bCount) return aCount - bCount; 
-       // حماية لفرز الأسماء
        return (a.full_name || '').localeCompare((b.full_name || ''), 'ar');
     });
 
@@ -293,7 +287,7 @@ export default function ExamCommitteesControl() {
         {(isEngineLoading || isPrinting) && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
             <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
-            <h2 className="text-2xl font-black mb-2 animate-pulse">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
+            <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
           </motion.div>
         )}
       </AnimatePresence>
@@ -405,7 +399,7 @@ export default function ExamCommitteesControl() {
                               {invigAvatar ? (
                                  <img src={invigAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
                               ) : (
-                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0)}</div>
+                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{(invigName || 'م').charAt(0)}</div>
                               )}
                               <span className="text-xs font-bold text-slate-700 truncate">{invigName}</span>
                             </div>
@@ -660,12 +654,12 @@ export default function ExamCommitteesControl() {
       {/* 
         =========================================================
         🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
-        تم إصلاح مشكلة הגوال بجعل القالب absolute وخفي بالشفافية فقط!
+        تم إصلاح مشكلة الجوال باستخدام fixed top-100vh!
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm' }}>
+        <div style={{ position: 'fixed', top: '100vh', left: 0, zIndex: -9999, pointerEvents: 'none' }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
             
             {printType === 'door_sheet' && (
               <div className="min-h-[1122px] bg-white">
