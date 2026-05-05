@@ -68,8 +68,19 @@ export default function ExamCommitteesControl() {
       const stats: any = {};
       if (allocs) { allocs.forEach((a: any) => { stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; }); }
 
+      // 🚀 إصلاح مصفوفة المعلمين (Flattening) لتجنب أخطاء البحث
+      const formattedTeachers = (tchrs || []).map((t: any) => {
+        const u = Array.isArray(t.users) ? t.users[0] : t.users;
+        return {
+          id: t.id,
+          full_name: u?.full_name || 'غير معروف',
+          avatar_url: u?.avatar_url || null,
+          subjectsStr: t.teacher_assignments?.map((a:any) => a.subjects?.name).filter(Boolean).join('، ') || 'غير محدد'
+        };
+      });
+
       setCommittees(comms || []);
-      setTeachers(tchrs || []);
+      setTeachers(formattedTeachers);
       setInvigilators(invigs || []);
       setAllocationsStats(stats);
     } catch (error) { console.error('Error fetching data:', error); } finally { setIsLoading(false); }
@@ -82,10 +93,6 @@ export default function ExamCommitteesControl() {
   }, [currentRole]);
 
   const selectedTeacherData = teachers.find(t => t.id === selectedTeacherId);
-  const selectedTeacherSubjects = selectedTeacherData?.teacher_assignments
-    ?.map((a: any) => a.subjects?.name)
-    .filter(Boolean)
-    .join('، ') || 'غير محدد';
 
   const totalTeachers = teachers.length;
   const uniqueAssignedTeachers = new Set(invigilators.map(i => i.teacher_id)).size;
@@ -204,20 +211,22 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة القوي بعد الإصلاح
+  // 🚀 محرك الطباعة بعد الإصلاح الشامل (إزالة الـ Opacity: 0)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
     if (type === 'invigilator_ids' && data.invigilators.length === 0) { alert('لا يوجد مراقبون في هذه اللجنة لطباعة هوياتهم!'); setIsPrinting(false); return; }
 
-    setPrintData(data); setPrintType(type);
+    setPrintData(data); 
+    setPrintType(type);
 
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
         const canvas = await html2canvas(printRef.current, { 
           scale: 2, 
-          useCORS: true 
+          useCORS: true,
+          logging: false
         });
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
@@ -232,8 +241,8 @@ export default function ExamCommitteesControl() {
 
         pdf.save(`${fileName}.pdf`);
       } catch (err) { 
-        console.error(err);
-        alert('حدث خطأ أثناء إنشاء ملف الـ PDF.'); 
+        console.error("PDF Engine Error:", err);
+        alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة مرة أخرى.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
     }, 2000); 
@@ -253,21 +262,20 @@ export default function ExamCommitteesControl() {
     );
   }
 
-  // 🚀 خوارزمية الفرز والبحث الآمنة 100%
+  // 🚀 خوارزمية الفرز والبحث الآمنة والحديثة
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => i.teacher_id === tId);
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
-       const fullName = t.users?.full_name || '';
        const term = (teacherSearchTerm || '').toLowerCase();
-       const matchesName = fullName.toLowerCase().includes(term);
-       const matchesSubj = t.teacher_assignments?.some((a:any) => (a.subjects?.name || '').toLowerCase().includes(term));
+       const matchesName = t.full_name.toLowerCase().includes(term);
+       const matchesSubj = t.subjectsStr.toLowerCase().includes(term);
        return matchesName || matchesSubj;
     })
     .sort((a, b) => {
        const aCount = getTeacherAssignments(a.id).length;
        const bCount = getTeacherAssignments(b.id).length;
        if (aCount !== bCount) return aCount - bCount; 
-       return (a.users?.full_name || '').localeCompare(b.users?.full_name || '', 'ar');
+       return a.full_name.localeCompare(b.full_name, 'ar');
     });
 
   return (
@@ -484,7 +492,6 @@ export default function ExamCommitteesControl() {
                       const assignedComms = getTeacherAssignments(t.id);
                       const isInThisCommittee = assignedComms.some(c => c.committee_id === selectedCommittee.id);
                       
-                      const subs = t.teacher_assignments?.map((a:any) => a.subjects?.name).filter(Boolean).join('، ') || 'غير محدد';
                       const isSelected = selectedTeacherId === t.id;
 
                       return (
@@ -499,14 +506,14 @@ export default function ExamCommitteesControl() {
                             )}
                          >
                             <div className="flex items-center gap-3">
-                               {t.users?.avatar_url ? (
-                                  <img src={t.users.avatar_url} className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
+                               {t.avatar_url ? (
+                                  <img src={t.avatar_url} className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{t.users?.full_name?.charAt(0) || 'م'}</div>
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{t.full_name?.charAt(0) || 'م'}</div>
                                )}
                                <div>
-                                  <p className="text-sm font-black text-slate-800">{t.users?.full_name}</p>
-                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={subs}>المواد: {subs}</p>
+                                  <p className="text-sm font-black text-slate-800">{t.full_name}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={t.subjectsStr}>المواد: {t.subjectsStr}</p>
                                </div>
                             </div>
                             <div className="shrink-0 text-left">
@@ -632,7 +639,7 @@ export default function ExamCommitteesControl() {
 
       {/* 🚀 القوالب المخفية بثبات لمنع أخطاء الطباعة */}
       {printData && (
-        <div className="absolute left-[-9999px] top-0 bg-white shadow-none pointer-events-none" style={{ width: '210mm', minHeight: '297mm' }}>
+        <div style={{ position: 'absolute', top: '-9999px', left: '-9999px', width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
           <div ref={printRef} className="w-[794px] bg-white text-black p-10 font-cairo" dir="rtl">
             
             {printType === 'door_sheet' && (
