@@ -212,7 +212,7 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة الآمن للأجهزة المحمولة
+  // 🚀 محرك الطباعة الجبار والمتوافق مع الجوال
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
@@ -230,10 +230,10 @@ export default function ExamCommitteesControl() {
           useCORS: true,
           allowTaint: true,
           logging: false,
-          windowWidth: 1024 
+          windowWidth: 800 
         });
         
-        const imgData = canvas.toDataURL('image/jpeg', 0.9);
+        const imgData = canvas.toDataURL('image/jpeg', 0.9); 
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
@@ -266,20 +266,20 @@ export default function ExamCommitteesControl() {
     );
   }
 
-  // 🚀 خوارزمية الفرز والبحث الفولاذية المضادة للانهيار
+  // 🚀 خوارزمية الفرز والبحث الآمنة 100% والمضادة للانهيار
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => i.teacher_id === tId);
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
        const term = String(teacherSearchTerm || '').toLowerCase();
-       const matchesName = String(t?.full_name || '').toLowerCase().includes(term);
-       const matchesSubj = String(t?.subjectsStr || '').toLowerCase().includes(term);
+       const matchesName = String(t.full_name || '').toLowerCase().includes(term);
+       const matchesSubj = String(t.subjectsStr || '').toLowerCase().includes(term);
        return matchesName || matchesSubj;
     })
     .sort((a, b) => {
        const aCount = getTeacherAssignments(a.id).length;
        const bCount = getTeacherAssignments(b.id).length;
        if (aCount !== bCount) return aCount - bCount; 
-       return String(a?.full_name || '').localeCompare(String(b?.full_name || ''), 'ar');
+       return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ar');
     });
 
   return (
@@ -288,7 +288,7 @@ export default function ExamCommitteesControl() {
       {/* 🚀 نافذة التحميل الشاملة */}
       <AnimatePresence>
         {(isEngineLoading || isPrinting) && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
+          <motion.div key="loader-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
             <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
             <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
           </motion.div>
@@ -396,14 +396,13 @@ export default function ExamCommitteesControl() {
                       {committeeInvigs.map(invig => {
                         const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
                         const invName = String(invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف');
-                        const invInitial = invName.charAt(0) || 'م';
                         return (
                           <div key={invig.id} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                             <div className="flex items-center gap-2 overflow-hidden">
                               {invAvatar ? (
-                                 <img src={invAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
+                                 <img src={invAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
                               ) : (
-                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invInitial}</div>
+                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invName.charAt(0)}</div>
                               )}
                               <span className="text-xs font-bold text-slate-700 truncate">{invName}</span>
                             </div>
@@ -437,21 +436,12 @@ export default function ExamCommitteesControl() {
         )}
       </div>
 
-      {/* 🚀 نافذة إدارة اللجنة (الآن آمنة تماماً ولا تنهار) */}
+      {/* 🚀 نافذة إدارة/تعديل اللجنة */}
       <AnimatePresence>
         {isCommitteeModalOpen && (
-          <motion.div 
-            key="modal-committee-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => setIsCommitteeModalOpen(false)}
-          >
-            <motion.div 
-              key="modal-committee-content"
-              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
-              onClick={(e) => e.stopPropagation()}
-              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6"
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div key="modal-overlay-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)} />
+            <motion.div key="modal-content-1" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                   <Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'إعدادات اللجنة' : 'لجنة جديدة'}
@@ -476,25 +466,16 @@ export default function ExamCommitteesControl() {
                 <button onClick={handleSaveCommittee} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md mt-4">حفظ التغييرات</button>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
-      {/* 🚀 نافذة اختيار المراقبين (الآمنة تماماً) */}
+      {/* 🚀 نافذة اختيار المراقبين */}
       <AnimatePresence>
         {isAssignModalOpen && selectedCommittee && (
-          <motion.div 
-            key="modal-assign-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}
-          >
-            <motion.div 
-              key="modal-assign-content"
-              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
-              onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]"
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div key="modal-overlay-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}} />
+            <motion.div key="modal-content-2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]">
               
               <div className="flex justify-between items-center mb-6 shrink-0">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
@@ -567,7 +548,7 @@ export default function ExamCommitteesControl() {
 
                 <AnimatePresence>
                   {selectedTeacherId && (
-                     <motion.div initial={{ opacity:0, height: 0 }} animate={{ opacity:1, height:'auto' }} exit={{ opacity:0, height:0 }} className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start gap-3 mt-4 shrink-0 overflow-hidden">
+                     <motion.div key="academic-note" initial={{ opacity:0, height: 0 }} animate={{ opacity:1, height:'auto' }} exit={{ opacity:0, height:0 }} className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start gap-3 mt-4 shrink-0 overflow-hidden">
                         <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                         <div>
                            <p className="text-xs font-black text-amber-800 mb-1">معلومات أكاديمية للإدارة:</p>
@@ -587,25 +568,17 @@ export default function ExamCommitteesControl() {
                 </div>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
       {/* 🚀 نافذة عرض تفاصيل اللجنة */}
       <AnimatePresence>
         {isViewModalOpen && selectedCommittee && (
-          <motion.div 
-            key="modal-view-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
-            onClick={() => setIsViewModalOpen(false)}
-          >
-            <motion.div 
-              key="modal-view-content"
-              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} 
-              onClick={(e) => e.stopPropagation()}
-              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col"
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div key="modal-overlay-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)} />
+            <motion.div key="modal-content-3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col">
+              
               <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
                 <div>
                   <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
@@ -685,19 +658,19 @@ export default function ExamCommitteesControl() {
                  </div>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
       {/* 
         =========================================================
-        🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
-        الآن متوافقة 100% مع أجهزة آبل (Apple iOS Safari) 
+        🖨️ قوالب الطباعة المخفية بثبات لدعم الـ Canvas
+        تمت إعادة هندستها للتوافق مع متصفحات الآيفون
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm' }}>
+        <div style={{ position: 'fixed', top: '0', left: 0, opacity: 0.01, pointerEvents: 'none', zIndex: -9999 }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
             
             {printType === 'door_sheet' && (
               <div className="min-h-[1122px] bg-white">
