@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, FileText, Printer, ShieldCheck, 
-  Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact, BarChart2
+  Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -68,19 +68,8 @@ export default function ExamCommitteesControl() {
       const stats: any = {};
       if (allocs) { allocs.forEach((a: any) => { stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; }); }
 
-      // 🚀 إصلاح مصفوفة المعلمين (Flattening) لتجنب أخطاء البحث
-      const formattedTeachers = (tchrs || []).map((t: any) => {
-        const u = Array.isArray(t.users) ? t.users[0] : t.users;
-        return {
-          id: t.id,
-          full_name: u?.full_name || 'غير معروف',
-          avatar_url: u?.avatar_url || null,
-          subjectsStr: t.teacher_assignments?.map((a:any) => a.subjects?.name).filter(Boolean).join('، ') || 'غير محدد'
-        };
-      });
-
       setCommittees(comms || []);
-      setTeachers(formattedTeachers);
+      setTeachers(tchrs || []);
       setInvigilators(invigs || []);
       setAllocationsStats(stats);
     } catch (error) { console.error('Error fetching data:', error); } finally { setIsLoading(false); }
@@ -92,11 +81,15 @@ export default function ExamCommitteesControl() {
     }
   }, [currentRole]);
 
+  // 🚀 استخبارات المعلم بأمان
   const selectedTeacherData = teachers.find(t => t.id === selectedTeacherId);
+  const selectedTeacherSubjects = selectedTeacherData?.teacher_assignments
+    ?.map((a: any) => a.subjects?.name)
+    .filter(Boolean)
+    .join('، ') || 'غير محدد';
 
   const totalTeachers = teachers.length;
   const uniqueAssignedTeachers = new Set(invigilators.map(i => i.teacher_id)).size;
-  const unassignedTeachers = totalTeachers - uniqueAssignedTeachers;
   const assignmentCoverage = totalTeachers > 0 ? Math.round((uniqueAssignedTeachers / totalTeachers) * 100) : 0;
 
   const handleSaveCommittee = async () => {
@@ -211,23 +204,30 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة بعد الإصلاح الشامل (إزالة الـ Opacity: 0)
+  // 🚀 محرك الطباعة الجبار والمتوافق مع الجوال (Fixed Viewport issue)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
     if (type === 'invigilator_ids' && data.invigilators.length === 0) { alert('لا يوجد مراقبون في هذه اللجنة لطباعة هوياتهم!'); setIsPrinting(false); return; }
 
-    setPrintData(data); 
-    setPrintType(type);
+    setPrintData(data); setPrintType(type);
 
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
+        // حيلة لحل مشكلة متصفحات الجوال بجعل السكرول في الأعلى لحظة التصوير
+        window.scrollTo(0, 0); 
+
         const canvas = await html2canvas(printRef.current, { 
           scale: 2, 
           useCORS: true,
-          logging: false
+          allowTaint: true,
+          logging: false,
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 800 // عرض ثابت لضمان عدم تشوه التصميم على الجوال
         });
+
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -240,9 +240,9 @@ export default function ExamCommitteesControl() {
         if (type === 'invigilator_ids') fileName = `هويات_المراقبين_${data.committee.name}`;
 
         pdf.save(`${fileName}.pdf`);
-      } catch (err) { 
-        console.error("PDF Engine Error:", err);
-        alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة مرة أخرى.'); 
+      } catch (err: any) { 
+        console.error("PDF Print Error:", err);
+        alert(`حدث خطأ أثناء إنشاء ملف الـ PDF. التفاصيل: ${err.message || 'مشكلة في التوافق'}`); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
     }, 2000); 
@@ -262,20 +262,26 @@ export default function ExamCommitteesControl() {
     );
   }
 
-  // 🚀 خوارزمية الفرز والبحث الآمنة والحديثة
+  // 🚀 خوارزمية الفرز والبحث الآمنة والمضادة للانهيار
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => i.teacher_id === tId);
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
+       // استخراج آمن تماماً للبيانات
+       const fullName = (t.users?.full_name || t.users?.[0]?.full_name || '').toLowerCase();
        const term = (teacherSearchTerm || '').toLowerCase();
-       const matchesName = t.full_name.toLowerCase().includes(term);
-       const matchesSubj = t.subjectsStr.toLowerCase().includes(term);
+       const subjStr = (t.teacher_assignments?.map((a:any) => a.subjects?.name).join(' ') || '').toLowerCase();
+
+       const matchesName = fullName.includes(term);
+       const matchesSubj = subjStr.includes(term);
        return matchesName || matchesSubj;
     })
     .sort((a, b) => {
        const aCount = getTeacherAssignments(a.id).length;
        const bCount = getTeacherAssignments(b.id).length;
        if (aCount !== bCount) return aCount - bCount; 
-       return a.full_name.localeCompare(b.full_name, 'ar');
+       const aName = (a.users?.full_name || a.users?.[0]?.full_name || '');
+       const bName = (b.users?.full_name || b.users?.[0]?.full_name || '');
+       return aName.localeCompare(bName, 'ar');
     });
 
   return (
@@ -388,19 +394,23 @@ export default function ExamCommitteesControl() {
                     </div>
                     
                     <div className="space-y-2">
-                      {committeeInvigs.map(invig => (
-                        <div key={invig.id} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            {invig.users?.avatar_url ? (
-                               <img src={invig.users.avatar_url} className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
-                            ) : (
-                               <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invig.users?.full_name?.charAt(0) || 'م'}</div>
-                            )}
-                            <span className="text-xs font-bold text-slate-700 truncate">{invig.users?.full_name}</span>
+                      {committeeInvigs.map(invig => {
+                        const invigAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
+                        const invigName = invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف';
+                        return (
+                          <div key={invig.id} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              {invigAvatar ? (
+                                 <img src={invigAvatar} className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
+                              ) : (
+                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0)}</div>
+                              )}
+                              <span className="text-xs font-bold text-slate-700 truncate">{invigName}</span>
+                            </div>
+                            <button onClick={() => handleRemoveInvigilator(invig.id)} className="text-rose-400 hover:text-rose-600 p-1 bg-rose-50 rounded-lg shrink-0"><Trash2 className="w-4 h-4"/></button>
                           </div>
-                          <button onClick={() => handleRemoveInvigilator(invig.id)} className="text-rose-400 hover:text-rose-600 p-1 bg-rose-50 rounded-lg shrink-0"><Trash2 className="w-4 h-4"/></button>
-                        </div>
-                      ))}
+                        )
+                      })}
                       {committeeInvigs.length < 2 && (
                         <button onClick={() => { setSelectedCommittee(committee); setIsAssignModalOpen(true); }} className="w-full p-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-50 flex items-center justify-center gap-2 transition-colors">
                           <UserPlus className="w-4 h-4" /> اختيار مراقب
@@ -493,6 +503,11 @@ export default function ExamCommitteesControl() {
                       const isInThisCommittee = assignedComms.some(c => c.committee_id === selectedCommittee.id);
                       
                       const isSelected = selectedTeacherId === t.id;
+                      const teacherName = t.users?.full_name || t.users?.[0]?.full_name || t.full_name || 'غير معروف';
+                      const teacherAvatar = t.users?.avatar_url || t.users?.[0]?.avatar_url || t.avatar_url;
+                      
+                      // حماية إضافية للبيانات المفقودة من Supabase Join
+                      const subjectsList = t.teacher_assignments?.map((a:any) => a.subjects?.name).filter(Boolean).join('، ') || t.subjectsStr || 'غير محدد';
 
                       return (
                          <div 
@@ -506,14 +521,14 @@ export default function ExamCommitteesControl() {
                             )}
                          >
                             <div className="flex items-center gap-3">
-                               {t.avatar_url ? (
-                                  <img src={t.avatar_url} className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
+                               {teacherAvatar ? (
+                                  <img src={teacherAvatar} className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{t.full_name?.charAt(0) || 'م'}</div>
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{teacherName.charAt(0)}</div>
                                )}
                                <div>
-                                  <p className="text-sm font-black text-slate-800">{t.full_name}</p>
-                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={t.subjectsStr}>المواد: {t.subjectsStr}</p>
+                                  <p className="text-sm font-black text-slate-800">{teacherName}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={subjectsList}>المواد: {subjectsList}</p>
                                </div>
                             </div>
                             <div className="shrink-0 text-left">
@@ -579,19 +594,23 @@ export default function ExamCommitteesControl() {
                  <div>
                     <h4 className="text-sm font-black text-indigo-900 bg-indigo-50 px-3 py-2 rounded-lg inline-block mb-3">طاقم المراقبة</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                       {viewCommitteeDetails.invigs.length > 0 ? viewCommitteeDetails.invigs.map(invig => (
-                          <div key={invig.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                             {invig.users?.avatar_url ? (
-                                <img src={invig.users.avatar_url} className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
-                             ) : (
-                                <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{invig.users?.full_name?.charAt(0) || 'م'}</div>
-                             )}
-                             <div>
-                                <p className="text-sm font-black text-slate-800">{invig.users?.full_name}</p>
-                                <p className="text-[10px] font-bold text-slate-500">مراقب لجنة</p>
-                             </div>
-                          </div>
-                       )) : <p className="text-sm font-bold text-rose-500">لم يتم تعيين مراقبين لهذه اللجنة بعد.</p>}
+                       {viewCommitteeDetails.invigs.length > 0 ? viewCommitteeDetails.invigs.map(invig => {
+                          const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
+                          const invName = invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف';
+                          return (
+                            <div key={invig.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                               {invAvatar ? (
+                                  <img src={invAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
+                               ) : (
+                                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{invName.charAt(0)}</div>
+                               )}
+                               <div>
+                                  <p className="text-sm font-black text-slate-800">{invName}</p>
+                                  <p className="text-[10px] font-bold text-slate-500">مراقب لجنة</p>
+                               </div>
+                            </div>
+                          )
+                       }) : <p className="text-sm font-bold text-rose-500">لم يتم تعيين مراقبين لهذه اللجنة بعد.</p>}
                     </div>
                  </div>
 
@@ -611,20 +630,25 @@ export default function ExamCommitteesControl() {
                            </tr>
                          </thead>
                          <tbody>
-                           {viewCommitteeDetails.students.map((s) => (
-                             <tr key={s.seat_number} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
-                               <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
-                               <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
-                                  {s.students?.users?.avatar_url ? (
-                                    <img src={s.students.users.avatar_url} className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
-                                  ) : (
-                                    <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{s.students?.users?.full_name?.charAt(0) || 'ط'}</div>
-                                  )}
-                                  <span className="truncate">{s.students?.users?.full_name}</span>
-                               </td>
-                               <td className="p-3 border-b border-slate-100 font-bold text-slate-500">{s.students?.sections?.classes?.level === 10 ? 'العاشر' : 'الحادي عشر'}</td>
-                             </tr>
-                           ))}
+                           {viewCommitteeDetails.students.map((s) => {
+                             const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
+                             const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب';
+                             const classLvl = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
+                             return (
+                               <tr key={s.seat_number} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
+                                 <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
+                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
+                                    {stdAvatar ? (
+                                      <img src={stdAvatar} className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
+                                    ) : (
+                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdName.charAt(0)}</div>
+                                    )}
+                                    <span className="truncate">{stdName}</span>
+                                 </td>
+                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-500">{classLvl === 10 ? 'العاشر' : 'الحادي عشر'}</td>
+                               </tr>
+                             )
+                           })}
                          </tbody>
                        </table>
                     ) : (
@@ -637,13 +661,18 @@ export default function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 القوالب المخفية بثبات لمنع أخطاء الطباعة */}
+      {/* 
+        =========================================================
+        🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
+        تم إصلاح مشكلة الجوال بالاعتماد على fixed و opacity
+        =========================================================
+      */}
       {printData && (
-        <div style={{ position: 'absolute', top: '-9999px', left: '-9999px', width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
-          <div ref={printRef} className="w-[794px] bg-white text-black p-10 font-cairo" dir="rtl">
+        <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
             
             {printType === 'door_sheet' && (
-              <div className="min-h-[1122px] bg-white">
+              <div className="min-h-[1122px]">
                 <div className="text-center mb-8 border-b-2 border-slate-900 pb-6 flex items-center justify-between">
                   <div className="text-right">
                     <h2 className="text-xl font-black">دولة الكويت</h2>
@@ -662,7 +691,7 @@ export default function ExamCommitteesControl() {
                 <div className="mb-6 flex justify-between bg-slate-50 p-4 rounded-xl border border-slate-300">
                   <p className="font-black text-lg">أعضاء لجنة المراقبة:</p>
                   {printData.invigilators.map((i:any, idx:number) => (
-                    <p key={i.id} className="font-bold text-lg">{idx + 1}- أ. {i.users?.full_name}</p>
+                    <p key={i.id} className="font-bold text-lg">{idx + 1}- أ. {i.users?.full_name || i.users?.[0]?.full_name}</p>
                   ))}
                   {printData.invigilators.length === 0 && <p className="text-slate-400 font-bold">لم يتم التعيين.</p>}
                 </div>
@@ -678,81 +707,94 @@ export default function ExamCommitteesControl() {
                     </tr>
                   </thead>
                   <tbody>
-                    {printData.students.map((s:any, idx:number) => (
-                      <tr key={s.seat_number} className="even:bg-slate-50">
-                        <td className="border border-slate-900 p-3 text-center font-bold text-lg">{idx + 1}</td>
-                        <td className="border border-slate-900 p-3 text-center font-black text-xl tracking-widest">{s.seat_number}</td>
-                        <td className="border border-slate-900 p-3 font-bold text-lg">{s.students?.users?.full_name}</td>
-                        <td className="border border-slate-900 p-3 text-center font-bold text-lg">{s.students?.sections?.classes?.level === 10 ? 'العاشر' : 'الحادي عشر'}</td>
-                        <td className="border border-slate-900 p-3 text-center"></td>
-                      </tr>
-                    ))}
+                    {printData.students.map((s:any, idx:number) => {
+                      const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
+                      const stdClass = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
+                      return (
+                        <tr key={s.seat_number} className="even:bg-slate-50">
+                          <td className="border border-slate-900 p-3 text-center font-bold text-lg">{idx + 1}</td>
+                          <td className="border border-slate-900 p-3 text-center font-black text-xl tracking-widest">{s.seat_number}</td>
+                          <td className="border border-slate-900 p-3 font-bold text-lg">{stdName}</td>
+                          <td className="border border-slate-900 p-3 text-center font-bold text-lg">{stdClass === 10 ? 'العاشر' : 'الحادي عشر'}</td>
+                          <td className="border border-slate-900 p-3 text-center"></td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
 
             {printType === 'desk_cards' && (
-              <div className="grid grid-cols-2 gap-8 bg-white min-h-[1122px]">
-                {printData.students.map((s:any) => (
-                  <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-6 relative overflow-hidden flex flex-col items-center text-center shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-                    <div className="absolute top-0 left-0 w-full h-8 bg-slate-900"></div>
-                    <h2 className="text-xl font-black mt-4 mb-2 uppercase tracking-wider">{printData.committee.name}</h2>
-                    <div className="w-24 h-24 mb-4 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center shrink-0">
-                      {s.students?.users?.avatar_url ? ( 
-                        <img src={s.students.users.avatar_url} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> 
-                      ) : ( 
-                        <span className="text-xs font-bold text-slate-400">صورة الطالب</span> 
-                      )}
-                    </div>
-                    <h1 className="text-2xl font-black mb-2 text-indigo-900">{s.students?.users?.full_name}</h1>
-                    <div className="bg-slate-100 w-full py-3 rounded-xl mb-4 border border-slate-300">
-                      <p className="text-sm font-bold text-slate-500 mb-1">الصف والمرحلة</p>
-                      <p className="text-xl font-black">{s.students?.sections?.classes?.level === 10 ? 'الصف العاشر' : 'الصف الحادي عشر'}</p>
-                    </div>
-                    <div className="bg-slate-900 text-white w-full py-4 rounded-xl shadow-md mt-auto">
-                      <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس الامتحاني</p>
-                      <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
-                    </div>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 gap-8 min-h-[1122px]">
+                {printData.students.map((s:any) => {
+                   const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
+                   const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
+                   const stdClass = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
+                   return (
+                      <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-6 relative overflow-hidden flex flex-col items-center text-center shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+                        <div className="absolute top-0 left-0 w-full h-8 bg-slate-900"></div>
+                        <h2 className="text-xl font-black mt-4 mb-2 uppercase tracking-wider">{printData.committee.name}</h2>
+                        <div className="w-24 h-24 mb-4 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center shrink-0">
+                          {stdAvatar ? ( 
+                            <img src={stdAvatar} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> 
+                          ) : ( 
+                            <span className="text-xs font-bold text-slate-400">صورة الطالب</span> 
+                          )}
+                        </div>
+                        <h1 className="text-2xl font-black mb-2 text-indigo-900">{stdName}</h1>
+                        <div className="bg-slate-100 w-full py-3 rounded-xl mb-4 border border-slate-300">
+                          <p className="text-sm font-bold text-slate-500 mb-1">الصف والمرحلة</p>
+                          <p className="text-xl font-black">{stdClass === 10 ? 'الصف العاشر' : 'الصف الحادي عشر'}</p>
+                        </div>
+                        <div className="bg-slate-900 text-white w-full py-4 rounded-xl shadow-md mt-auto">
+                          <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس الامتحاني</p>
+                          <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
+                        </div>
+                      </div>
+                   )
+                })}
               </div>
             )}
 
             {printType === 'invigilator_ids' && (
-              <div className="flex flex-wrap gap-8 justify-center bg-white min-h-[1122px]">
-                {printData.invigilators.map((invig:any) => (
-                  <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-indigo-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
-                    <div className="absolute top-0 left-0 w-full h-[35mm] bg-indigo-900 shrink-0"></div>
-                    <div className="absolute top-[25mm] left-1/2 -translate-x-1/2 w-[90mm] h-[20mm] bg-indigo-800 rounded-[50%] shrink-0"></div>
-                    
-                    <div className="relative z-10 w-full pt-3">
-                       <p className="text-white font-black text-sm tracking-wider">مدرسة الرفعة النموذجية</p>
-                       <p className="text-indigo-200 font-bold text-[10px]">لجنة الامتحانات النهائية</p>
-                    </div>
+              <div className="flex flex-wrap gap-8 justify-center min-h-[1122px]">
+                {printData.invigilators.map((invig:any) => {
+                  const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
+                  const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
+                  return (
+                    <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-indigo-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
+                      <div className="absolute top-0 left-0 w-full h-[35mm] bg-indigo-900 shrink-0"></div>
+                      <div className="absolute top-[25mm] left-1/2 -translate-x-1/2 w-[90mm] h-[20mm] bg-indigo-800 rounded-[50%] shrink-0"></div>
+                      
+                      <div className="relative z-10 w-full pt-3">
+                         <p className="text-white font-black text-sm tracking-wider">مدرسة الرفعة النموذجية</p>
+                         <p className="text-indigo-200 font-bold text-[10px]">لجنة الامتحانات النهائية</p>
+                      </div>
 
-                    <div className="relative z-10 w-[22mm] h-[22mm] mt-4 mb-3 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
-                       {invig.users?.avatar_url ? ( 
-                          <img src={invig.users.avatar_url} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
-                       ) : ( 
-                          <UserPlus className="w-8 h-8 text-slate-300" /> 
-                       )}
-                    </div>
+                      <div className="relative z-10 w-[22mm] h-[22mm] mt-4 mb-3 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
+                         {invAvatar ? ( 
+                            <img src={invAvatar} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
+                         ) : ( 
+                            <UserPlus className="w-8 h-8 text-slate-300" /> 
+                         )}
+                      </div>
 
-                    <div className="relative z-10 w-full px-3 flex-1 flex flex-col">
-                       <h2 className="text-lg font-black text-indigo-900 mb-1 leading-tight">{invig.users?.full_name}</h2>
-                       <p className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-widest border-b-2 border-indigo-100 pb-2">مراقب لجنة</p>
-                       
-                       <div className="mt-auto bg-indigo-50 w-full p-2 rounded-lg border border-indigo-100 mb-3">
-                          <p className="text-[10px] font-bold text-indigo-400 mb-0.5">مكلف في</p>
-                          <p className="text-sm font-black text-indigo-900">{printData.committee.name}</p>
-                          {printData.committee.location && <p className="text-[10px] font-bold text-slate-500 mt-0.5">{printData.committee.location}</p>}
-                       </div>
+                      <div className="relative z-10 w-full px-3 flex-1 flex flex-col">
+                         <h2 className="text-lg font-black text-indigo-900 mb-1 leading-tight">{invName}</h2>
+                         <p className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-widest border-b-2 border-indigo-100 pb-2">مراقب لجنة</p>
+                         
+                         <div className="mt-auto bg-indigo-50 w-full p-2 rounded-lg border border-indigo-100 mb-3">
+                            <p className="text-[10px] font-bold text-indigo-400 mb-0.5">مكلف في</p>
+                            <p className="text-sm font-black text-indigo-900">{printData.committee.name}</p>
+                            {printData.committee.location && <p className="text-[10px] font-bold text-slate-500 mt-0.5">{printData.committee.location}</p>}
+                         </div>
+                      </div>
+                      
+                      <div className="w-full h-2 bg-indigo-900 shrink-0"></div>
                     </div>
-                    
-                    <div className="w-full h-2 bg-indigo-900 shrink-0"></div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
