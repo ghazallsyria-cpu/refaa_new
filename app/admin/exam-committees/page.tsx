@@ -30,6 +30,7 @@ export default function ExamCommitteesControl() {
   
   const [isLoading, setIsLoading] = useState(true);
   
+  // 🚀 حالات النوافذ المنبثقة
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -67,6 +68,7 @@ export default function ExamCommitteesControl() {
       const stats: any = {};
       if (allocs) { allocs.forEach((a: any) => { stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; }); }
 
+      // تنظيف البيانات لضمان عدم حدوث أي انهيار أثناء البحث
       const formattedTeachers = (tchrs || []).map((t: any) => {
         const u = Array.isArray(t.users) ? t.users[0] : t.users;
         const subjects = t.teacher_subjects?.map((s:any) => s.subjects?.name).filter(Boolean).join('، ') || 'غير محدد';
@@ -210,7 +212,7 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة المحسن للهواتف (تم التعديل ليناسب Safari/iOS)
+  // 🚀 محرك الطباعة المحسن للهواتف والمثبت بإحداثيات آمنة (Fixed to Top: 200vh)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
@@ -231,7 +233,7 @@ export default function ExamCommitteesControl() {
           windowWidth: 1024 
         });
         
-        const imgData = canvas.toDataURL('image/jpeg', 0.9); // استخدام JPEG لتخفيف الحمل على الذاكرة
+        const imgData = canvas.toDataURL('image/jpeg', 0.9);
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
@@ -245,7 +247,7 @@ export default function ExamCommitteesControl() {
         pdf.save(`${fileName}.pdf`);
       } catch (err: any) { 
         console.error("PDF Engine Error:", err);
-        alert('حدث خطأ أثناء معالجة الصور. يرجى المحاولة باستخدام متصفح كروم أو من جهاز كمبيوتر.'); 
+        alert('حدث خطأ أثناء المعالجة في المتصفح الحالي، يرجى استخدام جهاز كمبيوتر أو متصفح كروم.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
     }, 2500); 
@@ -268,27 +270,28 @@ export default function ExamCommitteesControl() {
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => i.teacher_id === tId);
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
-       const term = (teacherSearchTerm || '').toLowerCase();
-       const matchesName = (t.full_name || '').toLowerCase().includes(term);
-       const matchesSubj = (t.subjectsStr || '').toLowerCase().includes(term);
+       const term = String(teacherSearchTerm || '').toLowerCase();
+       const matchesName = String(t.full_name || '').toLowerCase().includes(term);
+       const matchesSubj = String(t.subjectsStr || '').toLowerCase().includes(term);
        return matchesName || matchesSubj;
     })
     .sort((a, b) => {
        const aCount = getTeacherAssignments(a.id).length;
        const bCount = getTeacherAssignments(b.id).length;
        if (aCount !== bCount) return aCount - bCount; 
-       return (a.full_name || '').localeCompare((b.full_name || ''), 'ar');
+       return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ar');
     });
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
       
+      {/* 🚀 نافذة التحميل الشاملة */}
       <AnimatePresence>
         {(isEngineLoading || isPrinting) && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
             <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
             <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -392,14 +395,14 @@ export default function ExamCommitteesControl() {
                     <div className="space-y-2">
                       {committeeInvigs.map(invig => {
                         const invigAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
-                        const invigName = invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف';
+                        const invigName = String(invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف');
                         return (
                           <div key={invig.id} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                             <div className="flex items-center gap-2 overflow-hidden">
                               {invigAvatar ? (
                                  <img src={invigAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
                               ) : (
-                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{(invigName || 'م').charAt(0)}</div>
+                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0)}</div>
                               )}
                               <span className="text-xs font-bold text-slate-700 truncate">{invigName}</span>
                             </div>
@@ -433,11 +436,12 @@ export default function ExamCommitteesControl() {
         )}
       </div>
 
+      {/* 🚀 نافذة إدارة اللجنة (الآن داخل div عادي لحماية Framer Motion) */}
       <AnimatePresence>
         {isCommitteeModalOpen && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40" onClick={() => setIsCommitteeModalOpen(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-2xl z-50 p-6">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div key="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)} />
+            <motion.div key="modal" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                   <Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'إعدادات اللجنة' : 'لجنة جديدة'}
@@ -462,15 +466,16 @@ export default function ExamCommitteesControl() {
                 <button onClick={handleSaveCommittee} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md mt-4">حفظ التغييرات</button>
               </div>
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
 
+      {/* 🚀 نافذة اختيار المراقبين */}
       <AnimatePresence>
         {isAssignModalOpen && selectedCommittee && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 flex flex-col max-h-[90vh]">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div key="backdrop-assign" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}} />
+            <motion.div key="modal-assign" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]">
               
               <div className="flex justify-between items-center mb-6 shrink-0">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
@@ -498,10 +503,11 @@ export default function ExamCommitteesControl() {
                       const assignedComms = getTeacherAssignments(t.id);
                       const isInThisCommittee = assignedComms.some(c => c.committee_id === selectedCommittee.id);
                       const isSelected = selectedTeacherId === t.id;
+                      const initialChar = String(t.full_name || 'م').charAt(0);
 
                       return (
                          <div 
-                            key={t.id} 
+                            key={t.id || Math.random()} 
                             onClick={() => !isInThisCommittee && setSelectedTeacherId(t.id)}
                             className={cn(
                                "p-3 rounded-xl border flex items-center justify-between transition-all",
@@ -514,7 +520,7 @@ export default function ExamCommitteesControl() {
                                {t.avatar_url ? (
                                   <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{(t.full_name || 'م').charAt(0)}</div>
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{initialChar}</div>
                                )}
                                <div>
                                   <p className="text-sm font-black text-slate-800">{t.full_name}</p>
@@ -523,7 +529,7 @@ export default function ExamCommitteesControl() {
                             </div>
                             <div className="shrink-0 text-left">
                                {isInThisCommittee ? (
-                                  <span className="text-[10px] font-black text-slate-500 bg-slate-200 px-2 py-1 rounded border border-slate-300">موجود بهذه اللجنة</span>
+                                  <span className="text-[10px] font-black text-slate-500 bg-slate-200 px-2 py-1 rounded border border-slate-300">موجود باللجنة</span>
                                ) : assignedComms.length === 0 ? (
                                   <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">🟢 متاح (لم يُكلف)</span>
                                ) : (
@@ -546,7 +552,7 @@ export default function ExamCommitteesControl() {
                            <p className="text-xs font-black text-amber-800 mb-1">معلومات أكاديمية للإدارة:</p>
                            <p className="text-[11px] font-bold text-amber-700 leading-relaxed">
                               هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{selectedTeacherSubjects}</span>.
-                              يُرجى عدم وضعه في لجان يُمتحن فيها تلاميذه بنفس المادة لضمان نزاهة المراقبة.
+                              يُرجى عدم وضعه في لجان يُمتحن فيها تلاميذه لضمان نزاهة المراقبة.
                            </p>
                         </div>
                      </motion.div>
@@ -560,15 +566,16 @@ export default function ExamCommitteesControl() {
                 </div>
               </div>
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
 
+      {/* 🚀 نافذة عرض تفاصيل اللجنة */}
       <AnimatePresence>
         {isViewModalOpen && selectedCommittee && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40" onClick={() => setIsViewModalOpen(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white rounded-3xl shadow-2xl z-50 p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div key="view-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)} />
+            <motion.div key="view-modal" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col">
               
               <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
                 <div>
@@ -586,13 +593,14 @@ export default function ExamCommitteesControl() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                        {viewCommitteeDetails.invigs.length > 0 ? viewCommitteeDetails.invigs.map(invig => {
                           const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
-                          const invName = invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف';
+                          const invName = String(invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف');
+                          const invInitial = invName.charAt(0);
                           return (
-                            <div key={invig.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <div key={invig.id || Math.random()} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                                {invAvatar ? (
                                   <img src={invAvatar} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100" alt="avatar" />
                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{(invName || 'م').charAt(0)}</div>
+                                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{invInitial}</div>
                                )}
                                <div>
                                   <p className="text-sm font-black text-slate-800">{invName}</p>
@@ -622,16 +630,16 @@ export default function ExamCommitteesControl() {
                          <tbody>
                            {viewCommitteeDetails.students.map((s) => {
                              const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
-                             const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب';
+                             const stdName = String(s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب');
                              const classLvl = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
                              return (
-                               <tr key={s.seat_number} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
+                               <tr key={s.seat_number || Math.random()} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
                                  <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
                                  <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
                                     {stdAvatar ? (
                                       <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
                                     ) : (
-                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{(stdName || 'ط').charAt(0)}</div>
+                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdName.charAt(0)}</div>
                                     )}
                                     <span className="truncate">{stdName}</span>
                                  </td>
@@ -647,19 +655,19 @@ export default function ExamCommitteesControl() {
                  </div>
               </div>
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
 
       {/* 
         =========================================================
         🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
-        تم إصلاح مشكلة الجوال باستخدام fixed top-100vh!
+        الآن متوافقة 100% مع الجوالات بفضل position: fixed top: 200vh
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'fixed', top: '100vh', left: 0, zIndex: -9999, pointerEvents: 'none' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
+        <div style={{ position: 'fixed', top: '200vh', left: 0, pointerEvents: 'none', zIndex: -9999 }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm' }}>
             
             {printType === 'door_sheet' && (
               <div className="min-h-[1122px] bg-white">
@@ -802,3 +810,4 @@ export default function ExamCommitteesControl() {
     </div>
   );
 }
+```</AnimatePresence>
