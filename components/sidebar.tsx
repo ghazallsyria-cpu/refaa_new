@@ -47,6 +47,7 @@ const navigation = [
   
   // 🚀 أدوات الامتحانات والكنترول المركزية
   { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
+  { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine }, // 🚀 جديد
   { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
   { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
   
@@ -114,10 +115,11 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     
     // روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
     if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'رادار الكنترول') return (authRole === 'admin' || authRole === 'management'); // 🚀 جديد
     if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
 
-    // 🚀 روابط الرادارات والعمليات المركزية (التتبع المزدوج)
+    // روابط الرادارات والعمليات المركزية (التتبع المزدوج)
     if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'العمليات المركزية') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'رادار المراقب') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
@@ -141,7 +143,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     // إذا كان مشرفاً إدارياً ولديه صلاحية المراقبة
     if (isGlobalWatcher) return true;
     
-    // 🚀 باقي الصلاحيات (تمت إضافة "رادار المراقب" للمعلم)
+    // باقي الصلاحيات 
     if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل', 'رادار المراقب'].includes(item.name);
     
     if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
