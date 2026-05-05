@@ -16,7 +16,7 @@ import {
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
-  ShieldCheck, FileKey, ScanLine // 🚀 تم إضافة أيقونة ScanLine للرادارات
+  ShieldCheck, FileKey, ScanLine, FileSignature // 🚀 تم إضافة FileSignature للغلاف الرقمي
 } from 'lucide-react';
 
 const navigation = [
@@ -47,7 +47,9 @@ const navigation = [
   
   // 🚀 أدوات الامتحانات والكنترول المركزية
   { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
-  { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine }, // 🚀 جديد
+  { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
+  { name: 'مسار إنجاز الكنترول', href: '/admin/exam-pipeline', icon: BarChart3 }, // 🚀 جديد
+  { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature }, // 🚀 جديد
   { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
   { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
   
@@ -115,9 +117,13 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     
     // روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
     if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
-    if (item.name === 'رادار الكنترول') return (authRole === 'admin' || authRole === 'management'); // 🚀 جديد
+    if (item.name === 'رادار الكنترول') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'مسار إنجاز الكنترول') return (authRole === 'admin' || authRole === 'management'); // 🚀 جديد
     if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
+
+    // الغلاف الرقمي متاح للإدارة ورؤساء الأقسام (المعلمين)
+    if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher'); // 🚀 جديد
 
     // روابط الرادارات والعمليات المركزية (التتبع المزدوج)
     if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management');
@@ -144,7 +150,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (isGlobalWatcher) return true;
     
     // باقي الصلاحيات 
-    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل', 'رادار المراقب'].includes(item.name);
+    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل', 'رادار المراقب', 'الغلاف الرقمي'].includes(item.name);
     
     if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
     
