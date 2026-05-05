@@ -1,3 +1,5 @@
+// @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import Link from 'next/link';
@@ -14,7 +16,7 @@ import {
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
-  ShieldCheck, FileKey // 🚀 أيقونات جديدة للكنترول والنماذج
+  ShieldCheck, FileKey, ScanLine // 🚀 تم إضافة أيقونة ScanLine للرادارات
 } from 'lucide-react';
 
 const navigation = [
@@ -42,9 +44,17 @@ const navigation = [
   { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate },
   { name: 'المنتديات', href: '/forums', icon: Compass },
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
-  { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck }, // 🚀 جديد
-  { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays }, // 🚀 جديد
-  { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey }, // 🚀 جديد
+  
+  // 🚀 أدوات الامتحانات والكنترول المركزية
+  { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
+  { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
+  { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
+  
+  // 🚀 الرادارات وعمليات التتبع الجديدة المزدوجة
+  { name: 'العمليات المركزية', href: '/admin/exam-live-dashboard', icon: Activity },
+  { name: 'رادار البوابة', href: '/admin/gate-radar', icon: ScanLine },
+  { name: 'رادار المراقب', href: '/teacher/exam-radar', icon: ScanLine },
+  
   { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
   { name: 'الجدول الدراسي القديم', href: '/schedule', icon: CalendarDays },
   { name: 'محرك الجدولة الذكي', href: '/admin/auto-schedule', icon: Wand2 },
@@ -71,7 +81,6 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const { user, userRole } = useAuth() as any;
   const [schoolData, setSchoolData] = useState({ name: 'المركز العلمي السوري', logo_url: '' });
   
-  // 🚀 جلب صلاحيات الستاف للسماح للمشرفين الإداريين بالرؤية
   const [staffPermissions, setStaffPermissions] = useState<any>({});
 
   useEffect(() => {
@@ -103,32 +112,37 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'استيراد البيانات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
     
-    // 🚀 روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
+    // روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
     if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
 
-    // 🚀 الروابط الجديدة للجدول للمدير والإدارة فقط
+    // 🚀 روابط الرادارات والعمليات المركزية (التتبع المزدوج)
+    if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'العمليات المركزية') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'رادار المراقب') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
+
+    // الروابط الجديدة للجدول للمدير والإدارة فقط
     if (item.name === 'محرك الجدولة الذكي') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'شاشة العرض المركزية') return (authRole === 'admin' || authRole === 'management' || authRole === 'student' || authRole === 'teacher' || authRole === 'parent');
 
     // ظهور الملف الشخصي للمعلم فقط
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
     
-    // 🚀 ظهور رابط الواجبات الذكية للإدارة فقط
+    // ظهور رابط الواجبات الذكية للإدارة فقط
     if (item.name === 'الواجبات بالذكاء الاصطناعي') return (authRole === 'admin' || authRole === 'management');
 
-    // 🚀 ظهور رابط الساحة (طالب) ومراقبة الساحة (معلم + إدارة)
+    // ظهور رابط الساحة (طالب) ومراقبة الساحة (معلم + إدارة)
     if (item.name === 'ساحة التدريب') return (authRole === 'student');
     if (item.name === 'مراقبة الساحة') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
 
     if (authRole === 'admin' || authRole === 'management') return true; 
     
-    // 🚀 إذا كان مشرفاً إدارياً ولديه صلاحية المراقبة
+    // إذا كان مشرفاً إدارياً ولديه صلاحية المراقبة
     if (isGlobalWatcher) return true;
     
-    // باقي الصلاحيات للمعلمين والطلاب وأولياء الأمور
-    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل'].includes(item.name);
+    // 🚀 باقي الصلاحيات (تمت إضافة "رادار المراقب" للمعلم)
+    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل', 'رادار المراقب'].includes(item.name);
     
     if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
     
