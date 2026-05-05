@@ -265,7 +265,7 @@ export default function ExamCommitteesControl() {
         let fileName = 'مستند';
         if (type === 'door_sheet') fileName = `كشف_مناداة_${data.committee.name}`;
         if (type === 'desk_cards') fileName = `بطاقات_طاولة_${data.committee.name}`;
-        if (type === 'invigilator_ids') fileName = `هويات_المراقبين_${data.committee.name}`;
+        if (type === 'invigilator_ids') fileName = `هويات_المراقبين_الذكية`;
 
         pdf.save(`${fileName}.pdf`);
       } catch (err: any) { 
@@ -451,7 +451,7 @@ export default function ExamCommitteesControl() {
                     <button onClick={() => printDocument(committee.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2.5 rounded-xl flex items-center justify-center gap-1 hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-100">
                       <IdCard className="w-3 h-3"/> بطاقات الطاولة
                     </button>
-                    <button onClick={() => printDocument(committee.id, 'invigilator_ids')} className="bg-amber-50 text-amber-700 text-[10px] font-black py-2.5 rounded-xl flex items-center justify-center gap-1 hover:bg-amber-100 transition-colors shadow-sm border border-amber-100">
+                    <button onClick={() => printDocument(committee.id, 'invigilator_ids')} className="bg-emerald-50 text-emerald-700 text-[10px] font-black py-2.5 rounded-xl flex items-center justify-center gap-1 hover:bg-emerald-100 transition-colors shadow-sm border border-emerald-100">
                       <Contact className="w-3 h-3"/> هويات المراقبين
                     </button>
                   </div>
@@ -682,14 +682,13 @@ export default function ExamCommitteesControl() {
       {/* 
         =========================================================
         🖨️ قوالب الطباعة (مقسمة إلى صفحات منفصلة لمنع قص البطاقات)
-        تم إضافة تصميم فخم بألوان داكنة قوية وتعديل خطوط اللجنة
         =========================================================
       */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10" dir="rtl">
             
-            {/* 📄 كشف المناداة - مقسم كل 18 طالب في صفحة */}
+            {/* 📄 كشف المناداة */}
             {printType === 'door_sheet' && chunkArray(printData.students, 18).map((studentChunk, pageIndex) => (
               <div key={pageIndex} className="print-page-wrapper bg-white flex flex-col" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
                 <div className="text-center mb-8 border-b-2 border-slate-900 pb-6 flex items-center justify-between shrink-0">
@@ -746,7 +745,7 @@ export default function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 بطاقات الطاولة - تصميم فخم وجديد تماماً */}
+            {/* 📄 بطاقات الطاولة */}
             {printType === 'desk_cards' && chunkArray(printData.students, 4).map((studentChunk, pageIndex) => (
               <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
                 <div className="grid grid-cols-2 gap-8 h-full content-start">
@@ -761,16 +760,11 @@ export default function ExamCommitteesControl() {
 
                      return (
                         <div key={s.seat_number} className="border-4 border-slate-900 rounded-[2rem] p-6 relative overflow-hidden flex flex-col items-center text-center shadow-sm h-[480px] bg-white" style={{ pageBreakInside: 'avoid' }}>
-                          
-                          {/* الشريط العلوي الكحلي وتم إصلاح تداخل النصوص */}
                           <div className="absolute top-0 left-0 w-full h-12 bg-slate-900 flex items-center justify-center">
-                             <p className="text-white text-sm font-black tracking-widest mt-1">مدرسة الرفعة النموذجية</p>
+                             <p className="text-white text-sm font-black mt-1">مدرسة الرفعة النموذجية</p>
                           </div>
                           
-                          {/* مساحة فارغة لدفع المحتوى أسفل الشريط */}
                           <div className="h-8 w-full shrink-0"></div>
-                          
-                          {/* اسم اللجنة واضح جداً */}
                           <h2 className="text-[26px] font-black text-slate-900 mb-4">{printData.committee.name}</h2>
                           
                           <div className="w-28 h-28 mb-4 rounded-2xl bg-slate-50 overflow-hidden border-2 border-slate-200 shadow-inner flex items-center justify-center shrink-0">
@@ -781,7 +775,6 @@ export default function ExamCommitteesControl() {
                             )}
                           </div>
                           
-                          {/* تم تصغير الخط قليلاً لمنع تقطع الأسماء الطويلة */}
                           <h1 className="text-[22px] font-black mb-3 text-indigo-950 line-clamp-2 min-h-[60px] flex items-center justify-center leading-tight px-2 w-full">{stdName}</h1>
                           
                           <div className="bg-slate-50 w-full py-3 rounded-xl mb-auto border border-slate-200 shadow-sm">
@@ -789,10 +782,9 @@ export default function ExamCommitteesControl() {
                             <p className="text-xl font-black text-slate-800">{fullClassName}</p>
                           </div>
                           
-                          {/* المنطقة السفلية الفخمة */}
                           <div className="bg-slate-900 text-white w-full p-4 rounded-2xl shadow-md mt-4 flex items-center justify-between">
                             <div className="text-right">
-                               <p className="text-xs font-bold text-slate-300 mb-1">رقم الجلوس الامتحاني</p>
+                               <p className="text-xs font-bold text-slate-300 mb-1">رقم الجلوس</p>
                                <p className="text-4xl font-black tracking-widest text-white">{s.seat_number}</p>
                             </div>
                             <div className="w-[72px] h-[72px] bg-white p-1.5 rounded-xl shrink-0 overflow-hidden border-2 border-slate-700">
@@ -806,7 +798,7 @@ export default function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 هويات المراقبين */}
+            {/* 📄 هويات المراقبين - الهوية الذكية المحدثة بدون تقطع بالحروف */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((invigChunk, pageIndex) => (
               <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
                 <div className="flex flex-wrap gap-8 justify-center content-start">
@@ -814,15 +806,21 @@ export default function ExamCommitteesControl() {
                     const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
                     const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
                     const safeAvatar = invAvatar ? `${invAvatar}?t=${new Date().getTime()}` : null;
+                    
+                    // الباركود الذكي للمعلم (يعمل كمفتاح رقمي بدلًا من اسم اللجنة الثابت)
+                    const qrPayload = `raf-teacher:${invig.teacher_id}`;
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
                       <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-slate-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
+                        
                         <div className="absolute top-0 left-0 w-full h-[30mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-3">
-                           <p className="text-white font-black text-sm tracking-widest">مدرسة الرفعة النموذجية</p>
-                           <p className="text-slate-300 font-bold text-[10px] mt-1">لجنة الامتحانات النهائية</p>
+                           {/* إزالة كلاس tracking-widest لإصلاح تقطع الحروف العربية */}
+                           <p className="text-white font-black text-[13px] mt-1">مدرسة الرفعة النموذجية</p>
+                           <p className="text-emerald-400 font-bold text-[10px] mt-1">هوية مراقب معتمد</p>
                         </div>
                         
-                        <div className="relative z-10 w-[24mm] h-[24mm] mt-[16mm] mb-3 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
+                        <div className="relative z-10 w-[22mm] h-[22mm] mt-[18mm] mb-2 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
                            {safeAvatar ? ( 
                               <img src={safeAvatar} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
                            ) : ( 
@@ -830,18 +828,20 @@ export default function ExamCommitteesControl() {
                            )}
                         </div>
 
-                        <div className="relative z-10 w-full px-3 flex-1 flex flex-col">
-                           <h2 className="text-lg font-black text-slate-900 mb-1 leading-tight">{invName}</h2>
-                           <p className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-widest border-b-2 border-slate-100 pb-2">مراقب لجنة</p>
+                        <div className="relative z-10 w-full px-3 flex-1 flex flex-col items-center">
+                           <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{invName}</h2>
+                           <p className="text-[10px] font-bold text-slate-500 mb-2 border-b border-slate-200 pb-2 w-full">وزارة التربية - لجان الامتحانات</p>
                            
-                           <div className="mt-auto bg-slate-50 w-full p-2.5 rounded-xl border border-slate-200 mb-3">
-                              <p className="text-[10px] font-black text-slate-500 mb-1">مكلف في</p>
-                              <p className="text-sm font-black text-slate-900">{printData.committee.name}</p>
-                              {printData.committee.location && <p className="text-[10px] font-bold text-slate-500 mt-1">{printData.committee.location}</p>}
+                           {/* الباركود السحري بدلاً من اسم اللجنة المتغير */}
+                           <div className="mt-auto mb-3 flex flex-col items-center">
+                              <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-lg border border-slate-300 mb-1">
+                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
+                              </div>
+                              <p className="text-[8px] font-black text-slate-400">امسح الكود للتحقق</p>
                            </div>
                         </div>
                         
-                        <div className="w-full h-3 bg-slate-900 shrink-0"></div>
+                        <div className="w-full h-2 bg-emerald-500 shrink-0"></div>
                       </div>
                     )
                   })}
