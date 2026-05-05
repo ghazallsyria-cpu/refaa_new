@@ -12,7 +12,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
-// 🚀 استخدام النسخة الاحترافية (PRO) لحل مشاكل الجوالات تماماً
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -211,7 +210,6 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة الاحترافي المخصص لجميع المنصات باستخدام html2canvas-pro
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
@@ -220,7 +218,6 @@ export default function ExamCommitteesControl() {
     setPrintData(data); 
     setPrintType(type);
 
-    // نعطي الـ DOM وقتاً كافياً للرسم
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
@@ -228,7 +225,6 @@ export default function ExamCommitteesControl() {
 
         const isMobile = window.innerWidth < 768;
 
-        // مكتبة PRO قوية جداً ضد أخطاء الجوالات
         const canvas = await html2canvas(printRef.current, { 
           scale: isMobile ? 1.5 : 2, 
           useCORS: true, 
@@ -238,7 +234,7 @@ export default function ExamCommitteesControl() {
           backgroundColor: '#ffffff'
         });
         
-        const imgData = canvas.toDataURL('image/jpeg', 0.85); // JPEG أخف جداً من PNG ولا يسبب انهيار للذاكرة
+        const imgData = canvas.toDataURL('image/jpeg', 0.85);
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
@@ -256,7 +252,7 @@ export default function ExamCommitteesControl() {
         alert('حدث خطأ أثناء معالجة الصور. يرجى المحاولة لاحقاً أو من جهاز كمبيوتر.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
-    }, 2500); 
+    }, 3000); 
   };
 
   if (currentRole !== 'admin' && currentRole !== 'management') {
@@ -663,12 +659,13 @@ export default function ExamCommitteesControl() {
 
       {/* 
         =========================================================
-        🖨️ قوالب الطباعة الموضوعة بشكل مرئي تماماً لخداع المتصفح
+        🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
+        الآن متوافقة 100% مع أجهزة آبل وتم إصلاح التنسيق والباركود
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 90, width: '100%', backgroundColor: 'white' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo mx-auto" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
             
             {printType === 'door_sheet' && (
               <div className="min-h-[1122px] bg-white">
@@ -725,32 +722,43 @@ export default function ExamCommitteesControl() {
             )}
 
             {printType === 'desk_cards' && (
-              <div className="grid grid-cols-2 gap-8 bg-white min-h-[1122px]">
+              <div className="grid grid-cols-2 gap-6 bg-white min-h-[1122px]">
                 {printData.students.map((s:any) => {
                    const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
                    const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
                    const stdClass = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
-                   const safeAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
+                   // 🚀 إضافة كود الـ QR Code (يقرأ رقم الجلوس مباشرة بدون أي مكتبات إضافية)
+                   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${s.seat_number}&margin=0`;
 
                    return (
-                      <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-6 relative overflow-hidden flex flex-col items-center text-center shadow-sm" style={{ pageBreakInside: 'avoid' }}>
+                      <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-5 relative overflow-hidden flex flex-col items-center text-center shadow-sm" style={{ pageBreakInside: 'avoid' }}>
                         <div className="absolute top-0 left-0 w-full h-8 bg-slate-900"></div>
-                        <h2 className="text-xl font-black mt-4 mb-2 uppercase tracking-wider">{printData.committee.name}</h2>
-                        <div className="w-24 h-24 mb-4 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center shrink-0">
-                          {safeAvatar ? ( 
-                            <img src={safeAvatar} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> 
+                        {/* إزالة كلاس tracking-wider المزعج الذي كان يقطع الحروف العربية */}
+                        <h2 className="text-xl font-black mt-4 mb-2">{printData.committee.name}</h2>
+                        
+                        <div className="w-20 h-20 mb-3 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center shrink-0">
+                          {stdAvatar ? ( 
+                            <img src={stdAvatar} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> 
                           ) : ( 
                             <span className="text-xs font-bold text-slate-400">صورة الطالب</span> 
                           )}
                         </div>
+                        
                         <h1 className="text-2xl font-black mb-2 text-indigo-900">{stdName}</h1>
-                        <div className="bg-slate-100 w-full py-3 rounded-xl mb-4 border border-slate-300">
+                        
+                        <div className="bg-slate-100 w-full py-2 rounded-xl mb-3 border border-slate-300">
                           <p className="text-sm font-bold text-slate-500 mb-1">الصف والمرحلة</p>
                           <p className="text-xl font-black">{stdClass === 10 ? 'الصف العاشر' : 'الصف الحادي عشر'}</p>
                         </div>
-                        <div className="bg-slate-900 text-white w-full py-4 rounded-xl shadow-md mt-auto">
-                          <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس الامتحاني</p>
-                          <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
+                        
+                        <div className="bg-slate-900 text-white w-full p-4 rounded-xl shadow-md mt-auto flex items-center justify-between">
+                          <div className="text-right">
+                             <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس الامتحاني</p>
+                             <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
+                          </div>
+                          <div className="w-16 h-16 bg-white p-1 rounded-lg shrink-0 overflow-hidden">
+                             <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
+                          </div>
                         </div>
                       </div>
                    )
@@ -763,8 +771,6 @@ export default function ExamCommitteesControl() {
                 {printData.invigilators.map((invig:any) => {
                   const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
                   const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
-                  const safeAvatar = invAvatar ? `${invAvatar}?t=${new Date().getTime()}` : null;
-
                   return (
                     <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-indigo-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
                       <div className="absolute top-0 left-0 w-full h-[35mm] bg-indigo-900 shrink-0"></div>
@@ -776,8 +782,8 @@ export default function ExamCommitteesControl() {
                       </div>
 
                       <div className="relative z-10 w-[22mm] h-[22mm] mt-4 mb-3 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
-                         {safeAvatar ? ( 
-                            <img src={safeAvatar} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
+                         {invAvatar ? ( 
+                            <img src={invAvatar} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
                          ) : ( 
                             <UserPlus className="w-8 h-8 text-slate-300" /> 
                          )}
