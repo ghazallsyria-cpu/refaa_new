@@ -5,7 +5,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, FileText, Printer, ShieldCheck, 
-  Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact, BarChart2
+  Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact, BarChart2,
+  Camera, UploadCloud // 🚀 تم إضافة أيقونات الكاميرا والرفع
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -44,6 +45,11 @@ export default function ExamCommitteesControl() {
   const [isPrinting, setIsPrinting] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
   const [printType, setPrintType] = useState<'door_sheet' | 'desk_cards' | 'invigilator_ids' | null>(null);
+
+  // 🚀 إعدادات رفع الصورة
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [targetUserId, setTargetUserId] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -90,6 +96,55 @@ export default function ExamCommitteesControl() {
       fetchData(); 
     }
   }, [currentRole]);
+
+  // 🚀 محرك رفع الصورة لـ Cloudinary وتحديث قاعدة البيانات
+  const triggerAvatarUpload = (userId: string) => {
+    setTargetUserId(userId);
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetUserId) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      // ضع الـ Upload Preset الخاص بك هنا
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'rafaa_preset');
+
+      // ضع الـ Cloud Name الخاص بك هنا
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dzmyqnj01';
+      
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.secure_url) {
+        // تحديث قاعدة البيانات في Supabase
+        const { error } = await supabase
+          .from('users')
+          .update({ avatar_url: data.secure_url })
+          .eq('id', targetUserId);
+
+        if (error) throw error;
+        alert('تم رفع الصورة واعتمادها بنجاح!');
+        fetchData(); // تحديث اللوحة فوراً لظهور الصورة
+      } else {
+         throw new Error('فشل الرفع لكلاوديناري');
+      }
+    } catch (error) {
+      console.error('Upload Error:', error);
+      alert('حدث خطأ أثناء رفع الصورة. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsUploadingAvatar(false);
+      setTargetUserId(null);
+      if (fileInputRef.current) fileInputRef.current.value = ''; // تصفير حقل الإدخال
+    }
+  };
 
   const selectedTeacherData = teachers.find(t => t.id === selectedTeacherId);
   const selectedTeacherSubjects = selectedTeacherData?.subjectsStr || 'غير محدد';
@@ -182,7 +237,6 @@ export default function ExamCommitteesControl() {
     try { await supabase.from('committee_invigilators').delete().eq('id', id); fetchData(); } catch (error) { alert('حدث خطأ أثناء الإزالة'); }
   };
 
-  // 🚀 الحصول على التسمية الصحيحة للصف والشعبة
   const getFullClassName = (studentData: any) => {
     const classLvl = studentData?.sections?.classes?.level || studentData?.sections?.[0]?.classes?.level;
     let classNameDisplay = 'صف غير محدد';
@@ -315,12 +369,31 @@ export default function ExamCommitteesControl() {
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
       
+      {/* 🚀 حقل الإدخال المخفي الخاص برفع الصورة لكلاوديناري */}
+      <input 
+        type="file" 
+        accept="image/*" 
+        className="hidden" 
+        ref={fileInputRef} 
+        onChange={handleFileUpload} 
+      />
+
       { (isEngineLoading || isPrinting) && (
         <div className="fixed inset-0 bg-slate-900 z-[100] flex flex-col items-center justify-center text-white">
           <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
           <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
         </div>
       )}
+
+      {/* 🚀 نافذة التحميل الشفافة عند رفع الصورة */}
+      <AnimatePresence>
+        {isUploadingAvatar && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex flex-col items-center justify-center text-white">
+            <UploadCloud className="w-16 h-16 animate-bounce text-emerald-400 mb-4" />
+            <h2 className="text-xl font-black">جاري رفع الصورة إلى Cloudinary واعتمادها...</h2>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="max-w-7xl mx-auto space-y-8 relative">
         <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden">
@@ -424,14 +497,26 @@ export default function ExamCommitteesControl() {
                         const invigName = String(invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف');
                         return (
                           <div key={invig.id} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              {invigAvatar ? (
-                                 <img src={invigAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
-                              ) : (
-                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0) || 'م'}</div>
-                              )}
+                            
+                            {/* 🚀 إمكانية التعديل على صورة المراقب من داخل اللجنة */}
+                            <div 
+                               className="flex items-center gap-2 overflow-hidden relative group/avatar cursor-pointer" 
+                               onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(invig.teacher_id); }}
+                               title="انقر لرفع وتعديل صورة المعلم"
+                            >
+                              <div className="relative shrink-0">
+                                {invigAvatar ? (
+                                   <img src={invigAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="avatar" />
+                                ) : (
+                                   <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">{invigName.charAt(0) || 'م'}</div>
+                                )}
+                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity">
+                                  <Camera className="w-3 h-3 text-white" />
+                                </div>
+                              </div>
                               <span className="text-xs font-bold text-slate-700 truncate">{invigName}</span>
                             </div>
+
                             <button onClick={() => handleRemoveInvigilator(invig.id)} className="text-rose-400 hover:text-rose-600 p-1 bg-rose-50 rounded-lg shrink-0"><Trash2 className="w-4 h-4"/></button>
                           </div>
                         )
@@ -539,11 +624,22 @@ export default function ExamCommitteesControl() {
                           }`}
                        >
                           <div className="flex items-center gap-3">
-                             {safeAvatarUrl ? (
-                                <img src={safeAvatarUrl} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
-                             ) : (
-                                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{initialChar}</div>
-                             )}
+                             {/* 🚀 إمكانية رفع وتعديل صورة المعلم من قائمة البحث أيضاً */}
+                             <div 
+                               className="relative group/avatar cursor-pointer" 
+                               onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(tId); }}
+                               title="انقر لرفع وتعديل صورة المعلم"
+                             >
+                               {safeAvatarUrl ? (
+                                  <img src={safeAvatarUrl} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" />
+                               ) : (
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{initialChar}</div>
+                               )}
+                               <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity">
+                                 <Camera className="w-4 h-4 text-white" />
+                               </div>
+                             </div>
+
                              <div>
                                 <p className="text-sm font-black text-slate-800">{teacherName}</p>
                                 <p className="text-[10px] font-bold text-slate-400 mt-0.5 max-w-[150px] truncate" title={t?.subjectsStr}>المواد: {t?.subjectsStr}</p>
@@ -807,7 +903,7 @@ export default function ExamCommitteesControl() {
                     const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
                     const safeAvatar = invAvatar ? `${invAvatar}?t=${new Date().getTime()}` : null;
                     
-                    // الباركود الذكي للمعلم (يعمل كمفتاح رقمي بدلًا من اسم اللجنة الثابت)
+                    // الباركود الذكي للمعلم
                     const qrPayload = `raf-teacher:${invig.teacher_id}`;
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
@@ -815,7 +911,6 @@ export default function ExamCommitteesControl() {
                       <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-slate-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
                         
                         <div className="absolute top-0 left-0 w-full h-[30mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-3">
-                           {/* إزالة كلاس tracking-widest لإصلاح تقطع الحروف العربية */}
                            <p className="text-white font-black text-[13px] mt-1">مدرسة الرفعة النموذجية</p>
                            <p className="text-emerald-400 font-bold text-[10px] mt-1">هوية مراقب معتمد</p>
                         </div>
@@ -832,7 +927,6 @@ export default function ExamCommitteesControl() {
                            <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{invName}</h2>
                            <p className="text-[10px] font-bold text-slate-500 mb-2 border-b border-slate-200 pb-2 w-full">وزارة التربية - لجان الامتحانات</p>
                            
-                           {/* الباركود السحري بدلاً من اسم اللجنة المتغير */}
                            <div className="mt-auto mb-3 flex flex-col items-center">
                               <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-lg border border-slate-300 mb-1">
                                  <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
