@@ -135,7 +135,6 @@ export default function ExamCommitteesControl() {
     setIsCommitteeModalOpen(true);
   };
 
-  // 🚀 تحديث جلب البيانات لاستخراج اسم الصف والشعبة الفعلي
   const openViewModal = async (committee: any) => {
     setIsLoading(true);
     setSelectedCommittee(committee);
@@ -183,7 +182,6 @@ export default function ExamCommitteesControl() {
     try { await supabase.from('committee_invigilators').delete().eq('id', id); fetchData(); } catch (error) { alert('حدث خطأ أثناء الإزالة'); }
   };
 
-  // 🚀 تحديث دالة الطباعة لجلب اسم الصف والشعبة الفعلي
   const fetchPrintData = async (committeeId: string) => {
     setIsPrinting(true);
     const { data } = await supabase.from('student_seat_allocations')
@@ -216,6 +214,7 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
+  // 🚀 محرك الطباعة الأسطوري (يدعم الصفحات المتعددة لمنع قص البطاقات)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
@@ -228,24 +227,32 @@ export default function ExamCommitteesControl() {
       if (!printRef.current) return;
       try {
         window.scrollTo(0, 0); 
-
         const isMobile = window.innerWidth < 768;
 
-        const canvas = await html2canvas(printRef.current, { 
-          scale: isMobile ? 1.5 : 2, 
-          useCORS: true, 
-          allowTaint: false, 
-          logging: false,
-          windowWidth: 1024,
-          backgroundColor: '#ffffff'
-        });
-        
-        const imgData = canvas.toDataURL('image/jpeg', 0.85); 
+        // 🚀 استهداف كل صفحة بشكل مستقل لتجنب القص
+        const pages = printRef.current.querySelectorAll('.print-page-wrapper');
+        if (pages.length === 0) return;
+
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
         
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        for (let i = 0; i < pages.length; i++) {
+          const canvas = await html2canvas(pages[i] as HTMLElement, { 
+            scale: isMobile ? 1.5 : 2, 
+            useCORS: true, 
+            allowTaint: false, 
+            logging: false,
+            width: 794,    // عرض A4 بالبكسل
+            height: 1122,  // طول A4 بالبكسل
+            backgroundColor: '#ffffff'
+          });
+          
+          const imgData = canvas.toDataURL('image/jpeg', 0.85); 
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight(); // استخدام الارتفاع الكامل للصفحة A4
+          
+          if (i > 0) pdf.addPage(); // إضافة صفحة جديدة لكل قسم
+          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        }
         
         let fileName = 'مستند';
         if (type === 'door_sheet') fileName = `كشف_مناداة_${data.committee.name}`;
@@ -258,7 +265,15 @@ export default function ExamCommitteesControl() {
         alert('حدث خطأ أثناء معالجة الصور. يرجى المحاولة لاحقاً أو من جهاز كمبيوتر.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
-    }, 2500); 
+    }, 3000); 
+  };
+
+  // 🚀 دالة ذكية لتقسيم المصفوفات لبناء الصفحات المتعددة
+  const chunkArray = (arr: any[], size: number) => {
+    if (!arr) return [];
+    return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+      arr.slice(i * size, i * size + size)
+    );
   };
 
   if (currentRole !== 'admin' && currentRole !== 'management') {
@@ -442,6 +457,8 @@ export default function ExamCommitteesControl() {
         )}
       </div>
 
+      {/* النوافذ المنبثقة */}
+      
       {/* نافذة إعدادات اللجنة */}
       {isCommitteeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
@@ -632,7 +649,6 @@ export default function ExamCommitteesControl() {
                            const stdName = String(s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب');
                            const stdInitial = stdName.charAt(0) || 'ط';
                            
-                           // 🚀 جلب اسم الصف واسم الشعبة الفعليين بشكل احترافي
                            const clsName = s.students?.sections?.classes?.name || s.students?.sections?.[0]?.classes?.name || 'صف غير محدد';
                            const secName = s.students?.sections?.name || s.students?.sections?.[0]?.name || '';
                            const fullClassName = `${clsName} ${secName ? '- ' + secName : ''}`;
@@ -667,18 +683,17 @@ export default function ExamCommitteesControl() {
 
       {/* 
         =========================================================
-        🖨️ قوالب الطباعة الموضوعة بشكل مرئي تماماً لخداع المتصفح 
-        وإلغاء التباعد المزعج للحروف (tracking-wider) 
-        وإضافة QR Code احترافي + اسم المدرسة
+        🖨️ قوالب الطباعة (مقسمة إلى صفحات منفصلة لمنع قص البطاقات)
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 90, width: '100%', backgroundColor: 'white' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo mx-auto" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+          <div ref={printRef} className="flex flex-col gap-10" dir="rtl">
             
-            {printType === 'door_sheet' && (
-              <div className="min-h-[1122px] bg-white">
-                <div className="text-center mb-8 border-b-2 border-slate-900 pb-6 flex items-center justify-between">
+            {/* 📄 كشف المناداة - مقسم كل 18 طالب في صفحة */}
+            {printType === 'door_sheet' && chunkArray(printData.students, 18).map((studentChunk, pageIndex) => (
+              <div key={pageIndex} className="print-page-wrapper bg-white flex flex-col" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
+                <div className="text-center mb-8 border-b-2 border-slate-900 pb-6 flex items-center justify-between shrink-0">
                   <div className="text-right">
                     <h2 className="text-xl font-black">دولة الكويت</h2>
                     <h3 className="text-lg font-bold">وزارة التربية</h3>
@@ -693,7 +708,7 @@ export default function ExamCommitteesControl() {
                   </div>
                 </div>
 
-                <div className="mb-6 flex justify-between bg-slate-50 p-4 rounded-xl border border-slate-300">
+                <div className="mb-6 flex justify-between bg-slate-50 p-4 rounded-xl border border-slate-300 shrink-0">
                   <p className="font-black text-lg">أعضاء لجنة المراقبة:</p>
                   {printData.invigilators.map((i:any, idx:number) => (
                     <p key={i.id} className="font-bold text-lg">{idx + 1}- أ. {i.users?.full_name || i.users?.[0]?.full_name}</p>
@@ -701,132 +716,141 @@ export default function ExamCommitteesControl() {
                   {printData.invigilators.length === 0 && <p className="text-slate-400 font-bold">لم يتم التعيين.</p>}
                 </div>
 
-                <table className="w-full border-collapse border-2 border-slate-900">
+                <table className="w-full border-collapse border-2 border-slate-900 flex-1">
                   <thead>
-                    <tr className="bg-slate-200">
-                      <th className="border border-slate-900 p-3 text-lg font-black w-12 text-center">م</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">رقم الجلوس</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black">اسم الطالب الرباعي</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">الصف</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">التوقيع</th>
+                    <tr className="bg-slate-200 h-12">
+                      <th className="border border-slate-900 p-2 text-lg font-black w-12 text-center">م</th>
+                      <th className="border border-slate-900 p-2 text-lg font-black w-32 text-center">رقم الجلوس</th>
+                      <th className="border border-slate-900 p-2 text-lg font-black">اسم الطالب الرباعي</th>
+                      <th className="border border-slate-900 p-2 text-lg font-black w-32 text-center">الصف</th>
+                      <th className="border border-slate-900 p-2 text-lg font-black w-32 text-center">التوقيع</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {printData.students.map((s:any, idx:number) => {
+                    {studentChunk.map((s:any, idx:number) => {
                       const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
-                      // 🚀 جلب اسم الصف واسم الشعبة الفعلي
                       const clsName = s.students?.sections?.classes?.name || s.students?.sections?.[0]?.classes?.name || 'صف غير محدد';
                       const secName = s.students?.sections?.name || s.students?.sections?.[0]?.name || '';
                       const fullClassName = `${clsName} ${secName ? '- ' + secName : ''}`;
 
+                      // حساب التسلسل الصحيح المستمر بين الصفحات
+                      const serialNumber = (pageIndex * 18) + idx + 1;
+
                       return (
-                        <tr key={s.seat_number} className="even:bg-slate-50">
-                          <td className="border border-slate-900 p-3 text-center font-bold text-lg">{idx + 1}</td>
-                          <td className="border border-slate-900 p-3 text-center font-black text-xl tracking-widest">{s.seat_number}</td>
-                          <td className="border border-slate-900 p-3 font-bold text-lg">{stdName}</td>
-                          <td className="border border-slate-900 p-3 text-center font-bold text-lg">{fullClassName}</td>
-                          <td className="border border-slate-900 p-3 text-center"></td>
+                        <tr key={s.seat_number} className="even:bg-slate-50 h-[45px]">
+                          <td className="border border-slate-900 p-2 text-center font-bold text-lg">{serialNumber}</td>
+                          <td className="border border-slate-900 p-2 text-center font-black text-xl tracking-widest">{s.seat_number}</td>
+                          <td className="border border-slate-900 p-2 font-bold text-lg">{stdName}</td>
+                          <td className="border border-slate-900 p-2 text-center font-bold text-lg truncate max-w-[120px]">{fullClassName}</td>
+                          <td className="border border-slate-900 p-2 text-center"></td>
                         </tr>
                       )
                     })}
                   </tbody>
                 </table>
               </div>
-            )}
+            ))}
 
-            {printType === 'desk_cards' && (
-              <div className="grid grid-cols-2 gap-6 bg-white min-h-[1122px]">
-                {printData.students.map((s:any) => {
-                   const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
-                   const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
-                   // 🚀 جلب اسم الصف والشعبة الفعلي
-                   const clsName = s.students?.sections?.classes?.name || s.students?.sections?.[0]?.classes?.name || 'صف غير محدد';
-                   const secName = s.students?.sections?.name || s.students?.sections?.[0]?.name || '';
-                   const fullClassName = `${clsName} ${secName ? '- ' + secName : ''}`;
-                   
-                   // رابط QR Code يحمل بروتوكول نظام المدرسة
-                   const qrPayload = `raf-exam-seat:${s.seat_number}`;
-                   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
+            {/* 📄 بطاقات الطاولة - مقسمة 4 بطاقات لكل صفحة A4 (2x2 Grid) لمنع القص */}
+            {printType === 'desk_cards' && chunkArray(printData.students, 4).map((studentChunk, pageIndex) => (
+              <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
+                <div className="grid grid-cols-2 gap-8 h-full content-start">
+                  {studentChunk.map((s:any) => {
+                     const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
+                     const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
+                     const clsName = s.students?.sections?.classes?.name || s.students?.sections?.[0]?.classes?.name || 'صف غير محدد';
+                     const secName = s.students?.sections?.name || s.students?.sections?.[0]?.name || '';
+                     const fullClassName = `${clsName} ${secName ? '- ' + secName : ''}`;
+                     
+                     const qrPayload = `raf-exam-seat:${s.seat_number}`;
+                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
+                     const safeAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
-                   return (
-                      <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-5 relative overflow-hidden flex flex-col items-center text-center shadow-sm" style={{ pageBreakInside: 'avoid' }}>
-                        <div className="absolute top-0 left-0 w-full h-8 bg-slate-900"></div>
-                        
-                        {/* 🚀 إزالة كلاس tracking-wider الذي كان يقطع الحروف وإضافة اسم المدرسة */}
-                        <p className="text-[10px] font-black text-slate-400 mt-5 mb-0.5">مدرسة الرفعة النموذجية</p>
-                        <h2 className="text-xl font-black mb-3">{printData.committee.name}</h2>
-                        
-                        <div className="w-20 h-20 mb-3 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center shrink-0">
-                          {stdAvatar ? ( 
-                            <img src={stdAvatar} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> 
-                          ) : ( 
-                            <span className="text-xs font-bold text-slate-400">صورة الطالب</span> 
-                          )}
-                        </div>
-                        
-                        <h1 className="text-2xl font-black mb-2 text-indigo-900 line-clamp-2 min-h-[64px] flex items-center justify-center">{stdName}</h1>
-                        
-                        <div className="bg-slate-100 w-full py-2 rounded-xl mb-3 border border-slate-300">
-                          <p className="text-sm font-bold text-slate-500 mb-1">الصف والمرحلة</p>
-                          <p className="text-xl font-black">{fullClassName}</p>
-                        </div>
-                        
-                        <div className="bg-slate-900 text-white w-full p-4 rounded-xl shadow-md mt-auto flex items-center justify-between">
-                          <div className="text-right">
-                             <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس</p>
-                             <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
+                     return (
+                        // تحديد ارتفاع ثابت لكل بطاقة لضمان التوافق المطلق داخل الـ A4
+                        <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-5 relative overflow-hidden flex flex-col items-center text-center shadow-sm h-[480px]" style={{ pageBreakInside: 'avoid' }}>
+                          <div className="absolute top-0 left-0 w-full h-8 bg-slate-900"></div>
+                          
+                          <p className="text-[10px] font-black text-slate-400 mt-5 mb-0.5">مدرسة الرفعة النموذجية</p>
+                          <h2 className="text-xl font-black mb-3">{printData.committee.name}</h2>
+                          
+                          <div className="w-24 h-24 mb-3 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center shrink-0">
+                            {safeAvatar ? ( 
+                              <img src={safeAvatar} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> 
+                            ) : ( 
+                              <span className="text-xs font-bold text-slate-400">صورة الطالب</span> 
+                            )}
                           </div>
-                          {/* 🚀 إضافة الـ QR Code بجانب رقم الجلوس */}
-                          <div className="w-[60px] h-[60px] bg-white p-1 rounded-lg shrink-0 overflow-hidden border border-slate-300">
-                             <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR Code" className="w-full h-full object-contain" />
+                          
+                          {/* الخط أصبح أصغر قليلاً لاستيعاب الأسماء الطويلة بدون تشوه */}
+                          <h1 className="text-[22px] font-black mb-2 text-indigo-900 line-clamp-2 min-h-[60px] flex items-center justify-center leading-tight px-2">{stdName}</h1>
+                          
+                          <div className="bg-slate-100 w-full py-2 rounded-xl mb-3 border border-slate-300">
+                            <p className="text-sm font-bold text-slate-500 mb-1">الصف والمرحلة</p>
+                            <p className="text-xl font-black">{fullClassName}</p>
+                          </div>
+                          
+                          <div className="bg-slate-900 text-white w-full p-4 rounded-xl shadow-md mt-auto flex items-center justify-between">
+                            <div className="text-right">
+                               <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس</p>
+                               <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
+                            </div>
+                            <div className="w-[64px] h-[64px] bg-white p-1 rounded-lg shrink-0 overflow-hidden border border-slate-300">
+                               <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR Code" className="w-full h-full object-contain" />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                   )
-                })}
+                     )
+                  })}
+                </div>
               </div>
-            )}
+            ))}
 
-            {printType === 'invigilator_ids' && (
-              <div className="flex flex-wrap gap-8 justify-center bg-white min-h-[1122px]">
-                {printData.invigilators.map((invig:any) => {
-                  const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
-                  const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
-                  return (
-                    <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-indigo-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
-                      <div className="absolute top-0 left-0 w-full h-[35mm] bg-indigo-900 shrink-0"></div>
-                      <div className="absolute top-[25mm] left-1/2 -translate-x-1/2 w-[90mm] h-[20mm] bg-indigo-800 rounded-[50%] shrink-0"></div>
-                      
-                      <div className="relative z-10 w-full pt-3">
-                         <p className="text-white font-black text-sm tracking-wider">مدرسة الرفعة النموذجية</p>
-                         <p className="text-indigo-200 font-bold text-[10px]">لجنة الامتحانات النهائية</p>
-                      </div>
+            {/* 📄 هويات المراقبين - مقسمة 6 هويات في كل صفحة لمنع التداخل */}
+            {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((invigChunk, pageIndex) => (
+              <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
+                <div className="flex flex-wrap gap-8 justify-center content-start">
+                  {invigChunk.map((invig:any) => {
+                    const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
+                    const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
+                    const safeAvatar = invAvatar ? `${invAvatar}?t=${new Date().getTime()}` : null;
 
-                      <div className="relative z-10 w-[22mm] h-[22mm] mt-4 mb-3 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
-                         {invAvatar ? ( 
-                            <img src={invAvatar} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
-                         ) : ( 
-                            <UserPlus className="w-8 h-8 text-slate-300" /> 
-                         )}
-                      </div>
+                    return (
+                      <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-indigo-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
+                        <div className="absolute top-0 left-0 w-full h-[35mm] bg-indigo-900 shrink-0"></div>
+                        <div className="absolute top-[25mm] left-1/2 -translate-x-1/2 w-[90mm] h-[20mm] bg-indigo-800 rounded-[50%] shrink-0"></div>
+                        
+                        <div className="relative z-10 w-full pt-3">
+                           <p className="text-white font-black text-sm tracking-wider">مدرسة الرفعة النموذجية</p>
+                           <p className="text-indigo-200 font-bold text-[10px]">لجنة الامتحانات النهائية</p>
+                        </div>
 
-                      <div className="relative z-10 w-full px-3 flex-1 flex flex-col">
-                         <h2 className="text-lg font-black text-indigo-900 mb-1 leading-tight">{invName}</h2>
-                         <p className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-widest border-b-2 border-indigo-100 pb-2">مراقب لجنة</p>
-                         
-                         <div className="mt-auto bg-indigo-50 w-full p-2 rounded-lg border border-indigo-100 mb-3">
-                            <p className="text-[10px] font-bold text-indigo-400 mb-0.5">مكلف في</p>
-                            <p className="text-sm font-black text-indigo-900">{printData.committee.name}</p>
-                            {printData.committee.location && <p className="text-[10px] font-bold text-slate-500 mt-0.5">{printData.committee.location}</p>}
-                         </div>
+                        <div className="relative z-10 w-[22mm] h-[22mm] mt-4 mb-3 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
+                           {safeAvatar ? ( 
+                              <img src={safeAvatar} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> 
+                           ) : ( 
+                              <UserPlus className="w-8 h-8 text-slate-300" /> 
+                           )}
+                        </div>
+
+                        <div className="relative z-10 w-full px-3 flex-1 flex flex-col">
+                           <h2 className="text-lg font-black text-indigo-900 mb-1 leading-tight">{invName}</h2>
+                           <p className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-widest border-b-2 border-indigo-100 pb-2">مراقب لجنة</p>
+                           
+                           <div className="mt-auto bg-indigo-50 w-full p-2 rounded-lg border border-indigo-100 mb-3">
+                              <p className="text-[10px] font-bold text-indigo-400 mb-0.5">مكلف في</p>
+                              <p className="text-sm font-black text-indigo-900">{printData.committee.name}</p>
+                              {printData.committee.location && <p className="text-[10px] font-bold text-slate-500 mt-0.5">{printData.committee.location}</p>}
+                           </div>
+                        </div>
+                        
+                        <div className="w-full h-2 bg-indigo-900 shrink-0"></div>
                       </div>
-                      
-                      <div className="w-full h-2 bg-indigo-900 shrink-0"></div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            )}
+            ))}
 
           </div>
         </div>
