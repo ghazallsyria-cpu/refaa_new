@@ -13,7 +13,8 @@ import {
   BarChart3, MessageSquare, Bell, FolderOpen, Settings, 
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
-  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp
+  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
+  ShieldCheck, FileKey // 🚀 أيقونات جديدة للكنترول والنماذج
 } from 'lucide-react';
 
 const navigation = [
@@ -41,16 +42,19 @@ const navigation = [
   { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate },
   { name: 'المنتديات', href: '/forums', icon: Compass },
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
+  { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck }, // 🚀 جديد
+  { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays }, // 🚀 جديد
+  { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey }, // 🚀 جديد
   { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
-  { name: 'الجدول الدراسي القديم', href: '/schedule', icon: CalendarDays }, // تمت إعادة التسمية للتوضيح إن رغبت، أو يمكنك تركها
-  { name: 'محرك الجدولة الذكي', href: '/admin/auto-schedule', icon: Wand2 }, // 🚀 الرابط الجديد الأول
-  { name: 'شاشة العرض المركزية', href: '/schedules-view', icon: MonitorUp }, // 🚀 الرابط الجديد الثاني
+  { name: 'الجدول الدراسي القديم', href: '/schedule', icon: CalendarDays },
+  { name: 'محرك الجدولة الذكي', href: '/admin/auto-schedule', icon: Wand2 },
+  { name: 'شاشة العرض المركزية', href: '/schedules-view', icon: MonitorUp },
   { name: 'الحصص الحية', href: '/live', icon: Clock },
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
-  { name: 'ساحة التدريب', href: '/arena', icon: Target }, // 🚀 للطالب فقط
-  { name: 'مراقبة الساحة', href: '/arena-monitor', icon: MonitorPlay }, // 🚀 للمعلم والإدارة
-  { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments-v2', icon: Sparkles }, // 🚀 للإدارة فقط
+  { name: 'ساحة التدريب', href: '/arena', icon: Target },
+  { name: 'مراقبة الساحة', href: '/arena-monitor', icon: MonitorPlay },
+  { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments-v2', icon: Sparkles },
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
   { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
@@ -99,9 +103,14 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'استيراد البيانات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
     
+    // 🚀 روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
+    if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
+
     // 🚀 الروابط الجديدة للجدول للمدير والإدارة فقط
     if (item.name === 'محرك الجدولة الذكي') return (authRole === 'admin' || authRole === 'management');
-    if (item.name === 'شاشة العرض المركزية') return (authRole === 'admin' || authRole === 'management' || authRole === 'student' || authRole === 'teacher' || authRole === 'parent'); // عادةً صفحة العرض متاحة للجميع، لكن إن أردتها للمدير فقط ضع `return (authRole === 'admin' || authRole === 'management');`
+    if (item.name === 'شاشة العرض المركزية') return (authRole === 'admin' || authRole === 'management' || authRole === 'student' || authRole === 'teacher' || authRole === 'parent');
 
     // ظهور الملف الشخصي للمعلم فقط
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
