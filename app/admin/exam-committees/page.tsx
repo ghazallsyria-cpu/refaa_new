@@ -49,19 +49,6 @@ export default function ExamCommitteesControl() {
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  if (currentRole !== 'admin' && currentRole !== 'management') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
-        <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center max-w-md w-full">
-          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6"><ShieldCheck className="w-12 h-12 text-rose-500" /></div>
-          <h1 className="text-2xl font-black text-slate-800 mb-2">منطقة محظورة! 🛑</h1>
-          <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">عذراً، هذه الغرفة مخصصة لمدير النظام والإدارة العليا فقط.</p>
-          <button onClick={() => router.back()} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all shadow-md active:scale-95">العودة للخلف</button>
-        </div>
-      </div>
-    );
-  }
-
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -80,19 +67,22 @@ export default function ExamCommitteesControl() {
     } catch (error) { console.error('Error fetching data:', error); } finally { setIsLoading(false); }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  // 🚀 كل الـ Hooks يجب أن تكون في الأعلى قبل أي عبارة Return شرطية 🚀
+  useEffect(() => { 
+    if (currentRole === 'admin' || currentRole === 'management') {
+      fetchData(); 
+    }
+  }, [currentRole]);
 
   // 🚀 مرونة إدارة اللجان (إضافة وتعديل وحذف)
   const handleSaveCommittee = async () => {
     if (!editCommitteeData.name.trim()) { alert('يرجى إدخال اسم اللجنة'); return; }
     try {
       if (editCommitteeData.id) {
-        // تعديل لجنة قائمة
         await supabase.from('exam_committees').update({ 
           name: editCommitteeData.name, capacity: editCommitteeData.capacity, location: editCommitteeData.location 
         }).eq('id', editCommitteeData.id);
       } else {
-        // إضافة لجنة جديدة
         await supabase.from('exam_committees').insert({ 
           name: editCommitteeData.name, capacity: editCommitteeData.capacity, location: editCommitteeData.location, academic_year: currentYear, semester: currentSemester 
         });
@@ -185,6 +175,20 @@ export default function ExamCommitteesControl() {
     }, 1500); 
   };
 
+  // 🛡️ حماية الغرفة (الآن أصبحت آمنة وفي المكان الصحيح) 🛡️
+  if (currentRole !== 'admin' && currentRole !== 'management') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
+        <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center max-w-md w-full">
+          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6"><ShieldCheck className="w-12 h-12 text-rose-500" /></div>
+          <h1 className="text-2xl font-black text-slate-800 mb-2">{'منطقة محظورة! 🛑'}</h1>
+          <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">{'عذراً، هذه الغرفة مخصصة لمدير النظام والإدارة العليا فقط.'}</p>
+          <button onClick={() => router.back()} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all shadow-md active:scale-95">{'العودة للخلف'}</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
       
@@ -205,7 +209,7 @@ export default function ExamCommitteesControl() {
             <h1 className="text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
               <LayoutGrid className="w-8 h-8 text-indigo-600" /> غرفة كنترول الامتحانات
             </h1>
-            <p className="text-slate-500 font-bold text-sm">إدارة اللجان، توزيع الطلاب، وتعيين المراقبين بمرونة عالية</p>
+            <p className="text-slate-500 font-bold text-sm">{'إدارة اللجان، توزيع الطلاب، وتعيين المراقبين بمرونة عالية'}</p>
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 relative z-10 w-full md:w-auto">
@@ -240,7 +244,7 @@ export default function ExamCommitteesControl() {
                     <div>
                       <h3 className="text-xl font-black text-slate-800">{committee.name}</h3>
                       <p className="text-[10px] font-bold text-slate-400 mt-1 flex items-center gap-1">
-                        السعة: {committee.capacity} {committee.location && `| 📍 ${committee.location}`}
+                        {'السعة:'} {committee.capacity} {committee.location && `| 📍 ${committee.location}`}
                       </p>
                     </div>
                     <div className="flex gap-1">
@@ -251,9 +255,9 @@ export default function ExamCommitteesControl() {
 
                   <div className="flex-1 mb-4">
                     <div className="flex justify-between items-center mb-3">
-                       <p className="text-xs font-black text-slate-500 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-indigo-400"/> المراقبون ({committeeInvigs.length}/2)</p>
+                       <p className="text-xs font-black text-slate-500 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-indigo-400"/> {'المراقبون'} ({committeeInvigs.length}/2)</p>
                        <div className={`px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 ${isFull ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                         <Users className="w-3 h-3"/> {studentsCount} طالب
+                         <Users className="w-3 h-3"/> {studentsCount} {'طالب'}
                        </div>
                     </div>
                     
@@ -266,7 +270,7 @@ export default function ExamCommitteesControl() {
                       ))}
                       {committeeInvigs.length < 2 && (
                         <button onClick={() => { setSelectedCommittee(committee); setIsAssignModalOpen(true); }} className="w-full p-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-50 flex items-center justify-center gap-2 transition-colors">
-                          <UserPlus className="w-4 h-4" /> إضافة مراقب
+                          <UserPlus className="w-4 h-4" /> {'إضافة مراقب'}
                         </button>
                       )}
                     </div>
@@ -275,13 +279,13 @@ export default function ExamCommitteesControl() {
                   {/* 🖨️ أزرار مركز الطباعة والتصدير */}
                   <div className="border-t border-slate-100 pt-4 grid grid-cols-2 gap-2">
                     <button onClick={() => printDocument(committee.id, 'door_sheet')} className="col-span-2 bg-slate-900 text-white text-[11px] font-black py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors shadow-sm">
-                      <PrinterIcon className="w-4 h-4 text-emerald-400"/> طباعة كشف الباب (PDF)
+                      <PrinterIcon className="w-4 h-4 text-emerald-400"/> {'طباعة كشف الباب (PDF)'}
                     </button>
                     <button onClick={() => printDocument(committee.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2.5 rounded-xl flex items-center justify-center gap-1 hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-100">
-                      <IdCard className="w-3 h-3"/> بطاقات الطاولة
+                      <IdCard className="w-3 h-3"/> {'بطاقات الطاولة'}
                     </button>
                     <button onClick={() => exportToExcel(committee.id)} className="bg-emerald-50 text-emerald-700 text-[10px] font-black py-2.5 rounded-xl flex items-center justify-center gap-1 hover:bg-emerald-100 transition-colors shadow-sm border border-emerald-100">
-                      <Download className="w-3 h-3"/> تصدير Excel
+                      <Download className="w-3 h-3"/> {'تصدير Excel'}
                     </button>
                   </div>
                 </motion.div>
@@ -305,20 +309,20 @@ export default function ExamCommitteesControl() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-600 mb-2">اسم اللجنة</label>
+                  <label className="block text-sm font-bold text-slate-600 mb-2">{'اسم اللجنة'}</label>
                   <input type="text" value={editCommitteeData.name} onChange={e => setEditCommitteeData({...editCommitteeData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: لجنة 1" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                    <div>
-                     <label className="block text-sm font-bold text-slate-600 mb-2">السعة القصوى</label>
+                     <label className="block text-sm font-bold text-slate-600 mb-2">{'السعة القصوى'}</label>
                      <input type="number" min="1" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
                    </div>
                    <div>
-                     <label className="block text-sm font-bold text-slate-600 mb-2">المكان (اختياري)</label>
+                     <label className="block text-sm font-bold text-slate-600 mb-2">{'المكان (اختياري)'}</label>
                      <input type="text" value={editCommitteeData.location} onChange={e => setEditCommitteeData({...editCommitteeData, location: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: المسرح" />
                    </div>
                 </div>
-                <button onClick={handleSaveCommittee} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md mt-4">حفظ التغييرات</button>
+                <button onClick={handleSaveCommittee} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md mt-4">{'حفظ التغييرات'}</button>
               </div>
             </motion.div>
           </>
@@ -333,16 +337,16 @@ export default function ExamCommitteesControl() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-2xl z-50 p-6">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                  <UserPlus className="w-6 h-6 text-indigo-600"/> تعيين مراقب
+                  <UserPlus className="w-6 h-6 text-indigo-600"/> {'تعيين مراقب'}
                 </h3>
                 <button onClick={() => setIsAssignModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
               </div>
               <div className="space-y-4">
                 <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500">
-                  <option value="">-- اختر المعلم --</option>
+                  <option value="">{'-- اختر المعلم --'}</option>
                   {teachers.map(t => ( <option key={t.id} value={t.id}>{t.name}</option> ))}
                 </select>
-                <button onClick={handleAddInvigilator} disabled={!selectedTeacherId} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 disabled:opacity-50 shadow-md">تأكيد التعيين</button>
+                <button onClick={handleAddInvigilator} disabled={!selectedTeacherId} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 disabled:opacity-50 shadow-md">{'تأكيد التعيين'}</button>
               </div>
             </motion.div>
           </>
@@ -359,35 +363,35 @@ export default function ExamCommitteesControl() {
               <div>
                 <div className="text-center mb-8 border-b-2 border-slate-900 pb-6 flex items-center justify-between">
                   <div className="text-right">
-                    <h2 className="text-xl font-black">دولة الكويت</h2>
-                    <h3 className="text-lg font-bold">وزارة التربية</h3>
-                    <h3 className="text-lg font-bold">مدرسة الرفعة النموذجية</h3>
+                    <h2 className="text-xl font-black">{'دولة الكويت'}</h2>
+                    <h3 className="text-lg font-bold">{'وزارة التربية'}</h3>
+                    <h3 className="text-lg font-bold">{'مدرسة الرفعة النموذجية'}</h3>
                   </div>
                   <div className="text-center">
-                    <h1 className="text-3xl font-black bg-slate-900 text-white px-6 py-2 rounded-2xl inline-block mb-2">كشف مناداة ({printData.committee.name})</h1>
-                    <p className="font-bold text-lg">{printData.committee.location && `المكان: ${printData.committee.location} | `} اختبارات {currentSemester} - {currentYear}</p>
+                    <h1 className="text-3xl font-black bg-slate-900 text-white px-6 py-2 rounded-2xl inline-block mb-2">{'كشف مناداة'} ({printData.committee.name})</h1>
+                    <p className="font-bold text-lg">{printData.committee.location && `المكان: ${printData.committee.location} | `} {'اختبارات'} {currentSemester} - {currentYear}</p>
                   </div>
                   <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center border-4 border-slate-900">
-                     <span className="font-black text-2xl">الرفعة</span>
+                     <span className="font-black text-2xl">{'الرفعة'}</span>
                   </div>
                 </div>
 
                 <div className="mb-6 flex justify-between bg-slate-50 p-4 rounded-xl border border-slate-300">
-                  <p className="font-black text-lg">المراقبون:</p>
+                  <p className="font-black text-lg">{'المراقبون:'}</p>
                   {printData.invigilators.map((i:any, idx:number) => (
                     <p key={i.id} className="font-bold text-lg">{idx + 1}- أ. {i.users?.full_name}</p>
                   ))}
-                  {printData.invigilators.length === 0 && <p className="text-rose-500 font-bold">لم يتم التعيين.</p>}
+                  {printData.invigilators.length === 0 && <p className="text-rose-500 font-bold">{'لم يتم التعيين.'}</p>}
                 </div>
 
                 <table className="w-full border-collapse border-2 border-slate-900">
                   <thead>
                     <tr className="bg-slate-200">
-                      <th className="border border-slate-900 p-3 text-lg font-black w-16 text-center">م</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">رقم الجلوس</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black">اسم الطالب الرباعي</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">الصف</th>
-                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">التوقيع</th>
+                      <th className="border border-slate-900 p-3 text-lg font-black w-16 text-center">{'م'}</th>
+                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">{'رقم الجلوس'}</th>
+                      <th className="border border-slate-900 p-3 text-lg font-black">{'اسم الطالب الرباعي'}</th>
+                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">{'الصف'}</th>
+                      <th className="border border-slate-900 p-3 text-lg font-black w-32 text-center">{'التوقيع'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -413,15 +417,15 @@ export default function ExamCommitteesControl() {
                     <div className="absolute top-0 left-0 w-full h-8 bg-slate-900"></div>
                     <h2 className="text-xl font-black mt-4 mb-2 uppercase tracking-wider">{printData.committee.name}</h2>
                     <div className="w-24 h-24 mb-4 rounded-2xl bg-slate-100 overflow-hidden border-2 border-slate-300 shadow-sm flex items-center justify-center">
-                      {s.students?.users?.avatar_url ? ( <img src={s.students.users.avatar_url} crossOrigin="anonymous" alt="صورة الطالب" className="w-full h-full object-cover" /> ) : ( <span className="text-xs font-bold text-slate-400">صورة الطالب</span> )}
+                      {s.students?.users?.avatar_url ? ( <img src={s.students.users.avatar_url} crossOrigin="anonymous" alt="صورة الطالب" className="w-full h-full object-cover" /> ) : ( <span className="text-xs font-bold text-slate-400">{'صورة الطالب'}</span> )}
                     </div>
                     <h1 className="text-2xl font-black mb-2 text-indigo-900">{s.students?.users?.full_name}</h1>
                     <div className="bg-slate-100 w-full py-3 rounded-xl mb-4 border border-slate-300">
-                      <p className="text-sm font-bold text-slate-500 mb-1">الصف والمرحلة</p>
+                      <p className="text-sm font-bold text-slate-500 mb-1">{'الصف والمرحلة'}</p>
                       <p className="text-xl font-black">{s.students?.sections?.classes?.level === 10 ? 'الصف العاشر' : 'الصف الحادي عشر'}</p>
                     </div>
                     <div className="bg-slate-900 text-white w-full py-4 rounded-xl shadow-lg mt-auto">
-                      <p className="text-sm font-bold text-slate-300 mb-1">رقم الجلوس الامتحاني</p>
+                      <p className="text-sm font-bold text-slate-300 mb-1">{'رقم الجلوس الامتحاني'}</p>
                       <p className="text-4xl font-black tracking-widest">{s.seat_number}</p>
                     </div>
                   </div>
