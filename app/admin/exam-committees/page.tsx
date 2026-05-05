@@ -12,7 +12,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
-import html2canvas from 'html2canvas';
+// 🚀 استخدام النسخة الاحترافية (PRO) لحل مشاكل الجوالات تماماً
+import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 
@@ -30,7 +31,6 @@ export default function ExamCommitteesControl() {
   
   const [isLoading, setIsLoading] = useState(true);
   
-  // 🚀 حالات النوافذ المنبثقة
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -211,7 +211,7 @@ export default function ExamCommitteesControl() {
     setIsPrinting(false);
   };
 
-  // 🚀 محرك الطباعة الأسطوري المتوافق مع الآيفون (iOS Safari Fixes)
+  // 🚀 محرك الطباعة الاحترافي المخصص لجميع المنصات باستخدام html2canvas-pro
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
     const data = await fetchPrintData(committeeId);
     if (type !== 'invigilator_ids' && data.students.length === 0) { alert('لا يوجد طلاب في هذه اللجنة لطباعتهم!'); setIsPrinting(false); return; }
@@ -220,27 +220,29 @@ export default function ExamCommitteesControl() {
     setPrintData(data); 
     setPrintType(type);
 
+    // نعطي الـ DOM وقتاً كافياً للرسم
     setTimeout(async () => {
       if (!printRef.current) return;
       try {
-        window.scrollTo(0, 0); // إصلاح أساسي للآيفون
+        window.scrollTo(0, 0); 
 
-        // 🚀 تحديد ما إذا كان المستخدم يفتح من جوال لتقليل الضغط على الذاكرة
         const isMobile = window.innerWidth < 768;
 
+        // مكتبة PRO قوية جداً ضد أخطاء الجوالات
         const canvas = await html2canvas(printRef.current, { 
-          scale: isMobile ? 1.2 : 2, // 1.2 للجوال لكي لا ينهار، 2 للكمبيوتر للدقة
-          useCORS: true, // السماح بالصور الخارجية
-          allowTaint: false, // 🚀 إجباري false للآيفون لتجنب SecurityError
+          scale: isMobile ? 1.5 : 2, 
+          useCORS: true, 
+          allowTaint: false, 
           logging: false,
+          windowWidth: 1024,
           backgroundColor: '#ffffff'
         });
         
-        // استخدام JPEG بدلاً من PNG يخفف حجم الملف في الرام بشكل كبير جداً
-        const imgData = canvas.toDataURL('image/jpeg', 0.9); 
+        const imgData = canvas.toDataURL('image/jpeg', 0.85); // JPEG أخف جداً من PNG ولا يسبب انهيار للذاكرة
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        
         pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         
         let fileName = 'مستند';
@@ -251,10 +253,10 @@ export default function ExamCommitteesControl() {
         pdf.save(`${fileName}.pdf`);
       } catch (err: any) { 
         console.error("PDF Engine Error:", err);
-        alert('حدث خطأ أثناء معالجة الصور. المتصفح لديك قام بمنع العملية. يرجى المحاولة باستخدام كمبيوتر أو كروم.'); 
+        alert('حدث خطأ أثناء معالجة الصور. يرجى المحاولة لاحقاً أو من جهاز كمبيوتر.'); 
       } 
       finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
-    }, 3000); // 3 ثواني تأخير لضمان تحميل جميع صور الطلاب بشكل كامل قبل التصوير
+    }, 2500); 
   };
 
   if (currentRole !== 'admin' && currentRole !== 'management') {
@@ -271,26 +273,27 @@ export default function ExamCommitteesControl() {
   }
 
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => i.teacher_id === tId);
+  
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
        const term = String(teacherSearchTerm || '').toLowerCase();
-       const matchesName = String(t.full_name || '').toLowerCase().includes(term);
-       const matchesSubj = String(t.subjectsStr || '').toLowerCase().includes(term);
+       const matchesName = String(t?.full_name || '').toLowerCase().includes(term);
+       const matchesSubj = String(t?.subjectsStr || '').toLowerCase().includes(term);
        return matchesName || matchesSubj;
     })
     .sort((a, b) => {
-       const aCount = getTeacherAssignments(a.id).length;
-       const bCount = getTeacherAssignments(b.id).length;
+       const aCount = getTeacherAssignments(String(a?.id)).length;
+       const bCount = getTeacherAssignments(String(b?.id)).length;
        if (aCount !== bCount) return aCount - bCount; 
-       return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ar');
+       return String(a?.full_name || '').localeCompare(String(b?.full_name || ''), 'ar');
     });
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
       
-      {/* 🚀 شاشة التحميل */}
+      {/* 🚀 شاشة التحميل الصلبة (Solid Overlay) المخصصة لخداع المتصفح */}
       { (isEngineLoading || isPrinting) && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white transition-opacity">
+        <div className="fixed inset-0 bg-slate-900 z-[100] flex flex-col items-center justify-center text-white">
           <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
           <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">{isPrinting ? 'جاري تجهيز وتصميم ملف الطباعة عالي الدقة...' : progressMsg}</h2>
         </div>
@@ -370,7 +373,7 @@ export default function ExamCommitteesControl() {
               const isFull = studentsCount >= committee.capacity;
 
               return (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} key={committee.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group">
+                <div key={committee.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group">
                   <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-4 relative">
                     <div>
                       <h3 className="text-xl font-black text-slate-800">{committee.name}</h3>
@@ -430,14 +433,14 @@ export default function ExamCommitteesControl() {
                       <Contact className="w-3 h-3"/> هويات المراقبين
                     </button>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
         )}
       </div>
 
-      {/* 🚀 النوافذ المنبثقة مبنية بدون تأثيرات معقدة لضمان الاستقرار التام */}
+      {/* النوافذ المنبثقة مبنية بدون تأثيرات معقدة لضمان الاستقرار التام */}
       
       {/* نافذة إعدادات اللجنة */}
       {isCommitteeModalOpen && (
@@ -504,8 +507,8 @@ export default function ExamCommitteesControl() {
                     const teacherName = String(t?.full_name || 'بدون اسم');
                     const initialChar = teacherName.charAt(0) || 'م';
 
-                    // خدعة ذكية لكاسر كاش الصور لتفادي خطأ السفاري
-                    const safeAvatarUrl = t?.avatar_url ? `${t.avatar_url}${t.avatar_url.includes('?') ? '&' : '?'}print=1` : null;
+                    // خدعة ذكية لكاسر كاش الصور لتفادي خطأ السفاري الأمني
+                    const safeAvatarUrl = t?.avatar_url ? `${t.avatar_url}?t=${new Date().getTime()}` : null;
 
                     return (
                        <div 
@@ -590,7 +593,7 @@ export default function ExamCommitteesControl() {
                         const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
                         const invName = String(invig.users?.full_name || invig.users?.[0]?.full_name || 'غير معروف');
                         const invInitial = invName.charAt(0) || 'م';
-                        const safeInvAvatar = invAvatar ? `${invAvatar}${invAvatar.includes('?') ? '&' : '?'}print=1` : null;
+                        const safeInvAvatar = invAvatar ? `${invAvatar}?t=${new Date().getTime()}` : null;
 
                         return (
                           <div key={invig.id || `inv-${idx}`} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -630,7 +633,7 @@ export default function ExamCommitteesControl() {
                            const stdName = String(s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب');
                            const stdInitial = stdName.charAt(0) || 'ط';
                            const classLvl = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
-                           const safeStdAvatar = stdAvatar ? `${stdAvatar}${stdAvatar.includes('?') ? '&' : '?'}print=1` : null;
+                           const safeStdAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
                            return (
                              <tr key={s.seat_number || `std-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
@@ -660,13 +663,12 @@ export default function ExamCommitteesControl() {
 
       {/* 
         =========================================================
-        🖨️ قوالب الطباعة (مخفية عن المستخدم، مرئية للـ Canvas) 
-        الآن متوافقة 100% مع أجهزة آبل (Apple iOS Safari) 
+        🖨️ قوالب الطباعة الموضوعة بشكل مرئي تماماً لخداع المتصفح
         =========================================================
       */}
       {printData && (
-        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
-          <div ref={printRef} className="bg-white text-black p-10 font-cairo" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 90, width: '100%', backgroundColor: 'white' }}>
+          <div ref={printRef} className="bg-white text-black p-10 font-cairo mx-auto" dir="rtl" style={{ width: '210mm', minHeight: '297mm', backgroundColor: 'white' }}>
             
             {printType === 'door_sheet' && (
               <div className="min-h-[1122px] bg-white">
@@ -728,7 +730,7 @@ export default function ExamCommitteesControl() {
                    const stdName = s.students?.users?.full_name || s.students?.users?.[0]?.full_name;
                    const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
                    const stdClass = s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level;
-                   const safeAvatar = stdAvatar ? `${stdAvatar}${stdAvatar.includes('?') ? '&' : '?'}print=1` : null;
+                   const safeAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
                    return (
                       <div key={s.seat_number} className="border-4 border-slate-900 rounded-3xl p-6 relative overflow-hidden flex flex-col items-center text-center shadow-sm" style={{ pageBreakInside: 'avoid' }}>
@@ -761,7 +763,7 @@ export default function ExamCommitteesControl() {
                 {printData.invigilators.map((invig:any) => {
                   const invAvatar = invig.users?.avatar_url || invig.users?.[0]?.avatar_url;
                   const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
-                  const safeAvatar = invAvatar ? `${invAvatar}${invAvatar.includes('?') ? '&' : '?'}print=1` : null;
+                  const safeAvatar = invAvatar ? `${invAvatar}?t=${new Date().getTime()}` : null;
 
                   return (
                     <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-indigo-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
