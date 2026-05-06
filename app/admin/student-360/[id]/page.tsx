@@ -36,7 +36,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   const [isPrinting, setIsPrinting] = useState(false);
   const attendancePrintRef = useRef<HTMLDivElement>(null);
 
-  // 🚀 حالة الفلتر الجديد لسجل الغياب
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'week' | 'month'>('all');
 
   const fetchSummary = useCallback(async () => {
@@ -118,21 +117,18 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     }
   };
 
-  // 🚀 محرك تجميع الغيابات بالأيام وفلترتها
   const groupedAttendance = useMemo(() => {
     if (!tabData['attendance']) return [];
     
-    // 1. التجميع حسب التاريخ
     const groups: Record<string, any[]> = {};
     tabData['attendance'].forEach((r: any) => {
       if (!groups[r.date]) groups[r.date] = [];
       groups[r.date].push(r);
     });
     
-    // 2. معالجة وتحديد حالة اليوم (يوم كامل أم جزئي)
     let daysArr = Object.keys(groups).map(date => {
        const recs = groups[date];
-       const isFullDay = recs.length >= 4; // يعتبر غياباً كلياً إذا غاب 4 حصص فأكثر
+       const isFullDay = recs.length >= 4; 
        
        const statuses = [...new Set(recs.map(r => r.status))];
        let dayStatus = 'absent';
@@ -148,7 +144,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
        return { date, records: recs, isFullDay, dayStatus, periodsDesc };
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
-    // 3. تطبيق الفلتر الزمني (أسبوعي/شهري)
     const now = new Date();
     if (attendanceFilter === 'week') {
       const weekAgo = new Date(); 
@@ -163,6 +158,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     return daysArr;
   }, [tabData, attendanceFilter]);
 
+  // 🚀 محرك الطباعة الأنيق (المُحسّن)
   const downloadAttendancePDF = async () => {
     if (groupedAttendance.length === 0) {
       alert('لا توجد غيابات في هذه الفترة لطباعتها!');
@@ -191,7 +187,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
             backgroundColor: '#ffffff'
           });
           
-          const imgData = canvas.toDataURL('image/jpeg', 0.85); 
+          const imgData = canvas.toDataURL('image/jpeg', 1.0); 
           const pdfWidth = pdf.internal.pageSize.getWidth();
           const pdfHeight = pdf.internal.pageSize.getHeight(); 
           
@@ -206,9 +202,10 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
         alert('حدث خطأ أثناء استخراج الملف.'); 
       } 
       finally { setIsPrinting(false); }
-    }, 1500);
+    }, 2000); // مهلة أطول قليلاً لضمان تحميل الخطوط وتنسيق الصفحة
   };
 
+  // 🚀 تم تقليل العدد إلى 14 صف لضمان عدم تجاوز الصفحة (A4)
   const chunkArray = (arr: any[], size: number) => {
     if (!arr || arr.length === 0) return [[]];
     return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
@@ -233,6 +230,13 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   const { basic_info, academic_summary, attendance_summary, badges_count } = summaryData;
   const avgScore = Number(academic_summary?.average_score || 0).toFixed(1);
 
+  // إحصائيات سريعة للتقرير
+  const filterSummaryStats = {
+     absent: groupedAttendance.filter(d => d.dayStatus === 'absent').length,
+     late: groupedAttendance.filter(d => d.dayStatus === 'late').length,
+     excused: groupedAttendance.filter(d => d.dayStatus === 'excused').length,
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-cairo pb-20 relative overflow-x-hidden" dir="rtl">
       
@@ -241,6 +245,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[200] flex flex-col items-center justify-center text-white">
             <Loader2 className="w-16 h-16 animate-spin text-emerald-400 mb-4" />
             <h2 className="text-xl font-black">جاري تصميم وتوليد السجل الرسمي (PDF)...</h2>
+            <p className="text-sm text-slate-300 mt-2">يرجى الانتظار لحظات...</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -424,7 +429,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        </div>
                     )}
 
-                    {/* 🚀 التبويب 4: الغياب مع الفلتر والتجميع بالأيام والتصدير */}
                     {activeTab === 'attendance' && (
                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                           <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -442,8 +446,8 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                                 </select>
 
                                 <button onClick={downloadAttendancePDF} disabled={isPrinting || groupedAttendance.length === 0} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 shrink-0">
-                                  {isPrinting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
-                                  تصدير PDF
+                                  {isPrinting ? <Loader2 className="w-4 h-4 animate-spin"/> : <PrinterIcon className="w-4 h-4"/>}
+                                  تصدير التقرير (PDF)
                                 </button>
                              </div>
                           </div>
@@ -528,53 +532,70 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
 
       {/* 
         =========================================================
-        🖨️ القالب المخفي لتوليد وثيقة الغياب PDF المعتمدة على الفلتر 
+        🖨️ القالب المخفي لتوليد وثيقة الغياب PDF (مُحسّن)
         =========================================================
       */}
-      {groupedAttendance && (
-         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+      {groupedAttendance && groupedAttendance.length > 0 && (
+         <div style={{ position: 'absolute', top: '-9999px', left: '-9999px', zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
             <div ref={attendancePrintRef} className="flex flex-col gap-10" dir="rtl">
-               {chunkArray(groupedAttendance, 20).map((chunk: any, pageIndex: number) => (
+               {chunkArray(groupedAttendance, 14).map((chunk: any, pageIndex: number) => (
                   <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
                      
-                     <div className="flex justify-between items-center border-b-[3px] border-slate-900 pb-6 mb-8 shrink-0">
+                     <div className="flex justify-between items-center border-b-[3px] border-slate-900 pb-6 mb-6 shrink-0">
                         <div className="text-right">
                            <h2 className="text-xl font-black text-slate-900">دولة الكويت</h2>
                            <h3 className="text-lg font-bold text-slate-800">وزارة التربية</h3>
                            <h3 className="text-lg font-bold text-slate-800">مدرسة الرفعة النموذجية</h3>
                         </div>
                         <div className="text-center">
-                           <h1 className="text-3xl font-black bg-slate-900 text-white px-6 py-2 rounded-2xl inline-block mb-2 shadow-sm">سجل الغياب والانضباط</h1>
-                           <p className="font-bold text-lg text-slate-700">للعام الدراسي 2025-2026</p>
+                           <h1 className="text-3xl font-black bg-slate-900 text-white px-6 py-2 rounded-2xl inline-block mb-2 shadow-sm">سجل الانضباط والغياب</h1>
+                           <p className="font-bold text-lg text-slate-700">التقرير الرسمي - للعام 2025/2026</p>
                         </div>
                         <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center border-4 border-slate-900 overflow-hidden shrink-0">
                            <span className="font-black text-xl text-slate-400">شعار</span>
                         </div>
                      </div>
 
-                     <div className="bg-slate-50 border border-slate-300 p-4 rounded-xl mb-6 flex justify-between shrink-0 shadow-sm">
-                        <p className="font-black text-lg text-slate-900">اسم الطالب: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.full_name}</span></p>
-                        <p className="font-black text-lg text-slate-900">الرقم المدني: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.national_id}</span></p>
+                     <div className="bg-slate-50 border-2 border-slate-300 p-4 rounded-xl mb-6 flex justify-between shrink-0 shadow-sm items-center">
+                        <p className="font-black text-lg text-slate-900">الاسم: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.full_name}</span></p>
+                        <p className="font-black text-lg text-slate-900">المدني: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.national_id}</span></p>
                         <p className="font-black text-lg text-slate-900">الصف: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.class_name} - {summaryData?.basic_info?.section_name}</span></p>
                      </div>
+
+                     {pageIndex === 0 && (
+                        <div className="flex gap-4 mb-6 shrink-0">
+                           <div className="flex-1 bg-rose-50 border-2 border-rose-200 p-4 rounded-xl text-center">
+                              <p className="text-xs font-black text-rose-800 uppercase mb-1">إجمالي أيام الغياب في السجل</p>
+                              <p className="text-2xl font-black text-rose-600">{filterSummaryStats.absent}</p>
+                           </div>
+                           <div className="flex-1 bg-amber-50 border-2 border-amber-200 p-4 rounded-xl text-center">
+                              <p className="text-xs font-black text-amber-800 uppercase mb-1">إجمالي أيام التأخير</p>
+                              <p className="text-2xl font-black text-amber-600">{filterSummaryStats.late}</p>
+                           </div>
+                           <div className="flex-1 bg-blue-50 border-2 border-blue-200 p-4 rounded-xl text-center">
+                              <p className="text-xs font-black text-blue-800 uppercase mb-1">الأعذار المقبولة</p>
+                              <p className="text-2xl font-black text-blue-600">{filterSummaryStats.excused}</p>
+                           </div>
+                        </div>
+                     )}
 
                      <div className="flex-1">
                         <table className="w-full border-collapse border-2 border-slate-900 text-right">
                            <thead>
-                             <tr className="bg-slate-200">
-                               <th className="border border-slate-900 p-3 font-black text-slate-900 w-16 text-center">م</th>
-                               <th className="border border-slate-900 p-3 font-black text-slate-900 w-32 text-center">التاريخ</th>
-                               <th className="border border-slate-900 p-3 font-black text-slate-900">نوع الغياب</th>
-                               <th className="border border-slate-900 p-3 font-black text-slate-900 w-40 text-center">الحالة الإجمالية</th>
+                             <tr className="bg-slate-200 border-b-2 border-slate-900 h-10">
+                               <th className="border-l border-slate-900 p-2 font-black text-slate-900 w-16 text-center text-sm">م</th>
+                               <th className="border-l border-slate-900 p-2 font-black text-slate-900 w-32 text-center text-sm">التاريخ</th>
+                               <th className="border-l border-slate-900 p-2 font-black text-slate-900 text-sm">التفاصيل (يوم كامل / حصص)</th>
+                               <th className="p-2 font-black text-slate-900 w-32 text-center text-sm">الحالة</th>
                              </tr>
                            </thead>
                            <tbody>
                               {chunk.map((day: any, idx: number) => (
-                                <tr key={day.date} className="even:bg-slate-50">
-                                  <td className="border border-slate-900 p-3 font-bold text-slate-900 text-center">{pageIndex * 20 + idx + 1}</td>
-                                  <td className="border border-slate-900 p-3 font-bold text-slate-900 text-center" dir="ltr">{new Date(day.date).toLocaleDateString('en-GB')}</td>
-                                  <td className="border border-slate-900 p-3 font-bold text-slate-900">{day.periodsDesc}</td>
-                                  <td className="border border-slate-900 p-3 font-black text-center text-slate-800">
+                                <tr key={day.date} className="even:bg-slate-50 border-b border-slate-300 h-10">
+                                  <td className="border-l border-slate-900 p-2 font-bold text-slate-900 text-center text-sm">{pageIndex * 14 + idx + 1}</td>
+                                  <td className="border-l border-slate-900 p-2 font-bold text-slate-900 text-center text-sm" dir="ltr">{new Date(day.date).toLocaleDateString('en-GB')}</td>
+                                  <td className="border-l border-slate-900 p-2 font-bold text-slate-900 text-sm">{day.periodsDesc}</td>
+                                  <td className="p-2 font-black text-center text-sm text-slate-800">
                                      {day.dayStatus === 'absent' ? 'غائب' : day.dayStatus === 'late' ? 'تأخير' : 'عذر مقبول'}
                                   </td>
                                 </tr>
@@ -583,9 +604,25 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                         </table>
                      </div>
                      
-                     <div className="mt-auto pt-6 border-t-[3px] border-slate-900 text-left shrink-0 flex justify-between items-end">
-                        <p className="font-bold text-slate-600 text-sm">صفحة {pageIndex + 1} من {Math.ceil(groupedAttendance.length / 20)}</p>
-                        <p className="font-bold text-slate-600 text-sm">تاريخ استخراج التقرير: {new Date().toLocaleString('ar-EG')}</p>
+                     <div className="mt-auto pt-4 shrink-0">
+                        <div className="flex justify-between items-center mb-8 px-10">
+                           <div className="text-center">
+                              <p className="font-bold text-slate-800 mb-6">توقيع شؤون الطلبة</p>
+                              <p className="border-b border-slate-400 w-32 mx-auto"></p>
+                           </div>
+                           <div className="text-center">
+                              <p className="font-bold text-slate-800 mb-6">ختم المدرسة</p>
+                              <p className="border-b border-slate-400 w-32 mx-auto"></p>
+                           </div>
+                           <div className="text-center">
+                              <p className="font-bold text-slate-800 mb-6">يعتمد ،،، مدير المدرسة</p>
+                              <p className="border-b border-slate-400 w-32 mx-auto"></p>
+                           </div>
+                        </div>
+                        <div className="flex justify-between items-end border-t-[3px] border-slate-900 pt-4">
+                           <p className="font-bold text-slate-600 text-xs">صفحة {pageIndex + 1} من {Math.ceil(groupedAttendance.length / 14)}</p>
+                           <p className="font-bold text-slate-600 text-xs">تاريخ استخراج التقرير: {new Date().toLocaleString('ar-EG')}</p>
+                        </div>
                      </div>
                   </div>
                ))}
