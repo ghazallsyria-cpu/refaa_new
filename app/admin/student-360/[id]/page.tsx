@@ -33,7 +33,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   const [newNote, setNewNote] = useState('');
   const [isSendingNote, setIsSendingNote] = useState(false);
 
-  // 1. جلب البيانات الأساسية من الدالة המجمعة السريعة
+  // 1. جلب البيانات الأساسية من الدالة المجمعة السريعة
   const fetchSummary = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_student_360_summary', { p_student_id: studentId });
@@ -52,7 +52,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     }
   }, [currentRole, fetchSummary]);
 
-  // 2. التحميل الكسول للتبويبات (Lazy Loading Tabs)
+  // 2. التحميل الكسول للتبويبات (Lazy Loading Tabs) والمعدل لإصلاح الأخطاء
   const loadTabData = async (tab: string) => {
     if (tabData[tab]) return; // إذا كانت البيانات موجودة في الكاش، لا تفعل شيئاً
     if (tab === 'overview') return;
@@ -61,16 +61,42 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     try {
       let data = null;
       if (tab === 'grades') {
-        const { data: res } = await supabase.from('grades').select('*, subjects(name)').eq('student_id', studentId).order('created_at', { ascending: false });
+        const { data: res, error } = await supabase
+          .from('grades')
+          .select('*, subjects(name)')
+          .eq('student_id', studentId)
+          .order('created_at', { ascending: false });
+        if (error) console.error("Grades error:", error);
         data = res;
-      } else if (tab === 'assignments') {
-        const { data: res } = await supabase.from('student_progress_v2').select('*, assignments_v2(title, max_points, is_practice_mode)').eq('student_id', studentId).order('updated_at', { ascending: false });
+      } 
+      else if (tab === 'assignments') {
+        // 🚀 تم إصلاح الاستعلام: إزالة max_points لأنها غير موجودة بالجدول
+        const { data: res, error } = await supabase
+          .from('student_progress_v2')
+          .select('*, assignments_v2(title, is_practice_mode)')
+          .eq('student_id', studentId)
+          .order('updated_at', { ascending: false });
+        if (error) console.error("Assignments error:", error);
         data = res;
-      } else if (tab === 'attendance') {
-        const { data: res } = await supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', studentId).order('date', { ascending: false });
+      } 
+      else if (tab === 'attendance') {
+        // 🚀 تم إصلاح الاستعلام: فلترة لجلب الغياب والتأخير والأعذار فقط
+        const { data: res, error } = await supabase
+          .from('attendance_records')
+          .select('*, subjects(name)')
+          .eq('student_id', studentId)
+          .neq('status', 'present') // لا نجلب حالات "حاضر"
+          .order('date', { ascending: false });
+        if (error) console.error("Attendance error:", error);
         data = res;
-      } else if (tab === 'notes') {
-        const { data: res } = await supabase.from('private_student_notes').select('*, users!private_student_notes_teacher_id_fkey(full_name, avatar_url, role)').eq('student_id', studentId).order('created_at', { ascending: false });
+      } 
+      else if (tab === 'notes') {
+        const { data: res, error } = await supabase
+          .from('private_student_notes')
+          .select('*, users!private_student_notes_teacher_id_fkey(full_name, avatar_url, role)')
+          .eq('student_id', studentId)
+          .order('created_at', { ascending: false });
+        if (error) console.error("Notes error:", error);
         data = res;
       }
       
@@ -289,26 +315,32 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-4">
                           {tabData['assignments']?.length > 0 ? tabData['assignments'].map((a: any) => {
                              const isGraded = a.teacher_feedback?.includes('[تم رصد الدرجة]');
+                             const title = a.assignments_v2?.title || 'واجب بدون عنوان';
+                             const isPractice = a.assignments_v2?.is_practice_mode;
+                             
                              return (
                                 <div key={a.id} className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
-                                   <div>
+                                   <div className="w-full">
                                       <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                                         {a.assignments_v2?.is_practice_mode ? <Target className="w-4 h-4 text-amber-500"/> : <FileText className="w-4 h-4 text-indigo-500"/>}
-                                         {a.assignments_v2?.title || 'واجب بدون عنوان'}
+                                         {isPractice ? <Target className="w-4 h-4 text-amber-500"/> : <FileText className="w-4 h-4 text-indigo-500"/>}
+                                         {title}
                                       </h4>
-                                      {a.teacher_feedback && !isGraded && <p className="text-xs font-bold text-indigo-600 mt-2 bg-white px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm inline-block"><MessageSquareHeart className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
+                                      <div className="flex items-center gap-4 mt-2">
+                                         {a.teacher_feedback && !isGraded && <p className="text-xs font-bold text-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm inline-block"><MessageSquareHeart className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
+                                         {a.teacher_feedback && isGraded && <p className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 shadow-sm inline-block"><CheckCircle2 className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
+                                      </div>
                                    </div>
-                                   <div className="flex items-center gap-4 w-full md:w-auto">
+                                   <div className="flex items-center gap-4 w-full md:w-auto shrink-0">
                                       {isGraded ? (
-                                         <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl border border-emerald-200 font-black text-sm flex items-center gap-2">
-                                            <CheckCircle2 className="w-4 h-4"/> مُصحح وتم رصد درجته
+                                         <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl border border-emerald-200 font-black text-sm flex items-center gap-2 w-full justify-center">
+                                            <CheckCircle2 className="w-4 h-4"/> مُصحح وتم الرصد
                                          </div>
                                       ) : a.is_completed ? (
-                                         <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200 font-black text-sm flex items-center gap-2">
+                                         <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200 font-black text-sm flex items-center gap-2 w-full justify-center">
                                             <Clock className="w-4 h-4"/> بانتظار التصحيح
                                          </div>
                                       ) : (
-                                         <div className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2">
+                                         <div className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2 w-full justify-center">
                                             قيد الإنجاز
                                          </div>
                                       )}
@@ -337,16 +369,15 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                                    {tabData['attendance']?.length > 0 ? tabData['attendance'].map((rec: any) => (
                                       <tr key={rec.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                                          <td className="p-4" dir="ltr">{new Date(rec.date).toLocaleDateString('en-GB')}</td>
-                                         <td className="p-4"><span className="text-indigo-600">{rec.subjects?.name}</span> (حصة {rec.period})</td>
+                                         <td className="p-4"><span className="text-indigo-600">{rec.subjects?.name || 'مادة غير مسجلة'}</span> (حصة {rec.period})</td>
                                          <td className="p-4 text-center">
                                             {rec.status === 'absent' && <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-md text-xs font-black border border-rose-200">غائب</span>}
-                                            {rec.status === 'late' && <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-md text-xs font-black border border-amber-200">متأخر</span>}
+                                            {rec.status === 'late' && <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-md text-xs font-black border border-amber-200">تأخير</span>}
                                             {rec.status === 'excused' && <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-xs font-black border border-blue-200">عذر مقبول</span>}
-                                            {rec.status === 'present' && <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-md text-xs font-black border border-emerald-200">حاضر</span>}
                                          </td>
                                       </tr>
                                    )) : (
-                                      <tr><td colSpan={3} className="p-10 text-center text-slate-400">سجل الانضباط ناصع البياض! لا توجد غيابات.</td></tr>
+                                      <tr><td colSpan={3} className="p-10 text-center text-emerald-500 font-black"><CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-400"/>سجل الانضباط ناصع البياض! لا توجد غيابات.</td></tr>
                                    )}
                                 </tbody>
                              </table>
