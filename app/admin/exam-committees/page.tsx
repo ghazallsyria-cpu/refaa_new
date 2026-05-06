@@ -329,6 +329,7 @@ export default function ExamCommitteesControl() {
               <button onClick={handleDistribute} disabled={committees.length === 0} className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-50">
                 <Users className="w-4 h-4" /> الخلط الأبجدي
               </button>
+              {/* 🚀 الزر أُعيد إلى مكانه الصحيح */}
               {committees.length > 0 && (
                 <button onClick={handleNuclearReset} className="px-5 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-rose-200">
                   <Trash2 className="w-4 h-4" /> تصفير شامل
@@ -372,6 +373,10 @@ export default function ExamCommitteesControl() {
         ) : committees.length === 0 ? (
           <div className="text-center p-20 bg-white rounded-3xl border border-slate-200 border-dashed">
             <h3 className="text-xl font-black text-slate-400 mb-4">لم يتم إعداد اللجان بعد</h3>
+            {/* 🚀 الزر أُعيد إلى مكانه الصحيح */}
+            <button onClick={async () => { await generateDefaultCommittees(currentYear, currentSemester); fetchData(); }} className="px-8 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-slate-800">
+              توليد 22 لجنة افتراضية الآن
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -508,7 +513,7 @@ export default function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* باقي النوافذ المنبثقة (إعداد اللجنة وتكليف المراقب) */}
+      {/* باقي النوافذ المنبثقة */}
       {isCommitteeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
