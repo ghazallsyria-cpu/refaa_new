@@ -16,7 +16,7 @@ import {
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
-  ShieldCheck, FileKey, ScanLine, FileSignature 
+  ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch // 🚀 تم إضافة UserSearch لمستكشف الطلاب
 } from 'lucide-react';
 
 const navigation = [
@@ -46,7 +46,8 @@ const navigation = [
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   
   // 🚀 أدوات الامتحانات والكنترول المركزية
-  { name: 'فريق الكنترول', href: '/admin/control-team', icon: ShieldCheck }, // 🚀 جديد
+  { name: 'مستكشف الطلاب 360', href: '/admin/student-360', icon: UserSearch }, // 🚀 جديد للمدير
+  { name: 'فريق الكنترول', href: '/admin/control-team', icon: ShieldCheck },
   { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
   { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
   { name: 'مسار إنجاز الكنترول', href: '/admin/exam-pipeline', icon: BarChart3 },
@@ -117,7 +118,8 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
     
     // روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
-    if (item.name === 'فريق الكنترول') return (authRole === 'admin' || authRole === 'management'); // 🚀 جديد
+    if (item.name === 'مستكشف الطلاب 360') return (authRole === 'admin' || authRole === 'management'); // 🚀 متاح للإدارة فقط
+    if (item.name === 'فريق الكنترول') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'رادار الكنترول') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'مسار إنجاز الكنترول') return (authRole === 'admin' || authRole === 'management');
