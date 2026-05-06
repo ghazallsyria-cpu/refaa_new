@@ -1,4 +1,3 @@
-
 // @ts-nocheck
 'use client';
 
@@ -246,21 +245,39 @@ export default function ArenaMonitorDashboard() {
     }
   };
 
+  // 🚀 تصحيح دالة حفظ الملاحظات (Bulletproof Safe Updates)
   const saveFeedback = async () => {
     if (!selectedStudent || !selectedAssignment) return;
     setSavingFeedback(true);
     try {
-      const { error } = await supabase.from('student_progress_v2').upsert({ 
-           student_id: selectedStudent.student_id, 
-           assignment_id: selectedAssignment.id,
-           teacher_feedback: feedbackText, 
-           updated_at: new Date().toISOString() 
-        }, { onConflict: 'student_id, assignment_id' });
+      const { data: existingProg } = await supabase.from('student_progress_v2')
+         .select('id').eq('student_id', selectedStudent.student_id).eq('assignment_id', selectedAssignment.id).maybeSingle();
 
-      if (error) throw error;
+      if (existingProg) {
+         await supabase.from('student_progress_v2')
+            .update({ teacher_feedback: feedbackText, updated_at: new Date().toISOString() })
+            .eq('id', existingProg.id);
+      } else {
+         await supabase.from('student_progress_v2')
+            .insert({ 
+               student_id: selectedStudent.student_id, 
+               assignment_id: selectedAssignment.id, 
+               teacher_feedback: feedbackText, 
+               current_index: 0, 
+               correct_score: 0, 
+               wrong_score: 0, 
+               is_completed: false 
+            });
+      }
+
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText, has_started: true } : p));
       setFeedbackModalOpen(false);
-    } catch (err) { alert("حدث خطأ أثناء حفظ الملاحظة."); } finally { setSavingFeedback(false); }
+    } catch (err) { 
+      console.error(err);
+      alert("حدث خطأ أثناء حفظ الملاحظة."); 
+    } finally { 
+      setSavingFeedback(false); 
+    }
   };
 
   const openGradingModal = async (student: any) => {
@@ -274,6 +291,7 @@ export default function ArenaMonitorDashboard() {
       const { data: questions } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', selectedAssignment.id).order('order_index', { ascending: true });
       setAssignmentQuestions(questions || []);
 
+      // جلب أجوبة الطالب برقم المستخدم الخاص به في جدول student_answers_v2
       const { data: answers } = await supabase.from('student_answers_v2').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
       setStudentAnswers(answers || []);
 
@@ -291,50 +309,98 @@ export default function ArenaMonitorDashboard() {
     } catch (err) { alert("حدث خطأ أثناء جلب إجابات الطالب."); } finally { setIsGrading(false); }
   };
 
+  // 🚀 تصحيح دالة اعتماد الدرجات وإرسالها لتكون مضادة للأخطاء وتعمل مع أي قاعدة بيانات
   const submitFinalGrades = async () => {
     setSavingFeedback(true);
     try {
       let totalEssayPoints = 0;
-      const updates = [];
 
+      // 1. تحديث أو إدخال درجات الإجابات المقالية
       for (const [qId, points] of Object.entries(manualGrades)) {
         totalEssayPoints += points;
-        updates.push(
-          supabase.from('student_answers_v2').update({ points_earned: points, is_graded: true }).eq('student_id', selectedStudent.user_id).eq('question_id', qId)
-        );
+        const existingAnswer = studentAnswers.find(a => a.question_id === qId);
+        
+        if (existingAnswer) {
+          await supabase.from('student_answers_v2')
+             .update({ points_earned: points, is_graded: true })
+             .eq('id', existingAnswer.id);
+        } else {
+          await supabase.from('student_answers_v2')
+             .insert({ 
+                student_id: selectedStudent.user_id,
+                assignment_id: selectedAssignment.id,
+                question_id: qId,
+                answer_text: 'لم يقم بالإجابة', // حفظ السجل للطالب الذي ترك السؤال فارغاً
+                points_earned: points,
+                is_graded: true
+             });
+        }
       }
       
-      if (updates.length > 0) await Promise.all(updates);
-
       const finalScore = selectedStudent.correct_score + totalEssayPoints; 
       const newFeedback = `[تم رصد الدرجة] النتيجة المعتمدة: ${finalScore} / ${selectedAssignment.max_points}`;
 
-      await supabase.from('student_progress_v2').upsert({ 
-           student_id: selectedStudent.student_id, 
-           assignment_id: selectedAssignment.id,
-           teacher_feedback: newFeedback, 
-           updated_at: new Date().toISOString() 
-      }, { onConflict: 'student_id, assignment_id' });
+      // 2. التحديث الآمن لتقدم الطالب (student_progress_v2)
+      const { data: existingProg } = await supabase.from('student_progress_v2')
+         .select('id').eq('student_id', selectedStudent.student_id).eq('assignment_id', selectedAssignment.id).maybeSingle();
 
+      if (existingProg) {
+         await supabase.from('student_progress_v2')
+            .update({ teacher_feedback: newFeedback, updated_at: new Date().toISOString() })
+            .eq('id', existingProg.id);
+      } else {
+         await supabase.from('student_progress_v2')
+            .insert({ 
+               student_id: selectedStudent.student_id, 
+               assignment_id: selectedAssignment.id, 
+               teacher_feedback: newFeedback, 
+               current_index: 0, 
+               correct_score: selectedStudent.correct_score, 
+               wrong_score: 0, 
+               is_completed: true 
+            });
+      }
+
+      // 3. التحديث الآمن لسجل الدرجات الرسمي (grades)
       if (selectedAssignment.subject_id && selectedStudent.section_id && selectedStudent.section_id !== 'unknown') {
-         await supabase.from('grades').upsert({
-            student_id: selectedStudent.student_id,
-            subject_id: selectedAssignment.subject_id,
-            section_id: selectedStudent.section_id,
-            score: finalScore,
-            max_score: selectedAssignment.max_points || 10,
-            exam_type: 'assignment',
-            title: selectedAssignment.title,
-            recorded_by: user.id,
-            created_at: new Date().toISOString()
-         }, { onConflict: 'student_id, subject_id, section_id, title' });
+         const { data: existingGrade } = await supabase.from('grades')
+           .select('id')
+           .eq('student_id', selectedStudent.student_id)
+           .eq('subject_id', selectedAssignment.subject_id)
+           .eq('section_id', selectedStudent.section_id)
+           .eq('title', selectedAssignment.title)
+           .maybeSingle();
+
+         if (existingGrade) {
+            await supabase.from('grades')
+              .update({ score: finalScore, max_score: selectedAssignment.max_points || 10, recorded_by: user.id })
+              .eq('id', existingGrade.id);
+         } else {
+            await supabase.from('grades')
+              .insert({
+                student_id: selectedStudent.student_id,
+                subject_id: selectedAssignment.subject_id,
+                section_id: selectedStudent.section_id,
+                score: finalScore,
+                max_score: selectedAssignment.max_points || 10,
+                exam_type: 'assignment',
+                title: selectedAssignment.title,
+                recorded_by: user.id,
+                created_at: new Date().toISOString()
+              });
+         }
       }
 
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, is_graded: true, teacher_feedback: newFeedback } : p));
       setGradingModalOpen(false);
       alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات!');
 
-    } catch (err) { alert("حدث خطأ أثناء اعتماد الدرجات."); } finally { setSavingFeedback(false); }
+    } catch (err) { 
+       console.error("Grading Error:", err);
+       alert("حدث خطأ أثناء اعتماد الدرجات. يرجى المحاولة مرة أخرى."); 
+    } finally { 
+       setSavingFeedback(false); 
+    }
   };
 
   const displayedStudents = useMemo(() => {
@@ -342,6 +408,7 @@ export default function ArenaMonitorDashboard() {
     return studentsProgress.filter(s => s.section_id === selectedClassFilter);
   }, [studentsProgress, selectedClassFilter]);
 
+  // 🚀 تصحيح دالة تصفير الطلاب المتأخرين (Safe Bulk Insert/Update)
   const handleZeroOutMissing = async () => {
     const missingStudents = displayedStudents.filter(s => (!s.has_started || !s.is_completed) && !s.is_graded);
     
@@ -358,39 +425,47 @@ export default function ArenaMonitorDashboard() {
     try {
       const feedbackZero = `[تم رصد الدرجة] لم يقم بالتسليم. الدرجة: 0 / ${selectedAssignment.max_points}`;
       
-      const progressUpdates = missingStudents.map(s => ({
-        student_id: s.student_id,
-        assignment_id: selectedAssignment.id,
-        current_index: 0,
-        correct_score: 0,
-        wrong_score: 0,
-        is_completed: true,
-        teacher_feedback: feedbackZero,
-        updated_at: new Date().toISOString()
-      }));
+      for (const s of missingStudents) {
+         // تحديث التقدم
+         const { data: existingProg } = await supabase.from('student_progress_v2')
+            .select('id').eq('student_id', s.student_id).eq('assignment_id', selectedAssignment.id).maybeSingle();
+         
+         if (existingProg) {
+            await supabase.from('student_progress_v2').update({
+                current_index: 0, correct_score: 0, wrong_score: 0,
+                is_completed: true, teacher_feedback: feedbackZero, updated_at: new Date().toISOString()
+            }).eq('id', existingProg.id);
+         } else {
+            await supabase.from('student_progress_v2').insert({
+                student_id: s.student_id, assignment_id: selectedAssignment.id,
+                current_index: 0, correct_score: 0, wrong_score: 0,
+                is_completed: true, teacher_feedback: feedbackZero
+            });
+         }
 
-      const gradesInserts = missingStudents.filter(s => selectedAssignment.subject_id && s.section_id !== 'unknown').map(s => ({
-        student_id: s.student_id,
-        subject_id: selectedAssignment.subject_id,
-        section_id: s.section_id,
-        score: 0,
-        max_score: selectedAssignment.max_points || 10,
-        exam_type: 'assignment',
-        title: selectedAssignment.title,
-        recorded_by: user.id,
-        created_at: new Date().toISOString()
-      }));
-
-      await supabase.from('student_progress_v2').upsert(progressUpdates, { onConflict: 'student_id, assignment_id' });
-      
-      if (gradesInserts.length > 0) {
-        await supabase.from('grades').insert(gradesInserts);
+         // تحديث الدرجات
+         if (selectedAssignment.subject_id && s.section_id && s.section_id !== 'unknown') {
+             const { data: existingGrade } = await supabase.from('grades')
+               .select('id').eq('student_id', s.student_id).eq('subject_id', selectedAssignment.subject_id)
+               .eq('section_id', s.section_id).eq('title', selectedAssignment.title).maybeSingle();
+             
+             if (existingGrade) {
+                 await supabase.from('grades').update({ score: 0, max_score: selectedAssignment.max_points || 10, recorded_by: user.id }).eq('id', existingGrade.id);
+             } else {
+                 await supabase.from('grades').insert({
+                     student_id: s.student_id, subject_id: selectedAssignment.subject_id,
+                     section_id: s.section_id, score: 0, max_score: selectedAssignment.max_points || 10,
+                     exam_type: 'assignment', title: selectedAssignment.title, recorded_by: user.id, created_at: new Date().toISOString()
+                 });
+             }
+         }
       }
 
       setStudentsProgress(prev => prev.map(p => missingStudents.find(m => m.student_id === p.student_id) ? { ...p, is_graded: true, teacher_feedback: feedbackZero, has_started: true, is_completed: true } : p));
       
       alert(`تم بنجاح تصفير وإغلاق الواجب لعدد ${missingStudents.length} طلاب في ${classNameAlert}.`);
     } catch (err) {
+      console.error(err);
       alert("حدث خطأ أثناء تصفير الطلاب.");
     } finally {
       setRefreshing(false);
@@ -665,7 +740,7 @@ export default function ArenaMonitorDashboard() {
                     <p className="text-xs font-bold text-slate-500 mt-0.5">إلى: {selectedStudent.student_name}</p>
                   </div>
                 </div>
-                <button onClick={() => setFeedbackModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+                <button onClick={() => setFeedbackModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 bg-white rounded-full shadow-sm border border-slate-200 transition-colors active:scale-95"><X className="w-5 h-5"/></button>
               </div>
               <div className="p-6 space-y-4">
                 <div className="space-y-2">
@@ -705,7 +780,7 @@ export default function ArenaMonitorDashboard() {
                 
                 {assignmentQuestions.filter(q => q.question_type === 'essay').length === 0 && (
                    <div className="text-center p-10 bg-white rounded-2xl border border-slate-200 shadow-sm font-bold text-slate-500">
-                     لا يحتوي هذا الواجب على أسئلة مقالية تتطلب تصحيحاً يدوياً. الدرجة المعتمدة حالياً هي درجة أسئلة الاختيار التلقائية.
+                      لا يحتوي هذا الواجب على أسئلة مقالية تتطلب تصحيحاً يدوياً. الدرجة المعتمدة حالياً هي درجة أسئلة الاختيار التلقائية.
                    </div>
                 )}
 
@@ -768,5 +843,3 @@ export default function ArenaMonitorDashboard() {
     </div>
   );
 }
-
-
