@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, FileText, Printer, ShieldCheck, 
   Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact, BarChart2,
-  Camera, UploadCloud, Crown // 🚀 تم إضافة Crown لرؤساء اللجان
+  Camera, UploadCloud, Crown // 🚀 الأيقونات الجديدة
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,7 +35,7 @@ export default function ExamCommitteesControl() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [isHeadsModalOpen, setIsHeadsModalOpen] = useState(false); // 🚀 نافذة رؤساء اللجان
+  const [isHeadsModalOpen, setIsHeadsModalOpen] = useState(false);
   
   const [selectedCommittee, setSelectedCommittee] = useState<any>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -44,7 +44,6 @@ export default function ExamCommitteesControl() {
   const [editCommitteeData, setEditCommitteeData] = useState({ id: '', name: '', capacity: 14, location: '' });
   const [viewCommitteeDetails, setViewCommitteeDetails] = useState<{ students: any[], invigs: any[] }>({ students: [], invigs: [] });
 
-  // 🚀 بيانات تكليف رئيس اللجان
   const [headAssignment, setHeadAssignment] = useState({ timetable_id: '', head_teacher_id: '', committees_range: '' });
   const [currentHeads, setCurrentHeads] = useState<any[]>([]);
 
@@ -64,7 +63,11 @@ export default function ExamCommitteesControl() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const { data: comms } = await supabase.from('exam_committees').select('*').eq('academic_year', currentYear).eq('semester', currentSemester).order('name');
+      const { data: comms } = await supabase.from('exam_committees').select('*').eq('academic_year', currentYear).eq('semester', currentSemester);
+      
+      // 🚀 ترتيب طبيعي للجان (1, 2, 3.. 10) بدلاً من الترتيب النصي
+      const sortedComms = (comms || []).sort((a, b) => a.name.localeCompare(b.name, 'ar', { numeric: true }));
+
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, users(full_name, avatar_url)');
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id').eq('academic_year', currentYear).eq('semester', currentSemester);
@@ -79,7 +82,7 @@ export default function ExamCommitteesControl() {
         return { id: t.id || Math.random().toString(), full_name: u?.full_name || 'بدون اسم', avatar_url: u?.avatar_url || null, subjectsStr: subjects };
       });
 
-      setCommittees(comms || []);
+      setCommittees(sortedComms);
       setTeachers(formattedTeachers);
       setInvigilators(invigs || []);
       setAllocationsStats(stats);
@@ -89,14 +92,12 @@ export default function ExamCommitteesControl() {
 
   useEffect(() => { if (currentRole === 'admin' || currentRole === 'management') fetchData(); }, [currentRole]);
 
-  // 🚀 جلب رؤساء اللجان عند فتح النافذة
   const fetchHeads = async (timetableId: string) => {
     if (!timetableId) return;
     const { data } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name, avatar_url)').eq('timetable_id', timetableId);
     setCurrentHeads(data || []);
   };
 
-  // 🚀 تكليف رئيس لجان جديد
   const handleAssignHead = async () => {
     if (!headAssignment.timetable_id || !headAssignment.head_teacher_id || !headAssignment.committees_range) {
       alert('يرجى تعبئة جميع الحقول!'); return;
@@ -138,7 +139,28 @@ export default function ExamCommitteesControl() {
     } catch (error) { alert('حدث خطأ أثناء رفع الصورة.'); } finally { setIsUploadingAvatar(false); setTargetUserId(null); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
-  // ... (نفس الدوال السابقة: handleSaveCommittee, handleDeleteCommittee, handleNuclearReset, openCommitteeModal, openViewModal, handleDistribute, handleAddInvigilator, handleRemoveInvigilator, getFullClassName, exportToExcel, printDocument, chunkArray)
+  // 🚀 ميزة النقل اليدوي للطالب بين اللجان
+  const handleMoveStudent = async (studentId: string, newCommitteeId: string) => {
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('student_seat_allocations')
+        .update({ committee_id: newCommitteeId })
+        .eq('student_id', studentId)
+        .eq('academic_year', currentYear)
+        .eq('semester', currentSemester);
+
+      if (error) throw error;
+      alert('تم نقل الطالب بنجاح وتحديث التوزيع!');
+      setIsViewModalOpen(false); // إغلاق النافذة لتحديث اللوحة بالكامل
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ أثناء نقل الطالب.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const selectedTeacherData = teachers.find(t => t.id === selectedTeacherId);
   const selectedTeacherSubjects = selectedTeacherData?.subjectsStr || 'غير محدد';
@@ -161,7 +183,7 @@ export default function ExamCommitteesControl() {
   };
 
   const handleNuclearReset = async () => {
-    if (!confirm('تصفير اللجان والمراقبين والطلاب؟')) return;
+    if (!confirm('تحذير خطير: سيتم حذف جميع اللجان، والمراقبين، وأرقام جلوس الطلاب لهذا الفصل بالكامل للبدء من الصفر! هل أنت متأكد؟')) return;
     try { setIsLoading(true); await supabase.from('exam_committees').delete().eq('academic_year', currentYear).eq('semester', currentSemester); fetchData(); } catch (error) { alert('خطأ'); }
   };
 
@@ -174,7 +196,7 @@ export default function ExamCommitteesControl() {
   const openViewModal = async (committee: any) => {
     setIsLoading(true); setSelectedCommittee(committee);
     try {
-      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
+      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
       const commInvigs = invigilators.filter(i => i.committee_id === committee.id);
       setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); setIsViewModalOpen(true);
     } catch (error) { alert('خطأ'); } finally { setIsLoading(false); }
@@ -307,6 +329,11 @@ export default function ExamCommitteesControl() {
               <button onClick={handleDistribute} disabled={committees.length === 0} className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-50">
                 <Users className="w-4 h-4" /> الخلط الأبجدي
               </button>
+              {committees.length > 0 && (
+                <button onClick={handleNuclearReset} className="px-5 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-rose-200">
+                  <Trash2 className="w-4 h-4" /> تصفير شامل
+                </button>
+              )}
             </div>
           </div>
 
@@ -418,7 +445,7 @@ export default function ExamCommitteesControl() {
         )}
       </div>
 
-      {/* 🚀 نافذة تكليف رؤساء اللجان (الجديدة) */}
+      {/* نافذة تكليف رؤساء اللجان */}
       {isHeadsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsHeadsModalOpen(false)}>
           <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -481,7 +508,7 @@ export default function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* باقي النوافذ المنبثقة (إعداد اللجنة وتكليف المراقب واستعراض اللجنة)... بقيت كما هي لمنع تكرار الكود الطويل */}
+      {/* باقي النوافذ المنبثقة (إعداد اللجنة وتكليف المراقب) */}
       {isCommitteeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
@@ -577,20 +604,84 @@ export default function ExamCommitteesControl() {
         </div>
       )}
 
+      {/* 🚀 نافذة استعراض اللجنة (مع النقل اليدوي للطالب) */}
       {isViewModalOpen && selectedCommittee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)}>
-           {/* تم حذف الكود المتكرر هنا للاختصار، يمكنك استخدام نفس الـ Modal الخاص بالاستعراض السابق */}
-           <div className="relative bg-white rounded-3xl shadow-2xl p-8" onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => setIsViewModalOpen(false)} className="absolute top-4 left-4 p-2 bg-slate-100 rounded-full"><X className="w-5 h-5"/></button>
-              <h3 className="text-2xl font-black mb-4">استعراض {selectedCommittee.name}</h3>
-              <p className="font-bold text-slate-500 mb-4">إجمالي الطلاب: {viewCommitteeDetails.students.length}</p>
-              <div className="max-h-96 overflow-y-auto">
-                 {viewCommitteeDetails.students.map(s => (
-                    <div key={s.seat_number} className="flex justify-between p-3 border-b">
-                       <span className="font-black">{s.seat_number}</span>
-                       <span className="font-bold">{s.students?.users?.full_name}</span>
-                    </div>
-                 ))}
+           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
+                 <div>
+                    <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                       <DoorOpen className="w-6 h-6 text-indigo-600"/> استعراض {selectedCommittee.name}
+                    </h3>
+                    <p className="text-xs font-bold text-slate-400 mt-1">السعة: {selectedCommittee.capacity} | إجمالي الطلاب: {viewCommitteeDetails.students.length}</p>
+                 </div>
+                 <button onClick={() => setIsViewModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-6 h-6"/></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+                 <div>
+                    <h4 className="text-sm font-black text-emerald-900 bg-emerald-50 px-3 py-2 rounded-lg flex justify-between items-center mb-3">
+                       <span>قائمة الطلاب الموزعين وإجراءات النقل</span>
+                       <span className="text-xs font-bold text-emerald-600">{viewCommitteeDetails.students.length} طالب</span>
+                    </h4>
+                    
+                    {viewCommitteeDetails.students.length > 0 ? (
+                       <table className="w-full border-collapse border border-slate-200 text-right text-sm rounded-xl overflow-hidden shadow-sm">
+                         <thead className="bg-slate-100">
+                           <tr>
+                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">رقم الجلوس</th>
+                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">اسم الطالب</th>
+                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">الصف</th>
+                             <th className="p-3 border-b border-slate-200 font-black text-slate-700 text-center">إجراء النقل اليدوي</th>
+                           </tr>
+                         </thead>
+                         <tbody>
+                           {viewCommitteeDetails.students.map((s, idx) => {
+                             const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
+                             const stdName = String(s.students?.users?.full_name || s.students?.users?.[0]?.full_name || 'طالب');
+                             const stdInitial = stdName.charAt(0) || 'ط';
+                             
+                             const fullClassName = getFullClassName(s.students);
+                             const safeStdAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
+
+                             return (
+                               <tr key={s.seat_number || `std-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
+                                 <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
+                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
+                                    {safeStdAvatar ? (
+                                      <img src={safeStdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
+                                    ) : (
+                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
+                                    )}
+                                    <span className="truncate">{stdName}</span>
+                                 </td>
+                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-500">{fullClassName}</td>
+                                 <td className="p-3 border-b border-slate-100 text-center">
+                                    {/* 🚀 قائمة منسدلة أنيقة لنقل الطالب يدوياً */}
+                                    <select 
+                                       className="bg-white border border-slate-200 text-indigo-700 text-[10px] font-black rounded-lg px-2 py-1.5 outline-none hover:border-indigo-400 cursor-pointer shadow-sm transition-all"
+                                       onChange={(e) => {
+                                         if(e.target.value && confirm('تأكيد نقل هذا الطالب إلى ' + e.target.options[e.target.selectedIndex].text + '؟')) {
+                                           handleMoveStudent(s.student_id, e.target.value);
+                                         }
+                                       }}
+                                       defaultValue=""
+                                    >
+                                       <option value="" disabled>🔄 نقل إلى لجنة...</option>
+                                       {committees.filter(c => c.id !== selectedCommittee.id).map(c => (
+                                         <option key={c.id} value={c.id}>{c.name}</option>
+                                       ))}
+                                    </select>
+                                 </td>
+                               </tr>
+                             )
+                           })}
+                         </tbody>
+                       </table>
+                    ) : (
+                       <p className="text-sm font-bold text-slate-500 text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">هذه اللجنة فارغة، لم يتم توزيع الطلاب بعد.</p>
+                    )}
+                 </div>
               </div>
            </div>
         </div>
@@ -601,7 +692,7 @@ export default function ExamCommitteesControl() {
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10" dir="rtl">
             
-            {/* 📄 هويات المراقبين - الهوية الذكية المحدثة بدون تقطع بالحروف */}
+            {/* 📄 هويات المراقبين */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((invigChunk, pageIndex) => (
               <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
                 <div className="flex flex-wrap gap-8 justify-center content-start">
