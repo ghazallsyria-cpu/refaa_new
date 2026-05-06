@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { 
   Search, UserSearch, ShieldCheck, GraduationCap, 
-  ArrowLeft, Loader2, User, Fingerprint
+  ArrowLeft, Loader2, User, Fingerprint, Sparkles
 } from 'lucide-react';
 
 export default function Student360Explorer() {
@@ -28,7 +28,6 @@ export default function Student360Explorer() {
 
     const fetchStudents = async () => {
       try {
-        // جلب البيانات الأساسية فقط لتكون سريعة جداً
         const { data, error } = await supabase
           .from('students')
           .select(`
@@ -57,11 +56,11 @@ export default function Student360Explorer() {
           };
         });
 
-        // ترتيب أبجدي
         formatted.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
 
         setStudents(formatted);
-        setFilteredStudents(formatted);
+        // 🚀 التعديل الجذري: لا نضع الطلاب هنا لتبقى الشاشة نظيفة
+        setFilteredStudents([]); 
       } catch (err) {
         console.error('Error fetching students:', err);
       } finally {
@@ -75,8 +74,9 @@ export default function Student360Explorer() {
   // محرك البحث اللحظي
   useEffect(() => {
     const term = searchTerm.toLowerCase().trim();
+    // 🚀 إذا كان مربع البحث فارغاً، نفرغ قائمة النتائج
     if (!term) {
-      setFilteredStudents(students);
+      setFilteredStudents([]);
       return;
     }
 
@@ -93,7 +93,6 @@ export default function Student360Explorer() {
   return (
     <div className="min-h-screen bg-slate-50 font-cairo pb-20 relative overflow-x-hidden" dir="rtl">
       
-      {/* خلفية البحث */}
       <div className="absolute top-0 left-0 w-full h-[400px] bg-gradient-to-b from-indigo-900 via-slate-800 to-slate-50 overflow-hidden z-0">
          <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
          <div className="absolute top-10 left-10 w-96 h-96 bg-indigo-500 rounded-full blur-[120px] opacity-30 pointer-events-none"></div>
@@ -102,7 +101,6 @@ export default function Student360Explorer() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-12 sm:pt-20">
         
-        {/* هيدر البحث */}
         <div className="text-center mb-10 sm:mb-16">
            <div className="w-20 h-20 mx-auto bg-white/10 border border-white/20 backdrop-blur-xl rounded-3xl flex items-center justify-center shadow-2xl mb-6">
               <UserSearch className="w-10 h-10 text-indigo-300" />
@@ -115,7 +113,6 @@ export default function Student360Explorer() {
            </p>
         </div>
 
-        {/* شريط البحث العملاق */}
         <div className="max-w-3xl mx-auto mb-12 sm:mb-16 relative group">
            <div className="absolute inset-y-0 right-6 flex items-center pointer-events-none text-indigo-400 group-focus-within:text-indigo-600 transition-colors">
               <Search className="w-6 h-6 sm:w-7 sm:h-7" />
@@ -136,51 +133,74 @@ export default function Student360Explorer() {
            )}
         </div>
 
-        {/* النتائج */}
         {isLoading ? (
           <div className="flex justify-center p-20">
             <Loader2 className="w-12 h-12 animate-spin text-indigo-600 drop-shadow-md" />
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            <AnimatePresence>
-              {filteredStudents.length > 0 ? filteredStudents.map((student, idx) => (
-                <motion.div
-                  key={student.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ delay: idx > 15 ? 0 : idx * 0.05 }}
-                  onClick={() => router.push(`/admin/student-360/${student.id}`)}
-                  className="bg-white rounded-[2rem] p-5 border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 cursor-pointer transition-all group flex flex-col justify-between"
+            <AnimatePresence mode="wait">
+              {/* 🚀 واجهة ترحيبية عندما يكون مربع البحث فارغاً */}
+              {!searchTerm.trim() ? (
+                <motion.div 
+                  key="empty"
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  exit={{ opacity: 0, y: -20 }}
+                  className="col-span-full flex flex-col items-center justify-center py-20"
                 >
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 font-black text-2xl flex items-center justify-center shrink-0 border border-indigo-100 shadow-inner overflow-hidden group-hover:scale-105 transition-transform">
-                      {student.avatar_url ? (
-                        <img src={student.avatar_url} className="w-full h-full object-cover" alt="Student" />
-                      ) : (
-                        student.full_name.charAt(0)
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 pt-1">
-                      <h3 className="font-black text-slate-800 text-base sm:text-lg truncate group-hover:text-indigo-700 transition-colors">{student.full_name}</h3>
-                      <p className="text-[11px] sm:text-xs font-bold text-slate-500 mt-1 flex items-center gap-1.5 truncate">
-                        <GraduationCap className="w-3.5 h-3.5" /> {student.class_name} - {student.section_name}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100">
-                    <span className="text-[10px] font-black text-slate-400 flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-                      <Fingerprint className="w-3 h-3" /> {student.national_id || 'بدون رقم مدني'}
-                    </span>
-                    <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                      <ArrowLeft className="w-4 h-4" />
-                    </div>
-                  </div>
+                   <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mb-6 shadow-inner border border-indigo-100">
+                      <Sparkles className="w-10 h-10 text-indigo-300" />
+                   </div>
+                   <h3 className="text-2xl font-black text-slate-700 mb-2">مستعد للبحث!</h3>
+                   <p className="text-slate-500 font-bold max-w-md text-center">قم بكتابة الحروف الأولى من اسم الطالب أو رقمه المدني في الأعلى لتبدأ النتائج بالظهور فوراً.</p>
                 </motion.div>
-              )) : (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-full text-center py-20 bg-white/50 backdrop-blur-md rounded-[2rem] border-2 border-dashed border-slate-300">
+              ) : filteredStudents.length > 0 ? (
+                /* عرض النتائج في حال وجودها */
+                filteredStudents.map((student, idx) => (
+                  <motion.div
+                    key={student.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ delay: idx > 15 ? 0 : idx * 0.05 }}
+                    onClick={() => router.push(`/admin/student-360/${student.id}`)}
+                    className="bg-white rounded-[2rem] p-5 border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 cursor-pointer transition-all group flex flex-col justify-between"
+                  >
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 font-black text-2xl flex items-center justify-center shrink-0 border border-indigo-100 shadow-inner overflow-hidden group-hover:scale-105 transition-transform">
+                        {student.avatar_url ? (
+                          <img src={student.avatar_url} className="w-full h-full object-cover" alt="Student" />
+                        ) : (
+                          student.full_name.charAt(0)
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 pt-1">
+                        <h3 className="font-black text-slate-800 text-base sm:text-lg truncate group-hover:text-indigo-700 transition-colors">{student.full_name}</h3>
+                        <p className="text-[11px] sm:text-xs font-bold text-slate-500 mt-1 flex items-center gap-1.5 truncate">
+                          <GraduationCap className="w-3.5 h-3.5" /> {student.class_name} - {student.section_name}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100">
+                      <span className="text-[10px] font-black text-slate-400 flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                        <Fingerprint className="w-3 h-3" /> {student.national_id || 'بدون رقم مدني'}
+                      </span>
+                      <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <ArrowLeft className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                /* واجهة عدم وجود نتائج */
+                <motion.div 
+                  key="no-results"
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }} 
+                  className="col-span-full text-center py-20 bg-white/50 backdrop-blur-md rounded-[2rem] border-2 border-dashed border-slate-300"
+                >
                    <UserSearch className="w-16 h-16 mx-auto text-slate-300 mb-4" />
                    <h3 className="text-xl font-black text-slate-600 mb-2">لا يوجد طلاب يطابقون بحثك</h3>
                    <p className="text-sm font-bold text-slate-400">تأكد من كتابة الاسم أو الرقم المدني بشكل صحيح.</p>
