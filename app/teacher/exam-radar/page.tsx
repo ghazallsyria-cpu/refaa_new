@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { QrReader } from 'react-qr-reader'; // 🚀 ترقية المحرك
 
 export default function InvigilatorRadar() {
   const router = useRouter();
@@ -21,27 +22,22 @@ export default function InvigilatorRadar() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // بيانات الجلسة الحالية
   const [todayExam, setTodayExam] = useState<any>(null);
   const [myCommittee, setMyCommittee] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // إعدادات الكاميرا والرادار
   const [isScannerActive, setIsScannerActive] = useState(false);
-  const scannerRef = useRef<any>(null); // لحفظ كائن الماسح الضوئي
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
   const todayDate = format(new Date(), 'yyyy-MM-dd'); 
 
-  // 1️⃣ استخبارات النظام: من هو المعلم؟ وأين لجنته اليوم؟
   const fetchMyMission = async () => {
     setIsLoading(true);
     try {
       if (!user?.id) return;
 
-      // أ. البحث عن اختبارات اليوم
       const { data: exams } = await supabase
         .from('exam_timetables')
         .select('*, subjects(name)')
@@ -53,12 +49,11 @@ export default function InvigilatorRadar() {
 
       if (!exams || exams.length === 0) {
         setIsLoading(false);
-        return; // لا يوجد اختبار اليوم
+        return; 
       }
       const activeExam = exams[0];
       setTodayExam(activeExam);
 
-      // ب. أين تم تكليف هذا المعلم؟
       const { data: myAssignment } = await supabase
         .from('committee_invigilators')
         .select('committee_id, exam_committees(*)')
@@ -67,11 +62,10 @@ export default function InvigilatorRadar() {
 
       if (!myAssignment) {
         setIsLoading(false);
-        return; // المعلم غير مكلف بالمراقبة اليوم
+        return; 
       }
       setMyCommittee(myAssignment.exam_committees);
 
-      // ج. جلب طلاب هذه اللجنة وحالتهم
       await fetchStudents(activeExam.id, myAssignment.committee_id);
 
     } catch (error) {
@@ -132,13 +126,11 @@ export default function InvigilatorRadar() {
     if (user?.id) fetchMyMission();
   }, [user?.id]);
 
-  // 2️⃣ نظام تسجيل الحضور الآمن
   const markAttendance = async (studentId: string, newStatus: 'present' | 'absent' | 'excused') => {
     if (!todayExam?.id || !myCommittee?.id || !user?.id) return;
     setIsProcessing(true);
 
     try {
-      // تحديث فوري وسريع للواجهة لكي لا ينتظر المعلم
       setStudents(prev => prev.map(s => s.student_id === studentId ? { ...s, status: newStatus } : s));
 
       const { data, error } = await supabase
@@ -165,74 +157,42 @@ export default function InvigilatorRadar() {
     }
   };
 
-  // 3️⃣ تشغيل الرادار وكاميرا الهاتف (QR Scanner Engine) 🚀
-  useEffect(() => {
-    if (isScannerActive) {
-      // استيراد المكتبة ديناميكياً لتجنب أخطاء السيرفر (Next.js SSR)
-      import('html5-qrcode').then(({ Html5Qrcode }) => {
-        const html5QrCode = new Html5Qrcode("reader");
-        scannerRef.current = html5QrCode;
-
-        html5QrCode.start(
-          { facingMode: "environment" }, // الكاميرا الخلفية دائماً
-          {
-            fps: 10,    // 10 مسحات في الثانية للسرعة الخارقة
-            qrbox: { width: 250, height: 250 } // مربع التركيز
-          },
-          (decodedText) => {
-            // ماذا يحدث عند التقاط الباركود؟
-            if (decodedText.startsWith('raf-exam-seat:')) {
-              const seatNumber = decodedText.split(':')[1];
-              handleScannedSeat(seatNumber);
-            } else {
-              handleScannedSeat(decodedText); // في حال كان الباركود يحمل الرقم فقط
-            }
-          },
-          (errorMessage) => {
-            // يتم تجاهل أخطاء عدم العثور على كود لتجنب امتلاء الكونسول
-          }
-        ).catch((err) => {
-          console.error("Camera Error: ", err);
-          alert("تعذر الوصول للكاميرا، تأكد من منح الصلاحيات للمتصفح.");
-          setIsScannerActive(false);
-        });
-      });
-    } else {
-      // إغلاق الكاميرا بسلام عند إيقاف الرادار
-      if (scannerRef.current) {
-        scannerRef.current.stop().then(() => {
-          scannerRef.current.clear();
-        }).catch((err: any) => console.error(err));
+  // 🚀 معالج الكاميرا للمراقب
+  const handleScan = async (result: any, error: any) => {
+    if (!!result) {
+      let decodedText = result?.text;
+      if (!decodedText) return;
+      
+      let seatNumber = decodedText.trim();
+      if (decodedText.includes('raf-exam-seat:')) {
+        seatNumber = decodedText.split(':')[1];
+      } else if (decodedText.includes('/')) {
+         const parts = decodedText.split('/');
+         seatNumber = parts[parts.length - 1];
       }
+
+      setIsScannerActive(false); 
+      handleScannedSeat(seatNumber);
+      setTimeout(() => setIsScannerActive(true), 2000);
     }
+  };
 
-    return () => {
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().catch(console.error);
-      }
-    };
-  }, [isScannerActive]);
-
-  // معالجة الرقم الذي قرأته الكاميرا
   const handleScannedSeat = (seatNumber: string) => {
     setStudents(prevStudents => {
       const student = prevStudents.find(s => String(s.seat_number) === String(seatNumber));
       if (student) {
         if (student.status !== 'present') {
-          // تشغيل صوت تنبيه لطيف للمعلم
           playSuccessBeep();
           markAttendance(student.student_id, 'present');
         }
       } else {
-        // تنبيه قوي إذا كان الطالب لا ينتمي لهذه اللجنة!
         playErrorBeep();
-        alert(`🚨 تحذير: رقم الجلوس ${seatNumber} لا ينتمي للجنة ${myCommittee?.name}!`);
+        alert(`🚨 تحذير: رقم الجلوس ${seatNumber} لا ينتمي لهذه اللجنة!`);
       }
       return prevStudents;
     });
   };
 
-  // أصوات النظام
   const playSuccessBeep = () => {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -246,7 +206,6 @@ export default function InvigilatorRadar() {
     osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.3);
   };
 
-  // 🛡️ حماية الغرفة
   if (!['teacher', 'admin', 'management'].includes(currentRole)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
@@ -285,7 +244,6 @@ export default function InvigilatorRadar() {
 
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* 📋 رأس الصفحة لمعلومات اللجنة */}
         <div className="bg-slate-900 text-white rounded-[2rem] p-6 shadow-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
           
@@ -324,7 +282,6 @@ export default function InvigilatorRadar() {
 
         {myCommittee && (
           <>
-            {/* 🔴 محرك كاميرا الرادار */}
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 text-center border-b border-slate-100 bg-slate-50 flex flex-col items-center justify-center">
                  {!isScannerActive ? (
@@ -345,17 +302,32 @@ export default function InvigilatorRadar() {
                  <p className="text-xs font-bold text-slate-500 mt-4">قم بمسح الباركود الموجود على بطاقة الطالب ليتم تسجيل حضوره فوراً في السيرفر.</p>
               </div>
               
-              {/* نافذة الكاميرا */}
               <AnimatePresence>
                 {isScannerActive && (
                   <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden bg-slate-900 relative">
-                     <div id="reader" className="w-full max-w-md mx-auto overflow-hidden rounded-none sm:rounded-2xl my-0 sm:my-6 shadow-2xl"></div>
+                     {/* 🚀 القارئ المعتمد للمراقب */}
+                     <div className="w-full max-w-md mx-auto overflow-hidden rounded-none sm:rounded-2xl my-0 sm:my-6 shadow-2xl relative aspect-square bg-black">
+                        <QrReader
+                          onResult={handleScan}
+                          constraints={{ facingMode: 'environment' }}
+                          containerStyle={{ width: '100%', height: '100%' }}
+                          videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+                           <div className="w-full h-full border-2 border-emerald-500/50 rounded-2xl relative">
+                              <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-500 rounded-tl-xl -mt-1 -ml-1"></div>
+                              <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-500 rounded-tr-xl -mt-1 -mr-1"></div>
+                              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-500 rounded-bl-xl -mb-1 -ml-1"></div>
+                              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-500 rounded-br-xl -mb-1 -mr-1"></div>
+                              <div className="absolute w-full h-0.5 bg-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
+                           </div>
+                        </div>
+                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-            {/* 👥 قائمة الطلاب (الرصد اليدوي) */}
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
@@ -438,13 +410,17 @@ export default function InvigilatorRadar() {
         )}
       </div>
       
-      <style jsx global>{`
-        /* لتنسيق الكاميرا الخاصة بمكتبة html5-qrcode لتناسب جمال النظام */
-        #reader { border: none !important; border-radius: 1rem; overflow: hidden; }
-        #reader__dashboard_section_csr { display: none !important; }
-        #reader__dashboard_section_swaplink { text-decoration: none; color: white; background: #10b981; padding: 8px 16px; border-radius: 8px; margin-top: 10px; display: inline-block; font-weight: bold; }
-        #reader__camera_selection { padding: 8px; border-radius: 8px; margin-bottom: 10px; width: 100%; max-width: 300px; }
-      `}</style>
+      <style dangerouslySetInnerHTML={{__html:`
+        @keyframes scan {
+          0% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .animate-scan {
+          animation: scan 2s linear infinite;
+        }
+      `}}/>
     </div>
   );
 }
