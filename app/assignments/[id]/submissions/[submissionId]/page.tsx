@@ -23,29 +23,27 @@ const renderContentWithMath = (content: string) => {
    // 1. إصلاح النزول للسطر
    parsed = parsed.replace(/\\\\n/g, '<br/>').replace(/\\n/g, '<br/>').replace(/\\r\\n/g, '<br/>').replace(/\n/g, '<br/>');
    
-   // 2. 🚀 تحويل الروابط المباشرة للصور (Cloudinary وغيرها) إلى صور مرئية فوراً
+   // 2. تحويل الروابط المباشرة للصور إلى صور مرئية فوراً
    const rawImageUrlRegex = /(^|\s|>)(https?:\/\/[^\s<"']+(?:cloudinary\.com\/image[^\s<"']+|\.(?:jpeg|jpg|gif|png|webp)))(<\/?br>|\s|<|$)/gi;
-   parsed = parsed.replace(rawImageUrlRegex, '$1<img src="$2" alt="مرفق الطالب" class="max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain" />$3');
+   parsed = parsed.replace(rawImageUrlRegex, '$1<img src="$2" alt="مرفق" class="max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain" />$3');
 
-   // 3. تحليل هيكلي (DOM Parsing) لتحويل الروابط التشعبية التي تحتوي على صور إلى صور مرئية
+   // 3. تحليل هيكلي لتحويل الروابط التشعبية التي تحتوي على صور إلى صور مرئية
    if (typeof window !== 'undefined') {
      try {
        const parser = new DOMParser();
        const doc = parser.parseFromString(parsed, 'text/html');
        
-       // تحويل <a> إلى <img> إذا كان الرابط لصورة
        const links = doc.querySelectorAll('a');
        links.forEach(link => {
           if (link.href && (link.href.match(/\.(jpeg|jpg|gif|png|webp)$/i) || link.href.includes('cloudinary.com/image'))) {
              const img = doc.createElement('img');
              img.src = link.href;
-             img.alt = "مرفق الطالب";
+             img.alt = "مرفق";
              img.className = "max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain";
              link.parentNode?.replaceChild(img, link);
           }
        });
 
-       // تنسيق الصور الموجودة مسبقاً
        const images = doc.querySelectorAll('img');
        images.forEach((img) => {
          if (img.src && img.src.startsWith('http')) img.setAttribute('crossorigin', 'anonymous');
@@ -57,7 +55,7 @@ const renderContentWithMath = (content: string) => {
      } catch (e) {}
    }
 
-   // 4. 🚀 تلوين ومعالجة المعادلات الرياضية (KaTeX) بأداء عالي
+   // 4. تلوين ومعالجة المعادلات الرياضية بأداء عالي
    const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
      try {
        let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -69,7 +67,7 @@ const renderContentWithMath = (content: string) => {
    parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
    parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
    
-   // 5. تنسيق الجداول للثيم الفاتح وحمايتها بـ Wrapper
+   // 5. تنسيق الجداول
    parsed = parsed.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
    parsed = parsed.replace(/<\/table>/g, '</table></div>');
    parsed = parsed.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
@@ -162,6 +160,44 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && !document.getElementById('katex-js-grading')) {
+      const link = document.createElement('link');
+      link.id = 'katex-css-grading';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.id = 'katex-js-grading';
+      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+      script.onload = () => {
+        const autoRender = document.createElement('script');
+        autoRender.id = 'katex-auto-render-grading';
+        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+        document.head.appendChild(autoRender);
+      };
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
+        (window as any).renderMathInElement(document.body, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false
+        });
+      }
+    }, 100); 
+    return () => clearTimeout(timer);
+  }, [questions, answers, questionGrades, loading]); 
+
+  useEffect(() => {
     if (questions.length > 0 && Object.keys(questionGrades).length > 0) {
       let total = 0;
       Object.values(questionGrades).forEach(g => { total += (Number(g.pointsEarned) || 0); });
@@ -198,10 +234,45 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     } finally { setIsSaving(false); }
   };
 
-  const normalizeUrl = (url?: string) => {
-    if (!url) return '';
-    const clean = url.trim();
-    return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+  // 🚀 المترجم الفوري (JSON to HTML) لصور وأجوبة الطلاب
+  const formatStudentAnswer = (ans: any) => {
+    if (!ans) return '';
+    
+    // إذا كان الكائن مفككاً أصلاً (Parsed Object)
+    if (typeof ans === 'object' && !Array.isArray(ans)) {
+      if (ans.text !== undefined || ans.images !== undefined) {
+         let res = ans.text || '';
+         if (ans.images && Array.isArray(ans.images)) {
+            ans.images.forEach((img: string) => {
+               if(img) res += `<br/><img src="${img}" alt="إجابة الطالب" class="max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain" />`;
+            });
+         }
+         return res;
+      }
+      return JSON.stringify(ans);
+    }
+    
+    // إذا كان نصاً ولكنه يحمل هيكل JSON
+    if (typeof ans === 'string') {
+       if (ans.trim().startsWith('{') && ans.trim().endsWith('}')) {
+           try {
+               const parsed = JSON.parse(ans);
+               if (parsed.text !== undefined || parsed.images !== undefined) {
+                   let res = parsed.text || '';
+                   if (parsed.images && Array.isArray(parsed.images)) {
+                      parsed.images.forEach((img: string) => {
+                         if(img) res += `<br/><img src="${img}" alt="إجابة الطالب" class="max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain" />`;
+                      });
+                   }
+                   return res;
+               }
+           } catch(e) {}
+       }
+       return ans;
+    }
+    
+    if (Array.isArray(ans)) return ans.join('، ');
+    return String(ans);
   };
 
   if (loading) return (
@@ -226,7 +297,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-cairo text-slate-800 relative overflow-x-hidden pt-6" dir="rtl">
       
-      {/* الخلفية المضيئة */}
       <div className="fixed top-1/4 left-[-10%] w-[400px] h-[400px] sm:w-[500px] sm:h-[500px] bg-indigo-100/50 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 right-[-10%] w-[500px] h-[500px] sm:w-[600px] sm:h-[600px] bg-emerald-100/50 rounded-full blur-[140px] pointer-events-none z-0" />
 
@@ -244,7 +314,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6 sm:space-y-8">
         
-        {/* ההيدر والتحكم */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 bg-white/90 backdrop-blur-xl p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[3rem] relative overflow-hidden border border-slate-200 shadow-sm">
           <div className="flex items-start sm:items-center gap-3 sm:gap-4 relative z-10">
             <Link href={`/assignments/${assignmentId}`} className="h-10 w-10 sm:h-12 sm:w-12 flex items-center justify-center rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 shadow-sm text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-all shrink-0 active:scale-95">
@@ -276,7 +345,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
           
-          {/* Content */}
           <div className="xl:col-span-2 space-y-6 sm:space-y-8">
             <div className="bg-white/90 backdrop-blur-xl p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden border border-slate-200 shadow-sm">
                
@@ -330,7 +398,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                      );
                    }
 
-                   // تجهيز إجابة الطالب
                    let studentAnswerText = studentAns;
                    let isUnanswered = false;
 
@@ -367,16 +434,16 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                    } else if (isComparison) {
                       isUnanswered = !studentAnswerText || studentAnswerText === '[]' || studentAnswerText === '';
                    } else {
-                      isUnanswered = !studentAnswerText || studentAnswerText === '';
+                      // 🚀 استخدام المترجم الفوري لمعرفة ما إذا كانت الإجابة فارغة فعلياً
+                      const formattedObj = formatStudentAnswer(studentAnswerText);
+                      isUnanswered = !formattedObj || (formattedObj.replace(/<[^>]*>?/gm, '').trim() === '' && !formattedObj.includes('<img'));
                    }
 
                    const currentQNumber = questionCounter++;
 
-                   // 🌟 بطاقة السؤال للتصحيح
                    return (
                      <div key={q.id} className={`bg-white rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-sm border transition-all hover:shadow-md hover:border-indigo-200 ${isUnanswered ? 'border-slate-200 border-dashed' : qGrade.isCorrect ? 'border-emerald-300' : qGrade.isCorrect === false ? 'border-rose-300' : 'border-slate-200'}`}>
                        
-                       {/* رأس السؤال */}
                        <div className="p-5 sm:p-6 lg:p-8 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-6">
                          <div className="flex gap-3 sm:gap-4 items-start w-full min-w-0">
                            <div className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-[1rem] flex items-center justify-center font-black text-lg sm:text-xl shadow-sm border ${isUnanswered ? 'bg-slate-100 text-slate-500 border-slate-200' : qGrade.isCorrect ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : qGrade.isCorrect === false ? 'bg-rose-100 text-rose-700 border-rose-300' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
@@ -399,11 +466,9 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                          </div>
                        </div>
 
-                       {/* منطقة الإجابة */}
                        <div className="p-5 sm:p-6 lg:p-8 bg-transparent">
                           <div className="text-xs sm:text-sm font-black text-slate-500 mb-4 flex items-center gap-1.5 sm:gap-2"><User className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> إجابة الطالب:</div>
                           
-                          {/* الجداول المحسنة */}
                           {isComparison ? (
                             <div className={`rounded-xl sm:rounded-2xl border overflow-hidden shadow-sm ${isUnanswered ? 'border-slate-200 bg-slate-50' : qGrade.isCorrect ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50'}`}>
                               <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
@@ -454,12 +519,12 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                   <span className={isUnanswered ? 'text-slate-500' : qGrade.isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابتك المسجلة:</span>
                                 </div>
                                 <div className={`text-base sm:text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'italic' : ''}`}>
-                                    {isUnanswered ? 'لم يتم تقديم إجابة.' : <div dangerouslySetInnerHTML={renderContentWithMath(typeof studentAnswerText === 'object' && studentAnswerText !== null ? JSON.stringify(studentAnswerText) : String(studentAnswerText))} />}
+                                    {/* 🚀 السحر هنا: استخدام المترجم الفوري قبل تمريره للمحرك */}
+                                    {isUnanswered ? 'لم يتم تقديم إجابة.' : <div dangerouslySetInnerHTML={renderContentWithMath(formatStudentAnswer(studentAnswerText))} />}
                                 </div>
                             </div>
                           )}
 
-                          {/* 🚀 أزرار التقييم للمعلم مع دعم الدرجات العشرية */}
                           <div className="mt-6 pt-6 border-t border-slate-200">
                             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
                                <div className="xl:col-span-8 flex flex-col sm:flex-row items-center gap-2 sm:gap-3 bg-slate-50 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border border-slate-200 shadow-inner">
@@ -483,9 +548,8 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                   <div className="flex items-center gap-1.5 sm:gap-2">
                                     <input 
                                       type="number" 
-                                      step="any"  // 🚀 السحر هنا: هذا يتيح كتابة الكسور العشرية كالأرباع والأنصاف
-                                      min="0" 
-                                      max={q.points} 
+                                      step="any" 
+                                      min="0" max={q.points} 
                                       disabled={!canEdit}
                                       value={qGrade.pointsEarned === 0 && qGrade.isCorrect !== true ? '' : qGrade.pointsEarned} 
                                       onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], pointsEarned: Number(e.target.value)}}))} 
@@ -544,7 +608,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
           </div>
 
-          {/* Right Column: Sticky Grading Panel */}
           <div className="space-y-6 sm:space-y-8">
             <div className="bg-white/95 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-lg sticky top-6 sm:top-28">
               <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-6 sm:mb-8 flex items-center gap-2 sm:gap-3 border-b border-slate-200 pb-5 sm:pb-6">
@@ -557,7 +620,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                   <div className="relative z-10 flex items-center gap-3 sm:gap-4">
                     <input 
                       type="number" 
-                      step="any" // 🚀 لتقبل النتيجة الإجمالية كسوراً عشرية
+                      step="any"
                       disabled={!canEdit}
                       className={`block w-full rounded-xl sm:rounded-2xl border border-slate-300 py-4 sm:py-5 px-3 sm:px-4 text-indigo-700 text-3xl sm:text-4xl font-black text-center outline-none bg-white shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 ${!canEdit ? 'opacity-70 cursor-not-allowed bg-slate-100' : ''}`} 
                       value={grade} 
@@ -606,7 +669,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
         .custom-scrollbar-light::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
         .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
-        /* 🚀 الحل الجذري للجداول في الجوال (تصحيح المعلم) */
         .table-responsive-wrapper {
           width: 100%;
           max-width: 100vw;
