@@ -4,9 +4,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  ShieldCheck, Loader2, Search, Trash2, PrinterIcon, Contact, Crown, FileKey, 
-  Database, UserCheck, FileArchive, Plus, X, AlertTriangle, CheckCircle2,
-  KeyRound, MonitorCheck, ClipboardSignature, Edit3
+  ShieldCheck, Loader2, Search, Trash2, PrinterIcon, Crown, 
+  FileKey, MonitorCheck, ClipboardSignature, FileArchive, Plus, X, 
+  CheckCircle2, Edit3, UserCheck, AlertTriangle, Fingerprint
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,10 +16,10 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { cn } from '@/lib/utils';
 
-// 🚀 التصنيفات البرمجية المتوافقة تماماً مع قيود قاعدة البيانات الصارمة
+// 🚀 التصنيفات البرمجية المتوافقة مع قيود قاعدة البيانات
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-  { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: KeyRound, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+  { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
   { id: 'data_entry', defaultName: 'مسؤول الرصد والإدخال', icon: MonitorCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
   { id: 'auditor', defaultName: 'مراجع ومُدقق الدرجات', icon: ClipboardSignature, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
   { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
@@ -50,18 +50,22 @@ export default function ControlTeamManagement() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const { data: team } = await supabase
+      const { data: team, error: teamErr } = await supabase
         .from('exam_control_team')
         .select('*, users!exam_control_team_user_id_fkey(full_name, avatar_url)')
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester)
         .order('created_at', { ascending: true });
 
-      const { data: staff } = await supabase
+      if (teamErr) console.error("Team Fetch Error:", teamErr);
+
+      const { data: staff, error: staffErr } = await supabase
         .from('users')
         .select('id, full_name, avatar_url, role')
         .in('role', ['teacher', 'staff', 'management'])
         .order('full_name');
+
+      if (staffErr) console.error("Staff Fetch Error:", staffErr);
 
       setTeamMembers(team || []);
       setAvailableStaff(staff || []);
@@ -84,26 +88,39 @@ export default function ControlTeamManagement() {
     setIsAssignModalOpen(true);
   };
 
+  // 🚀 دالة التكليف المحصنة (تعرض الخطأ الحقيقي من السيرفر)
   const handleAssign = async () => {
-    if (!selectedUserId || !selectedBaseRole || !customRoleTitle.trim() || !user?.id) return;
+    if (!selectedUserId || !selectedBaseRole || !customRoleTitle.trim()) return;
+    
+    const assignerId = user?.id || user?.user_id;
+    if (!assignerId) {
+      alert("خطأ: لم نتمكن من تحديد معرّف حسابك الإداري.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('exam_control_team').insert({
+      const payload = {
         user_id: selectedUserId,
-        role_id: selectedBaseRole.id, // 🚀 يطابق قاعدة البيانات حرفياً لتجاوز الحظر
-        role_name: customRoleTitle.trim(), // 🚀 يُطبع على البطاقة حسب رغبة المدير
+        role_id: selectedBaseRole.id,
+        role_name: customRoleTitle.trim(),
         academic_year: currentYear,
         semester: currentSemester,
-        assigned_by: user.id
-      });
+        assigned_by: assignerId
+      };
+
+      const { data, error } = await supabase.from('exam_control_team').insert([payload]).select();
       
-      if (error) throw error;
+      if (error) {
+        console.error("DB Insert Error Details:", error);
+        throw error;
+      }
 
       setIsAssignModalOpen(false); 
       fetchData();
     } catch (error: any) {
-      console.error("Assignment Error:", error);
-      alert('تعذر التكليف! تأكد من أن المعلم غير مكلف مسبقاً في الكنترول.');
+      // 🚀 السحر هنا: عرض الخطأ الفعلي للمدير لكي نعالجه إن كان RLS أو Constraint
+      alert(`فشل التكليف من قاعدة البيانات ⚠️\n\nتفاصيل الخطأ:\n${error.message || error.details || 'خطأ غير معروف'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -111,12 +128,17 @@ export default function ControlTeamManagement() {
 
   const handleRemove = async (id: string, name: string) => {
     if (!confirm(`هل أنت متأكد من إعفاء (${name}) من فريق الكنترول؟`)) return;
-    await supabase.from('exam_control_team').delete().eq('id', id);
-    fetchData();
+    try {
+      const { error } = await supabase.from('exam_control_team').delete().eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (err: any) {
+      alert(`حدث خطأ أثناء الحذف:\n${err.message}`);
+    }
   };
 
   const printBadges = async () => {
-    if (teamMembers.length === 0) { alert('لا يوجد أعضاء في الكنترول لطباعة هوياتهم!'); return; }
+    if (teamMembers.length === 0) { alert('لا يوجد أعضاء لطباعة هوياتهم!'); return; }
     setIsPrinting(true);
     
     setTimeout(async () => {
@@ -143,7 +165,7 @@ export default function ControlTeamManagement() {
         }
         pdf.save(`هويات_فريق_الكنترول_VIP_${currentSemester}.pdf`);
       } catch (err: any) { 
-        alert('حدث خطأ أثناء التصدير.'); 
+        alert('حدث خطأ أثناء تصدير الهويات.'); 
       } finally { 
         setIsPrinting(false); 
       }
@@ -160,6 +182,9 @@ export default function ControlTeamManagement() {
 
   const chunkArray = (arr: any[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
 
+  const totalPositions = BASE_ROLES.length;
+  const filledPositions = new Set(teamMembers.map(m => m.role_id)).size;
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-10 font-cairo pb-20" dir="rtl">
       
@@ -174,7 +199,9 @@ export default function ControlTeamManagement() {
         )}
       </AnimatePresence>
 
-      <div className="max-w-7xl mx-auto space-y-8 relative">
+      <div className="max-w-7xl mx-auto space-y-6 relative z-10">
+        
+        {/* 🚀 لوحة التحكم العلوية الشاملة */}
         <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
           <div className="absolute -left-10 -top-10 text-rose-50/50 pointer-events-none">
             <ShieldCheck className="w-64 h-64" />
@@ -183,12 +210,16 @@ export default function ControlTeamManagement() {
           <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-100 pb-6 sm:pb-8">
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
-                <ShieldCheck className="w-8 h-8 text-rose-600" /> إدارة فريق الكنترول السري
+                <ShieldCheck className="w-8 h-8 text-rose-600" /> إدارة الكنترول المركزي
               </h1>
-              <p className="text-slate-500 font-bold text-sm">تشكيل وتكليف فريق الكنترول، مع إمكانية إسناد مسميات مخصصة وطباعة الهويات.</p>
+              <p className="text-slate-500 font-bold text-sm">تشكيل وتكليف فريق الكنترول، وتخصيص المسميات وطباعة هويات الدخول الأمنية.</p>
             </div>
-            <div className="w-full lg:w-auto">
-              <button onClick={printBadges} disabled={teamMembers.length === 0} className="w-full sm:w-auto px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95">
+            <div className="flex items-center gap-4 w-full lg:w-auto">
+              <div className="bg-rose-50 px-4 py-2.5 rounded-xl border border-rose-100 text-center shrink-0">
+                 <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-0.5">اكتمال الفريق</p>
+                 <p className="text-xl font-black text-rose-700">{filledPositions} / {totalPositions}</p>
+              </div>
+              <button onClick={printBadges} disabled={teamMembers.length === 0} className="w-full sm:w-auto px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95">
                 <PrinterIcon className="w-5 h-5" /> طباعة الهويات الأمنية
               </button>
             </div>
@@ -234,7 +265,7 @@ export default function ControlTeamManagement() {
                        
                        {membersInRole.length === 0 && (
                           <div className="h-20 border-2 border-dashed border-slate-300/50 rounded-2xl flex items-center justify-center">
-                             <p className="text-xs font-bold text-slate-400">لا يوجد أعضاء مكلفين</p>
+                             <p className="text-xs font-bold text-slate-400">المنصب شاغر</p>
                           </div>
                        )}
                     </div>
@@ -252,6 +283,7 @@ export default function ControlTeamManagement() {
         </div>
       </div>
 
+      {/* 🚀 نافذة التكليف وتخصيص المسميات */}
       <AnimatePresence>
         {isAssignModalOpen && selectedBaseRole && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
@@ -278,7 +310,7 @@ export default function ControlTeamManagement() {
                       value={customRoleTitle} 
                       onChange={(e) => setCustomRoleTitle(e.target.value)} 
                    />
-                   <p className="text-[10px] font-bold text-slate-400 mt-1.5 px-1">يمكنك تخصيص المسمى كما ترغب ليظهر على البطاقة.</p>
+                   <p className="text-[10px] font-bold text-slate-400 mt-1.5 px-1">هذا المسمى هو ما سيُطبع على بطاقة الكنترول الخاصة به.</p>
                 </div>
 
                 <div className="relative mb-4 shrink-0 mt-2">
@@ -309,7 +341,7 @@ export default function ControlTeamManagement() {
                          </div>
                       );
                    })}
-                   {filteredStaff.length === 0 && <div className="text-center text-slate-400 py-10"><UserCheck className="w-12 h-12 mx-auto mb-3 opacity-20"/><p className="text-sm font-bold">لا توجد نتائج، أو أن الكادر مكلف مسبقاً.</p></div>}
+                   {filteredStaff.length === 0 && <div className="text-center text-slate-400 py-10"><UserCheck className="w-12 h-12 mx-auto mb-3 opacity-20"/><p className="text-sm font-bold">لا توجد نتائج مطابقة، أو أن الكادر مكلف مسبقاً.</p></div>}
                 </div>
 
                 <div className="pt-4 shrink-0 border-t border-slate-100 mt-4">
@@ -324,6 +356,7 @@ export default function ControlTeamManagement() {
         )}
       </AnimatePresence>
 
+      {/* 🖨️ قوالب الطباعة لهويات الكنترول الأمنية */}
       <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
          <div ref={printRef} className="flex flex-col gap-10" dir="rtl">
             {chunkArray(teamMembers, 6).map((chunk, pageIndex) => (
@@ -357,7 +390,7 @@ export default function ControlTeamManagement() {
                                     <div className="w-[22mm] h-[22mm] bg-white p-1 rounded-xl border-[3px] border-slate-900 mb-1">
                                        <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
                                     </div>
-                                    <p className="text-[9px] font-black text-slate-500 uppercase">Secured Access Only</p>
+                                    <p className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1"><Fingerprint className="w-3 h-3"/> Secured Access</p>
                                  </div>
                               </div>
                               
