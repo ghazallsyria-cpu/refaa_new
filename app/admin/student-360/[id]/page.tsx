@@ -2,7 +2,7 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import React, { useState, useEffect, useCallback, use } from 'react';
+import React, { useState, useEffect, useCallback, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
@@ -11,8 +11,12 @@ import { cn } from '@/lib/utils';
 import { 
   ArrowRight, User, GraduationCap, Clock, CheckCircle2, AlertCircle, 
   BookOpen, FileText, Medal, Loader2, Activity, Target, ShieldAlert,
-  MessageSquareHeart, Send, ShieldCheck, Database, XCircle
+  MessageSquareHeart, Send, ShieldCheck, Database, XCircle, PrinterIcon, Download
 } from 'lucide-react';
+
+// 🚀 استيراد مكتبات الطباعة
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 
 export default function Student360Profile({ params }: { params: Promise<{ id: string }> }) {
   const { id: studentId } = use(params);
@@ -20,20 +24,23 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
-  // 🚀 حالات البيانات
+  // حالات البيانات
   const [summaryData, setSummaryData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'grades' | 'assignments' | 'attendance' | 'notes'>('overview');
   
-  // 🚀 التخزين المؤقت للتبويبات (Lazy Load Cache)
+  // التخزين المؤقت للتبويبات
   const [tabData, setTabData] = useState<Record<string, any>>({});
   const [isTabLoading, setIsTabLoading] = useState(false);
 
-  // إرسال ملاحظة جديدة
+  // الملاحظات
   const [newNote, setNewNote] = useState('');
   const [isSendingNote, setIsSendingNote] = useState(false);
 
-  // 1. جلب البيانات الأساسية من الدالة المجمعة السريعة
+  // 🚀 حالات ومراجع الطباعة الأنيقة
+  const [isPrinting, setIsPrinting] = useState(false);
+  const attendancePrintRef = useRef<HTMLDivElement>(null);
+
   const fetchSummary = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_student_360_summary', { p_student_id: studentId });
@@ -52,51 +59,27 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     }
   }, [currentRole, fetchSummary]);
 
-  // 2. التحميل الكسول للتبويبات (Lazy Loading Tabs) والمعدل لإصلاح الأخطاء
   const loadTabData = async (tab: string) => {
-    if (tabData[tab]) return; // إذا كانت البيانات موجودة في الكاش، لا تفعل شيئاً
+    if (tabData[tab]) return;
     if (tab === 'overview') return;
 
     setIsTabLoading(true);
     try {
       let data = null;
       if (tab === 'grades') {
-        const { data: res, error } = await supabase
-          .from('grades')
-          .select('*, subjects(name)')
-          .eq('student_id', studentId)
-          .order('created_at', { ascending: false });
-        if (error) console.error("Grades error:", error);
+        const { data: res } = await supabase.from('grades').select('*, subjects(name)').eq('student_id', studentId).order('created_at', { ascending: false });
         data = res;
       } 
       else if (tab === 'assignments') {
-        // 🚀 تم إصلاح الاستعلام: إزالة max_points لأنها غير موجودة بالجدول
-        const { data: res, error } = await supabase
-          .from('student_progress_v2')
-          .select('*, assignments_v2(title, is_practice_mode)')
-          .eq('student_id', studentId)
-          .order('updated_at', { ascending: false });
-        if (error) console.error("Assignments error:", error);
+        const { data: res } = await supabase.from('student_progress_v2').select('*, assignments_v2(title, is_practice_mode)').eq('student_id', studentId).order('updated_at', { ascending: false });
         data = res;
       } 
       else if (tab === 'attendance') {
-        // 🚀 تم إصلاح الاستعلام: فلترة لجلب الغياب والتأخير والأعذار فقط
-        const { data: res, error } = await supabase
-          .from('attendance_records')
-          .select('*, subjects(name)')
-          .eq('student_id', studentId)
-          .neq('status', 'present') // لا نجلب حالات "حاضر"
-          .order('date', { ascending: false });
-        if (error) console.error("Attendance error:", error);
+        const { data: res } = await supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', studentId).neq('status', 'present').order('date', { ascending: false });
         data = res;
       } 
       else if (tab === 'notes') {
-        const { data: res, error } = await supabase
-          .from('private_student_notes')
-          .select('*, users!private_student_notes_teacher_id_fkey(full_name, avatar_url, role)')
-          .eq('student_id', studentId)
-          .order('created_at', { ascending: false });
-        if (error) console.error("Notes error:", error);
+        const { data: res } = await supabase.from('private_student_notes').select('*, users!private_student_notes_teacher_id_fkey(full_name, avatar_url, role)').eq('student_id', studentId).order('created_at', { ascending: false });
         data = res;
       }
       
@@ -125,7 +108,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
       
       if (error) throw error;
       
-      // تحديث الكاش فوراً
       setTabData(prev => ({
         ...prev,
         notes: [data, ...(prev.notes || [])]
@@ -136,6 +118,59 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     } finally {
       setIsSendingNote(false);
     }
+  };
+
+  // 🚀 دالة توليد وتحميل الـ PDF لسجل الغياب
+  const downloadAttendancePDF = async () => {
+    if (!tabData['attendance'] || tabData['attendance'].length === 0) {
+      alert('لا توجد غيابات لطباعتها!');
+      return;
+    }
+    
+    setIsPrinting(true);
+    
+    setTimeout(async () => {
+      if (!attendancePrintRef.current) return;
+      try {
+        window.scrollTo(0, 0); 
+        const pages = attendancePrintRef.current.querySelectorAll('.print-page-wrapper');
+        if (pages.length === 0) return;
+
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        
+        for (let i = 0; i < pages.length; i++) {
+          const canvas = await html2canvas(pages[i] as HTMLElement, { 
+            scale: 2, 
+            useCORS: true, 
+            allowTaint: false, 
+            logging: false,
+            width: 794,    
+            height: 1122,  
+            backgroundColor: '#ffffff'
+          });
+          
+          const imgData = canvas.toDataURL('image/jpeg', 0.85); 
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight(); 
+          
+          if (i > 0) pdf.addPage(); 
+          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        }
+        
+        const safeStudentName = summaryData?.basic_info?.full_name.replace(/\s+/g, '_') || 'طالب';
+        pdf.save(`سجل_غياب_${safeStudentName}.pdf`);
+      } catch (err: any) { 
+        console.error("PDF Engine Error:", err);
+        alert('حدث خطأ أثناء استخراج الملف.'); 
+      } 
+      finally { setIsPrinting(false); }
+    }, 1500); // إعطاء مهلة للـ React لرسم القالب المخفي
+  };
+
+  // دالة لتقسيم المصفوفة لصفحات الطباعة (كل 25 غياب بصفحة)
+  const chunkArray = (arr: any[], size: number) => {
+    if (!arr || arr.length === 0) return [[]];
+    return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
   };
 
   if (!['admin', 'management', 'teacher', 'staff'].includes(currentRole)) return null;
@@ -160,7 +195,16 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   return (
     <div className="min-h-screen bg-slate-50 font-cairo pb-20 relative overflow-x-hidden" dir="rtl">
       
-      {/* خلفية فخمة */}
+      {/* 🚀 نافذة التحميل الشفافة عند توليد الـ PDF */}
+      <AnimatePresence>
+        {isPrinting && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[200] flex flex-col items-center justify-center text-white">
+            <Loader2 className="w-16 h-16 animate-spin text-emerald-400 mb-4" />
+            <h2 className="text-xl font-black">جاري تصميم وتوليد السجل الرسمي (PDF)...</h2>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="absolute top-0 left-0 w-full h-80 bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 overflow-hidden z-0">
          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
          <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-indigo-500 rounded-full blur-[100px] opacity-50 pointer-events-none"></div>
@@ -169,12 +213,10 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-8 sm:pt-12">
         
-        {/* زر العودة */}
         <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-white/80 hover:text-white transition-colors bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md border border-white/20 w-fit active:scale-95">
           <ArrowRight className="w-4 h-4" /> عودة للخلف
         </button>
 
-        {/* 💳 البطاقة العلوية (Hero Card) */}
         <div className="bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border border-white p-6 sm:p-8 flex flex-col md:flex-row gap-8 items-center md:items-start justify-between relative overflow-hidden">
            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-bl-full pointer-events-none"></div>
            
@@ -211,7 +253,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
            </div>
         </div>
 
-        {/* 📑 شريط التبويبات */}
         <div className="mt-8 flex overflow-x-auto custom-scrollbar bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
            {[
              { id: 'overview', label: 'نظرة عامة', icon: Activity },
@@ -233,7 +274,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
            ))}
         </div>
 
-        {/* 📌 منطقة المحتوى (شاشة عرض التبويبات) */}
         <div className="mt-6">
            <AnimatePresence mode="wait">
               {isTabLoading ? (
@@ -243,7 +283,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
               ) : (
                  <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                     
-                    {/* التبويب 1: نظرة عامة */}
                     {activeTab === 'overview' && (
                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                           <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm col-span-1 md:col-span-2">
@@ -275,7 +314,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        </div>
                     )}
 
-                    {/* التبويب 2: الدرجات والسجل الأكاديمي */}
                     {activeTab === 'grades' && (
                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
                           <div className="p-6 border-b border-slate-100 bg-slate-50/50">
@@ -310,37 +348,30 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        </div>
                     )}
 
-                    {/* التبويب 3: الواجبات والتسليم */}
                     {activeTab === 'assignments' && (
                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-4">
                           {tabData['assignments']?.length > 0 ? tabData['assignments'].map((a: any) => {
                              const isGraded = a.teacher_feedback?.includes('[تم رصد الدرجة]');
-                             const title = a.assignments_v2?.title || 'واجب بدون عنوان';
-                             const isPractice = a.assignments_v2?.is_practice_mode;
-                             
                              return (
                                 <div key={a.id} className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
-                                   <div className="w-full">
+                                   <div>
                                       <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                                         {isPractice ? <Target className="w-4 h-4 text-amber-500"/> : <FileText className="w-4 h-4 text-indigo-500"/>}
-                                         {title}
+                                         {a.assignments_v2?.is_practice_mode ? <Target className="w-4 h-4 text-amber-500"/> : <FileText className="w-4 h-4 text-indigo-500"/>}
+                                         {a.assignments_v2?.title || 'واجب بدون عنوان'}
                                       </h4>
-                                      <div className="flex items-center gap-4 mt-2">
-                                         {a.teacher_feedback && !isGraded && <p className="text-xs font-bold text-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm inline-block"><MessageSquareHeart className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
-                                         {a.teacher_feedback && isGraded && <p className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 shadow-sm inline-block"><CheckCircle2 className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
-                                      </div>
+                                      {a.teacher_feedback && !isGraded && <p className="text-xs font-bold text-indigo-600 mt-2 bg-white px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm inline-block"><MessageSquareHeart className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
                                    </div>
-                                   <div className="flex items-center gap-4 w-full md:w-auto shrink-0">
+                                   <div className="flex items-center gap-4 w-full md:w-auto">
                                       {isGraded ? (
-                                         <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl border border-emerald-200 font-black text-sm flex items-center gap-2 w-full justify-center">
-                                            <CheckCircle2 className="w-4 h-4"/> مُصحح وتم الرصد
+                                         <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl border border-emerald-200 font-black text-sm flex items-center gap-2">
+                                            <CheckCircle2 className="w-4 h-4"/> مُصحح وتم رصد درجته
                                          </div>
                                       ) : a.is_completed ? (
-                                         <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200 font-black text-sm flex items-center gap-2 w-full justify-center">
+                                         <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200 font-black text-sm flex items-center gap-2">
                                             <Clock className="w-4 h-4"/> بانتظار التصحيح
                                          </div>
                                       ) : (
-                                         <div className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2 w-full justify-center">
+                                         <div className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2">
                                             قيد الإنجاز
                                          </div>
                                       )}
@@ -353,9 +384,19 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        </div>
                     )}
 
-                    {/* التبويب 4: الغياب */}
+                    {/* 🚀 التبويب 4: الغياب مع ميزة التصدير */}
                     {activeTab === 'attendance' && (
-                       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                          <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                             <h3 className="font-black text-lg text-slate-800 flex items-center gap-2"><ShieldAlert className="w-5 h-5 text-rose-500"/> سجل الغياب والانضباط</h3>
+                             
+                             {/* 🚀 زر تحميل PDF الأنيق */}
+                             <button onClick={downloadAttendancePDF} disabled={isPrinting || !tabData['attendance'] || tabData['attendance'].length === 0} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2">
+                               {isPrinting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
+                               استخراج كوثيقة PDF
+                             </button>
+                          </div>
+                          
                           <div className="overflow-x-auto">
                              <table className="w-full text-right">
                                 <thead>
@@ -369,10 +410,10 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                                    {tabData['attendance']?.length > 0 ? tabData['attendance'].map((rec: any) => (
                                       <tr key={rec.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                                          <td className="p-4" dir="ltr">{new Date(rec.date).toLocaleDateString('en-GB')}</td>
-                                         <td className="p-4"><span className="text-indigo-600">{rec.subjects?.name || 'مادة غير مسجلة'}</span> (حصة {rec.period})</td>
+                                         <td className="p-4"><span className="text-indigo-600">{rec.subjects?.name}</span> (حصة {rec.period})</td>
                                          <td className="p-4 text-center">
                                             {rec.status === 'absent' && <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-md text-xs font-black border border-rose-200">غائب</span>}
-                                            {rec.status === 'late' && <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-md text-xs font-black border border-amber-200">تأخير</span>}
+                                            {rec.status === 'late' && <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-md text-xs font-black border border-amber-200">متأخر</span>}
                                             {rec.status === 'excused' && <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-xs font-black border border-blue-200">عذر مقبول</span>}
                                          </td>
                                       </tr>
@@ -385,7 +426,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        </div>
                     )}
 
-                    {/* التبويب 5: الملاحظات السرية */}
                     {activeTab === 'notes' && (
                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                           <div className="md:col-span-2 space-y-4">
@@ -428,6 +468,77 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
         </div>
 
       </div>
+
+      {/* 
+        =========================================================
+        🖨️ القالب المخفي لتوليد وثيقة الغياب PDF بشكل أنيق 
+        =========================================================
+      */}
+      {tabData['attendance'] && (
+         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+            <div ref={attendancePrintRef} className="flex flex-col gap-10" dir="rtl">
+               {chunkArray(tabData['attendance'], 20).map((chunk: any, pageIndex: number) => (
+                  <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
+                     
+                     {/* هيدر الوثيقة الرسمي */}
+                     <div className="flex justify-between items-center border-b-[3px] border-slate-900 pb-6 mb-8 shrink-0">
+                        <div className="text-right">
+                           <h2 className="text-xl font-black text-slate-900">دولة الكويت</h2>
+                           <h3 className="text-lg font-bold text-slate-800">وزارة التربية</h3>
+                           <h3 className="text-lg font-bold text-slate-800">مدرسة الرفعة النموذجية</h3>
+                        </div>
+                        <div className="text-center">
+                           <h1 className="text-3xl font-black bg-slate-900 text-white px-6 py-2 rounded-2xl inline-block mb-2 shadow-sm">سجل الغياب والانضباط</h1>
+                           <p className="font-bold text-lg text-slate-700">للعام الدراسي 2025-2026</p>
+                        </div>
+                        <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center border-4 border-slate-900 overflow-hidden shrink-0">
+                           <span className="font-black text-xl text-slate-400">شعار</span>
+                        </div>
+                     </div>
+
+                     {/* بيانات الطالب */}
+                     <div className="bg-slate-50 border border-slate-300 p-4 rounded-xl mb-6 flex justify-between shrink-0 shadow-sm">
+                        <p className="font-black text-lg text-slate-900">اسم الطالب: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.full_name}</span></p>
+                        <p className="font-black text-lg text-slate-900">الرقم المدني: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.national_id}</span></p>
+                        <p className="font-black text-lg text-slate-900">الصف: <span className="text-indigo-700 ml-2">{summaryData?.basic_info?.class_name} - {summaryData?.basic_info?.section_name}</span></p>
+                     </div>
+
+                     {/* جدول الغيابات */}
+                     <div className="flex-1">
+                        <table className="w-full border-collapse border-2 border-slate-900 text-right">
+                           <thead>
+                             <tr className="bg-slate-200">
+                               <th className="border border-slate-900 p-3 font-black text-slate-900 w-16 text-center">م</th>
+                               <th className="border border-slate-900 p-3 font-black text-slate-900 w-32 text-center">التاريخ</th>
+                               <th className="border border-slate-900 p-3 font-black text-slate-900">المادة / الحصة</th>
+                               <th className="border border-slate-900 p-3 font-black text-slate-900 w-40 text-center">حالة الغياب</th>
+                             </tr>
+                           </thead>
+                           <tbody>
+                              {chunk.map((rec: any, idx: number) => (
+                                <tr key={rec.id} className="even:bg-slate-50">
+                                  <td className="border border-slate-900 p-3 font-bold text-slate-900 text-center">{pageIndex * 20 + idx + 1}</td>
+                                  <td className="border border-slate-900 p-3 font-bold text-slate-900 text-center" dir="ltr">{new Date(rec.date).toLocaleDateString('en-GB')}</td>
+                                  <td className="border border-slate-900 p-3 font-bold text-slate-900">{rec.subjects?.name || 'مادة غير مسجلة'} (حصة {rec.period})</td>
+                                  <td className="border border-slate-900 p-3 font-black text-center text-slate-800">
+                                     {rec.status === 'absent' ? 'غائب' : rec.status === 'late' ? 'تأخير' : 'عذر مقبول'}
+                                  </td>
+                                </tr>
+                              ))}
+                           </tbody>
+                        </table>
+                     </div>
+                     
+                     {/* التذييل */}
+                     <div className="mt-auto pt-6 border-t-[3px] border-slate-900 text-left shrink-0 flex justify-between items-end">
+                        <p className="font-bold text-slate-600 text-sm">صفحة {pageIndex + 1} من {Math.ceil(tabData['attendance'].length / 20)}</p>
+                        <p className="font-bold text-slate-600 text-sm">تاريخ استخراج التقرير: {new Date().toLocaleString('ar-EG')}</p>
+                     </div>
+                  </div>
+               ))}
+            </div>
+         </div>
+      )}
 
       <style dangerouslySetInnerHTML={{__html:`
         .custom-scrollbar::-webkit-scrollbar { height: 6px; }
