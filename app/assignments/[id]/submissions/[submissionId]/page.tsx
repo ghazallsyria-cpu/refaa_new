@@ -1,5 +1,5 @@
-/* eslint-disable react/no-unescaped-entities */
 // @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
@@ -11,26 +11,71 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-// 🚀 محرك تنسيق المعادلات والجداول المُحسّن بصرياً للمعلم (Light Theme)
+// 🚀 إضافة مكتبة اللاتكس الأساسية
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+// 🚀 محرك تنسيق المعادلات والجداول والصور المُحسّن بصرياً للمعلم
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
-   let html = String(content);
+   let parsed = String(content);
    
-   // 1. إصلاح النزول للسطر (تحويل \n إلى <br/>)
-   html = html.replace(/\\\\n/g, '<br/>').replace(/\\n/g, '<br/>').replace(/\\r\\n/g, '<br/>').replace(/\n/g, '<br/>').replace(/\\\$/g, '$');
+   // 1. إصلاح النزول للسطر
+   parsed = parsed.replace(/\\\\n/g, '<br/>').replace(/\\n/g, '<br/>').replace(/\\r\\n/g, '<br/>').replace(/\n/g, '<br/>');
    
-   // 2. تلوين المعادلات الرياضية للثيم الفاتح
-   html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
-       return `<span class="math-tex text-indigo-700 bg-indigo-50/80 border border-indigo-200 px-2.5 py-1 rounded-lg font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
-   });
+   // 2. 🚀 تحويل الروابط المباشرة للصور (Cloudinary وغيرها) إلى صور مرئية فوراً
+   const rawImageUrlRegex = /(^|\s|>)(https?:\/\/[^\s<"']+(?:cloudinary\.com\/image[^\s<"']+|\.(?:jpeg|jpg|gif|png|webp)))(<\/?br>|\s|<|$)/gi;
+   parsed = parsed.replace(rawImageUrlRegex, '$1<img src="$2" alt="مرفق الطالب" class="max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain" />$3');
 
-   // 3. تنسيق الجداول للثيم الفاتح وحمايتها بـ Wrapper
-   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
-   html = html.replace(/<\/table>/g, '</table></div>');
-   html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
-   html = html.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
+   // 3. تحليل هيكلي (DOM Parsing) لتحويل الروابط التشعبية التي تحتوي على صور إلى صور مرئية
+   if (typeof window !== 'undefined') {
+     try {
+       const parser = new DOMParser();
+       const doc = parser.parseFromString(parsed, 'text/html');
+       
+       // تحويل <a> إلى <img> إذا كان الرابط لصورة
+       const links = doc.querySelectorAll('a');
+       links.forEach(link => {
+          if (link.href && (link.href.match(/\.(jpeg|jpg|gif|png|webp)$/i) || link.href.includes('cloudinary.com/image'))) {
+             const img = doc.createElement('img');
+             img.src = link.href;
+             img.alt = "مرفق الطالب";
+             img.className = "max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain";
+             link.parentNode?.replaceChild(img, link);
+          }
+       });
+
+       // تنسيق الصور الموجودة مسبقاً
+       const images = doc.querySelectorAll('img');
+       images.forEach((img) => {
+         if (img.src && img.src.startsWith('http')) img.setAttribute('crossorigin', 'anonymous');
+         if (!img.className.includes('max-w-full')) {
+           img.className = 'max-w-full h-auto max-h-96 rounded-xl shadow-sm border border-slate-200 my-3 mx-auto block object-contain';
+         }
+       });
+       parsed = doc.body.innerHTML;
+     } catch (e) {}
+   }
+
+   // 4. 🚀 تلوين ومعالجة المعادلات الرياضية (KaTeX) بأداء عالي
+   const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
+     try {
+       let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+       cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
+       return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
+     } catch (e) { return match; }
+   };
    
-   return { __html: html };
+   parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
+   parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
+   
+   // 5. تنسيق الجداول للثيم الفاتح وحمايتها بـ Wrapper
+   parsed = parsed.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   parsed = parsed.replace(/<\/table>/g, '</table></div>');
+   parsed = parsed.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
+   parsed = parsed.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
+   
+   return { __html: parsed };
 };
 
 export default function GradingPage({ params }: { params: Promise<{ id: string, submissionId: string }> }) {
@@ -116,51 +161,10 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة لمنع تكرار التحميل والانهيار
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !document.getElementById('katex-js-grading')) {
-      const link = document.createElement('link');
-      link.id = 'katex-css-grading';
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-      document.head.appendChild(link);
-
-      const script = document.createElement('script');
-      script.id = 'katex-js-grading';
-      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
-      script.onload = () => {
-        const autoRender = document.createElement('script');
-        autoRender.id = 'katex-auto-render-grading';
-        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
-        document.head.appendChild(autoRender);
-      };
-      document.head.appendChild(script);
-    }
-  }, []);
-
-  // 🚀 2. إعادة رسم المعادلات كلما تفاعل المعلم (تغيير الدرجة أو النقر)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
-        (window as any).renderMathInElement(document.body, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\(', right: '\\)', display: false },
-            { left: '\\[', right: '\\]', display: true }
-          ],
-          throwOnError: false
-        });
-      }
-    }, 100); 
-    return () => clearTimeout(timer);
-  }, [questions, answers, questionGrades, loading]); 
-
   useEffect(() => {
     if (questions.length > 0 && Object.keys(questionGrades).length > 0) {
       let total = 0;
       Object.values(questionGrades).forEach(g => { total += (Number(g.pointsEarned) || 0); });
-      // 🚀 التأكد من عدم وجود أصفار زائدة في المجموع العشري
       setGrade(parseFloat(total.toFixed(2)).toString());
     }
   }, [questionGrades, questions.length]);
@@ -217,7 +221,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const isOverdue = dueDateObj < new Date(submission?.submitted_at);
   const isGraded = submission?.status === 'graded';
 
-  // 🚀 متغير الترقيم المعتمد للأسئلة
   let questionCounter = 1;
 
   return (
@@ -515,7 +518,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
             {(submission?.content || submission?.file_url) && (
               <div className="bg-white/90 backdrop-blur-xl p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] mt-6 sm:mt-8 relative overflow-hidden border border-slate-200 shadow-sm">
                 <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 mb-6 sm:mb-8 flex items-center gap-2 sm:gap-3 relative z-10">
-                   <div className="p-2 sm:p-2.5 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm"><FileText className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" /></div> המرفقات والنصوص الإضافية التي أرسلتها الطالب
+                   <div className="p-2 sm:p-2.5 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm"><FileText className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" /></div> المرفقات والنصوص الإضافية التي أرسلها الطالب
                 </h3>
                 
                 {submission?.content && (
