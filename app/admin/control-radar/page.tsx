@@ -3,155 +3,350 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  ShieldCheck, Loader2, XCircle, ScanLine, Camera, UserCheck, Briefcase, FileSignature, ArrowRightLeft
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ScanLine, ShieldCheck, CheckCircle2, XCircle, AlertCircle, 
+  User, Mail, ArrowRight, Loader2, RefreshCcw, Camera
+} from 'lucide-react';
+import { QrReader } from 'react-qr-reader'; // 🚀 نستخدم القارئ المعتمد
 
-export default function ControlRadar() {
-  const router = useRouter();
+export default function ControlRadarPage() {
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [radarMode, setRadarMode] = useState<'invigilators' | 'envelopes'>('invigilators');
-  
-  const [todayExam, setTodayExam] = useState<any>(null);
-  const [isScannerActive, setIsScannerActive] = useState(false);
-  const scannerRef = useRef<any>(null);
-  const scanInputRef = useRef<HTMLInputElement>(null);
-  const [lastMessage, setLastMessage] = useState({ text: '', type: '' });
+  const [activeTab, setActiveTab] = useState<'envelope' | 'invigilator'>('envelope');
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [scanStatus, setScanStatus] = useState<'idle' | 'success' | 'error' | 'loading'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [cameraActive, setCameraActive] = useState(false);
 
-  const currentYear = '2025-2026';
-  const currentSemester = 'الفصل الدراسي الثاني';
-  const todayDate = format(new Date(), 'yyyy-MM-dd');
-
-  useEffect(() => {
-    const fetchExam = async () => {
-      const { data } = await supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).eq('exam_date', todayDate).limit(1);
-      if (data && data.length > 0) setTodayExam(data[0]);
-      setIsLoading(false);
-    };
-    fetchExam();
-  }, []);
-
-  const handleInvigilatorScan = async (teacherId: string) => {
-    // منطق حضور المراقب الذي برمجناه سابقاً (تم تبسيطه هنا للاختصار)
+  // 🚀 فلترة وتهيئة النص الممسوح من الـ QR Code
+  const processQRText = (text: string) => {
+    if (!text) return null;
+    let cleanId = text.trim();
+    
     try {
-      const { data: assignment } = await supabase.from('committee_invigilators').select('*').eq('teacher_id', teacherId).single();
-      if (!assignment) { setLastMessage({ text: 'المعلم غير مكلف اليوم!', type: 'error' }); return; }
+      // 1. إذا كان JSON (مثل {"id": "123..."})
+      if (cleanId.startsWith('{')) {
+        const parsed = JSON.parse(cleanId);
+        if (parsed.id) return parsed.id;
+        if (parsed.student_id) return parsed.student_id;
+        if (parsed.teacher_id) return parsed.teacher_id;
+      }
       
-      await supabase.from('invigilator_attendance').upsert({ teacher_id: teacherId, timetable_id: todayExam.id, committee_id: assignment.committee_id, scanned_by: user.id }, { onConflict: 'teacher_id, timetable_id' });
-      setLastMessage({ text: 'تم إثبات استلام المراقب للجنته بنجاح!', type: 'success' });
-    } catch (e) { setLastMessage({ text: 'خطأ في الرصد', type: 'error' }); }
+      // 2. إذا كان رابطاً (مثل https://domain.com/scan/123...)
+      if (cleanId.includes('/')) {
+        const parts = cleanId.split('/');
+        cleanId = parts[parts.length - 1]; // نأخذ آخر جزء من الرابط (وهو الـ ID غالباً)
+      }
+      
+      return cleanId;
+    } catch (e) {
+      return cleanId; // إرجاع النص كما هو إذا فشل التحليل
+    }
   };
 
-  const handleEnvelopeScan = async (hodId: string) => {
-    // منطق تسليم واستلام المظاريف الجديد!
+  const handleScan = async (result: any, error: any) => {
+    if (!!result) {
+      const rawText = result?.text;
+      const extractedId = processQRText(rawText);
+      
+      if (extractedId && scanStatus !== 'loading' && scanResult !== extractedId) {
+        setScanResult(extractedId);
+        setCameraActive(false); // إيقاف الكاميرا مؤقتاً لتجنب المسح المتكرر المزعج
+        
+        if (activeTab === 'envelope') {
+          await processEnvelopeScan(extractedId);
+        } else {
+          await processInvigilatorScan(extractedId);
+        }
+      }
+    }
+    
+    if (!!error) {
+      // نتجاهل أخطاء "عدم وجود رمز" لأنها تحدث في كل إطار (Frame)
+      if (error?.message && !error.message.includes('No QR code found')) {
+        console.warn("QR Error:", error);
+      }
+    }
+  };
+
+  // 🚀 معالجة مسح مغلف الأسئلة (استلام من رئيس اللجنة)
+  const processEnvelopeScan = async (scannedId: string) => {
+    setScanStatus('loading');
+    setStatusMessage('جاري التحقق من مغلف الأسئلة...');
+    
     try {
-      // التحقق من حالة المظروف الحالية
-      const { data: pipeline } = await supabase.from('exam_pipeline').select('*').eq('timetable_id', todayExam.id).single();
-      
-      let newStatus = 'with_hod';
-      let msg = 'تم تسليم المظاريف لرئيس القسم للتصحيح.';
-      
-      if (pipeline && pipeline.handover_status === 'with_hod') {
-        newStatus = 'returned_to_control';
-        msg = 'تم استرجاع المظاريف المصححة للكنترول للرصد!';
+      // البحث عن المغلف في جدول رؤساء اللجان (exam_committee_heads) بناءً على معرف الجدول (timetable_id)
+      const { data: envelope, error: fetchError } = await supabase
+        .from('exam_committee_heads')
+        .select('*, exam_timetables(subject_id, class_level, subjects(name))')
+        .eq('timetable_id', scannedId)
+        .single();
+
+      if (fetchError || !envelope) {
+        throw new Error('لم يتم العثور على مغلف أسئلة مطابق لهذا الرمز.');
       }
 
-      await supabase.from('exam_pipeline').upsert({ 
-        timetable_id: todayExam.id, 
-        hod_id: hodId,
-        handover_status: newStatus,
-        [newStatus === 'with_hod' ? 'handover_at' : 'returned_at']: new Date().toISOString()
-      }, { onConflict: 'timetable_id' });
+      if (envelope.is_delivered) {
+        setScanStatus('error');
+        setStatusMessage(`هذا المغلف تم تسليمه مسبقاً في ${new Date(envelope.delivered_at).toLocaleTimeString('ar-KW')}`);
+        return;
+      }
 
-      setLastMessage({ text: msg, type: 'success' });
-    } catch (e) { setLastMessage({ text: 'حدث خطأ في النظام', type: 'error' }); }
+      // تحديث حالة المغلف إلى "تم التسليم"
+      const { error: updateError } = await supabase
+        .from('exam_committee_heads')
+        .update({
+          is_delivered: true,
+          delivered_at: new Date().toISOString(),
+          received_by: user.id
+        })
+        .eq('id', envelope.id);
+
+      if (updateError) throw updateError;
+
+      setScanStatus('success');
+      setStatusMessage(`تم استلام مغلف (${envelope.exam_timetables?.subjects?.name} - صف ${envelope.exam_timetables?.class_level}) بنجاح!`);
+
+    } catch (err: any) {
+      setScanStatus('error');
+      setStatusMessage(err.message || 'حدث خطأ أثناء معالجة المغلف.');
+    }
   };
 
-  useEffect(() => {
-    if (isScannerActive) {
-      import('html5-qrcode').then(({ Html5Qrcode }) => {
-        const html5QrCode = new Html5Qrcode("control-reader");
-        scannerRef.current = html5QrCode;
-        html5QrCode.start(
-          { facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            if (decodedText.startsWith('raf-teacher:')) {
-              const scannedId = decodedText.split(':')[1];
-              if (radarMode === 'invigilators') handleInvigilatorScan(scannedId);
-              else handleEnvelopeScan(scannedId);
-            }
-          }, () => {}
-        ).catch(() => setIsScannerActive(false));
-      });
-    } else {
-      if (scannerRef.current) scannerRef.current.stop().then(() => scannerRef.current.clear());
+  // 🚀 معالجة مسح بطاقة المراقب (تسجيل الحضور)
+  const processInvigilatorScan = async (teacherId: string) => {
+    setScanStatus('loading');
+    setStatusMessage('جاري تسجيل حضور المراقب...');
+    
+    try {
+      // 1. التحقق من أن هذا المعلم هو مراقب اليوم
+      const todayDate = new Date().toISOString().split('T')[0];
+      
+      const { data: timetables } = await supabase
+        .from('exam_timetables')
+        .select('id')
+        .eq('exam_date', todayDate);
+
+      if (!timetables || timetables.length === 0) {
+        throw new Error('لا توجد اختبارات مجدولة لهذا اليوم.');
+      }
+
+      const timetableIds = timetables.map(t => t.id);
+
+      // 2. البحث عن لجنة المراقبة المكلف بها
+      const { data: assignment, error: fetchError } = await supabase
+        .from('committee_invigilators')
+        .select('*, exam_committees(name)')
+        .eq('teacher_id', teacherId)
+        .single(); // في نظام واقعي قد يراقب أكثر من لجنة، نأخذ الأولى مؤقتاً للتوضيح
+
+      if (fetchError || !assignment) {
+        throw new Error('هذا المعلم غير مكلف بالمراقبة اليوم أو الرمز غير صحيح.');
+      }
+
+      // 3. تسجيل حضوره في جدول (invigilator_attendance)
+      const { data: existingAttendance } = await supabase
+        .from('invigilator_attendance')
+        .select('id')
+        .eq('teacher_id', teacherId)
+        .eq('committee_id', assignment.committee_id)
+        .eq('timetable_id', timetableIds[0]) // نفترض الاختبار الأول اليوم
+        .maybeSingle();
+
+      if (existingAttendance) {
+         setScanStatus('error');
+         setStatusMessage(`تم تسجيل حضور هذا المراقب مسبقاً في لجنة (${assignment.exam_committees?.name}).`);
+         return;
+      }
+
+      const { error: insertError } = await supabase
+        .from('invigilator_attendance')
+        .insert({
+          teacher_id: teacherId,
+          timetable_id: timetableIds[0],
+          committee_id: assignment.committee_id,
+          status: 'present',
+          scanned_by: user.id
+        });
+
+      if (insertError) throw insertError;
+
+      setScanStatus('success');
+      setStatusMessage(`تم تسجيل حضور المراقب للجنة (${assignment.exam_committees?.name}) بنجاح!`);
+
+    } catch (err: any) {
+      setScanStatus('error');
+      setStatusMessage(err.message || 'حدث خطأ أثناء تسجيل حضور المراقب.');
     }
-    return () => { if (scannerRef.current?.isScanning) scannerRef.current.stop(); };
-  }, [isScannerActive, radarMode, todayExam]);
+  };
+
+  const resetScan = () => {
+    setScanResult(null);
+    setScanStatus('idle');
+    setStatusMessage('');
+    setCameraActive(true);
+  };
 
   if (!['admin', 'management', 'staff'].includes(currentRole)) return null;
 
   return (
-    <div className="min-h-screen bg-[#0a0d16] p-4 font-cairo text-slate-200" dir="rtl">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-50 font-cairo pb-20 relative overflow-hidden" dir="rtl">
+      {/* Background Decor */}
+      <div className="absolute top-0 left-0 w-full h-96 bg-slate-900 overflow-hidden z-0">
+         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+         <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-indigo-500 rounded-full blur-[100px] opacity-30"></div>
+         <div className="absolute top-10 left-10 w-72 h-72 bg-blue-500 rounded-full blur-[100px] opacity-20"></div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-12 sm:pt-20">
         
-        <div className="bg-slate-900/80 backdrop-blur-xl rounded-[2rem] p-6 border border-slate-700 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-black text-white">رادار الكنترول المركزي</h1>
-            <p className="text-indigo-400 font-bold">{todayExam ? `اختبار اليوم: ${todayExam.subjects?.name}` : 'لا يوجد اختبار'}</p>
-          </div>
+        <div className="text-center mb-10">
+           <div className="w-20 h-20 mx-auto bg-white/10 border border-white/20 backdrop-blur-xl rounded-3xl flex items-center justify-center shadow-2xl mb-6">
+              <ScanLine className="w-10 h-10 text-indigo-300" />
+           </div>
+           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-4 drop-shadow-md">
+             رادار الكنترول <span className="text-amber-400">الذكي</span>
+           </h1>
+           <p className="text-indigo-200 font-bold text-sm max-w-xl mx-auto">
+             قم بتوجيه الكاميرا نحو الـ QR Code الخاص بمغلفات الأسئلة أو بطاقات المراقبين لتسجيل الحركات فورياً في النظام المركزي.
+           </p>
         </div>
 
-        {todayExam && (
-          <div className="bg-slate-900 rounded-[2rem] p-6 border border-slate-800">
-            {/* أزرار التبديل (Tabs) */}
-            <div className="flex bg-slate-800 p-1.5 rounded-2xl mb-8">
-              <button onClick={() => {setRadarMode('invigilators'); setIsScannerActive(false); setLastMessage({text:'', type:''})}} className={cn("flex-1 py-3 rounded-xl font-black flex justify-center items-center gap-2 transition-all", radarMode === 'invigilators' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-white")}>
-                <UserCheck className="w-5 h-5"/> تسليم اللجان للمراقبين
-              </button>
-              <button onClick={() => {setRadarMode('envelopes'); setIsScannerActive(false); setLastMessage({text:'', type:''})}} className={cn("flex-1 py-3 rounded-xl font-black flex justify-center items-center gap-2 transition-all", radarMode === 'envelopes' ? "bg-emerald-600 text-white shadow-lg" : "text-slate-400 hover:text-white")}>
-                <ArrowRightLeft className="w-5 h-5"/> حركة مظاريف التصحيح
-              </button>
-            </div>
+        {/* Tabs */}
+        <div className="flex bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/20 mb-8 mx-auto max-w-md">
+           <button
+             onClick={() => { setActiveTab('envelope'); resetScan(); }}
+             className={`flex-1 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'envelope' ? 'bg-white text-indigo-900 shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}
+           >
+             <Mail className="w-4 h-4"/> تسليم المغلفات
+           </button>
+           <button
+             onClick={() => { setActiveTab('invigilator'); resetScan(); }}
+             className={`flex-1 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'invigilator' ? 'bg-white text-indigo-900 shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}
+           >
+             <User className="w-4 h-4"/> حضور المراقبين
+           </button>
+        </div>
 
-            <div className="text-center min-h-[400px]">
-              {!isScannerActive ? (
-                <div className="py-20">
-                  <ScanLine className={cn("w-20 h-20 mx-auto mb-6", radarMode === 'invigilators' ? "text-indigo-500/50" : "text-emerald-500/50")} />
-                  <button onClick={() => setIsScannerActive(true)} className={cn("text-white font-black py-4 px-10 rounded-2xl shadow-xl flex items-center gap-3 mx-auto transition-all", radarMode === 'invigilators' ? "bg-indigo-600 hover:bg-indigo-500" : "bg-emerald-600 hover:bg-emerald-500")}>
-                    <Camera className="w-6 h-6" /> تفعيل ماسح {radarMode === 'invigilators' ? 'المراقبين' : 'التصحيح'}
-                  </button>
+        {/* Scanner Card */}
+        <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-6 sm:p-8 overflow-hidden">
+           
+           <div className="mb-6 text-center">
+              <h2 className="text-xl font-black text-slate-800 flex items-center justify-center gap-2">
+                 {activeTab === 'envelope' ? (
+                   <><ShieldCheck className="w-6 h-6 text-indigo-600"/> مسح مغلف الأسئلة</>
+                 ) : (
+                   <><Camera className="w-6 h-6 text-indigo-600"/> مسح بطاقة المراقب</>
+                 )}
+              </h2>
+              <p className="text-sm font-bold text-slate-500 mt-2">
+                 {activeTab === 'envelope' ? 'قم بمسح الكود الموجود على المغلف لإثبات استلامه من رئيس اللجنة.' : 'قم بمسح كود المعلم لتسجيل حضوره كـ (مراقب لجنة).'}
+              </p>
+           </div>
+
+           <div className="relative mx-auto w-full max-w-md aspect-square bg-slate-100 rounded-3xl overflow-hidden border-4 border-slate-200 shadow-inner flex flex-col items-center justify-center">
+              
+              {!cameraActive && scanStatus === 'idle' ? (
+                <div className="text-center p-6">
+                   <ScanLine className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                   <button onClick={() => setCameraActive(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-black shadow-md hover:bg-indigo-700 active:scale-95 transition-all">
+                     تفعيل الكاميرا والمسح
+                   </button>
                 </div>
-              ) : (
-                <div className="w-full max-w-sm mx-auto">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className={cn("font-black text-sm animate-pulse", radarMode === 'invigilators' ? "text-indigo-400" : "text-emerald-400")}>الماسح جاهز للقراءة...</span>
-                    <button onClick={() => setIsScannerActive(false)} className="text-rose-400 flex items-center gap-1 bg-rose-500/10 px-3 py-1.5 rounded-lg"><XCircle className="w-4 h-4"/> إيقاف</button>
+              ) : cameraActive ? (
+                <div className="w-full h-full relative">
+                  {/* 🚀 القارئ المعتمد والموثوق */}
+                  <QrReader
+                    onResult={handleScan}
+                    constraints={{ facingMode: 'environment' }}
+                    containerStyle={{ width: '100%', height: '100%' }}
+                    videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  {/* إطار التوجيه (Guides) */}
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+                     <div className="w-full h-full border-2 border-indigo-500/50 rounded-2xl relative">
+                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-indigo-500 rounded-tl-xl -mt-1 -ml-1"></div>
+                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-indigo-500 rounded-tr-xl -mt-1 -mr-1"></div>
+                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-indigo-500 rounded-bl-xl -mb-1 -ml-1"></div>
+                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-indigo-500 rounded-br-xl -mb-1 -mr-1"></div>
+                        <div className="absolute w-full h-0.5 bg-indigo-400/80 shadow-[0_0_10px_rgba(99,102,241,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
+                     </div>
                   </div>
-                  <div id="control-reader" className="w-full aspect-square bg-black rounded-3xl overflow-hidden border-4 border-slate-700 shadow-2xl mb-4"></div>
-                  
-                  <input type="text" ref={scanInputRef} onKeyDown={(e) => { if (e.key === 'Enter') { const val = e.currentTarget.value.trim().split(':')[1] || e.currentTarget.value.trim(); radarMode === 'invigilators' ? handleInvigilatorScan(val) : handleEnvelopeScan(val); e.currentTarget.value = ''; } }} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 text-center text-white focus:outline-none placeholder:text-slate-600" placeholder="... مسدس الباركود جاهز ..." autoFocus />
                 </div>
-              )}
+              ) : null}
 
-              {lastMessage.text && (
-                <div className={cn("mt-6 p-4 rounded-xl font-black text-lg border", lastMessage.type === 'success' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20")}>
-                  {lastMessage.text}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+              {/* طبقة العرض (Overlay) لنتيجة المسح */}
+              <AnimatePresence>
+                {scanStatus !== 'idle' && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }} 
+                    animate={{ opacity: 1, scale: 1 }} 
+                    exit={{ opacity: 0, scale: 0.9 }} 
+                    className="absolute inset-0 bg-white/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center"
+                  >
+                     {scanStatus === 'loading' && (
+                        <>
+                          <Loader2 className="w-16 h-16 animate-spin text-indigo-500 mb-4" />
+                          <h3 className="text-xl font-black text-slate-800 mb-2">جاري التحقق...</h3>
+                          <p className="text-sm font-bold text-slate-500">{statusMessage}</p>
+                        </>
+                     )}
+                     
+                     {scanStatus === 'success' && (
+                        <>
+                          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-lg">
+                            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+                          </div>
+                          <h3 className="text-xl font-black text-slate-800 mb-2">عملية ناجحة</h3>
+                          <p className="text-sm font-bold text-emerald-600 bg-emerald-50 p-3 rounded-xl border border-emerald-100">{statusMessage}</p>
+                          <button onClick={resetScan} className="mt-8 bg-slate-900 text-white px-8 py-3 rounded-xl font-black shadow-md hover:bg-slate-800 active:scale-95 transition-all flex items-center gap-2">
+                             <RefreshCcw className="w-4 h-4"/> مسح كود آخر
+                          </button>
+                        </>
+                     )}
+
+                     {scanStatus === 'error' && (
+                        <>
+                          <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-lg">
+                            <XCircle className="w-10 h-10 text-rose-500" />
+                          </div>
+                          <h3 className="text-xl font-black text-slate-800 mb-2">فشلت العملية</h3>
+                          <p className="text-sm font-bold text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-100">{statusMessage}</p>
+                          <p className="text-xs text-slate-400 mt-4">الرمز الممسوح: {scanResult}</p>
+                          <button onClick={resetScan} className="mt-6 bg-slate-900 text-white px-8 py-3 rounded-xl font-black shadow-md hover:bg-slate-800 active:scale-95 transition-all flex items-center gap-2">
+                             <RefreshCcw className="w-4 h-4"/> المحاولة مرة أخرى
+                          </button>
+                        </>
+                     )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+           </div>
+           
+           <div className="mt-6 flex items-center justify-center gap-2 text-xs font-bold text-slate-400 bg-slate-50 py-3 rounded-xl border border-slate-100">
+             <AlertCircle className="w-4 h-4 text-amber-500" />
+             تأكد من إضاءة المكان بشكل جيد للحصول على قراءة سريعة.
+           </div>
+        </div>
+
       </div>
+
+      <style dangerouslySetInnerHTML={{__html:`
+        @keyframes scan {
+          0% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .animate-scan {
+          animation: scan 2s linear infinite;
+        }
+      `}}/>
     </div>
   );
 }
