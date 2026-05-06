@@ -16,7 +16,7 @@ import {
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
-  ShieldCheck, FileKey, ScanLine, FileSignature // 🚀 تم إضافة FileSignature للغلاف الرقمي
+  ShieldCheck, FileKey, ScanLine, FileSignature 
 } from 'lucide-react';
 
 const navigation = [
@@ -46,10 +46,11 @@ const navigation = [
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   
   // 🚀 أدوات الامتحانات والكنترول المركزية
+  { name: 'فريق الكنترول', href: '/admin/control-team', icon: ShieldCheck }, // 🚀 جديد
   { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
   { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
-  { name: 'مسار إنجاز الكنترول', href: '/admin/exam-pipeline', icon: BarChart3 }, // 🚀 جديد
-  { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature }, // 🚀 جديد
+  { name: 'مسار إنجاز الكنترول', href: '/admin/exam-pipeline', icon: BarChart3 },
+  { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature },
   { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
   { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
   
@@ -116,14 +117,15 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
     
     // روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
+    if (item.name === 'فريق الكنترول') return (authRole === 'admin' || authRole === 'management'); // 🚀 جديد
     if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'رادار الكنترول') return (authRole === 'admin' || authRole === 'management');
-    if (item.name === 'مسار إنجاز الكنترول') return (authRole === 'admin' || authRole === 'management'); // 🚀 جديد
+    if (item.name === 'مسار إنجاز الكنترول') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
 
     // الغلاف الرقمي متاح للإدارة ورؤساء الأقسام (المعلمين)
-    if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher'); // 🚀 جديد
+    if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher');
 
     // روابط الرادارات والعمليات المركزية (التتبع المزدوج)
     if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management');
