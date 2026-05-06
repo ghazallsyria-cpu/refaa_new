@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, Loader2, Search, Trash2, PrinterIcon, Contact, Crown, FileKey, 
   Database, UserCheck, FileArchive, Plus, X, AlertTriangle, CheckCircle2,
-  Users, KeyRound, MonitorCheck, ClipboardSignature, Edit3
+  KeyRound, MonitorCheck, ClipboardSignature, Edit3
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,7 +16,7 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { cn } from '@/lib/utils';
 
-// 🚀 التصنيفات البرمجية (للتوافق مع قيود قاعدة البيانات الصارمة)
+// 🚀 التصنيفات البرمجية المتوافقة تماماً مع قيود قاعدة البيانات الصارمة
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
   { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: KeyRound, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
@@ -34,10 +34,9 @@ export default function ControlTeamManagement() {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [availableStaff, setAvailableStaff] = useState<any[]>([]);
   
-  // حالات نافذة التكليف الديناميكية
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedBaseRole, setSelectedBaseRole] = useState<any>(null);
-  const [customRoleTitle, setCustomRoleTitle] = useState(''); // 🚀 المسمى المخصص للمدير
+  const [customRoleTitle, setCustomRoleTitle] = useState(''); 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,7 +76,6 @@ export default function ControlTeamManagement() {
     if (['admin', 'management'].includes(currentRole)) fetchData();
   }, [currentRole]);
 
-  // 🚀 فتح نافذة التكليف مع تعيين المسمى الافتراضي ليتمكن المدير من تغييره
   const openAssignModal = (baseRole: any) => {
     setSelectedBaseRole(baseRole);
     setCustomRoleTitle(baseRole.defaultName);
@@ -92,8 +90,8 @@ export default function ControlTeamManagement() {
     try {
       const { error } = await supabase.from('exam_control_team').insert({
         user_id: selectedUserId,
-        role_id: selectedBaseRole.id, // هذا للتوافق مع قاعدة البيانات
-        role_name: customRoleTitle.trim(), // 🚀 هذا ما سيظهر في الشاشة والطباعة
+        role_id: selectedBaseRole.id, // 🚀 يطابق قاعدة البيانات حرفياً لتجاوز الحظر
+        role_name: customRoleTitle.trim(), // 🚀 يُطبع على البطاقة حسب رغبة المدير
         academic_year: currentYear,
         semester: currentSemester,
         assigned_by: user.id
@@ -105,7 +103,7 @@ export default function ControlTeamManagement() {
       fetchData();
     } catch (error: any) {
       console.error("Assignment Error:", error);
-      alert('تعذر التكليف! تأكد من أن المعلم غير مكلف مسبقاً، أو حاول لاحقاً.');
+      alert('تعذر التكليف! تأكد من أن المعلم غير مكلف مسبقاً في الكنترول.');
     } finally {
       setIsSubmitting(false);
     }
@@ -117,7 +115,6 @@ export default function ControlTeamManagement() {
     fetchData();
   };
 
-  // محرك طباعة الهويات الفخمة
   const printBadges = async () => {
     if (teamMembers.length === 0) { alert('لا يوجد أعضاء في الكنترول لطباعة هوياتهم!'); return; }
     setIsPrinting(true);
@@ -155,7 +152,6 @@ export default function ControlTeamManagement() {
 
   if (!['admin', 'management'].includes(currentRole)) return null;
 
-  // استبعاد الكوادر المكلفة مسبقاً للقسم المختار فقط أو بشكل عام
   const filteredStaff = availableStaff.filter(s => {
     const isAlreadyInTeam = teamMembers.some(tm => tm.user_id === s.id);
     const matchesSearch = s.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -198,7 +194,6 @@ export default function ControlTeamManagement() {
             </div>
           </div>
 
-          {/* عرض فرق الكنترول حسب التصنيف الأساسي */}
           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
              {BASE_ROLES.map(role => {
                const membersInRole = teamMembers.filter(tm => tm.role_id === role.id);
@@ -226,7 +221,6 @@ export default function ControlTeamManagement() {
                                )}
                                <div className="min-w-0">
                                   <p className="font-black text-slate-800 text-sm line-clamp-1">{member.users?.full_name}</p>
-                                  {/* 🚀 المسمى المخصص يظهر هنا بوضوح */}
                                   <p className={cn("text-[10px] font-black mt-1 bg-slate-50 px-2 py-0.5 rounded border inline-block truncate max-w-full", role.color, role.border)} title={member.role_name}>
                                     {member.role_name}
                                   </p>
@@ -258,7 +252,6 @@ export default function ControlTeamManagement() {
         </div>
       </div>
 
-      {/* 🚀 نافذة التكليف الذكية والمخصصة المسميات */}
       <AnimatePresence>
         {isAssignModalOpen && selectedBaseRole && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
@@ -276,7 +269,6 @@ export default function ControlTeamManagement() {
               
               <div className="flex-1 overflow-hidden flex flex-col min-h-[400px]">
                 
-                {/* 🚀 حقل المسمى الوظيفي المخصص */}
                 <div className="mb-4 shrink-0">
                    <label className="block text-xs font-black text-slate-500 mb-2 px-1 flex items-center gap-1.5"><Edit3 className="w-4 h-4"/> المسمى الوظيفي في بطاقة الكنترول:</label>
                    <input 
@@ -286,7 +278,7 @@ export default function ControlTeamManagement() {
                       value={customRoleTitle} 
                       onChange={(e) => setCustomRoleTitle(e.target.value)} 
                    />
-                   <p className="text-[10px] font-bold text-slate-400 mt-1.5 px-1">يمكنك تخصيص المسمى كما ترغب (مثال: نائب رئيس الكنترول للمرحلة المتوسطة).</p>
+                   <p className="text-[10px] font-bold text-slate-400 mt-1.5 px-1">يمكنك تخصيص المسمى كما ترغب ليظهر على البطاقة.</p>
                 </div>
 
                 <div className="relative mb-4 shrink-0 mt-2">
@@ -317,7 +309,7 @@ export default function ControlTeamManagement() {
                          </div>
                       );
                    })}
-                   {filteredStaff.length === 0 && <div className="text-center text-slate-400 py-10"><UserCheck className="w-12 h-12 mx-auto mb-3 opacity-20"/><p className="text-sm font-bold">لا توجد نتائج مطابقة، أو أن الكادر مكلف مسبقاً.</p></div>}
+                   {filteredStaff.length === 0 && <div className="text-center text-slate-400 py-10"><UserCheck className="w-12 h-12 mx-auto mb-3 opacity-20"/><p className="text-sm font-bold">لا توجد نتائج، أو أن الكادر مكلف مسبقاً.</p></div>}
                 </div>
 
                 <div className="pt-4 shrink-0 border-t border-slate-100 mt-4">
@@ -332,7 +324,6 @@ export default function ControlTeamManagement() {
         )}
       </AnimatePresence>
 
-      {/* 🖨️ قوالب الطباعة لهويات الكنترول (تصميم أمني VIP يعتمد المسميات المخصصة) */}
       <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
          <div ref={printRef} className="flex flex-col gap-10" dir="rtl">
             {chunkArray(teamMembers, 6).map((chunk, pageIndex) => (
@@ -359,8 +350,7 @@ export default function ControlTeamManagement() {
                               </div>
 
                               <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
-                                 <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{member.users?.full_name}</h2>
-                                 {/* 🚀 طباعة المسمى المخصص الذي ادخله المدير */}
+                                 <h2 className="text-[18px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{member.users?.full_name}</h2>
                                  <p className="text-[11px] font-black text-rose-600 mb-2 border-b-2 border-slate-200 pb-2 w-full">{member.role_name}</p>
                                  
                                  <div className="mt-auto mb-4 flex flex-col items-center">
