@@ -38,6 +38,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
 
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'week' | 'month'>('all');
 
+  // 1. جلب البيانات الأساسية من الدالة המجمعة (تعمل بنجاح)
   const fetchSummary = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_student_360_summary', { p_student_id: studentId });
@@ -56,33 +57,64 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     }
   }, [currentRole, fetchSummary]);
 
+  // 🚀 2. المحرك الجديد الذكي (Bulletproof Fetcher) لحل مشكلة العلاقات المتشابكة
   const loadTabData = async (tab: string) => {
-    if (tabData[tab]) return;
+    if (tabData[tab]) return; // الكاش موجود
     if (tab === 'overview') return;
 
     setIsTabLoading(true);
     try {
-      let data = null;
+      let finalData = [];
+      
       if (tab === 'grades') {
-        const { data: res } = await supabase.from('grades').select('*, subjects(name)').eq('student_id', studentId).order('created_at', { ascending: false });
-        data = res;
+        const { data: rawGrades } = await supabase.from('grades').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
+        if (rawGrades && rawGrades.length > 0) {
+           const subjectIds = [...new Set(rawGrades.map(g => g.subject_id).filter(Boolean))];
+           const { data: subjects } = await supabase.from('subjects').select('id, name').in('id', subjectIds);
+           finalData = rawGrades.map(g => ({
+             ...g,
+             subjects: subjects?.find(s => s.id === g.subject_id) || null
+           }));
+        }
       } 
       else if (tab === 'assignments') {
-        const { data: res } = await supabase.from('student_progress_v2').select('*, assignments_v2(title, is_practice_mode)').eq('student_id', studentId).order('updated_at', { ascending: false });
-        data = res;
+        const { data: rawProgress } = await supabase.from('student_progress_v2').select('*').eq('student_id', studentId).order('updated_at', { ascending: false });
+        if (rawProgress && rawProgress.length > 0) {
+           const assignIds = [...new Set(rawProgress.map(p => p.assignment_id).filter(Boolean))];
+           const { data: assigns } = await supabase.from('assignments_v2').select('id, title, is_practice_mode').in('id', assignIds);
+           finalData = rawProgress.map(p => ({
+             ...p,
+             assignments_v2: assigns?.find(a => a.id === p.assignment_id) || null
+           }));
+        }
       } 
       else if (tab === 'attendance') {
-        const { data: res } = await supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', studentId).neq('status', 'present').order('date', { ascending: false });
-        data = res;
+        const { data: rawAttendance } = await supabase.from('attendance_records').select('*').eq('student_id', studentId).neq('status', 'present').order('date', { ascending: false });
+        if (rawAttendance && rawAttendance.length > 0) {
+           const subjectIds = [...new Set(rawAttendance.map(a => a.subject_id).filter(Boolean))];
+           const { data: subjects } = await supabase.from('subjects').select('id, name').in('id', subjectIds);
+           finalData = rawAttendance.map(a => ({
+             ...a,
+             subjects: subjects?.find(s => s.id === a.subject_id) || null
+           }));
+        }
       } 
       else if (tab === 'notes') {
-        const { data: res } = await supabase.from('private_student_notes').select('*, users!private_student_notes_teacher_id_fkey(full_name, avatar_url, role)').eq('student_id', studentId).order('created_at', { ascending: false });
-        data = res;
+        const { data: rawNotes } = await supabase.from('private_student_notes').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
+        if (rawNotes && rawNotes.length > 0) {
+           const teacherIds = [...new Set(rawNotes.map(n => n.teacher_id).filter(Boolean))];
+           const { data: users } = await supabase.from('users').select('id, full_name, avatar_url, role').in('id', teacherIds);
+           finalData = rawNotes.map(n => ({
+             ...n,
+             users: users?.find(u => u.id === n.teacher_id) || null
+           }));
+        }
       }
       
-      setTabData(prev => ({ ...prev, [tab]: data || [] }));
+      setTabData(prev => ({ ...prev, [tab]: finalData }));
     } catch (err) {
       console.error(`Error loading ${tab}:`, err);
+      setTabData(prev => ({ ...prev, [tab]: [] })); // تأمين الشاشة من الانهيار
     } finally {
       setIsTabLoading(false);
     }
@@ -97,17 +129,22 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     if (!newNote.trim() || !user) return;
     setIsSendingNote(true);
     try {
-      const { data, error } = await supabase.from('private_student_notes').insert({
+      const { data: insertedNote, error } = await supabase.from('private_student_notes').insert({
         student_id: studentId,
         teacher_id: user.id,
         content: newNote.trim()
-      }).select('*, users!private_student_notes_teacher_id_fkey(full_name, avatar_url, role)').single();
+      }).select().single();
       
       if (error) throw error;
       
+      // جلب بيانات المعلم لدمجها بالكاش فوراً
+      const { data: userData } = await supabase.from('users').select('id, full_name, avatar_url, role').eq('id', user.id).single();
+      
+      const completeNote = { ...insertedNote, users: userData };
+
       setTabData(prev => ({
         ...prev,
-        notes: [data, ...(prev.notes || [])]
+        notes: [completeNote, ...(prev.notes || [])]
       }));
       setNewNote('');
     } catch (err) {
@@ -158,7 +195,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     return daysArr;
   }, [tabData, attendanceFilter]);
 
-  // 🚀 محرك الطباعة الأنيق (المُحسّن)
   const downloadAttendancePDF = async () => {
     if (groupedAttendance.length === 0) {
       alert('لا توجد غيابات في هذه الفترة لطباعتها!');
@@ -202,10 +238,9 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
         alert('حدث خطأ أثناء استخراج الملف.'); 
       } 
       finally { setIsPrinting(false); }
-    }, 2000); // مهلة أطول قليلاً لضمان تحميل الخطوط وتنسيق الصفحة
+    }, 2000); 
   };
 
-  // 🚀 تم تقليل العدد إلى 14 صف لضمان عدم تجاوز الصفحة (A4)
   const chunkArray = (arr: any[], size: number) => {
     if (!arr || arr.length === 0) return [[]];
     return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
@@ -230,7 +265,6 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   const { basic_info, academic_summary, attendance_summary, badges_count } = summaryData;
   const avgScore = Number(academic_summary?.average_score || 0).toFixed(1);
 
-  // إحصائيات سريعة للتقرير
   const filterSummaryStats = {
      absent: groupedAttendance.filter(d => d.dayStatus === 'absent').length,
      late: groupedAttendance.filter(d => d.dayStatus === 'late').length,
@@ -399,24 +433,27 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                              const isGraded = a.teacher_feedback?.includes('[تم رصد الدرجة]');
                              return (
                                 <div key={a.id} className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
-                                   <div>
+                                   <div className="w-full">
                                       <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
                                          {a.assignments_v2?.is_practice_mode ? <Target className="w-4 h-4 text-amber-500"/> : <FileText className="w-4 h-4 text-indigo-500"/>}
                                          {a.assignments_v2?.title || 'واجب بدون عنوان'}
                                       </h4>
-                                      {a.teacher_feedback && !isGraded && <p className="text-xs font-bold text-indigo-600 mt-2 bg-white px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm inline-block"><MessageSquareHeart className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
+                                      <div className="flex items-center gap-4 mt-2">
+                                         {a.teacher_feedback && !isGraded && <p className="text-xs font-bold text-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm inline-block"><MessageSquareHeart className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
+                                         {a.teacher_feedback && isGraded && <p className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 shadow-sm inline-block"><CheckCircle2 className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
+                                      </div>
                                    </div>
-                                   <div className="flex items-center gap-4 w-full md:w-auto">
+                                   <div className="flex items-center gap-4 w-full md:w-auto shrink-0">
                                       {isGraded ? (
-                                         <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl border border-emerald-200 font-black text-sm flex items-center gap-2">
-                                            <CheckCircle2 className="w-4 h-4"/> مُصحح وتم رصد درجته
+                                         <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl border border-emerald-200 font-black text-sm flex items-center gap-2 w-full justify-center">
+                                            <CheckCircle2 className="w-4 h-4"/> مُصحح وتم الرصد
                                          </div>
                                       ) : a.is_completed ? (
-                                         <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200 font-black text-sm flex items-center gap-2">
+                                         <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200 font-black text-sm flex items-center gap-2 w-full justify-center">
                                             <Clock className="w-4 h-4"/> بانتظار التصحيح
                                          </div>
                                       ) : (
-                                         <div className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2">
+                                         <div className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2 w-full justify-center">
                                             قيد الإنجاز
                                          </div>
                                       )}
