@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
   MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, RotateCcw, Database,
-  Settings2 // أيقونة للأسئلة الآلية
+  Settings2,PenTool // أيقونة للأسئلة الآلية
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
