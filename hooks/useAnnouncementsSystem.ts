@@ -19,7 +19,7 @@ export function useAnnouncementsSystem() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-const fetchAnnouncements = useCallback(async (authRole: string | null) => {
+  const fetchAnnouncements = useCallback(async (authRole: string | null) => {
     setLoading(true);
     setError(null);
     try {
@@ -35,13 +35,11 @@ const fetchAnnouncements = useCallback(async (authRole: string | null) => {
         `)
         .order('created_at', { ascending: false });
 
-      // 🛡️ تطبيق جدار الرفعة الناري (مع التوافق مع الإعلانات القديمة التي لا تحتوي على فئة)
+      // 🛡️ تطبيق جدار الرفعة الناري
       if (authRole !== 'admin' && authRole !== 'management') {
         if (authRole) {
-          // 🚀 الإصلاح: جلب الإعلانات المخصصة، أو للجميع، أو القديمة (null)
           query = query.or(`target_role.eq.${authRole},target_role.eq.all,target_role.is.null`);
         } else {
-          // للزوار غير المعروفين
           query = query.or(`target_role.eq.all,target_role.is.null`);
         }
       }
@@ -67,48 +65,58 @@ const fetchAnnouncements = useCallback(async (authRole: string | null) => {
     }
   }, []);
 
-  const saveAnnouncement = useCallback(async (announcement: Partial<Announcement>) => {
+  // 🚀 المحرك الجديد للحفظ المباشر
+  const saveAnnouncement = useCallback(async (announcement: Partial<Announcement>, userId?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/announcements/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...announcement,
-          // إذا لم يحدد الإداري فئة، نعتبرها للجميع افتراضياً
-          target_role: announcement.target_role || 'all' 
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to save announcement');
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء الحفظ';
+      const payload: any = {
+        title: announcement.title,
+        content: announcement.content,
+        target_role: announcement.target_role || 'all',
+        image_url: announcement.image_url || null,
+      };
+
+      if (announcement.id) {
+        payload.updated_at = new Date().toISOString();
+        const { error } = await supabase
+          .from('announcements')
+          .update(payload)
+          .eq('id', announcement.id);
+        
+        if (error) throw error;
+      } else {
+        if (!userId) throw new Error('يرجى تسجيل الدخول كإداري أولاً');
+        payload.author_id = userId; // ربط الإعلان بكاتبه
+        const { error } = await supabase
+          .from('announcements')
+          .insert([payload]);
+          
+        if (error) throw error;
+      }
+    } catch (err: any) {
       console.error('Error saving announcement:', err);
-      setError(errorMessage);
+      setError(err.message || 'حدث خطأ أثناء الحفظ');
       throw err;
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // 🚀 المحرك الجديد للحذف المباشر
   const deleteAnnouncement = useCallback(async (id: string, imageUrl?: string | null) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/announcements/delete?id=${id}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to delete announcement');
+      const { error } = await supabase.from('announcements').delete().eq('id', id);
+      if (error) throw error;
 
       if (imageUrl) {
         await deleteFromCloudinary(imageUrl);
       }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء الحذف';
+    } catch (err: any) {
       console.error('Error deleting announcement:', err);
-      setError(errorMessage);
+      setError(err.message || 'حدث خطأ أثناء الحذف');
       throw err;
     } finally {
       setLoading(false);
