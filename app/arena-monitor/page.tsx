@@ -6,7 +6,8 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, RotateCcw, Database
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, RotateCcw, Database,
+  Settings2 // أيقونة للأسئلة الآلية
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -245,7 +246,6 @@ export default function ArenaMonitorDashboard() {
     }
   };
 
-  // 🚀 تصحيح دالة حفظ الملاحظات (Bulletproof Safe Updates)
   const saveFeedback = async () => {
     if (!selectedStudent || !selectedAssignment) return;
     setSavingFeedback(true);
@@ -291,7 +291,6 @@ export default function ArenaMonitorDashboard() {
       const { data: questions } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', selectedAssignment.id).order('order_index', { ascending: true });
       setAssignmentQuestions(questions || []);
 
-      // جلب أجوبة الطالب برقم المستخدم الخاص به في جدول student_answers_v2
       const { data: answers } = await supabase.from('student_answers_v2').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
       setStudentAnswers(answers || []);
 
@@ -309,38 +308,46 @@ export default function ArenaMonitorDashboard() {
     } catch (err) { alert("حدث خطأ أثناء جلب إجابات الطالب."); } finally { setIsGrading(false); }
   };
 
-  // 🚀 تصحيح دالة اعتماد الدرجات وإرسالها لتكون مضادة للأخطاء وتعمل مع أي قاعدة بيانات
+  // 🚀 حساب الدرجة النهائية يشمل الآن الأسئلة المقالية والآلية معاً بذكاء
   const submitFinalGrades = async () => {
     setSavingFeedback(true);
     try {
-      let totalEssayPoints = 0;
+      let finalScore = 0;
 
-      // 1. تحديث أو إدخال درجات الإجابات المقالية
-      for (const [qId, points] of Object.entries(manualGrades)) {
-        totalEssayPoints += points;
-        const existingAnswer = studentAnswers.find(a => a.question_id === qId);
+      for (const q of assignmentQuestions) {
+        const isEssay = q.question_type === 'essay';
         
-        if (existingAnswer) {
-          await supabase.from('student_answers_v2')
-             .update({ points_earned: points, is_graded: true })
-             .eq('id', existingAnswer.id);
-        } else {
-          await supabase.from('student_answers_v2')
-             .insert({ 
-                student_id: selectedStudent.user_id,
-                assignment_id: selectedAssignment.id,
-                question_id: qId,
-                answer_text: 'لم يقم بالإجابة', // حفظ السجل للطالب الذي ترك السؤال فارغاً
-                points_earned: points,
-                is_graded: true
-             });
+        // استخراج النقاط: إما الرصد اليدوي للسؤال المقالي، أو الدرجة الآلية المحفوظة مسبقاً
+        const points = isEssay 
+           ? (manualGrades[q.id] || 0) 
+           : (studentAnswers.find(a => a.question_id === q.id)?.points_earned || 0);
+        
+        finalScore += points;
+
+        // تحديث أو إنشاء السجل فقط للأسئلة المقالية في جدول الإجابات
+        if (isEssay) {
+          const existingAnswer = studentAnswers.find(a => a.question_id === q.id);
+          if (existingAnswer) {
+            await supabase.from('student_answers_v2')
+               .update({ points_earned: points, is_graded: true })
+               .eq('id', existingAnswer.id);
+          } else {
+            await supabase.from('student_answers_v2')
+               .insert({ 
+                  student_id: selectedStudent.user_id,
+                  assignment_id: selectedAssignment.id,
+                  question_id: q.id,
+                  answer_text: 'لم يقم بالإجابة',
+                  points_earned: points,
+                  is_graded: true
+               });
+          }
         }
       }
       
-      const finalScore = selectedStudent.correct_score + totalEssayPoints; 
       const newFeedback = `[تم رصد الدرجة] النتيجة المعتمدة: ${finalScore} / ${selectedAssignment.max_points}`;
 
-      // 2. التحديث الآمن لتقدم الطالب (student_progress_v2)
+      // 2. تحديث تقدم الطالب
       const { data: existingProg } = await supabase.from('student_progress_v2')
          .select('id').eq('student_id', selectedStudent.student_id).eq('assignment_id', selectedAssignment.id).maybeSingle();
 
@@ -361,7 +368,7 @@ export default function ArenaMonitorDashboard() {
             });
       }
 
-      // 3. التحديث الآمن لسجل الدرجات الرسمي (grades)
+      // 3. تحديث سجل الدرجات الرسمي
       if (selectedAssignment.subject_id && selectedStudent.section_id && selectedStudent.section_id !== 'unknown') {
          const { data: existingGrade } = await supabase.from('grades')
            .select('id')
@@ -393,7 +400,7 @@ export default function ArenaMonitorDashboard() {
 
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, is_graded: true, teacher_feedback: newFeedback } : p));
       setGradingModalOpen(false);
-      alert('تم تصحيح الواجب ورصد الدرجة بنجاح في سجل الدرجات!');
+      alert('تم اعتماد درجة الواجب الشاملة بنجاح!');
 
     } catch (err) { 
        console.error("Grading Error:", err);
@@ -408,7 +415,6 @@ export default function ArenaMonitorDashboard() {
     return studentsProgress.filter(s => s.section_id === selectedClassFilter);
   }, [studentsProgress, selectedClassFilter]);
 
-  // 🚀 تصحيح دالة تصفير الطلاب المتأخرين (Safe Bulk Insert/Update)
   const handleZeroOutMissing = async () => {
     const missingStudents = displayedStudents.filter(s => (!s.has_started || !s.is_completed) && !s.is_graded);
     
@@ -426,7 +432,6 @@ export default function ArenaMonitorDashboard() {
       const feedbackZero = `[تم رصد الدرجة] لم يقم بالتسليم. الدرجة: 0 / ${selectedAssignment.max_points}`;
       
       for (const s of missingStudents) {
-         // تحديث التقدم
          const { data: existingProg } = await supabase.from('student_progress_v2')
             .select('id').eq('student_id', s.student_id).eq('assignment_id', selectedAssignment.id).maybeSingle();
          
@@ -443,7 +448,6 @@ export default function ArenaMonitorDashboard() {
             });
          }
 
-         // تحديث الدرجات
          if (selectedAssignment.subject_id && s.section_id && s.section_id !== 'unknown') {
              const { data: existingGrade } = await supabase.from('grades')
                .select('id').eq('student_id', s.student_id).eq('subject_id', selectedAssignment.subject_id)
@@ -462,7 +466,6 @@ export default function ArenaMonitorDashboard() {
       }
 
       setStudentsProgress(prev => prev.map(p => missingStudents.find(m => m.student_id === p.student_id) ? { ...p, is_graded: true, teacher_feedback: feedbackZero, has_started: true, is_completed: true } : p));
-      
       alert(`تم بنجاح تصفير وإغلاق الواجب لعدد ${missingStudents.length} طلاب في ${classNameAlert}.`);
     } catch (err) {
       console.error(err);
@@ -707,7 +710,7 @@ export default function ArenaMonitorDashboard() {
                                   }`}
                                 >
                                   {isGrading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4" />} 
-                                  {student.is_graded ? 'تعديل الدرجة' : 'تصحيح الإجابة'}
+                                  {student.is_graded ? 'مراجعة / تعديل' : 'تصحيح الإجابة'}
                                 </button>
                               ) : (
                                 <button onClick={() => { setSelectedStudent(student); setFeedbackText(student.teacher_feedback || ''); setFeedbackModalOpen(true); }} className="bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl text-slate-500 transition-all shadow-sm active:scale-95">
@@ -768,66 +771,73 @@ export default function ArenaMonitorDashboard() {
               <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-white rounded-t-[2rem] shrink-0">
                 <button onClick={() => setGradingModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 rounded-full shadow-sm"><X className="w-5 h-5" /></button>
                 <div className="text-center">
-                   <h3 className="font-black text-slate-800 text-lg">تصحيح واجب: {selectedStudent.student_name}</h3>
-                   <p className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 inline-block mt-1">النقاط الآلية: {selectedStudent.correct_score}</p>
+                   <h3 className="font-black text-slate-800 text-lg">مراجعة وتصحيح: {selectedStudent.student_name}</h3>
+                   <p className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 inline-block mt-1">النقاط الآلية المكتسبة: {selectedStudent.correct_score}</p>
                 </div>
                 <button onClick={submitFinalGrades} disabled={savingFeedback} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center gap-2 border border-indigo-500">
-                  {savingFeedback ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4"/>} اعتماد ورصد الدرجة
+                  {savingFeedback ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckSquare className="w-4 h-4"/>} اعتماد ورصد الدرجة الشاملة
                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-32 space-y-6 bg-slate-100/50 custom-scrollbar">
                 
-                {assignmentQuestions.filter(q => q.question_type === 'essay').length === 0 && (
-                   <div className="text-center p-10 bg-white rounded-2xl border border-slate-200 shadow-sm font-bold text-slate-500">
-                      لا يحتوي هذا الواجب على أسئلة مقالية تتطلب تصحيحاً يدوياً. الدرجة المعتمدة حالياً هي درجة أسئلة الاختيار التلقائية.
-                   </div>
-                )}
-
-                {assignmentQuestions.filter(q => q.question_type === 'essay').map((q, idx) => {
+                {/* 🚀 تم استبدال الفلتر ليتم عرض جميع الأسئلة بلا استثناء */}
+                {assignmentQuestions.map((q, idx) => {
                   const studentAnsObj = studentAnswers.find(a => a.question_id === q.id);
                   const studentText = studentAnsObj?.text_answer || studentAnsObj?.answer_text || 'لم يقم الطالب بالإجابة على هذا السؤال.';
                   const maxPts = q.points || 1;
+                  const isEssay = q.question_type === 'essay';
                   
                   return (
                     <div key={q.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-6">
                       <div className="flex-1 space-y-5 min-w-0">
                         <div className="border-b border-slate-100 pb-4">
-                          <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg mb-3 inline-block">السؤال المقالي {idx + 1}</span>
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-lg mb-3 inline-flex items-center gap-1.5 border ${isEssay ? 'text-indigo-600 bg-indigo-50 border-indigo-100' : 'text-emerald-600 bg-emerald-50 border-emerald-100'}`}>
+                             {isEssay ? <><PenTool className="w-3 h-3"/> سؤال مقالي (يتطلب تصحيح) - {idx + 1}</> : <><Settings2 className="w-3 h-3"/> سؤال آلي التقييم - {idx + 1}</>}
+                          </span>
                           <div className="font-bold text-slate-800 prose prose-sm max-w-none break-words" dangerouslySetInnerHTML={renderHTMLWithMath(q.content_html)} />
                         </div>
-                        <div className="bg-white p-5 rounded-2xl border-2 border-indigo-100 shadow-sm relative">
-                          <div className="absolute top-0 right-6 -mt-3 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">إجابة الطالب</div>
+                        <div className={`p-5 rounded-2xl border-2 shadow-sm relative ${isEssay ? 'bg-white border-indigo-100' : 'bg-slate-50 border-slate-200'}`}>
+                          <div className="absolute top-0 right-6 -mt-3 bg-white px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">إجابة الطالب</div>
                           <div className="font-bold text-slate-700 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={renderHTMLWithMath(studentText)} />
                         </div>
                       </div>
                       
-                      <div className="xl:w-96 shrink-0 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 flex flex-col h-full shadow-inner">
-                        <div className="mb-6 flex-1 min-h-[200px]">
-                           <p className="text-xs font-black text-indigo-500 mb-3 flex items-center gap-1.5"><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
-                           <div className="font-bold text-indigo-900 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-indigo-100 break-words" dangerouslySetInnerHTML={renderHTMLWithMath(q.model_answer_html)} />
+                      <div className={`xl:w-96 shrink-0 p-6 rounded-2xl border flex flex-col h-full shadow-inner ${isEssay ? 'bg-indigo-50/50 border-indigo-100' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className="mb-6 flex-1 min-h-[150px]">
+                           <p className={`text-xs font-black mb-3 flex items-center gap-1.5 ${isEssay ? 'text-indigo-500' : 'text-slate-500'}`}><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
+                           <div className="font-bold text-slate-700 text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-white/50 p-4 rounded-xl border border-slate-200 break-words" dangerouslySetInnerHTML={renderHTMLWithMath(q.model_answer_html || 'غير متوفرة')} />
                         </div>
                         
-                        <div className="mt-auto border-t border-indigo-200 pt-5">
+                        <div className={`mt-auto border-t pt-5 ${isEssay ? 'border-indigo-200' : 'border-slate-200'}`}>
                            <label className="block text-xs font-black text-slate-600 mb-2 flex items-center justify-between">
-                             <span>رصد الدرجة لهذا السؤال</span>
-                             <span className="text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-md">من {maxPts}</span>
+                             <span>تقييم السؤال</span>
+                             <span className={`${isEssay ? 'text-indigo-600 bg-indigo-100' : 'text-slate-600 bg-slate-200'} px-2 py-0.5 rounded-md`}>من {maxPts}</span>
                            </label>
-                           <div className="relative">
-                             <input 
-                               type="number" 
-                               min="0" max={maxPts} 
-                               value={manualGrades[q.id] !== undefined ? manualGrades[q.id] : 0} 
-                               onChange={(e) => {
-                                 let val = Number(e.target.value);
-                                 if (val > maxPts) val = maxPts;
-                                 if (val < 0) val = 0;
-                                 setManualGrades(prev => ({...prev, [q.id]: val}));
-                               }}
-                               className="w-full bg-white border-2 border-indigo-200 text-center font-black text-2xl p-3 rounded-xl shadow-sm focus:border-indigo-500 outline-none text-indigo-700 pr-10" 
-                             />
-                             <CheckCircle2 className="w-5 h-5 text-indigo-300 absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
-                           </div>
+                           
+                           {isEssay ? (
+                             <div className="relative">
+                               <input 
+                                 type="number" 
+                                 min="0" max={maxPts} 
+                                 value={manualGrades[q.id] !== undefined ? manualGrades[q.id] : 0} 
+                                 onChange={(e) => {
+                                   let val = Number(e.target.value);
+                                   if (val > maxPts) val = maxPts;
+                                   if (val < 0) val = 0;
+                                   setManualGrades(prev => ({...prev, [q.id]: val}));
+                                 }}
+                                 className="w-full bg-white border-2 border-indigo-200 text-center font-black text-2xl p-3 rounded-xl shadow-sm focus:border-indigo-500 outline-none text-indigo-700 pr-10" 
+                               />
+                               <CheckCircle2 className="w-5 h-5 text-indigo-300 absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
+                             </div>
+                           ) : (
+                             // 🚀 إظهار درجة السؤال الآلي كقراءة فقط
+                             <div className="w-full bg-slate-100 border-2 border-slate-200 text-center font-black text-2xl p-3 rounded-xl shadow-sm text-slate-500 flex items-center justify-center gap-2 cursor-not-allowed">
+                                {studentAnsObj?.points_earned || 0} 
+                                <span className="text-sm font-bold text-slate-400 mt-1">/ آلي</span>
+                             </div>
+                           )}
                         </div>
                       </div>
                     </div>
