@@ -13,6 +13,7 @@ import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { QrReader } from 'react-qr-reader'; // 🚀 ترقية المحرك
 
 export default function GateRadar() {
   const router = useRouter();
@@ -21,27 +22,22 @@ export default function GateRadar() {
 
   const [isLoading, setIsLoading] = useState(true);
   
-  // الخريطة السريعة للطلاب (للبحث في أجزاء من الثانية)
   const [studentMap, setStudentMap] = useState<Map<string, any>>(new Map());
   const [totalStudents, setTotalStudents] = useState(0);
   const [enteredToday, setEnteredToday] = useState(0);
   
-  // شاشة الطالب الذي تم مسحه للتو
   const [lastScanned, setLastScanned] = useState<any>(null);
   
   const [isScannerActive, setIsScannerActive] = useState(false);
-  const scannerRef = useRef<any>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
   const todayDate = format(new Date(), 'yyyy-MM-dd');
 
-  // 1️⃣ استخبارات البوابة (تحميل كل بطاقات الطلاب الموزعة)
   const fetchGateData = async () => {
     setIsLoading(true);
     try {
-      // أ. جلب كل الطلاب الذين لديهم أرقام جلوس هذا الفصل
       const { data: allocations } = await supabase
         .from('student_seat_allocations')
         .select(`
@@ -52,7 +48,6 @@ export default function GateRadar() {
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
 
-      // ب. جلب من دخلوا من البوابة اليوم
       const { data: gateRecords } = await supabase
         .from('school_gate_attendance')
         .select('student_id')
@@ -97,7 +92,6 @@ export default function GateRadar() {
     }
   }, [currentRole]);
 
-  // 2️⃣ تسجيل الدخول في البوابة
   const markGateEntry = async (student: any) => {
     if (!user?.id || student.has_entered) return;
 
@@ -110,9 +104,8 @@ export default function GateRadar() {
           scanned_by: user.id
         });
 
-      if (error && error.code !== '23505') throw error; // تجاهل خطأ التكرار (Unique Violation)
+      if (error && error.code !== '23505') throw error; 
 
-      // تحديث الإحصائيات فوراً
       student.has_entered = true;
       setStudentMap(new Map(studentMap));
       setEnteredToday(prev => prev + 1);
@@ -122,46 +115,29 @@ export default function GateRadar() {
     }
   };
 
-  // 3️⃣ تشغيل كاميرا الرادار الذكي للبوابة 🚀
-  useEffect(() => {
-    if (isScannerActive) {
-      import('html5-qrcode').then(({ Html5Qrcode }) => {
-        const html5QrCode = new Html5Qrcode("gate-reader");
-        scannerRef.current = html5QrCode;
-
-        html5QrCode.start(
-          { facingMode: "environment" },
-          { fps: 15, qrbox: { width: 300, height: 300 } }, // كاميرا سريعة جداً ومربع كبير للبوابة
-          (decodedText) => {
-            let seatNumber = decodedText;
-            if (decodedText.startsWith('raf-exam-seat:')) {
-              seatNumber = decodedText.split(':')[1];
-            }
-            handleScannedSeat(seatNumber);
-          },
-          () => {} // تجاهل الأخطاء الفارغة
-        ).catch((err) => {
-          console.error("Camera Error: ", err);
-          alert("تعذر الوصول للكاميرا، تأكد من منح الصلاحيات للمتصفح.");
-          setIsScannerActive(false);
-        });
-      });
-    } else {
-      if (scannerRef.current) {
-        scannerRef.current.stop().then(() => {
-          scannerRef.current.clear();
-        }).catch((err: any) => console.error(err));
+  // 🚀 معالج الكاميرا الجديد والمطور
+  const handleScan = async (result: any, error: any) => {
+    if (!!result) {
+      let decodedText = result?.text;
+      if (!decodedText) return;
+      
+      let seatNumber = decodedText.trim();
+      if (decodedText.includes('raf-exam-seat:')) {
+        seatNumber = decodedText.split(':')[1];
+      } else if (decodedText.includes('/')) {
+         const parts = decodedText.split('/');
+         seatNumber = parts[parts.length - 1];
       }
+
+      // إيقاف الكاميرا فوراً لمنع التكرار (Debounce)
+      setIsScannerActive(false); 
+      handleScannedSeat(seatNumber);
+      
+      // إعادة تفعيل الكاميرا بعد ثانيتين لاستقبال طالب آخر
+      setTimeout(() => setIsScannerActive(true), 2000);
     }
+  };
 
-    return () => {
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().catch(console.error);
-      }
-    };
-  }, [isScannerActive]);
-
-  // معالجة الباركود المقروء من الكاميرا أو مسدس الباركود الخارجي
   const handleScannedSeat = (seatNumber: string) => {
     const student = studentMap.get(String(seatNumber));
     
@@ -172,7 +148,6 @@ export default function GateRadar() {
         playSuccessBeep();
         markGateEntry(student);
       } else {
-        // قرأ بطاقة طالب دخل مسبقاً (تم مسحه من قبل)
         playAlreadyEnteredBeep();
       }
     } else {
@@ -181,7 +156,6 @@ export default function GateRadar() {
     }
   };
 
-  // دعم مسدس الباركود الخارجي (USB Barcode Scanner)
   const handleManualScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const scannedCode = e.currentTarget.value.trim();
@@ -195,14 +169,12 @@ export default function GateRadar() {
     }
   };
 
-  // المحافظة على تركيز حقل الإدخال إذا كان الرادار نشطاً لمسدس الباركود
   useEffect(() => {
     if (isScannerActive && scanInputRef.current) {
       scanInputRef.current.focus();
     }
   }, [isScannerActive, lastScanned]);
 
-  // أصوات البوابة المخصصة
   const playSuccessBeep = () => {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -253,7 +225,6 @@ export default function GateRadar() {
 
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* 🛡️ الهيدر الفخم للبوابة */}
         <div className="bg-slate-900 rounded-[2rem] p-6 shadow-2xl border border-slate-800 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
           
@@ -281,12 +252,11 @@ export default function GateRadar() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* 🔴 نظام المسح (الكاميرا أو المسدس) */}
           <div className="bg-slate-900 rounded-[2rem] shadow-xl border border-slate-800 p-6 text-center flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
             {!isScannerActive ? (
               <div className="flex flex-col items-center justify-center w-full h-full relative z-10">
                 <ScanLine className="w-24 h-24 text-slate-700 mb-6" />
-                <h2 className="text-2xl font-black text-white mb-2">نقطة التفتيش مغلقة</h2>
+                <h2 className="text-2xl font-black text-white mb-2">نقطة التفتيش متوقفة</h2>
                 <p className="text-slate-400 mb-8 max-w-sm">قم بتفعيل الرادار لتتمكن من مسح بطاقات الطلاب عبر كاميرا الهاتف أو جهاز الباركود.</p>
                 <button 
                    onClick={() => setIsScannerActive(true)}
@@ -307,12 +277,25 @@ export default function GateRadar() {
                   </button>
                 </div>
                 
-                {/* كاميرا الرادار الخاصة بالبوابة */}
+                {/* 🚀 القارئ الجديد الخاص بالبوابة */}
                 <div className="w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-4 border-slate-800 shadow-2xl relative mb-4">
-                   <div id="gate-reader" className="w-full h-full"></div>
+                   <QrReader
+                      onResult={handleScan}
+                      constraints={{ facingMode: 'environment' }}
+                      containerStyle={{ width: '100%', height: '100%' }}
+                      videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+                       <div className="w-full h-full border-2 border-emerald-500/50 rounded-2xl relative">
+                          <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-500 rounded-tl-xl -mt-1 -ml-1"></div>
+                          <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-500 rounded-tr-xl -mt-1 -mr-1"></div>
+                          <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-500 rounded-bl-xl -mb-1 -ml-1"></div>
+                          <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-500 rounded-br-xl -mb-1 -mr-1"></div>
+                          <div className="absolute w-full h-0.5 bg-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
+                       </div>
+                    </div>
                 </div>
 
-                {/* حقل الإدخال السري لمسدس الباركود */}
                 <input 
                   ref={scanInputRef}
                   type="text" 
@@ -326,7 +309,6 @@ export default function GateRadar() {
             )}
           </div>
 
-          {/* 🧑‍🎓 شاشة الطالب (Feedback Screen) */}
           <div className="bg-slate-900 rounded-[2rem] shadow-xl border border-slate-800 p-6 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
             {lastScanned ? (
               <AnimatePresence mode="wait">
@@ -343,7 +325,6 @@ export default function GateRadar() {
                 ) : (
                   <motion.div key="success" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center text-center w-full">
                     
-                    {/* هالة خضراء أو صفراء خلف الصورة */}
                     <div className={cn("absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-20", lastScanned.has_entered ? "bg-amber-500" : "bg-emerald-500")}></div>
                     
                     <div className={cn("w-40 h-40 rounded-full p-2 mb-6 relative z-10", lastScanned.has_entered ? "bg-amber-500/20 border-2 border-amber-500/50" : "bg-emerald-500/20 border-2 border-emerald-500/50")}>
@@ -355,7 +336,6 @@ export default function GateRadar() {
                          )}
                        </div>
                        
-                       {/* أيقونة الحالة الصح */}
                        <div className={cn("absolute bottom-0 right-4 w-10 h-10 rounded-full border-4 border-slate-900 flex items-center justify-center shadow-lg", lastScanned.has_entered ? "bg-amber-500 text-slate-900" : "bg-emerald-500 text-slate-900")}>
                           <CheckCircle2 className="w-6 h-6" />
                        </div>
@@ -390,11 +370,17 @@ export default function GateRadar() {
         </div>
       </div>
 
-      <style jsx global>{`
-        #gate-reader { border: none !important; border-radius: 1.5rem; overflow: hidden; }
-        #gate-reader__dashboard_section_csr { display: none !important; }
-        #gate-reader__camera_selection { padding: 8px; border-radius: 8px; background: #1e293b; color: white; border: 1px solid #334155; margin-bottom: 10px; width: 100%; max-width: 300px; }
-      `}</style>
+      <style dangerouslySetInnerHTML={{__html:`
+        @keyframes scan {
+          0% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .animate-scan {
+          animation: scan 2s linear infinite;
+        }
+      `}}/>
     </div>
   );
 }
