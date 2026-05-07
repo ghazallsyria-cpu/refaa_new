@@ -30,6 +30,7 @@ export default function InvigilatorRadar() {
   // 🚀 حالات التحكم بالمسح
   const [isScanMode, setIsScanMode] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isScannerActive, setIsScannerActive] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
   const currentYear = '2025-2026';
@@ -60,7 +61,7 @@ export default function InvigilatorRadar() {
       const { data: myAssignment } = await supabase
         .from('committee_invigilators')
         .select('committee_id, exam_committees(*)')
-        .eq('teacher_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (!myAssignment) {
