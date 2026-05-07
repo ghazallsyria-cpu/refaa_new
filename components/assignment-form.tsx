@@ -3,16 +3,22 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square, X, Loader2, Image as ImageIcon, FileText, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
+// استدعاء مكون رفع الصور المستقل الذي برمجناه سابقاً (المزود بالضغط الذكي)
 import ImageUpload from '@/components/ImageUpload';
 import imageCompression from 'browser-image-compression';
 
+// استيراد مكتبات المعادلات الرياضية
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
-// 🚀 محرك تنسيق المعادلات والجداول للطالب
+// =========================================================================
+// 🧮 محرك تنسيق المعادلات والجداول (Format Engine)
+// يقوم بتنظيف نصوص الأسئلة/الخيارات وتحويل الرموز الرياضية ($$) إلى واجهة قابلة للقراءة
+// =========================================================================
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
+   // تنظيف وتنسيق فواصل الأسطر لتظهر بشكل سليم في الـ HTML
    let html = String(content)
      .replace(/\\\\n/g, '<br/>')
      .replace(/\\n/g, '<br/>')
@@ -20,10 +26,12 @@ const renderContentWithMath = (content: string) => {
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$'); 
      
+   // تحويل الـ LaTeX المكتوب بين علامتي الدولار ($$) إلى عناصر <span> ملونة بخط الرياضيات
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
+   // تنسيق الجداول المستوردة من المحرر (تطبيق ستايلات Tailwind عليها)
    html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
    html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
@@ -34,6 +42,7 @@ const renderContentWithMath = (content: string) => {
 
 // =========================================================================
 // 🚀 المكون الداخلي: تسليم المشاريع العلمية
+// هذا المكون يظهر فقط إذا كان المعلم قد اختار نوع السؤال "مشروع علمي/تقرير"
 // =========================================================================
 interface ProjectSubmissionProps {
   initialData?: { text: string; images: string[] };
@@ -46,11 +55,13 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
   const [images, setImages] = useState<string[]>(initialData?.images || []);
   const [isUploading, setIsUploading] = useState(false);
 
+  // تحديث نص المشروع
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     onChange({ text: e.target.value, images });
   };
 
+  // رفع مرفقات المشروع (مع الضغط السحابي)
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -65,11 +76,8 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
 
     try {
       for (const file of files) {
-        const options = {
-          maxSizeMB: 0.2, 
-          maxWidthOrHeight: 1280,
-          useWebWorker: true,
-        };
+        // ضغط الملفات قبل الرفع لتوفير الباقة وتقليل وقت التحميل للطالب والمعلم
+        const options = { maxSizeMB: 0.2, maxWidthOrHeight: 1280, useWebWorker: true };
         const compressedFile = await imageCompression(file, options);
 
         const formData = new FormData();
@@ -77,14 +85,11 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
         formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
 
         const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
-          method: 'POST',
-          body: formData,
+          method: 'POST', body: formData,
         });
 
         const data = await res.json();
-        if (data.secure_url) {
-          uploadedUrls.push(data.secure_url);
-        }
+        if (data.secure_url) uploadedUrls.push(data.secure_url);
       }
 
       const newImages = [...images, ...uploadedUrls];
@@ -98,6 +103,7 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
     }
   };
 
+  // إزالة صورة تم رفعها بالخطأ (فقط في وضع التعديل)
   const removeImage = (index: number) => {
     if (readOnly) return;
     const newImages = images.filter((_, i) => i !== index);
@@ -108,6 +114,8 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
   return (
     <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm mt-5">
       <div className="space-y-6">
+        
+        {/* مساحة وصف المشروع */}
         <div>
           <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
             <FileText className="w-5 h-5 text-indigo-500" /> وصف المشروع، أبحاثك، والملاحظات (اختياري)
@@ -122,6 +130,7 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
           />
         </div>
 
+        {/* مساحة إرفاق صور المشروع */}
         <div>
           <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
             <ImageIcon className="w-5 h-5 text-indigo-500" /> مرفقات المشروع المرئية (حد أقصى 8 صور)
@@ -164,15 +173,16 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
 }
 
 // =========================================================================
-
+// 📝 المكون الرئيسي: واجهة الإجابة عن الواجبات (Assignment Form)
+// =========================================================================
 interface AssignmentFormProps {
-  questions: any[];
-  onSubmit: (answers: Record<string, any>) => void;
-  onChange?: (answers: Record<string, any>) => void;
-  isSubmitting?: boolean;
-  initialAnswers?: Record<string, any>;
-  readOnly?: boolean;
-  showModelAnswer?: boolean; 
+  questions: any[]; // مصفوفة الأسئلة
+  onSubmit: (answers: Record<string, any>) => void; // دالة الإرسال النهائي للسيرفر
+  onChange?: (answers: Record<string, any>) => void; // دالة لالتقاط الإجابات وحفظها مؤقتاً
+  isSubmitting?: boolean; // حالة الإرسال (لتدوير زر الإرسال)
+  initialAnswers?: Record<string, any>; // إجابات الطالب السابقة (إذا كان في وضع العرض أو التعديل)
+  readOnly?: boolean; // هل النموذج للعرض فقط؟ (يُستخدم للمعلم عند التصحيح)
+  showModelAnswer?: boolean; // هل نظهر الإجابات النموذجية للطالب بعد التصحيح؟
   children?: React.ReactNode;
 }
 
@@ -186,9 +196,16 @@ export default function AssignmentForm({
   showModelAnswer = false, 
   children 
 }: AssignmentFormProps) {
-  const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // ==========================================
+  // 🎛️ حالات نموذج الواجب
+  // ==========================================
+  const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers); // تخزين الإجابات بربطها بـ ID السؤال
+  const [errors, setErrors] = useState<Record<string, string>>({}); // تخزين أخطاء الإدخال (مثال: حقل مطلوب)
 
+  // ==========================================
+  // 🧮 تحميل مكتبة KaTeX لمعالجة المعادلات في واجهة الطالب
+  // ==========================================
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('katex-js-form')) {
       const link = document.createElement('link');
@@ -210,6 +227,7 @@ export default function AssignmentForm({
     }
   }, []);
 
+  // تشغيل المعالجة الرياضية على العناصر بعد 100 ملي ثانية من تغيرها (ليأخذ الـ DOM وقته في التحديث)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
@@ -230,6 +248,7 @@ export default function AssignmentForm({
     return () => clearTimeout(timer);
   }, [questions, answers, errors]);
 
+  // تحديث الإجابات الأولية إذا أتت متأخرة من السيرفر
   useEffect(() => {
     if (initialAnswers && Object.keys(initialAnswers).length > 0) {
       const timer = setTimeout(() => {
@@ -239,48 +258,64 @@ export default function AssignmentForm({
     }
   }, [initialAnswers]);
 
+  // ==========================================
+  // 📝 معالجات الإدخال (Input Handlers)
+  // ==========================================
+  
+  // معالج الإجابات النصية والخيارات الفردية
   const handleAnswerChange = (questionId: string, value: any) => {
     if (readOnly) return;
     setAnswers(prev => {
       const newAnswers = { ...prev, [questionId]: value };
-      if (onChange) onChange(newAnswers);
+      if (onChange) onChange(newAnswers); // حفظ الإجابة مؤقتاً للأب
       return newAnswers;
     });
+    // مسح الخطأ بمجرد أن يبدأ الطالب في الإجابة
     if (errors[questionId]) setErrors(prev => { const n = {...prev}; delete n[questionId]; return n; });
   };
 
+  // معالج الخيارات المتعددة (Checkboxes)
   const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
     if (readOnly) return;
     const current = (answers[questionId] as string[]) || [];
     handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
   };
 
+  // ==========================================
+  // 🛡️ معالج التحقق من الأخطاء (Validation)
+  // ==========================================
   const validate = () => {
     const newErrors: Record<string, string> = {};
     questions.forEach(q => {
+      // التحقق فقط للأسئلة الإجبارية والتي ليست من نوع "عنوان"
       if (q.isRequired && q.type !== 'section_header') {
         const ans = answers[q.id];
+        // إذا لم يكن هناك إجابة، أو مصفوفة فارغة، أو مقارنة فارغة
         if (!ans || (Array.isArray(ans) && ans.length === 0) || (q.type === 'comparison' && ans === '[]') || (q.type === 'project_submission' && !ans)) {
           newErrors[q.id] = 'هذا السؤال مطلوب للإرسال';
         }
       }
     });
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return Object.keys(newErrors).length === 0; // إرجاع True إذا لم تكن هناك أخطاء
   };
 
+  // الاعتماد والإرسال النهائي
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!readOnly && validate()) onSubmit(answers);
   };
 
-  // 🚀 العارض الذكي الجديد: إجبار التحميل لملفات الـ PDF (يحل مشكلة الشاشة البيضاء)
+  // ==========================================
+  // 🖼️ العارض الذكي للمرفقات (Smart Media Renderer)
+  // إذا كان المرفق PDF يُعطي زر تحميل، وإذا كان صورة يعرضها مباشرة.
+  // ==========================================
   const renderSmartMedia = (url: string) => {
     if (!url) return null;
     const isPdf = url.toLowerCase().includes('.pdf');
 
     if (isPdf) {
-      // سحر كلاوديناري: إضافة fl_attachment لإجبار المتصفح على التحميل المباشر
+      // سحر Cloudinary: حقن /fl_attachment/ يُجبر المتصفح على تنزيل الـ PDF بدلاً من فتحه (يمنع الشاشة البيضاء في الجوالات)
       const downloadUrl = (url.includes('cloudinary.com') && url.includes('/upload/'))
         ? url.replace('/upload/', '/upload/fl_attachment/')
         : url;
@@ -301,12 +336,18 @@ export default function AssignmentForm({
       );
     }
 
+    // إذا كان المرفق صورة
     return <img src={url} className="mt-6 max-h-[500px] w-auto rounded-2xl border border-slate-200 shadow-md object-contain" alt="توضيح المرفق" />;
   };
 
+  // ==========================================
+  // 🧩 مولد أنواع الأسئلة (Question Input Generator)
+  // بناءً على نوع السؤال (نص، خيارات، جدول، مقارنة...) يُرسم الـ Input المناسب
+  // ==========================================
   const renderQuestionInput = (q: any) => {
     const ans = answers[q.id];
 
+    // 1️⃣ استدعاء مكون المشاريع والأبحاث
     if (q.type === 'project_submission') {
       let projectData = { text: '', images: [] };
       if (ans && typeof ans === 'string') {
@@ -326,6 +367,7 @@ export default function AssignmentForm({
       );
     }
 
+    // 2️⃣ أسئلة الخيارات الفردية (Radio Buttons)
     if (q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'radio') {
       const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
           ? q.options 
@@ -344,6 +386,7 @@ export default function AssignmentForm({
                    {isSelected && <Circle className="h-2.5 w-2.5 fill-current" />}
                 </div>
                 <input type="radio" className="hidden" disabled={readOnly} checked={isSelected} onChange={() => handleAnswerChange(q.id, optId)} />
+                {/* دمج النص مع المعادلات الرياضية (إن وجدت في الخيار) */}
                 <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'} w-full block`} dangerouslySetInnerHTML={renderContentWithMath(optContent)} />
               </label>
             );
@@ -352,6 +395,7 @@ export default function AssignmentForm({
       );
     }
 
+    // 3️⃣ أسئلة الخيارات المتعددة (Checkboxes) المربعات
     if (q.type === 'checkbox' || q.type === 'multi_select') {
       const selectedArray = Array.isArray(ans) ? ans : [];
       const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
@@ -370,6 +414,7 @@ export default function AssignmentForm({
                 </div>
                 <input type="checkbox" className="hidden" disabled={readOnly} checked={isSelected} onChange={() => {
                    if (readOnly) return;
+                   // إذا تم تحديده، نحذفه من المصفوفة، وإلا نضيفه
                    const newArr = isSelected ? selectedArray.filter((i: string) => i !== optId && i !== optContent) : [...selectedArray, optId];
                    handleAnswerChange(q.id, newArr);
                 }} />
@@ -381,6 +426,7 @@ export default function AssignmentForm({
       );
     }
 
+    // 4️⃣ رفع ملف فردي
     if (q.type === 'file_upload') {
        return (
          <div className="mt-5 bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm">
@@ -389,8 +435,10 @@ export default function AssignmentForm({
            </label>
            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
              {readOnly ? (
+               // عرض المرفق للطالب أو المعلم إذا انتهى الإرسال
                ans ? <img src={ans} className="max-h-64 rounded-xl object-contain mx-auto" alt="مرفق الطالب" /> : <p className="text-slate-400 italic text-center py-6 font-bold">لم يتم إرفاق ملف</p>
              ) : (
+               // مكون الرفع
                <ImageUpload initialImageUrl={ans || ''} onUploadSuccess={(url) => handleAnswerChange(q.id, url)} label="انقر أو اسحب صورة ورقة الحل هنا" />
              )}
            </div>
@@ -398,7 +446,9 @@ export default function AssignmentForm({
        );
     }
 
+    // 5️⃣ جداول البيانات الديناميكية (Dynamic Tables)
     let tableData = q.table;
+    // دعم رجعي للبيانات القديمة التي كانت تحفظ الجدول كـ String داخل options
     if (!tableData && q.type === 'data_table' && q.options && q.options.length > 0) {
       try {
         const optContent = typeof q.options[0] === 'string' ? q.options[0] : (q.options[0].content || q.options[0].text);
@@ -407,7 +457,7 @@ export default function AssignmentForm({
     }
 
     if (q.type === 'data_table' && tableData) {
-      const parsedAns = Array.isArray(ans) ? ans : [];
+      const parsedAns = Array.isArray(ans) ? ans : []; // المصفوفة ثنائية الأبعاد (صفوف x أعمدة)
 
       return (
         <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
@@ -428,14 +478,17 @@ export default function AssignmentForm({
                     {row.map((cell: string, cIdx: number) => (
                       <td key={cIdx} className={`p-4 border-l border-slate-200 align-middle text-center last:border-l-0 ${cIdx === 0 ? 'bg-slate-50/80 font-bold text-slate-800' : 'bg-white'}`}>
                         {cIdx === 0 ? (
+                          // العمود الأول دائماً نص ثابت (عنوان الصف)
                           <div className="prose max-w-none text-slate-800 font-bold text-center" dangerouslySetInnerHTML={renderContentWithMath(cell)} />
                         ) : (
+                          // باقي الأعمدة هي حقول إدخال للطالب
                           <textarea 
                             disabled={readOnly} 
                             rows={1} 
                             placeholder="..." 
                             value={parsedAns[rIdx]?.[cIdx] || ''} 
                             onChange={(e) => { 
+                              // نسخ المصفوفة وتحديث الخلية المعينة فقط
                               const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : Array(tableData.headers.length).fill('')); 
                               if (!newAns[rIdx]) newAns[rIdx] = Array(tableData.headers.length).fill(''); 
                               newAns[rIdx][cIdx] = e.target.value; 
@@ -455,6 +508,7 @@ export default function AssignmentForm({
       );
     }
 
+    // 6️⃣ سؤال المقارنة الثنائية (الذي طلبته خصيصاً للفيزياء والكيمياء)
     if (q.type === 'comparison') {
         const getOptValue = (opt: any, fallback: string) => {
           if (!opt) return fallback;
@@ -463,7 +517,7 @@ export default function AssignmentForm({
         const aspects = q.options?.slice(2)?.map((o: any) => getOptValue(o, '')) || [];
         const party1 = getOptValue(q.options?.[0], 'الطرف الأول');
         const party2 = getOptValue(q.options?.[1], 'الطرف الثاني');
-        const parsedAns = Array.isArray(ans) ? ans : [];
+        const parsedAns = Array.isArray(ans) ? ans : []; // لكل وجه مقارنة هناك إجابتين (مصفوفة ثنائية)
 
         return (
           <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
@@ -482,6 +536,7 @@ export default function AssignmentForm({
                       <td className="p-5 border-l border-slate-200 font-bold text-slate-800 bg-slate-50/80 align-middle leading-relaxed">
                          <div className="prose max-w-none text-slate-800 font-bold" dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
                       </td>
+                      {/* إجابة الطالب للطرف الأول */}
                       <td className="p-5 border-l border-slate-200 align-top bg-white">
                          <textarea 
                            disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} 
@@ -494,6 +549,7 @@ export default function AssignmentForm({
                            className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-3 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-400 transition-all shadow-inner" 
                          />
                       </td>
+                      {/* إجابة الطالب للطرف الثاني */}
                       <td className="p-5 align-top bg-white">
                          <textarea 
                            disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[1] || ''} 
@@ -515,6 +571,7 @@ export default function AssignmentForm({
         );
     }
 
+    // 7️⃣ الحالة الافتراضية (سؤال مقالي أو فقرة نصية)
     return (
       <textarea
         disabled={readOnly}
@@ -527,8 +584,12 @@ export default function AssignmentForm({
     );
   };
 
+  // ==========================================
+  // 🎨 الواجهة الرئيسية للنموذج (Form UI Render)
+  // ==========================================
   return (
     <form id="assignment-form-container" onSubmit={handleSubmit} className="space-y-8" dir="rtl">
+      {/* ستايلات الـ Scrollbar المخصصة لهذه المنطقة (Light Theme) */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar-light::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar-light::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
@@ -536,23 +597,29 @@ export default function AssignmentForm({
         .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
 
+      {/* حلقة تكرارية لطباعة كل سؤال */}
       {questions.map((q, idx) => {
-        const isHeader = q.type === 'section_header';
+        const isHeader = q.type === 'section_header'; // هل هذا عنوان أم سؤال؟
         
         let rawContent = q.content || q.text || q.question_text || '';
         let questionText = rawContent;
         let modelAnswerText = '';
         
+        // 💡 استخراج الإجابة النموذجية المكتوبة داخل المربع
+        // المعلم في الـ AI بيكتب: "نص السؤال... [الإجابة النموذجية: كذا وكذا]"
+        // هذا الكود يفصل السؤال عن الإجابة ليعرض الإجابة النموذجية فقط بعد التصحيح (showModelAnswer = true)
         const answerIndex = rawContent.indexOf('[الإجابة النموذجية');
         if (answerIndex !== -1) {
           questionText = rawContent.substring(0, answerIndex).trim();
           modelAnswerText = rawContent.substring(answerIndex).trim();
         }
 
+        // 🖼️ إذا كان العنصر عبارة عن (عنوان) فقط
         if (isHeader) {
           return (
             <div key={q.id} className="pt-10 pb-4 border-b-2 border-indigo-100 mb-8">
                <div className="prose max-w-none text-2xl font-black text-indigo-950 leading-relaxed text-right" dangerouslySetInnerHTML={renderContentWithMath(questionText)} />
+               {/* عرض الإجابة النموذجية للعنوان (إن وجدت) بعد التصحيح */}
                {showModelAnswer && modelAnswerText && (
                  <div className="mt-4 p-5 bg-emerald-50/80 text-emerald-900 rounded-2xl border border-emerald-200 text-base font-bold shadow-sm" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                )}
@@ -562,28 +629,39 @@ export default function AssignmentForm({
           );
         }
 
+        // 📝 إذا كان العنصر عبارة عن (سؤال) طبيعي للطالب
         return (
           <div key={q.id} className="bg-white/95 backdrop-blur-xl p-6 sm:p-8 rounded-[2.5rem] border border-slate-200 shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(99,102,241,0.08)] hover:border-indigo-100">
              <div className="flex flex-col sm:flex-row gap-5 items-start">
+                
+                {/* 🔢 رقم السؤال في مربع جميل */}
                 <div className="shrink-0 w-14 h-14 rounded-[1.25rem] bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-2xl shadow-sm border border-indigo-100">
                    {idx + 1}
                 </div>
+                
+                {/* ❓ محتوى السؤال وحقل الإجابة */}
                 <div className="flex-1 w-full pt-1 text-right overflow-hidden">
                    <div className="flex items-start gap-2 justify-between">
+                     {/* نص السؤال يمر بـ Render Engine لدعم الـ Math والـ HTML */}
                      <div className="prose max-w-none text-xl font-bold text-slate-800 leading-relaxed w-full" dangerouslySetInnerHTML={renderContentWithMath(questionText)} />
+                     {/* النجمة الحمراء إذا كان السؤال إجبارياً */}
                      {q.is_required && <span className="text-rose-500 text-2xl font-black mt-1 shrink-0" title="مطلوب">*</span>}
                    </div>
                    
+                   {/* عرض الإجابة النموذجية (تظهر للطالب فقط بعدما يُصحح له المعلم) */}
                    {showModelAnswer && modelAnswerText && (
                      <div className="mt-5 p-5 bg-emerald-50/80 text-emerald-900 rounded-2xl border border-emerald-200 text-base font-bold shadow-sm" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                    )}
 
-                   {/* 🚀 السحر يعمل هنا للمرفقات داخل الأسئلة والمشاريع */}
+                   {/* 🚀 المرفقات التوضيحية داخل السؤال (مثل صورة لخريطة أو خوارزمية) */}
                    {renderSmartMedia(q.media_url)}
                    
+                   {/* 🎯 استدعاء حقل الإدخال المناسب (يختلف حسب نوع السؤال) */}
                    {renderQuestionInput(q)}
                 </div>
              </div>
+             
+             {/* ⚠️ رسائل الأخطاء إن وجدت (مثل: "هذا السؤال مطلوب للإرسال") */}
              {errors[q.id] && (
                <div className="mt-5 flex items-center gap-2 text-rose-600 bg-rose-50 p-4 rounded-2xl border border-rose-100 text-sm font-bold shadow-sm animate-in fade-in">
                  <AlertCircle className="h-5 w-5 shrink-0" /> <span>{errors[q.id]}</span>
@@ -593,8 +671,12 @@ export default function AssignmentForm({
         );
       })}
       
+      {/* حقن أي أزرار أو محتوى إضافي يأتي من مكون الأب (Page) */}
       {children}
 
+      {/* ==========================================
+          📤 زر الإرسال النهائي (يظهر فقط إذا كان النموذج ليس للقراءة)
+          ========================================== */}
       {!readOnly && (
         <div className="pt-10">
           <button type="submit" disabled={isSubmitting} className="w-full flex justify-center items-center gap-3 rounded-[2rem] bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-5 text-lg font-black text-white shadow-[0_10px_25px_rgba(79,70,229,0.3)] hover:shadow-[0_15px_35px_rgba(79,70,229,0.4)] hover:-translate-y-1 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none">
