@@ -28,10 +28,12 @@ export default function InvigilatorRadar() {
   const [searchTerm, setSearchTerm] = useState('');
   
   // 🚀 حالات التحكم بالمسح
-  const [isScanMode, setIsScanMode] = useState(false);
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const [isScannerActive, setIsScannerActive] = useState(false);
-  const scanInputRef = useRef<HTMLInputElement>(null);
+const [isScanMode, setIsScanMode] = useState(false);
+const [isCameraActive, setIsCameraActive] = useState(false);
+const [isScannerActive, setIsScannerActive] = useState(false);
+
+const scanInputRef = useRef<HTMLInputElement>(null);
+const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
@@ -61,7 +63,7 @@ export default function InvigilatorRadar() {
       const { data: myAssignment } = await supabase
         .from('committee_invigilators')
         .select('committee_id, exam_committees(*)')
-        .eq('id', user.id)
+        .eq('teacher_id', user.id)
         .single();
 
       if (!myAssignment) {
@@ -207,15 +209,24 @@ export default function InvigilatorRadar() {
       const rawText = result.text.trim();
       setIsCameraActive(false); 
       processScannedCode(rawText);
-      setTimeout(() => setIsCameraActive(true), 2500); 
-    }
+timeoutRef.current = setTimeout(() => {
+  setIsCameraActive(true);
+}, 2500);    }
   };
 
-  useEffect(() => {
-    if (isScanMode && !isCameraActive && scanInputRef.current) {
-      scanInputRef.current.focus();
+useEffect(() => {
+  if (isScanMode && !isCameraActive && scanInputRef.current) {
+    scanInputRef.current.focus();
+  }
+}, [isScanMode, isCameraActive]);
+
+useEffect(() => {
+  return () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
-  }, [isScanMode, isCameraActive]);
+  };
+}, []);
 
   const playSuccessBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); };
   const playAlreadyEnteredBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(600, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.2); };
