@@ -188,9 +188,9 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
         </div>
       ) : (
         
-        {/* 🖼️ الحالة الثانية: تم رفع الملف (تظهر المعاينة) */}
+
         <div className="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 group shadow-sm">
-          
+                  {/* 🖼️ الحالة الثانية: تم رفع الملف (تظهر المعاينة) */}
           {/* إذا كان الملف صورة، نعرضها بكامل المساحة */}
           {isImage ? (
             // 🚀 استخدام object-cover لتغطية المساحة بجمالية بدون تشوه أبعاد الصورة
