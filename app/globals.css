@@ -1,28 +1,38 @@
 @import "tailwindcss";
 
+/* ==========================================
+   🎨 1. المتغيرات والألوان (Theme Variables)
+   هنا نحدد الهوية البصرية الأساسية للمنصة
+   ========================================== */
 @theme {
   --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
   --radius-3xl: 1.5rem;
   --radius-4xl: 2rem;
   
-  /* 🚀 ألوان الذهب الخالص (Pure Gold) */
+  /* 🚀 ألوان الذهب الخالص (Pure Gold) للعلامة التجارية */
   --color-brand-400: #fbbf24;
   --color-brand-500: #f59e0b;
   --color-brand-600: #d97706;
 }
 
+/* ==========================================
+   🏗️ 2. الطبقة الأساسية (Base Layer)
+   إعدادات الجسم الأساسي (Body) وإلغاء التنسيقات الافتراضية المزعجة
+   ========================================== */
 @layer base {
   * {
+    /* توحيد لون الحدود لجميع العناصر الشفافة */
     @apply border-white/10;
   }
+  
   body {
     /* 🚀 أسود ملكي عميق جداً يبرز الذهب والأبيض */
     @apply bg-[#02040a] text-slate-100 relative overflow-x-hidden;
-    /* 🚀 منع التكبير العشوائي لحماية معالج الرسوميات (GPU) */
+    /* 🚀 منع التكبير العشوائي (Pinch-zoom) في الجوال لحماية تجربة المستخدم (UX) */
     touch-action: pan-y; 
   }
 
-  /* نسيج خفيف جداً لمنع اللون الميت */
+  /* 🌌 نسيج خفيف جداً (Noise Texture) لمنع اللون الميت وإعطاء طابع سينمائي */
   body::before {
     content: "";
     @apply fixed inset-0 pointer-events-none z-[-1] opacity-[0.05];
@@ -30,36 +40,49 @@
   }
 }
 
+/* ==========================================
+   🧱 3. طبقة المكونات الجاهزة (Components Layer)
+   كلاسات مخصصة يمكن استخدامها في أي مكان في المشروع
+   ========================================== */
 @layer components {
-  /* 🚀 زجاج داكن فخم (Smoked Glass) مع توهج عند مرور الماوس */
+  /* 🚀 زجاج داكن فخم (Smoked Glass) مع توهج تفاعلي عند مرور الماوس */
   .glass-panel {
     @apply bg-[#0f1423]/60 backdrop-blur-2xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.8)] hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] transition-all duration-500;
   }
   
+  /* 🚀 ترويسة زجاجية لتثبيتها في أعلى الصفحات */
   .glass-header {
     @apply bg-[#02040a]/80 backdrop-blur-3xl border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.9)];
   }
   
+  /* 🚀 حقول إدخال زجاجية تتفاعل عند التركيز (Focus) */
   .glass-input {
     @apply bg-[#090c15]/80 backdrop-blur-md border border-white/10 focus:bg-[#0f1423] focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all text-white placeholder:text-slate-500 shadow-inner;
   }
 
+  /* 🚀 روابط الشريط الجانبي (Sidebar) العادية */
   .sidebar-link {
     @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-400 hover:bg-white/5 hover:text-white transition-all duration-300 font-bold;
   }
   
+  /* 🚀 رابط الشريط الجانبي النشط (ينفجر بالفخامة الذهبية عند اختياره) */
   .sidebar-link-active {
-    /* 🚀 زر نشط ينفجر بالفخامة الذهبية */
     @apply bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black shadow-[0_0_25px_rgba(245,158,11,0.5)] border border-amber-300;
   }
 }
 
-/* 🚀 Custom Scrollbar */
+/* ==========================================
+   📜 4. تخصيص شريط التمرير (Custom Scrollbar)
+   تصميم نحيف وداكن يتماشى مع فخامة المنصة
+   ========================================== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { @apply bg-[#02040a]; }
 ::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full hover:bg-amber-500 transition-colors; }
 
-/* 🚀 أنيميشن الكرات المضيئة (حركة سينمائية واضحة) */
+/* ==========================================
+   🎬 5. الحركات المخصصة (Animations)
+   تُستخدم للكرات المضيئة في خلفية صفحات التسجيل والإدارة
+   ========================================== */
 @keyframes cinematic-glow {
   0% { transform: translate(0px, 0px) scale(1) rotate(0deg); opacity: 0.4; }
   33% { transform: translate(40px, -60px) scale(1.1) rotate(15deg); opacity: 0.7; }
@@ -70,20 +93,37 @@
 .animation-delay-2000 { animation-delay: 3s; }
 .animation-delay-4000 { animation-delay: 6s; }
 
-/* إعدادات الطباعة */
+/* ==========================================
+   🖨️ 6. إعدادات الطباعة (Print Media Queries)
+   لضمان خروج الكشوف والجداول بخلفية بيضاء نقية وتوفير الحبر
+   ========================================== */
 @media print {
   @page { size: landscape; margin: 10mm; }
-  body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: white !important; color: black !important; }
-  body::before { display: none !important; }
-  .glass-panel, .glass-header { background: white !important; backdrop-filter: none !important; box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+  body { 
+    -webkit-print-color-adjust: exact !important; 
+    print-color-adjust: exact !important; 
+    background: white !important; 
+    color: black !important; 
+  }
+  body::before { display: none !important; } /* إخفاء النسيج */
+  .glass-panel, .glass-header { 
+    background: white !important; 
+    backdrop-filter: none !important; 
+    box-shadow: none !important; 
+    border: 1px solid #e2e8f0 !important; 
+  }
   .print-hidden { display: none !important; }
 }
 
-  /* 🚀 درع الحماية العالمي للمعادلات الرياضية (KaTeX RTL Isolation) */
+/* ==========================================
+   🧮 7. درع الحماية العالمي للمعادلات الرياضية (KaTeX RTL Isolation)
+   يحمي المعادلات من التكسر والتداخل في الواجهات العربية (من اليمين لليسار)
+   ========================================== */
 .katex, .katex * { 
   direction: ltr !important; 
 }
 .katex-html {
+  /* عزل الـ Bidi لمنع المتصفح من عكس الرموز الرياضية */
   unicode-bidi: isolate-override !important;
 }
 .katex-display { 
@@ -91,7 +131,7 @@
   justify-content: center !important;
   margin: 0.5rem 0 !important; 
   width: 100% !important;
+  /* حماية المعادلات الطويلة من كسر الشاشة وإضافة تمرير أفقي لها */
   overflow-x: auto;
   overflow-y: hidden;
 }
-
