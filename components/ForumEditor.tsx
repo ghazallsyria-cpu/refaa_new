@@ -8,19 +8,22 @@ import {
   Palette, Type, X, Calculator, BarChart3, FileText, Files, Check, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 
-// 🚀 استيراد دالة cn الناقصة
+// استيراد دالة دمج الكلاسات بأمان
 import { cn } from '@/lib/utils';
 
-// 🚀 مكتبة الرياضيات
+// استيراد مكتبة الرياضيات الشهيرة LaTeX لرسم المعادلات المعقدة
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
+// ==========================================
+// 📦 تعريف خصائص المحرر (Props)
+// ==========================================
 interface ForumEditorProps {
-  content: string;
-  setContent: (content: string) => void;
-  canUploadImage: boolean;
-  placeholder?: string;
-  isCompact?: boolean; // 🚀 إضافة خاصية الحجم المدمج لشريط المحادثة
+  content: string; // المحتوى الحالي للمحرر (HTML String)
+  setContent: (content: string) => void; // دالة تحديث المحتوى عند الكتابة
+  canUploadImage: boolean; // هل يُسمح لهذا المستخدم برفع صور/ملفات؟
+  placeholder?: string; // النص التوضيحي الذي يظهر عندما يكون المحرر فارغاً
+  isCompact?: boolean; // خاصية تجعل المحرر مضغوطاً (صغيراً) ليناسب شاشات الدردشة (الرسائل)
 }
 
 export default function ForumEditor({ 
@@ -30,30 +33,43 @@ export default function ForumEditor({
   placeholder = "اكتب مقالك الاحترافي هنا...",
   isCompact = false 
 }: ForumEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null); 
   
-  const [isUploading, setIsUploading] = useState(false);
+  // ==========================================
+  // 🎛️ المراجع (Refs) للوصول للعناصر بشكل مباشر
+  // ==========================================
+  const editorRef = useRef<HTMLDivElement>(null); // مرجع منطقة الكتابة (ContentEditable)
+  const fileInputRef = useRef<HTMLInputElement>(null); // مرجع زر اختيار الصور الخفي
+  const pdfInputRef = useRef<HTMLInputElement>(null); // مرجع زر اختيار الـ PDF الخفي
+  const savedSelection = useRef<Range | null>(null); // مرجع لحفظ مكان المؤشر (Cursor) قبل فتح القوائم المنبثقة
+
+  // ==========================================
+  // ⚡ حالات المحرر (States)
+  // ==========================================
+  const [isUploading, setIsUploading] = useState(false); // حالة رفع الصور العادية
   
-  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+  // حالات معالجة الـ PDF (تقطيع الصفحات وتحويلها لصور)
+  const [isProcessingPdf, setIsProcessingPdf] = useState(false); 
   const [pdfProgressText, setPdfProgressText] = useState('');
-  
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
+  
+  // حالات العلامة المائية للـ PDF (حماية حقوق المعلم)
   const [showWatermarkModal, setShowWatermarkModal] = useState(false);
   const [applyWatermark, setApplyWatermark] = useState(false);
   const [watermarkText, setWatermarkText] = useState('منصة الرفعة الرقمية');
 
+  // حالات فتح وإغلاق القوائم العائمة (Dropdowns) في شريط الأدوات
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontSize, setShowFontSize] = useState(false);
-  const [showMathUI, setShowMathUI] = useState(false);
+  const [showMathUI, setShowMathUI] = useState(false); // واجهة إدخال المعادلات
   const [linkUrl, setLinkUrl] = useState('');
-  
   const [latexInput, setLatexInput] = useState('');
 
-  const savedSelection = useRef<Range | null>(null);
-
+  // ==========================================
+  // ⚙️ محرك قراءة الـ PDF (PDF.js)
+  // تحميل المكتبة بشكل ديناميكي (Lazy Load) فقط عندما يفتح المستخدم المحرر
+  // لتسريع تحميل الموقع بأكمله.
+  // ==========================================
   useEffect(() => {
     if (!document.getElementById('pdfjs-script')) {
       const script = document.createElement('script');
@@ -68,6 +84,11 @@ export default function ForumEditor({
     }
   }, []);
 
+  // ==========================================
+  // 🎯 التحكم في المؤشر (Cursor)
+  // مشكلة شائعة في المحررات: عند النقر على لون، يفقد المؤشر مكانه في النص!
+  // هذه الدوال تحفظ مكان المؤشر وتعيده بعد النقر على الأدوات.
+  // ==========================================
   const saveSelection = useCallback(() => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0) {
@@ -83,23 +104,32 @@ export default function ForumEditor({
     }
   }, []);
 
+  // ==========================================
+  // 🔄 مزامنة المحتوى بين Component State و DOM
+  // إذا تغير المحتوى من الخارج (مثلاً تعديل رسالة قديمة)، يتم تحديث المحرر
+  // ==========================================
   useEffect(() => {
     if (editorRef.current && content !== editorRef.current.innerHTML && document.activeElement !== editorRef.current) {
       editorRef.current.innerHTML = content || '';
     }
   }, [content]);
 
+  // دالة تعمل مع كل حرف يتم كتابته لتحديث الـ State الخارجي
   const handleInput = () => {
     if (editorRef.current) setContent(editorRef.current.innerHTML);
   };
 
+  // ==========================================
+  // 🛠️ المحرك التنفيذي لأوامر التنسيق
+  // ==========================================
   const execCommand = (command: string, value: string | undefined = undefined) => {
     editorRef.current?.focus();
     restoreSelection();
-    document.execCommand(command, false, value);
+    document.execCommand(command, false, value); // دالة المتصفح الأصلية للتنسيق
     if (editorRef.current) setContent(editorRef.current.innerHTML);
   };
 
+  // إدراج رابط تشعبي (Hyperlink)
   const addLink = () => {
     if (linkUrl) {
       execCommand('createLink', linkUrl);
@@ -108,6 +138,10 @@ export default function ForumEditor({
     }
   };
 
+  // ==========================================
+  // ☁️ رفع الصور (Cloudinary Upload)
+  // يرفع الصورة ويعيد الرابط ويدرجه داخل النص كعنصر <img> أنيق
+  // ==========================================
   const uploadImageFile = async (file: File) => {
     setIsUploading(true);
     try {
@@ -123,6 +157,7 @@ export default function ForumEditor({
       if (data.secure_url) {
         editorRef.current?.focus();
         restoreSelection(); 
+        // ستايل مضمن يضمن عدم تشوه الصورة (Responsive)
         const imgHTML = `<br/><img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; height: auto; border-radius: 12px; margin: 15px 0; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" /><br/>`;
         
         let inserted = false;
@@ -141,6 +176,10 @@ export default function ForumEditor({
     }
   };
 
+  // ==========================================
+  // 📄 محرك تفكيك ومعالجة الـ PDF (السحر الحقيقي!)
+  // يفكك صفحات الـ PDF إلى صور -> يضيف علامة مائية -> يرفعها -> يدمجها في المحرر
+  // ==========================================
   const executePdfProcessing = async () => {
     if (!pendingPdfFile) return;
     
@@ -160,10 +199,11 @@ export default function ForumEditor({
       const imageUrls: string[] = [];
       const blobs: Blob[] = [];
 
+      // الخطوة 1: تقطيع الـ PDF إلى صور Canvas
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
         setPdfProgressText(`جاري تحويل الصفحة ${pageNum}...`);
         const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 }); 
+        const viewport = page.getViewport({ scale: 2.0 }); // جودة عالية
         
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -173,14 +213,15 @@ export default function ForumEditor({
         canvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
         
+        // الخطوة 2: رسم العلامة المائية (إذا اختار المعلم ذلك)
         if (applyWatermark && watermarkText.trim() !== '') {
           ctx.save();
-          ctx.globalAlpha = 0.20; 
+          ctx.globalAlpha = 0.20; // الشفافية
           const fontSize = Math.floor(canvas.width / 12);
           ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
-          ctx.fillStyle = "#4f46e5"; 
-          ctx.translate(canvas.width / 2, canvas.height / 2);
-          ctx.rotate(-Math.PI / 4); 
+          ctx.fillStyle = "#4f46e5"; // لون أزرق نيلي
+          ctx.translate(canvas.width / 2, canvas.height / 2); // نقل نقطة الرسم للمنتصف
+          ctx.rotate(-Math.PI / 4); // تدوير النص بزاوية 45 درجة
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(watermarkText, 0, 0);
@@ -191,6 +232,7 @@ export default function ForumEditor({
         if (blob) blobs.push(blob);
       }
 
+      // الخطوة 3: رفع الصور السحابي لـ Cloudinary
       for (let i = 0; i < blobs.length; i++) {
          setPdfProgressText(`رفع الصفحة ${i + 1}...`);
          const formData = new FormData();
@@ -203,6 +245,7 @@ export default function ForumEditor({
 
       setPdfProgressText("جاري الإدراج...");
       
+      // الخطوة 4: دمج الصور المرفوعة كأكواد HTML متتابعة داخل المحرر
       let htmlToInsert = '<br/>';
       imageUrls.forEach((url, idx) => {
          htmlToInsert += `<div style="text-align: center; margin-bottom: 24px;"><img src="${url}" alt="صفحة ${idx + 1}" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" /></div>`;
@@ -218,7 +261,7 @@ export default function ForumEditor({
             inserted = document.execCommand('insertHTML', false, htmlToInsert);
           }
         } catch(e) {}
-        if (!inserted) editorRef.current.innerHTML += htmlToInsert;
+        if (!inserted) editorRef.current.innerHTML += htmlToInsert; // خطة بديلة للإدراج
         setContent(editorRef.current.innerHTML);
       }
 
@@ -231,12 +274,17 @@ export default function ForumEditor({
     }
   };
 
+  // التراجع عن رفع الـ PDF
   const handleCancelPdf = () => {
     setShowWatermarkModal(false);
     setPendingPdfFile(null);
     if (pdfInputRef.current) pdfInputRef.current.value = '';
   };
 
+  // ==========================================
+  // 📋 ميزة اللصق الذكي (Smart Paste)
+  // يسمح للمعلم بنسخ صورة (Ctrl+C) من أي مكان، ثم لصقها (Ctrl+V) داخل المحرر مباشرة!
+  // ==========================================
   const handlePaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
     saveSelection(); 
     const items = e.clipboardData?.items;
@@ -244,23 +292,26 @@ export default function ForumEditor({
 
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf('image') !== -1 && canUploadImage) {
-        e.preventDefault(); 
+        e.preventDefault(); // منع المتصفح من اللصق العشوائي 
         const file = items[i].getAsFile();
-        if (file) await uploadImageFile(file);
+        if (file) await uploadImageFile(file); // رفع الصورة أولاً ثم إدراجها
         return; 
       }
     }
   };
 
+  // إدراج جدول جاهز ومنسق
   const insertTable = () => {
     const tableHTML = `<table style="width: 100%; border-collapse: collapse; margin: 15px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;"><tbody><tr><td style="border: 1px solid #e2e8f0; padding: 12px; background: #f8fafc; font-weight: bold;">عنوان 1</td><td style="border: 1px solid #e2e8f0; padding: 12px; background: #f8fafc; font-weight: bold;">عنوان 2</td></tr><tr><td style="border: 1px solid #e2e8f0; padding: 12px;">خلية 1</td><td style="border: 1px solid #e2e8f0; padding: 12px;">خلية 2</td></tr></tbody></table><br/>`;
     execCommand('insertHTML', tableHTML);
   };
 
+  // إدراج رمز رياضي بشكل أنيق
   const insertMathSymbol = (symbol: string) => {
      execCommand('insertHTML', `&nbsp;<span style="background: #fdf2f8; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #db2777; font-weight: bold;" dir="ltr">${symbol}</span>&nbsp;`);
   };
 
+  // مكون مصغر لزر شريط الأدوات يمنع فقدان التركيز (onMouseDown)
   const ToolbarButton = ({ icon: Icon, onClick, title }: any) => (
     <button
       type="button"
@@ -273,10 +324,12 @@ export default function ForumEditor({
   );
 
   return (
-    // 🚀 تطبيق الـ Wrapper Structure الدقيق: flex-col, overflow-visible
-    // مع الاعتماد على isCompact لتحديد الحد الأدنى للارتفاع
+    // 🚀 الحاوية الرئيسية للمحرر، تتأثر بحجم المحرر (Compact للمحادثات أو كامل للمقالات)
     <div className={cn("w-full border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans flex flex-col overflow-visible", isCompact ? "min-h-[100px]" : "min-h-[300px]")} dir="rtl">
       
+      {/* ==========================================
+          🌊 نافذة العلامة المائية للـ PDF (Modal)
+          ========================================== */}
       {showWatermarkModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
            <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full animate-in zoom-in-95 duration-200 border border-slate-100">
@@ -324,15 +377,19 @@ export default function ForumEditor({
         </div>
       )}
 
-      {/* 🚀 Toolbar: shrink-0 (الارتفاع مستقل)، relative (إزالة sticky) */}
+      {/* ==========================================
+          🧰 شريط أدوات التنسيق (Toolbar)
+          ========================================== */}
       <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 relative shrink-0 z-20 rounded-t-[1.5rem]">
         
+        {/* مجموعة التنسيق الأساسي (غامق، مائل، تسطير) */}
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1">
           <ToolbarButton icon={Bold} onClick={() => execCommand('bold')} title="عريض" />
           <ToolbarButton icon={Italic} onClick={() => execCommand('italic')} title="مائل" />
           {!isCompact && <ToolbarButton icon={Underline} onClick={() => execCommand('underline')} title="تسطير" />}
         </div>
 
+        {/* مجموعة العناوين (تختفي في المحادثات المصغرة) */}
         {!isCompact && (
           <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1 hidden sm:flex">
             <ToolbarButton icon={Heading1} onClick={() => execCommand('formatBlock', 'H3')} title="عنوان كبير" />
@@ -340,17 +397,22 @@ export default function ForumEditor({
           </div>
         )}
 
+        {/* مجموعة المحاذاة (يمين، وسط، يسار) */}
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1">
           <ToolbarButton icon={AlignRight} onClick={() => execCommand('justifyRight')} title="يمين" />
           <ToolbarButton icon={AlignCenter} onClick={() => execCommand('justifyCenter')} title="وسط" />
           <ToolbarButton icon={AlignLeft} onClick={() => execCommand('justifyLeft')} title="يسار" />
         </div>
 
+        {/* مجموعة الألوان وحجم الخط */}
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1 relative">
+          
+          {/* زر اختيار اللون */}
           <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowColorPicker(!showColorPicker); setShowFontSize(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-1.5 sm:p-2 rounded-lg ${showColorPicker ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="لون النص">
             <Palette className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </button>
           
+          {/* قائمة الألوان المنبثقة */}
           {showColorPicker && (
             <div className="absolute top-full mt-2 right-0 sm:right-auto bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex flex-wrap gap-2 z-50 w-48">
               {['#000000', '#ef4444', '#f97316', '#84cc16', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef'].map(color => (
@@ -359,12 +421,14 @@ export default function ForumEditor({
             </div>
           )}
 
+          {/* زر اختيار حجم الخط */}
           {!isCompact && (
             <>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowFontSize(!showFontSize); setShowColorPicker(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-1.5 sm:p-2 rounded-lg ${showFontSize ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="حجم الخط">
                 <Type className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
               </button>
 
+              {/* قائمة الأحجام المنبثقة */}
               {showFontSize && (
                 <div className="absolute top-full mt-2 right-0 sm:right-auto bg-white border border-slate-200 shadow-xl rounded-xl p-2 flex flex-col z-50 w-32">
                   <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '2'); setShowFontSize(false); }} className="px-3 py-2 text-sm text-right hover:bg-slate-100 rounded">صغير</button>
@@ -377,11 +441,13 @@ export default function ForumEditor({
           )}
         </div>
 
+        {/* مجموعة القوائم (النقطية والرقمية) */}
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1">
           <ToolbarButton icon={List} onClick={() => execCommand('insertUnorderedList')} title="قائمة نقطية" />
           <ToolbarButton icon={ListOrdered} onClick={() => execCommand('insertOrderedList')} title="قائمة رقمية" />
         </div>
 
+        {/* مجموعة الإدراج (رابط، جدول، رياضيات) */}
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1 relative">
           <ToolbarButton icon={LinkIcon} onClick={() => { saveSelection(); setShowLinkInput(!showLinkInput); setShowMathUI(false); setShowColorPicker(false); setShowFontSize(false); }} title="إضافة رابط" />
           {!isCompact && <ToolbarButton icon={Table} onClick={insertTable} title="إدراج جدول" />}
@@ -390,6 +456,7 @@ export default function ForumEditor({
             <Calculator className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </button>
 
+          {/* مربع إدخال الرابط */}
           {showLinkInput && (
              <div className="absolute top-full mt-2 right-0 sm:right-auto bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex gap-2 z-50 w-64 sm:w-72">
                 <input type="url" placeholder="https://..." value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); addLink(); } }} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500 font-bold text-left" dir="ltr" />
@@ -397,6 +464,7 @@ export default function ForumEditor({
              </div>
           )}
 
+          {/* 🧮 المحرر الرياضي المتطور (LaTeX) */}
           {showMathUI && (
             <div className="absolute top-full mt-2 right-0 sm:-right-24 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 z-50 w-[300px] sm:w-[400px] animate-in fade-in zoom-in" dir="rtl">
               <div className="flex justify-between items-center mb-4 border-b pb-3">
@@ -407,6 +475,7 @@ export default function ForumEditor({
               </div>
 
               <div className="space-y-4">
+                {/* رموز رياضية سريعة الإدراج */}
                 <div>
                   <div className="grid grid-cols-6 gap-2" dir="ltr">
                     {['½','¾','√','∛','x²','x³','π','∞','∑','∫','≠','≈'].map(sym => (
@@ -415,6 +484,7 @@ export default function ForumEditor({
                   </div>
                 </div>
 
+                {/* حقل إدخال معادلة الـ LaTeX (مثل الكسور والجذور المعقدة) */}
                 <div className="border-t border-slate-100 pt-4">
                    <textarea
                       value={latexInput}
@@ -426,12 +496,14 @@ export default function ForumEditor({
                    />
                 </div>
 
+                {/* المعاينة الحية للمعادلة الرياضية */}
                 {latexInput && (
                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-center overflow-x-auto min-h-[60px] items-center text-white shadow-inner">
                        <Latex>{`$${latexInput}$`}</Latex>
                    </div>
                 )}
 
+                {/* إدراج المعادلة في المحرر */}
                 <button
                    type="button"
                    onMouseDown={(e) => {
@@ -451,17 +523,22 @@ export default function ForumEditor({
           )}
         </div>
 
+        {/* مسح جميع التنسيقات عن النص المحدد */}
         <ToolbarButton icon={RemoveFormatting} onClick={() => execCommand('removeFormat')} title="إزالة التنسيق" />
 
+        {/* ==========================================
+            📤 أزرار الرفع المتطورة (صور و PDF)
+            ========================================== */}
         {canUploadImage && (
           <div className="mr-auto flex items-center gap-1 sm:gap-2">
+             {/* أزرار الإدخال المخفية (Input type="file") التي يتم النقر عليها برمجياً */}
              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await uploadImageFile(file); if(fileInputRef.current) fileInputRef.current.value = ''; }} />
              
              <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={(e) => { 
                 const file = e.target.files?.[0]; 
                 if(file) {
                   setPendingPdfFile(file);
-                  setShowWatermarkModal(true);
+                  setShowWatermarkModal(true); // استدعاء نافذة العلامة المائية
                 }
              }} />
              
@@ -470,6 +547,7 @@ export default function ForumEditor({
                <span className="hidden sm:inline">صورة</span>
              </button>
 
+             {/* زر تفكيك الـ PDF للصور (يختفي في الدردشة) */}
              {!isCompact && (
                <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs sm:text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50 shrink-0" title="استخراج من PDF">
                  <Files className="w-4 h-4 text-indigo-600" />
@@ -480,8 +558,12 @@ export default function ForumEditor({
         )}
       </div>
 
-      {/* 🚀 Editor Body: flex-1, overflow-y-auto (إزالة الخانق max-height) */}
+      {/* ==========================================
+          ✍️ جسم المحرر (منطقة الكتابة الحقيقية ContentEditable)
+          ========================================== */}
       <div className="relative flex-1 flex flex-col min-h-0 bg-transparent rounded-b-[1.5rem]">
+        
+        {/* شاشة تحميل شفافة أثناء رفع الصور والملفات */}
         {(isUploading || isProcessingPdf) && (
           <div className="absolute inset-0 bg-white/70 backdrop-blur-[4px] flex items-center justify-center z-20 rounded-b-[1.5rem]">
              <div className="bg-white px-6 py-4 rounded-[2rem] shadow-xl border border-indigo-100 flex flex-col items-center justify-center gap-3 font-bold text-sm text-indigo-700 max-w-[80%] text-center">
@@ -496,7 +578,7 @@ export default function ForumEditor({
           ref={editorRef}
           contentEditable
           onInput={handleInput}
-          onPaste={handlePaste}
+          onPaste={handlePaste} // استدعاء ميزة اللصق الذكي للصور
           onBlur={saveSelection} 
           className={cn("flex-1 w-full overflow-y-auto p-4 sm:p-6 outline-none prose prose-sm sm:prose-base prose-slate max-w-none text-slate-800 leading-loose rounded-b-[1.5rem]", isCompact ? "min-h-[100px]" : "min-h-[180px] lg:min-h-[280px]")}
           data-placeholder={placeholder}
@@ -505,6 +587,10 @@ export default function ForumEditor({
         />
       </div>
 
+      {/* ==========================================
+          🎨 تعديلات بصرية خاصة (CSS Injection)
+          تخصيص الـ Placeholder والجدول والصور المدرجة داخل النص
+          ========================================== */}
       <style dangerouslySetInnerHTML={{__html: `
         [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; font-weight: 500; }
         [contenteditable]:focus:empty:before { opacity: 0.5; }
