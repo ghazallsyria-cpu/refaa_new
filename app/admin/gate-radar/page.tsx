@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, Loader2, CheckCircle2, XCircle, ScanLine, AlertTriangle, 
-  LogIn, Fingerprint, Clock, LogOut, UserCheck, UserX, Info, Camera, Crown
+  LogIn, Fingerprint, Clock, LogOut, UserCheck, UserX, Info, Camera, Crown, UsersRound
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,24 +23,26 @@ export default function SmartGateRadar() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
-  const [stats, setStats] = useState({ present: 0, late: 0, earlyExit: 0 });
+  const [stats, setStats] = useState({ present: 0, late: 0, earlyExit: 0, absent: 0 });
   
-  // أوضاع الرادار: entry (دخول صباحي) أو exit (خروج مبكر)
   const [scanMode, setScanMode] = useState<'entry' | 'exit'>('entry');
   const [isScannerActive, setIsScannerActive] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  // حالة عرض النتيجة
   const [lastScanned, setLastScanned] = useState<any>(null);
 
-  // حالة نافذة الخروج المبكر
+  // حالة الخروج المبكر
   const [showEscortModal, setShowEscortModal] = useState(false);
   const [pendingExitUser, setPendingExitUser] = useState<any>(null);
   const [escortData, setEscortData] = useState({ name: '', nationalId: '', relation: '' });
 
+  // 🚀 حالات نظام "المكنسة" (إغلاق الدوام واعتماد الغياب)
+  const [showSweeperModal, setShowSweeperModal] = useState(false);
+  const [missingStudents, setMissingStudents] = useState<any[]>([]);
+  const [isSubmittingSweeper, setIsSubmittingSweeper] = useState(false);
+
   const todayDate = format(new Date(), 'yyyy-MM-dd');
 
-  // 1️⃣ جلب الإعدادات والإحصائيات
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
@@ -59,6 +61,7 @@ export default function SmartGateRadar() {
           present: logs.filter(l => l.status === 'present' && l.scan_type === 'entry').length,
           late: logs.filter(l => l.status === 'late' && l.scan_type === 'entry').length,
           earlyExit: logs.filter(l => l.scan_type === 'exit').length,
+          absent: logs.filter(l => l.status === 'absent' && l.scan_type === 'entry').length,
         });
       }
     } catch (error) {
@@ -72,7 +75,6 @@ export default function SmartGateRadar() {
     if (['admin', 'management', 'staff'].includes(currentRole)) fetchInitialData();
   }, [currentRole]);
 
-  // 2️⃣ حساب حالة الدخول بناءً على الوقت (Logic Engine)
   const calculateEntryStatus = (settings: any) => {
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -91,66 +93,50 @@ export default function SmartGateRadar() {
     return { status: 'denied', color: 'rose', text: 'تجاوز حد الغياب - يمنع الدخول' };
   };
 
-  // 3️⃣ معالجة مسح البطاقة الموحدة (Universal ID Scan)
   const handleScan = async (result: any, error: any) => {
     if (!!result && result?.text) {
       const rawText = result.text.trim();
       setIsScannerActive(false); 
       await processUniversalId(rawText);
-      setTimeout(() => setIsScannerActive(true), 3000); // تجميد الكاميرا لـ 3 ثواني لعرض النتيجة
+      setTimeout(() => setIsScannerActive(true), 3000); 
     }
   };
 
-// 🚀 معالجة الهوية الرقمية الموحدة (مصححة التوجيه)
   const processUniversalId = async (scannedCode: string) => {
     try {
       let targetId = scannedCode;
       if (scannedCode.startsWith('raf-id:')) targetId = scannedCode.split(':')[1];
       else if (scannedCode.startsWith('raf-exam-seat:')) targetId = scannedCode.split(':')[1];
 
-      // 🚨 التصحيح الجذري هنا: جلب (الصف) من خلال (الشعبة)
       const { data: userData, error: userErr } = await supabase
         .from('users')
         .select(`
           *, 
           students(
             enrollment_status, 
-            sections(
-               name, 
-               classes(name)
-            )
+            sections(name, classes(name))
           )
         `)
         .eq('id', targetId)
         .single();
 
       if (userErr || !userData) {
-        console.error("Scan Query Error:", userErr);
         throw new Error('بطاقة غير صالحة أو غير مسجلة في النظام.');
       }
 
-      let userTitle = 'عضو هيئة تدريس/إداري';
-
-      // تجهيز بيانات الطالب للعرض
       if (userData.role === 'student') {
         const studentInfo = Array.isArray(userData.students) ? userData.students[0] : userData.students;
-        
-        // التحقق الأمني من حالة القيد
         if (studentInfo?.enrollment_status && studentInfo.enrollment_status !== 'active') {
-          throw new Error(`يُمنع الدخول! حالة الطالب: ${studentInfo.enrollment_status === 'graduated' ? 'خريج' : 'منقول'}`);
+          throw new Error(`يُمنع الدخول! حالة الطالب: ${studentInfo.enrollment_status === 'graduated' ? 'خريج' : 'منقول/موقوف'}`);
         }
-        
-        const className = studentInfo?.sections?.classes?.name || 'صف غير محدد';
-        const sectionName = studentInfo?.sections?.name || '';
-        userTitle = `${className} - ${sectionName}`;
       }
 
-      // توجيه العملية حسب زر الرادار (دخول أو خروج)
-      if (scanMode === 'entry') {
-        await executeEntryLogic(userData, userTitle);
-      } else {
-        await executeExitLogic(userData, userTitle);
-      }
+      const isStudent = userData.role === 'student';
+      const studentInfo = Array.isArray(userData.students) ? userData.students[0] : userData.students;
+      const userTitle = isStudent ? `${studentInfo?.sections?.classes?.name || 'صف غير محدد'} - ${studentInfo?.sections?.name || ''}` : 'عضو هيئة تدريس/إداري';
+
+      if (scanMode === 'entry') await executeEntryLogic(userData, userTitle);
+      else await executeExitLogic(userData, userTitle);
 
     } catch (error: any) {
       playErrorBeep();
@@ -158,7 +144,6 @@ export default function SmartGateRadar() {
     }
   };
 
-  // 🟢 تنفيذ منطق الدخول الصباحي
   const executeEntryLogic = async (userData: any, userTitle: string) => {
     const entryLogic = calculateEntryStatus(schoolSettings);
     
@@ -168,7 +153,6 @@ export default function SmartGateRadar() {
       return;
     }
 
-    // التحقق هل سجل دخوله مسبقاً اليوم؟
     const { data: existingLog } = await supabase
       .from('school_gate_attendance')
       .select('id')
@@ -183,32 +167,23 @@ export default function SmartGateRadar() {
       return;
     }
 
-    // تسجيل الدخول في قاعدة البيانات
     await supabase.from('school_gate_attendance').insert({
-      user_id: userData.id,
-      user_role: userData.role,
-      status: entryLogic.status,
-      scan_type: 'entry',
-      scanned_by: user.id
+      user_id: userData.id, user_role: userData.role, status: entryLogic.status, scan_type: 'entry', scanned_by: user.id
     });
 
     playSuccessBeep();
     setLastScanned({ type: 'success', statusData: entryLogic, user: userData, title: userTitle });
     
-    // تحديث الإحصائيات
     if(entryLogic.status === 'present') setStats(prev => ({...prev, present: prev.present + 1}));
     if(entryLogic.status === 'late') setStats(prev => ({...prev, late: prev.late + 1}));
   };
 
-  // 🔴 تنفيذ منطق الخروج المبكر
   const executeExitLogic = async (userData: any, userTitle: string) => {
     if (userData.role === 'student') {
-      // إذا كان طالباً، نوقف العملية ونظهر نافذة المستلم
       playWarningBeep();
       setPendingExitUser({ user: userData, title: userTitle });
       setShowEscortModal(true);
     } else {
-      // المعلم يخرج مباشرة
       await recordExit(userData, userTitle, null);
     }
   };
@@ -216,7 +191,6 @@ export default function SmartGateRadar() {
   const confirmStudentExit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!escortData.name || !escortData.nationalId) return;
-    
     setShowEscortModal(false);
     await recordExit(pendingExitUser.user, pendingExitUser.title, escortData);
     setEscortData({ name: '', nationalId: '', relation: '' });
@@ -225,16 +199,9 @@ export default function SmartGateRadar() {
 
   const recordExit = async (userData: any, userTitle: string, escort: any) => {
     await supabase.from('school_gate_attendance').insert({
-      user_id: userData.id,
-      user_role: userData.role,
-      scan_type: 'exit',
-      is_early_dismissal: true,
-      escort_name: escort?.name || null,
-      escort_national_id: escort?.nationalId || null,
-      escort_relation: escort?.relation || null,
-      scanned_by: user.id
+      user_id: userData.id, user_role: userData.role, scan_type: 'exit', is_early_dismissal: true,
+      escort_name: escort?.name || null, escort_national_id: escort?.nationalId || null, escort_relation: escort?.relation || null, scanned_by: user.id
     });
-
     playSuccessBeep();
     setLastScanned({ type: 'exit_success', message: 'تم تسجيل الخروج بأمان', user: userData, title: userTitle });
     setStats(prev => ({...prev, earlyExit: prev.earlyExit + 1}));
@@ -248,11 +215,73 @@ export default function SmartGateRadar() {
     }
   };
 
-  useEffect(() => {
-    if (isScannerActive && !showEscortModal && scanInputRef.current) scanInputRef.current.focus();
-  }, [isScannerActive, showEscortModal]);
+  // 🚀 دالة تجهيز وإحصاء الغياب (المكنسة)
+  const prepareSweeper = async () => {
+    setIsLoading(true);
+    try {
+      const { data: activeStudents, error: err1 } = await supabase
+        .from('users')
+        .select('id, full_name, students!inner(enrollment_status)')
+        .eq('role', 'student')
+        .eq('students.enrollment_status', 'active');
 
-  // 🎵 أصوات النظام
+      const { data: todayLogs, error: err2 } = await supabase
+        .from('school_gate_attendance')
+        .select('user_id')
+        .eq('date', todayDate)
+        .eq('user_role', 'student')
+        .eq('scan_type', 'entry');
+
+      if (err1 || err2) throw new Error('فشل في جلب البيانات');
+
+      const loggedUserIds = new Set(todayLogs?.map(log => log.user_id));
+      const missing = activeStudents?.filter(s => !loggedUserIds.has(s.id)) || [];
+
+      setMissingStudents(missing);
+      setShowSweeperModal(true);
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ أثناء فحص السجلات.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 🚀 دالة تنفيذ واعتماد الغياب آلياً في السيرفر (Bulk Insert)
+  const executeSweeper = async () => {
+    if (missingStudents.length === 0) {
+      setShowSweeperModal(false);
+      return;
+    }
+    setIsSubmittingSweeper(true);
+    try {
+      const payload = missingStudents.map(s => ({
+        user_id: s.id,
+        user_role: 'student',
+        status: 'absent',
+        scan_type: 'entry',
+        scanned_by: user?.id,
+        date: todayDate
+      }));
+
+      const { error } = await supabase.from('school_gate_attendance').insert(payload);
+      if (error) throw error;
+
+      playSuccessBeep();
+      setShowSweeperModal(false);
+      fetchInitialData(); // تحديث الإحصائيات بعد الجرد
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ أثناء اعتماد الغياب في قاعدة البيانات.');
+    } finally {
+      setIsSubmittingSweeper(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isScannerActive && !showEscortModal && !showSweeperModal && scanInputRef.current) scanInputRef.current.focus();
+  }, [isScannerActive, showEscortModal, showSweeperModal]);
+
   const playSuccessBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); };
   const playAlreadyEnteredBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(600, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.2); };
   const playWarningBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'square'; osc.frequency.setValueAtTime(400, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.15); };
@@ -280,38 +309,48 @@ export default function SmartGateRadar() {
         <div className="bg-slate-900 rounded-[2rem] p-6 shadow-2xl border border-slate-800 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
           
-          <div className="relative z-10 flex items-center gap-4">
-            <div className="p-4 bg-indigo-500/20 rounded-2xl border border-indigo-500/30">
+          <div className="relative z-10 flex items-center gap-4 w-full md:w-auto">
+            <div className="p-4 bg-indigo-500/20 rounded-2xl border border-indigo-500/30 shrink-0">
               <Fingerprint className="w-8 h-8 text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-white tracking-wide">رادار الحرم المدرسي</h1>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-wide">رادار الحرم المدرسي</h1>
               <p className="text-indigo-400/80 font-bold mt-1 text-sm">{format(new Date(), 'dd MMMM yyyy', { locale: arSA })} | نظام الهوية الموحدة</p>
             </div>
           </div>
           
-          <div className="relative z-10 flex gap-3 w-full md:w-auto">
-             <div className="bg-slate-800 px-5 py-2.5 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
-                <p className="text-[10px] text-emerald-400 font-black mb-1">حضور مبكر</p>
-                <p className="text-xl font-black text-white">{stats.present}</p>
+          <div className="relative z-10 flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+             <div className="bg-slate-800 px-4 py-2.5 rounded-2xl border border-slate-700 text-center min-w-[80px]">
+                <p className="text-[10px] text-emerald-400 font-black mb-1">مبكر</p>
+                <p className="text-lg font-black text-white">{stats.present}</p>
              </div>
-             <div className="bg-slate-800 px-5 py-2.5 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
+             <div className="bg-slate-800 px-4 py-2.5 rounded-2xl border border-slate-700 text-center min-w-[80px]">
                 <p className="text-[10px] text-amber-400 font-black mb-1">تأخير</p>
-                <p className="text-xl font-black text-white">{stats.late}</p>
+                <p className="text-lg font-black text-white">{stats.late}</p>
              </div>
-             <div className="bg-slate-800 px-5 py-2.5 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
-                <p className="text-[10px] text-rose-400 font-black mb-1">خروج مبكر</p>
-                <p className="text-xl font-black text-white">{stats.earlyExit}</p>
+             <div className="bg-slate-800 px-4 py-2.5 rounded-2xl border border-slate-700 text-center min-w-[80px]">
+                <p className="text-[10px] text-indigo-400 font-black mb-1">خروج</p>
+                <p className="text-lg font-black text-white">{stats.earlyExit}</p>
+             </div>
+             <div className="bg-rose-500/10 px-4 py-2.5 rounded-2xl border border-rose-500/30 text-center min-w-[80px]">
+                <p className="text-[10px] text-rose-400 font-black mb-1">غياب</p>
+                <p className="text-lg font-black text-white">{stats.absent}</p>
              </div>
           </div>
         </div>
 
+        {/* 🚀 زر المكنسة (إغلاق الدوام) */}
+        {['admin', 'management'].includes(currentRole) && (
+          <div className="flex justify-end">
+             <button onClick={prepareSweeper} className="bg-rose-600 hover:bg-rose-500 text-white font-black py-3 px-6 rounded-2xl shadow-lg flex items-center gap-2 transition-all active:scale-95 border border-rose-400/50">
+               <UsersRound className="w-5 h-5"/> إغلاق البوابة واعتماد الغياب
+             </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* 🔴 نظام المسح والكاميرا */}
           <div className="bg-slate-900 rounded-[2rem] shadow-xl border border-slate-800 p-6 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
-            
-            {/* أزرار التبديل بين وضع الدخول والخروج */}
             <div className="flex bg-slate-800 p-1.5 rounded-2xl w-full max-w-sm mb-6 relative z-10 border border-slate-700">
                <button onClick={() => { setScanMode('entry'); setLastScanned(null); }} className={cn("flex-1 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all", scanMode === 'entry' ? "bg-emerald-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white")}>
                  <LogIn className="w-4 h-4" /> وضع الدخول
@@ -332,13 +371,13 @@ export default function SmartGateRadar() {
             ) : (
               <div className="w-full flex flex-col items-center relative z-10 flex-1">
                 <div className="w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-4 border-slate-800 shadow-2xl relative mb-4">
-<QrReader 
-  onResult={handleScan} 
-  constraints={{ facingMode: 'environment' }} 
-  videoContainerStyle={{ width: '100%', height: '100%', paddingTop: 0, margin: 0 }} 
-  videoStyle={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
-/>                   
-                   {/* إطار التوجيه يتغير لونه حسب الوضع */}
+                   {/* 🚀 إعدادات الكاميرا المصححة تماماً للظهور */}
+                   <QrReader 
+                      onResult={handleScan} 
+                      constraints={{ facingMode: 'environment' }} 
+                      videoContainerStyle={{ width: '100%', height: '100%', paddingTop: 0, margin: 0 }} 
+                      videoStyle={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
+                    />
                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
                       <div className={cn("w-full h-full border-2 rounded-2xl relative", scanMode === 'entry' ? "border-emerald-500/50" : "border-rose-500/50")}>
                          <div className={cn("absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 rounded-tl-xl -mt-1 -ml-1", scanMode === 'entry' ? "border-emerald-500" : "border-rose-500")}></div>
@@ -350,7 +389,7 @@ export default function SmartGateRadar() {
                    </div>
                 </div>
 
-                <input ref={scanInputRef} type="text" onKeyDown={handleManualScan} onBlur={() => { if(isScannerActive && !showEscortModal) scanInputRef.current?.focus(); }} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-center font-black text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" placeholder="... مسدس الباركود يعمل هنا ..." autoFocus />
+                <input ref={scanInputRef} type="text" onKeyDown={handleManualScan} onBlur={() => { if(isScannerActive && !showEscortModal && !showSweeperModal) scanInputRef.current?.focus(); }} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-center font-black text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" placeholder="... مسدس الباركود يعمل هنا ..." autoFocus />
                 
                 <button onClick={() => setIsScannerActive(false)} className="mt-4 text-slate-400 hover:text-white text-sm font-bold flex items-center gap-1">
                   <XCircle className="w-4 h-4"/> إيقاف الكاميرا
@@ -359,7 +398,6 @@ export default function SmartGateRadar() {
             )}
           </div>
 
-          {/* 🧑‍🎓 شاشة العرض والنتائج (Dynamic Screen) */}
           <div className="bg-slate-900 rounded-[2rem] shadow-xl border border-slate-800 p-6 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
             {lastScanned ? (
               <AnimatePresence mode="wait">
@@ -426,7 +464,7 @@ export default function SmartGateRadar() {
         </div>
       </div>
 
-      {/* 🛑 نافذة إجبارية لبيانات المستلم (في الخروج المبكر للطلاب) */}
+      {/* 🛑 نافذة إجبارية لبيانات المستلم (في الخروج المبكر) */}
       <AnimatePresence>
         {showEscortModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -458,7 +496,6 @@ export default function SmartGateRadar() {
                     <option value="other">أخرى</option>
                   </select>
                 </div>
-                
                 <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
                   <button type="button" onClick={() => {setShowEscortModal(false); setPendingExitUser(null); setIsScannerActive(true);}} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black rounded-xl transition-colors">إلغاء</button>
                   <button type="submit" className="flex-[2] py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl shadow-lg transition-colors flex justify-center items-center gap-2">
@@ -466,6 +503,33 @@ export default function SmartGateRadar() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🧹 نافذة تأكيد عملية המكنسة (Sweeper Modal) */}
+      <AnimatePresence>
+        {showSweeperModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-slate-900 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl border border-slate-700">
+              <div className="text-center mb-6 border-b border-slate-800 pb-6">
+                <div className="w-16 h-16 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-rose-500/50"><UsersRound className="w-8 h-8 text-rose-500"/></div>
+                <h3 className="text-2xl font-black text-white">إغلاق البوابة</h3>
+                <p className="text-sm font-bold text-slate-400 mt-2">تسجيل الغياب التلقائي لمن لم يحضر</p>
+              </div>
+              
+              <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 mb-6 text-center">
+                 <p className="text-sm text-slate-300 font-bold">يوجد حالياً <span className="text-2xl text-rose-400 font-black mx-2">{missingStudents.length}</span> طالب نشط لم يسجلوا دخولهم اليوم.</p>
+                 <p className="text-xs text-amber-500 font-bold mt-2">هل أنت متأكد من رغبتك في تسجيلهم كغائبين في قاعدة البيانات دفعة واحدة؟</p>
+              </div>
+
+              <div className="flex gap-3">
+                <button type="button" disabled={isSubmittingSweeper} onClick={() => setShowSweeperModal(false)} className="flex-1 py-3.5 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-xl transition-colors disabled:opacity-50">تراجع</button>
+                <button type="button" disabled={isSubmittingSweeper || missingStudents.length === 0} onClick={executeSweeper} className="flex-[2] py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl shadow-lg transition-colors flex justify-center items-center gap-2 disabled:opacity-50">
+                  {isSubmittingSweeper ? <Loader2 className="w-5 h-5 animate-spin"/> : <CheckCircle2 className="w-5 h-5"/>} اعتماد الغياب للكل
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
