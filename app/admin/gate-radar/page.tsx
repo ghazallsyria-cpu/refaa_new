@@ -167,9 +167,16 @@ export default function SmartGateRadar() {
       return;
     }
 
-    await supabase.from('school_gate_attendance').insert({
-      user_id: userData.id, user_role: userData.role, status: entryLogic.status, scan_type: 'entry', scanned_by: user.id
-    });
+// في دالة executeEntryLogic
+await supabase.from('school_gate_attendance').insert({
+  user_id: userData.id,
+  student_id: userData.id, // 👈 أضفنا هذا السطر للتوافق
+  user_role: userData.role,
+  status: entryLogic.status,
+  scan_type: 'entry',
+  scanned_by: user.id,
+  date: todayDate // 👈 نحدد التاريخ يدوياً للتأكيد
+});
 
     playSuccessBeep();
     setLastScanned({ type: 'success', statusData: entryLogic, user: userData, title: userTitle });
@@ -198,10 +205,19 @@ export default function SmartGateRadar() {
   };
 
   const recordExit = async (userData: any, userTitle: string, escort: any) => {
-    await supabase.from('school_gate_attendance').insert({
-      user_id: userData.id, user_role: userData.role, scan_type: 'exit', is_early_dismissal: true,
-      escort_name: escort?.name || null, escort_national_id: escort?.nationalId || null, escort_relation: escort?.relation || null, scanned_by: user.id
-    });
+// وفي دالة recordExit
+await supabase.from('school_gate_attendance').insert({
+  user_id: userData.id,
+  student_id: userData.id, // 👈 أضفنا هذا السطر للتوافق
+  user_role: userData.role,
+  scan_type: 'exit',
+  is_early_dismissal: true,
+  escort_name: escort?.name || null,
+  escort_national_id: escort?.nationalId || null,
+  escort_relation: escort?.relation || null,
+  scanned_by: user.id,
+  date: todayDate // 👈 نحدد التاريخ يدوياً للتأكيد
+});
     playSuccessBeep();
     setLastScanned({ type: 'exit_success', message: 'تم تسجيل الخروج بأمان', user: userData, title: userTitle });
     setStats(prev => ({...prev, earlyExit: prev.earlyExit + 1}));
