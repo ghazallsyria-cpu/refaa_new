@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, Loader2, CheckCircle2, XCircle, ScanLine, AlertTriangle, 
-  LogIn, Fingerprint, Clock, LogOut, UserCheck, UserX, Info
+  LogIn, Fingerprint, Clock, LogOut, UserCheck, UserX, Info, Camera, Crown
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
