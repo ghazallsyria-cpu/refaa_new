@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { QrReader } from 'react-qr-reader'; // 🚀 ترقية المحرك
+import { QrReader } from 'react-qr-reader'; 
 
 export default function InvigilatorRadar() {
   const router = useRouter();
@@ -27,7 +27,10 @@ export default function InvigilatorRadar() {
   const [students, setStudents] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  const [isScannerActive, setIsScannerActive] = useState(false);
+  // 🚀 حالات التحكم بالمسح
+  const [isScanMode, setIsScanMode] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
@@ -157,54 +160,65 @@ export default function InvigilatorRadar() {
     }
   };
 
-  // 🚀 معالج الكاميرا للمراقب
-  const handleScan = async (result: any, error: any) => {
-    if (!!result) {
-      let decodedText = result?.text;
-      if (!decodedText) return;
-      
-      let seatNumber = decodedText.trim();
-      if (decodedText.includes('raf-exam-seat:')) {
-        seatNumber = decodedText.split(':')[1];
-      } else if (decodedText.includes('/')) {
-         const parts = decodedText.split('/');
-         seatNumber = parts[parts.length - 1];
-      }
+  // 🚀 المحرك المركزي الجديد لمعالجة الأكواد
+  const processScannedCode = (scannedCode: string) => {
+    if (!scannedCode) return;
+    
+    let targetStudent = null;
 
-      setIsScannerActive(false); 
-      handleScannedSeat(seatNumber);
-      setTimeout(() => setIsScannerActive(true), 2000);
+    if (scannedCode.startsWith('raf-id:')) {
+      const uuid = scannedCode.split(':')[1];
+      targetStudent = students.find(s => s.student_id === uuid);
+    } 
+    else if (scannedCode.startsWith('raf-exam-seat:')) {
+      const seatNumber = scannedCode.split(':')[1];
+      targetStudent = students.find(s => String(s.seat_number) === seatNumber);
+    } 
+    else {
+      targetStudent = students.find(s => String(s.seat_number) === scannedCode);
+    }
+
+    if (targetStudent) {
+      if (targetStudent.status !== 'present') {
+        playSuccessBeep();
+        markAttendance(targetStudent.student_id, 'present');
+      } else {
+        playAlreadyEnteredBeep();
+      }
+    } else {
+      playErrorBeep();
+      alert(`عذراً، هذا الطالب لا ينتمي للجنة (${myCommittee?.name})! يرجى توجيهه للجنة الصحيحة.`);
     }
   };
 
-  const handleScannedSeat = (seatNumber: string) => {
-    setStudents(prevStudents => {
-      const student = prevStudents.find(s => String(s.seat_number) === String(seatNumber));
-      if (student) {
-        if (student.status !== 'present') {
-          playSuccessBeep();
-          markAttendance(student.student_id, 'present');
-        }
-      } else {
-        playErrorBeep();
-        alert(`🚨 تحذير: رقم الجلوس ${seatNumber} لا ينتمي لهذه اللجنة!`);
-      }
-      return prevStudents;
-    });
+  // معالج مسدس الباركود أو إدخال الكيبورد
+  const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const scannedCode = e.currentTarget.value.trim();
+      e.currentTarget.value = ''; 
+      processScannedCode(scannedCode);
+    }
   };
 
-  const playSuccessBeep = () => {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    osc.type = 'sine'; osc.frequency.setValueAtTime(800, ctx.currentTime);
-    osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1);
+  // 🚀 معالج الكاميرا (QrReader)
+  const handleCameraScan = (result: any, error: any) => {
+    if (!!result && result?.text) {
+      const rawText = result.text.trim();
+      setIsCameraActive(false); 
+      processScannedCode(rawText);
+      setTimeout(() => setIsCameraActive(true), 2500); 
+    }
   };
-  const playErrorBeep = () => {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime);
-    osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.3);
-  };
+
+  useEffect(() => {
+    if (isScanMode && !isCameraActive && scanInputRef.current) {
+      scanInputRef.current.focus();
+    }
+  }, [isScanMode, isCameraActive]);
+
+  const playSuccessBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); };
+  const playAlreadyEnteredBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(600, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.2); };
+  const playErrorBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4); };
 
   if (!['teacher', 'admin', 'management'].includes(currentRole)) {
     return (
@@ -282,18 +296,27 @@ export default function InvigilatorRadar() {
 
         {myCommittee && (
           <>
+            {/* 🚀 قسم الكاميرا الجديد للمراقب */}
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 text-center border-b border-slate-100 bg-slate-50 flex flex-col items-center justify-center">
                  {!isScannerActive ? (
                     <button 
-                       onClick={() => setIsScannerActive(true)}
+                       onClick={() => {
+                         setIsScanMode(true);
+                         setIsScannerActive(true);
+                         setIsCameraActive(true);
+                       }}
                        className="bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 px-8 rounded-2xl shadow-lg shadow-emerald-500/30 flex items-center gap-3 transition-all active:scale-95"
                     >
                        <Camera className="w-6 h-6" /> تشغيل الكاميرا والمسح السريع
                     </button>
                  ) : (
                     <button 
-                       onClick={() => setIsScannerActive(false)}
+                       onClick={() => {
+                         setIsScanMode(false);
+                         setIsScannerActive(false);
+                         setIsCameraActive(false);
+                       }}
                        className="bg-rose-100 hover:bg-rose-200 text-rose-600 font-black py-3 px-6 rounded-2xl shadow-sm flex items-center gap-3 transition-all"
                     >
                        <XCircle className="w-5 h-5" /> إيقاف الكاميرا
@@ -305,23 +328,46 @@ export default function InvigilatorRadar() {
               <AnimatePresence>
                 {isScannerActive && (
                   <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden bg-slate-900 relative">
-                     {/* 🚀 القارئ المعتمد للمراقب */}
-                     <div className="w-full max-w-md mx-auto overflow-hidden rounded-none sm:rounded-2xl my-0 sm:my-6 shadow-2xl relative aspect-square bg-black">
-                        <QrReader
-                          onResult={handleScan}
-                          constraints={{ facingMode: 'environment' }}
-                          containerStyle={{ width: '100%', height: '100%' }}
-                          videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
-                           <div className="w-full h-full border-2 border-emerald-500/50 rounded-2xl relative">
-                              <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-500 rounded-tl-xl -mt-1 -ml-1"></div>
-                              <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-500 rounded-tr-xl -mt-1 -mr-1"></div>
-                              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-500 rounded-bl-xl -mb-1 -ml-1"></div>
-                              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-500 rounded-br-xl -mb-1 -mr-1"></div>
-                              <div className="absolute w-full h-0.5 bg-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
+                     <div className="w-full max-w-sm mx-auto overflow-hidden rounded-none sm:rounded-2xl my-0 sm:my-6 shadow-2xl relative aspect-square bg-black border-4 border-emerald-500">
+                        {isCameraActive ? (
+                           <>
+                              {/* 🚀 إجبار الكاميرا على ملء المربع عبر CSS */}
+                              <div className="absolute inset-0 z-0 qr-force-wrapper">
+                                 <QrReader 
+                                    onResult={handleCameraScan} 
+                                    constraints={{ facingMode: 'environment' }} 
+                                    videoContainerStyle={{ width: '100%', height: '100%', paddingTop: 0, margin: 0 }} 
+                                    videoStyle={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
+                                 />
+                              </div>
+                              <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center p-8">
+                                 <div className="w-full h-full border-2 border-emerald-400/50 rounded-2xl relative">
+                                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-xl -mt-1 -ml-1"></div>
+                                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-xl -mt-1 -mr-1"></div>
+                                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-xl -mb-1 -ml-1"></div>
+                                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-xl -mb-1 -mr-1"></div>
+                                    <div className="absolute w-full h-0.5 bg-emerald-300/80 shadow-[0_0_10px_rgba(52,211,153,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
+                                 </div>
+                              </div>
+                           </>
+                        ) : (
+                           <div className="w-full h-full flex flex-col items-center justify-center text-emerald-200/50">
+                              <ScanLine className="w-16 h-16 mb-4" />
+                              <p className="font-black">جاري الاستعداد للبطاقة التالية...</p>
                            </div>
-                        </div>
+                        )}
+                     </div>
+
+                     {/* حقل الإدخال للي يستخدمون مسدس بدلا من الكاميرا */}
+                     <div className="max-w-xs mx-auto pb-6 px-4">
+                        <input 
+                           ref={scanInputRef}
+                           type="text" 
+                           onKeyDown={handleBarcodeScan}
+                           onBlur={() => { if(isScanMode && !isCameraActive) scanInputRef.current?.focus(); }} 
+                           className="w-full bg-white/10 border-2 border-white/40 rounded-2xl p-3 text-center font-black text-sm text-white outline-none placeholder:text-white/30 focus:border-white transition-all"
+                           placeholder="أو امسح بمسدس خارجي..."
+                        />
                      </div>
                   </motion.div>
                 )}
@@ -410,16 +456,13 @@ export default function InvigilatorRadar() {
         )}
       </div>
       
+      {/* 🚀 CSS مخصص لإجبار الكاميرا على ملء الشاشة */}
       <style dangerouslySetInnerHTML={{__html:`
-        @keyframes scan {
-          0% { top: 0%; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { top: 100%; opacity: 0; }
-        }
-        .animate-scan {
-          animation: scan 2s linear infinite;
-        }
+        @keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } 
+        .animate-scan { animation: scan 2s linear infinite; }
+        
+        .qr-force-wrapper section { padding-top: 0 !important; height: 100% !important; display: flex; align-items: center; justify-content: center; }
+        .qr-force-wrapper video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
       `}}/>
     </div>
   );
