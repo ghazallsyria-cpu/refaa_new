@@ -468,15 +468,29 @@ useEffect(() => {
           </>
         )}
       </div>
-      
       {/* 🚀 CSS مخصص لإجبار الكاميرا على ملء الشاشة */}
       <style dangerouslySetInnerHTML={{__html:`
         @keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } 
         .animate-scan { animation: scan 2s linear infinite; }
         
-        .qr-force-wrapper section { padding-top: 0 !important; height: 100% !important; display: flex; align-items: center; justify-content: center; }
-        .qr-force-wrapper video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
+        /* الاستهداف الشامل للحاوية الداخلية للمكتبة */
+        .qr-force-wrapper > div, .qr-force-wrapper section { 
+            padding-top: 0 !important; 
+            height: 100% !important; 
+            position: absolute !important;
+            top: 0; left: 0; right: 0; bottom: 0;
+        }
+        .qr-force-wrapper video { 
+            object-fit: cover !important; 
+            width: 100% !important; 
+            height: 100% !important; 
+            position: absolute !important;
+            top: 0 !important; 
+            left: 0 !important; 
+        }
       `}}/>
+
+      
     </div>
   );
 }
