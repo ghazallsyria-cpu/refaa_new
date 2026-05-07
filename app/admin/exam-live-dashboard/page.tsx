@@ -118,7 +118,7 @@ export default function ExamLiveDashboard() {
     return () => clearInterval(interval);
   }, [selectedTimetableId]);
 
-  // 3️⃣ التدخل اليدوي للمدير (تسجيل طالب نسي بطاقته)
+  // 3️⃣ التدخل اليدوي للمدير
   const handleManualAttendance = async (studentId: string, committeeId: string, newStatus: 'present' | 'absent') => {
     if (!selectedTimetableId || !user?.id) return;
     setIsRefreshing(true);
@@ -134,7 +134,7 @@ export default function ExamLiveDashboard() {
         }, { onConflict: 'student_id, timetable_id' });
 
       if (error) throw error;
-      await fetchLiveStats(); // تحديث اللوحة فوراً
+      await fetchLiveStats(); 
     } catch (error) {
       console.error('Error updating manual attendance:', error);
       alert('حدث خطأ أثناء التحديث اليدوي.');
@@ -142,7 +142,6 @@ export default function ExamLiveDashboard() {
     }
   };
 
-  // 🛡️ حماية الغرفة المركزية
   if (currentRole !== 'admin' && currentRole !== 'management') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4 font-cairo" dir="rtl">
@@ -156,7 +155,6 @@ export default function ExamLiveDashboard() {
     );
   }
 
-  // الحسابات والإحصائيات
   const totalExpected = allocations.length;
   const totalPresent = attendance.filter(a => a.status === 'present').length;
   const totalAbsent = attendance.filter(a => a.status === 'absent').length;
@@ -164,14 +162,23 @@ export default function ExamLiveDashboard() {
   
   const attendancePercentage = totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
 
-  // تجهيز بيانات البحث اليدوي
+  // 🚀 تجهيز بيانات البحث اليدوي (تم التحديث لدعم مسدس الباركود والهوية الموحدة raf-id)
   const searchResults = allocations.filter(a => {
     if (!searchTerm) return false;
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
+
+    // استخراج الـ UUID إذا تم استخدام مسدس الباركود لمسح البطاقة
+    let searchId = term;
+    if (term.startsWith('raf-id:')) searchId = term.split(':')[1];
+    else if (term.startsWith('raf-exam-seat:')) searchId = term.split(':')[1];
+
     const studentName = String(a.students?.users?.full_name || '').toLowerCase();
     const seatNum = String(a.seat_number || '');
-    return studentName.includes(term) || seatNum.includes(term);
-  }).slice(0, 5); // عرض أول 5 نتائج فقط لسرعة الأداء
+    const stdId = String(a.student_id || '').toLowerCase();
+
+    // البحث يتطابق الآن مع: الاسم، أو رقم الجلوس، أو الهوية الرقمية الممسوحة
+    return studentName.includes(term) || seatNum.includes(term) || stdId === searchId;
+  }).slice(0, 5); 
 
   return (
     <div className="min-h-screen bg-[#0a0d16] p-4 sm:p-6 md:p-8 font-cairo text-slate-200 selection:bg-indigo-500/30" dir="rtl">
@@ -237,7 +244,6 @@ export default function ExamLiveDashboard() {
             {/* 📊 القسم الأيمن: الإحصائيات الحية والتحكم اليدوي */}
             <div className="space-y-6">
               
-              {/* شريط الإحصائيات (Progress) */}
               <div className="bg-slate-800/50 backdrop-blur-xl rounded-[2rem] p-6 border border-slate-700/50 shadow-xl">
                 <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2"><ShieldAlert className="w-5 h-5 text-indigo-400"/> ملخص الحضور العام</h3>
                 
@@ -273,14 +279,14 @@ export default function ExamLiveDashboard() {
               <div className="bg-indigo-900/20 backdrop-blur-xl rounded-[2rem] p-6 border border-indigo-500/30 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                 <h3 className="text-lg font-black text-white mb-2 flex items-center gap-2 relative z-10"><Search className="w-5 h-5 text-indigo-400"/> التدخل اليدوي السريع</h3>
-                <p className="text-xs font-bold text-indigo-200/70 mb-5 relative z-10">استخدم هذا المربع لتسجيل حضور طالب نسي بطاقته أو واجه المراقب مشكلة في مسح كوده.</p>
+                <p className="text-xs font-bold text-indigo-200/70 mb-5 relative z-10">اكتب الاسم أو مرر البطاقة باستخدام مسدس الباركود للبحث السريع.</p>
                 
                 <div className="relative z-10 mb-4">
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="رقم الجلوس أو اسم الطالب..."
+                    placeholder="امسح الهوية أو ابحث بالاسم..."
                     className="w-full bg-slate-900/80 border border-indigo-500/30 rounded-xl py-3 px-4 text-sm font-bold text-white focus:outline-none focus:border-indigo-400 transition-colors shadow-inner placeholder:text-slate-500"
                   />
                 </div>
@@ -325,19 +331,17 @@ export default function ExamLiveDashboard() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {committees.map(committee => {
-                   // تجميع طلاب وحضور هذه اللجنة
                    const commAllocs = allocations.filter(a => a.committee_id === committee.id);
                    const commCapacity = commAllocs.length;
-                   if (commCapacity === 0) return null; // إخفاء اللجان الفارغة من هذا الاختبار
+                   if (commCapacity === 0) return null; 
 
                    const commAtts = attendance.filter(a => a.committee_id === committee.id);
                    const commPresent = commAtts.filter(a => a.status === 'present').length;
                    const commAbsent = commAtts.filter(a => a.status === 'absent').length;
                    const commPending = commCapacity - commPresent - commAbsent;
 
-                   // تحديد لون بطاقة اللجنة بناءً على الحالة (أخضر إذا اكتملت، أحمر إذا تأخرت، أزرق طبيعي)
                    const isCompleted = commPending === 0;
-                   const isCritical = commPending > 0 && commPresent === 0 && attendance.length > 10; // لم يبدأ الرصد أبداً بينما اللجان الأخرى بدأت
+                   const isCritical = commPending > 0 && commPresent === 0 && attendance.length > 10; 
 
                    return (
                      <div key={committee.id} className={cn(
@@ -346,7 +350,6 @@ export default function ExamLiveDashboard() {
                        isCritical ? "bg-rose-900/10 border-rose-500/30" :
                        "bg-slate-800/40 border-slate-700/50"
                      )}>
-                       {/* مؤشر النبض للجان المكتملة */}
                        {isCompleted && <div className="absolute top-4 left-4 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,1)] animate-pulse"></div>}
 
                        <h3 className="text-lg font-black text-white mb-4">{committee.name}</h3>
