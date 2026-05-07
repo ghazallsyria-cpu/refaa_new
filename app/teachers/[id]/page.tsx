@@ -16,7 +16,10 @@ import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
-/* ─── ألوان الملاحظات (حائط الذكريات) ─── */
+// ==========================================
+// 🎨 ألوان وتنسيقات حائط الذكريات (Sticky Notes Theme)
+// مصفوفة من الألوان الدافئة والورقية لإعطاء طابع حقيقي للرسائل المتروكة للمعلم
+// ==========================================
 const NOTE_STYLES = [
   { bg: '#fef9c3', text: '#713f12', quote: '#ca8a04', meta: '#92400e', tape: '#fde047', avatarBg: '#fde68a', avatarText: '#92400e' },
   { bg: '#fce7f3', text: '#831843', quote: '#db2777', meta: '#9d174d', pin: '#f43f5e', avatarBg: '#fbcfe8', avatarText: '#9d174d' },
@@ -28,13 +31,17 @@ const NOTE_STYLES = [
   { bg: '#fff1f2', text: '#881337', quote: '#e11d48', meta: '#9f1239', pin: '#fb7185', avatarBg: '#fecdd3', avatarText: '#9f1239' },
 ];
 
+// دالة لتوليد ميلان عشوائي ثابت (Pseudo-random rotation) للورقة بناءً على معرفها (ID)
 const getRotation = (id: string) => {
   const chars = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const rotations = [-3, -2, -1.5, -1, 0.5, 1, 1.8, 2.5, 3];
   return rotations[chars % rotations.length];
 };
 
-/* ─── الثيمات المخصصة لملف المعلم ─── */
+// ==========================================
+// 🎭 الثيمات المخصصة لملف المعلم (Profile Themes)
+// تسمح للمعلم بتخصيص شكل ملفه ليعكس شخصيته
+// ==========================================
 const THEMES: Record<string, { bg: string, text: string, border: string, name: string, glow: string }> = {
   royal:   { bg: 'from-indigo-600 to-blue-700',   text: 'text-indigo-400',  border: 'border-indigo-500/30',  name: 'أزرق ملكي', glow: 'shadow-indigo-500/20' },
   emerald: { bg: 'from-emerald-500 to-teal-700',  text: 'text-emerald-400', border: 'border-emerald-500/30', name: 'أخضر زمردي', glow: 'shadow-emerald-500/20' },
@@ -43,13 +50,19 @@ const THEMES: Record<string, { bg: string, text: string, border: string, name: s
   slate:   { bg: 'from-slate-700 to-slate-900',   text: 'text-slate-300',   border: 'border-slate-500/30',   name: 'رمادي داكن', glow: 'shadow-slate-500/20' },
 };
 
+// ==========================================
+// 🛡️ المكون الرئيسي: الملف الشخصي للمعلم
+// ==========================================
 export default function TeacherProfilePage() {
   const { id } = useParams();
   const teacherId = Array.isArray(id) ? id[0] : id as string;
   const router = useRouter();
+  
+  // سياق المصادقة والنظام
   const { user, isChecking } = useAuth();
   const { loading, fetchTeacherProfile, updateTeacherProfileSettings } = useProfileSystem();
 
+  // 🗃️ إدارة حالة البيانات (State Management)
   const [data, setData]               = useState<any>(null);
   const [departmentName, setDepartmentName] = useState<string>('عام'); // 🚀 حالة لحفظ اسم القسم الأصلي من القاعدة
   const [isEditing, setIsEditing]     = useState(false);
@@ -58,12 +71,16 @@ export default function TeacherProfilePage() {
     theme: 'royal', bio: '', achievements: [''], youtube: '', linkedin: '',
   });
 
-  /* ─── حائط الذكريات ─── */
+  // 🗃️ إدارة حالة الذكريات (Memories Wall State)
   const [memories, setMemories]                   = useState<any[]>([]);
   const [newMemory, setNewMemory]                 = useState('');
   const [isSubmittingMemory, setIsSubmittingMemory] = useState(false);
   const [deletingId, setDeletingId]               = useState<string | null>(null);
 
+  // ==========================================
+  // 📥 جلب الذكريات (Fetch Memories)
+  // يتم استدعاؤها مباشرة من Supabase لضمان التحديث السريع
+  // ==========================================
   const fetchMemories = useCallback(async () => {
     if (!teacherId) return;
     const { data: rows, error } = await supabase
@@ -75,6 +92,9 @@ export default function TeacherProfilePage() {
     if (rows) setMemories(rows);
   }, [teacherId]);
 
+  // ==========================================
+  // 🚀 التهيئة الأولية للملف (Mount Initialization)
+  // ==========================================
   useEffect(() => {
     if (!teacherId || isChecking) return;
 
@@ -88,6 +108,7 @@ export default function TeacherProfilePage() {
         if (deptData) setDepartmentName(deptData.name);
       }
 
+      // تعبئة إعدادات الملف الشخصي إذا كانت محفوظة مسبقاً
       if (res?.profile_settings) {
         setProfileSettings({
           theme:        res.profile_settings.theme        || 'royal',
@@ -103,6 +124,9 @@ export default function TeacherProfilePage() {
     loadAll();
   }, [teacherId, fetchTeacherProfile, fetchMemories, isChecking]);
 
+  // ==========================================
+  // ✍️ معالجات الذكريات (Memory Handlers)
+  // ==========================================
   const handleAddMemory = async () => {
     if (!newMemory.trim() || !user || !teacherId) return;
     setIsSubmittingMemory(true);
@@ -125,8 +149,12 @@ export default function TeacherProfilePage() {
     setDeletingId(null);
   };
 
+  // ==========================================
+  // 💾 حفظ إعدادات الملف الشخصي (Save Profile Handlers)
+  // ==========================================
   const handleSaveProfile = async () => {
     setIsSaving(true);
+    // تنظيف الإنجازات الفارغة قبل الحفظ (Clean Architecture)
     const cleaned = { ...profileSettings, achievements: profileSettings.achievements.filter(a => a.trim()) };
     const success = await updateTeacherProfileSettings(teacherId, cleaned);
     if (success) {
@@ -146,6 +174,9 @@ export default function TeacherProfilePage() {
     setProfileSettings({ ...profileSettings, achievements: arr });
   };
 
+  // ==========================================
+  // 🛡️ شاشات التحميل والحماية (Loading States)
+  // ==========================================
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
@@ -169,25 +200,33 @@ export default function TeacherProfilePage() {
     </div>
   );
 
+  // 🛡️ الصلاحيات والمتغيرات السريعة
   const isHOD        = data.department_heads?.length > 0;
   const customTitles = data.custom_titles || [];
   const activeTheme  = THEMES[profileSettings.theme] || THEMES['royal'];
   const canEdit      = user?.id === data.id || user?.role === 'admin' || user?.role === 'management';
-  const isTeacher    = user?.id === teacherId;
+  const isTeacher    = user?.id === teacherId; // لمعرفة هل الزائر هو صاحب الملف نفسه
 
+  // ==========================================
+  // 🎨 الواجهة المرئية للملف الشخصي (Render)
+  // ==========================================
   return (
     <div className="min-h-screen bg-[#090b14] pb-32 font-cairo text-slate-200 relative overflow-x-hidden pt-6" dir="rtl">
       
+      {/* 🌌 الإضاءة الخلفية المحيطية */}
       <div className="fixed top-1/4 left-[-10%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 right-[-10%] w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-8">
 
+        {/* 🔙 شريط التنقل العلوي */}
         <div className="flex justify-between items-center">
           <button onClick={() => router.back()}
             className="flex items-center gap-2 text-slate-400 hover:text-white font-black transition-colors glass-panel px-5 py-2.5 rounded-2xl shadow-inner border border-white/5 hover:border-indigo-500/30 active:scale-95">
             <ChevronLeft className="w-5 h-5" /> العودة
           </button>
+          
+          {/* زر التخصيص يظهر فقط لصاحب الحساب أو الإدارة */}
           {canEdit && !isEditing && (
             <button onClick={() => setIsEditing(true)}
               className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-black px-6 py-3 rounded-2xl shadow-[0_0_20px_rgba(79,70,229,0.4)] hover:opacity-90 transition-all active:scale-95 border border-indigo-400/50">
@@ -196,19 +235,25 @@ export default function TeacherProfilePage() {
           )}
         </div>
 
+        {/* 👑 الهيدر الشخصي (Hero Profile Section) يتلون حسب الثيم المختار */}
         <motion.div layout className={`relative rounded-[2.5rem] sm:rounded-[3.5rem] p-1 sm:p-1.5 shadow-2xl overflow-hidden bg-gradient-to-r ${activeTheme.bg} ${activeTheme.glow}`}>
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay" />
           <div className="absolute -top-32 -left-32 w-80 h-80 bg-white/10 rounded-full blur-[100px]" />
           
           <div className="bg-[#02040a]/90 backdrop-blur-2xl rounded-[2.2rem] sm:rounded-[3.2rem] p-8 sm:p-12 lg:p-16 relative z-10 flex flex-col md:flex-row items-center md:items-center gap-8 lg:gap-12 text-center md:text-right border border-white/5">
+            
+            {/* الصورة الشخصية */}
             <div className="relative shrink-0">
               <div className={`h-36 w-36 sm:h-48 sm:w-48 rounded-[2.5rem] sm:rounded-[3rem] flex items-center justify-center text-6xl sm:text-7xl font-black shadow-[0_0_40px_rgba(0,0,0,0.8)] border-4 bg-[#0f1423] ${activeTheme.text} ${activeTheme.border}`}>
                 {data.users?.avatar_url
                   ? <img src={data.users.avatar_url} className="w-full h-full rounded-[2.2rem] sm:rounded-[2.7rem] object-cover" alt="avatar" />
                   : <span className="drop-shadow-md">{data.users?.full_name?.charAt(0)}</span>}
               </div>
+              {/* تاج رئيس القسم */}
               {isHOD && <Crown className="absolute -top-6 -right-6 h-14 w-14 sm:h-16 sm:w-16 text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.8)] animate-bounce" />}
             </div>
+            
+            {/* معلومات المعلم */}
             <div className="flex-1 space-y-4">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-300 shadow-inner">
                 <Sparkles className="w-3.5 h-3.5" /> الملف المهني
@@ -222,9 +267,10 @@ export default function TeacherProfilePage() {
                     <Crown className="w-4 h-4" /> رئيس قسم {data.department_heads[0]?.subjects?.name || ''}
                   </span>
                 )}
-                {/* 🚀 هنا تم الاعتماد على اسم القسم الحقيقي المجلوب من القاعدة */}
+                {/* 🚀 عرض اسم القسم بدقة */}
                 <span className="px-4 py-2 bg-[#131836] text-slate-300 font-black text-xs sm:text-sm rounded-xl border border-white/5 shadow-inner">قسم {departmentName}</span>
                 <span className={`px-4 py-2 font-black text-xs sm:text-sm rounded-xl border bg-[#02040a] shadow-inner ${activeTheme.text} ${activeTheme.border}`}>{data.specialization || 'عام'}</span>
+                
                 {customTitles.map((t: string, i: number) => (
                   <span key={i} className="px-4 py-2 bg-white/10 text-white font-black text-xs sm:text-sm rounded-xl shadow-inner border border-white/5">{t}</span>
                 ))}
@@ -233,6 +279,7 @@ export default function TeacherProfilePage() {
           </div>
         </motion.div>
 
+        {/* ⚙️ لوحة التعديل (تظهر فقط عند النقر على تخصيص الملف) */}
         <AnimatePresence>
           {isEditing && (
             <motion.div initial={{ opacity: 0, height: 0, y: -20 }} animate={{ opacity: 1, height: 'auto', y: 0 }} exit={{ opacity: 0, height: 0, y: -20 }}
@@ -244,6 +291,7 @@ export default function TeacherProfilePage() {
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-6">
+                  {/* اختيار اللون */}
                   <div className="glass-panel p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
                     <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-4 block">لون واجهة الملف</label>
                     <div className="flex flex-wrap gap-3">
@@ -255,13 +303,16 @@ export default function TeacherProfilePage() {
                       ))}
                     </div>
                   </div>
+                  {/* النبذة */}
                   <div className="glass-panel p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
                     <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-4 block">النبذة والفلسفة التعليمية</label>
                     <textarea value={profileSettings.bio} onChange={e => setProfileSettings({ ...profileSettings, bio: e.target.value })}
                       placeholder="اكتب مقولة تؤمن بها أو نبذة قصيرة عن طريقتك في التدريس..." className="w-full h-36 p-5 bg-[#02040a]/60 border border-white/5 rounded-xl font-bold text-white outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 resize-none shadow-inner placeholder:text-slate-600 custom-scrollbar" />
                   </div>
                 </div>
+                
                 <div className="space-y-6">
+                  {/* الإنجازات */}
                   <div className="glass-panel p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
                     <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-4 block">الإنجازات والشهادات</label>
                     <div className="space-y-3">
@@ -277,6 +328,7 @@ export default function TeacherProfilePage() {
                       </button>
                     </div>
                   </div>
+                  {/* الروابط المهنية */}
                   <div className="glass-panel p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
                     <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-4 block">روابط مهنية للتواصل</label>
                     <div className="space-y-3">
@@ -294,6 +346,8 @@ export default function TeacherProfilePage() {
                   </div>
                 </div>
               </div>
+              
+              {/* زر الحفظ */}
               <div className="mt-8 pt-6 border-t border-white/5 flex justify-end">
                 <button disabled={isSaving} onClick={handleSaveProfile}
                   className="bg-white text-slate-900 font-black px-10 py-4 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:bg-slate-200 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">
@@ -304,8 +358,10 @@ export default function TeacherProfilePage() {
           )}
         </AnimatePresence>
 
+        {/* 🌟 عرض تفاصيل الملف المخصصة (النبذة، الإنجازات، الروابط) */}
         {(profileSettings.bio || profileSettings.achievements.filter(a => a).length > 0 || profileSettings.youtube || profileSettings.linkedin) && !isEditing && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mb-8">
+            
             {profileSettings.bio && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className={`lg:col-span-2 bg-gradient-to-br ${activeTheme.bg} p-8 sm:p-10 rounded-[2.5rem] shadow-lg text-white relative overflow-hidden border border-white/10 ${activeTheme.glow}`}>
@@ -315,7 +371,9 @@ export default function TeacherProfilePage() {
                 <p className="text-lg sm:text-xl lg:text-2xl font-black leading-relaxed sm:leading-loose relative z-10 whitespace-pre-wrap drop-shadow-md opacity-90">{profileSettings.bio}</p>
               </motion.div>
             )}
+
             <div className={`space-y-6 sm:space-y-8 ${!profileSettings.bio ? 'lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8 space-y-0' : ''}`}>
+              
               {profileSettings.achievements.filter(a => a).length > 0 && (
                 <div className="glass-panel p-6 sm:p-8 rounded-[2.5rem] border border-white/5 shadow-lg bg-[#0f1423]/60 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
@@ -329,6 +387,7 @@ export default function TeacherProfilePage() {
                   </ul>
                 </div>
               )}
+
               {(profileSettings.youtube || profileSettings.linkedin) && (
                 <div className="glass-panel p-6 sm:p-8 rounded-[2.5rem] border border-white/5 shadow-lg bg-[#0f1423]/60 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] pointer-events-none"></div>
@@ -343,6 +402,7 @@ export default function TeacherProfilePage() {
           </div>
         )}
 
+        {/* 📈 إحصائيات الإنتاجية الأكاديمية للمدير/المعلم */}
         <div className="glass-panel p-8 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] border border-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.3)] bg-[#02040a]/40 relative overflow-hidden">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none"></div>
           <h3 className="text-lg sm:text-xl font-black text-white mb-8 flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm relative z-10"><Briefcase className="w-6 h-6 text-indigo-400" /> الإنتاجية الأكاديمية</h3>
@@ -360,6 +420,7 @@ export default function TeacherProfilePage() {
           </div>
         </div>
 
+        {/* ❤️ حائط الذكريات (Memory Wall) */}
         <div className="mt-16 sm:mt-20 rounded-[3rem] sm:rounded-[4rem] overflow-hidden border border-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.5)] relative" style={{ background: '#0a0d16' }}>
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay pointer-events-none" />
           <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 rounded-full blur-[100px] pointer-events-none" />
@@ -374,6 +435,7 @@ export default function TeacherProfilePage() {
             </p>
           </div>
 
+          {/* مربع كتابة الذكرى (لا يظهر للمعلم نفسه) */}
           {user && !isTeacher && (
             <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-12 sm:pb-16 relative z-10">
               <div className="rounded-[2rem] p-5 sm:p-8 border border-white/10 shadow-2xl" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)' }}>
@@ -398,6 +460,7 @@ export default function TeacherProfilePage() {
             </div>
           )}
 
+          {/* عرض الذكريات (Sticky Notes) */}
           <div className="px-4 sm:px-8 pb-16 sm:pb-24 relative z-10 max-w-7xl mx-auto">
             {memories.length === 0 ? (
               <div className="text-center py-20 text-slate-500 font-bold bg-[#02040a]/40 rounded-[2.5rem] border border-white/5 border-dashed max-w-2xl mx-auto shadow-inner">
@@ -427,8 +490,11 @@ export default function TeacherProfilePage() {
                           cursor: 'default', transformOrigin: 'top center',
                         }}
                       >
+                        {/* اللاصق (Tape) أو الدبوس (Pin) */}
                         {style.tape && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', width: 50, height: 24, background: style.tape, borderRadius: 3, opacity: 0.85, boxShadow: '0 2px 5px rgba(0,0,0,0.4)' }} />}
                         {usePin && <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', width: 18, height: 18, borderRadius: '50%', background: style.pin, boxShadow: '0 4px 8px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.3) inset' }} />}
+                        
+                        {/* زر الحذف لصاحب الملف */}
                         {isTeacher && (
                           <button
                             onClick={() => handleDeleteMemory(memory.id)}
@@ -442,8 +508,10 @@ export default function TeacherProfilePage() {
                             {deletingId === memory.id ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin text-white" /> : <Trash2 size={14} color={deletingId === memory.id ? 'white' : 'rgba(0,0,0,0.5)'} />}
                           </button>
                         )}
+                        
                         <div style={{ fontSize: 48, lineHeight: 0.8, marginBottom: 8, color: style.quote, opacity: 0.3, fontFamily: 'Georgia, serif' }}>"</div>
                         <p style={{ fontSize: 14, lineHeight: 1.8, fontWeight: 700, color: style.text, marginBottom: 20, whiteSpace: 'pre-wrap' }}>{memory.content}</p>
+                        
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: `1px dashed ${style.text}40`, paddingTop: 14 }}>
                           <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: style.avatarBg, color: style.avatarText, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, overflow: 'hidden', boxShadow: `0 0 0 2px ${style.bg}, 0 0 0 3px ${style.text}20` }}>
                             {memory.author?.avatar_url ? <img src={memory.author.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : memory.author?.full_name?.charAt(0)}
@@ -464,6 +532,7 @@ export default function TeacherProfilePage() {
           </div>
         </div>
       </div>
+      
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 10px; }
