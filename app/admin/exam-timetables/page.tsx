@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   CalendarDays, Clock, BookOpen, Plus, Edit3, Trash2, 
-  ShieldCheck, Loader2, LayoutGrid, X, CheckCircle2 // <-- تم إضافة CheckCircle2 هنا 🚀
+  ShieldCheck, Loader2, X, CheckCircle2 
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,7 +22,7 @@ export default function ExamTimetablesAdmin() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [timetables, setTimetables] = useState<any[]>([]);
   
-  const [activeLevel, setActiveLevel] = useState<number>(10); // 10 للعاشر، 11 للحادي عشر
+  const [activeLevel, setActiveLevel] = useState<number>(10); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -40,11 +40,9 @@ export default function ExamTimetablesAdmin() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. جلب قائمة المواد
       const { data: subs } = await supabase.from('subjects').select('id, name').order('name');
       setSubjects(subs || []);
 
-      // 2. جلب جدول الاختبارات الحالي
       const { data: exams } = await supabase.from('exam_timetables')
         .select(`*, subjects(name)`)
         .eq('academic_year', currentYear)
@@ -116,8 +114,9 @@ export default function ExamTimetablesAdmin() {
         subject_id: exam.subject_id,
         class_level: exam.class_level,
         exam_date: exam.exam_date,
-        start_time: exam.start_time.substring(0, 5), 
-        end_time: exam.end_time.substring(0, 5)
+        // 🚀 حماية برمجية لتفادي الانهيار إذا كان الوقت فارغاً
+        start_time: exam.start_time ? exam.start_time.substring(0, 5) : '08:00', 
+        end_time: exam.end_time ? exam.end_time.substring(0, 5) : '10:00'
       });
     } else {
       setFormData({
@@ -132,7 +131,6 @@ export default function ExamTimetablesAdmin() {
     setIsModalOpen(true);
   };
 
-  // 🛡️ حماية الغرفة
   if (currentRole !== 'admin' && currentRole !== 'management') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
@@ -146,10 +144,8 @@ export default function ExamTimetablesAdmin() {
     );
   }
 
-  // فلترة الاختبارات حسب الصف المحدد
   const filteredExams = timetables.filter(exam => exam.class_level === activeLevel);
 
-  // دالة تنسيق التاريخ العربي
   const formatArabicDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -163,7 +159,6 @@ export default function ExamTimetablesAdmin() {
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
       <div className="max-w-6xl mx-auto space-y-8 relative">
         
-        {/* 🚀 الهيدر */}
         <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
           <div className="absolute -left-10 -top-10 text-indigo-50/50 pointer-events-none"><CalendarDays className="w-64 h-64" /></div>
           <div className="relative z-10">
@@ -179,7 +174,6 @@ export default function ExamTimetablesAdmin() {
           </div>
         </div>
 
-        {/* 🚀 تبويبات الصفوف */}
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm max-w-md mx-auto">
           <button onClick={() => setActiveLevel(10)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeLevel === 10 ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             الصف العاشر
@@ -189,7 +183,6 @@ export default function ExamTimetablesAdmin() {
           </button>
         </div>
 
-        {/* 🚀 المحتوى */}
         {isLoading ? (
           <div className="flex justify-center p-20"><Loader2 className="w-12 h-12 animate-spin text-indigo-500" /></div>
         ) : filteredExams.length === 0 ? (
@@ -224,7 +217,7 @@ export default function ExamTimetablesAdmin() {
                   </div>
                   <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <Clock className="w-5 h-5 text-amber-500" />
-                    <span className="font-bold text-sm" dir="ltr">{exam.start_time.substring(0,5)} - {exam.end_time.substring(0,5)}</span>
+                    <span className="font-bold text-sm" dir="ltr">{exam.start_time?.substring(0,5)} - {exam.end_time?.substring(0,5)}</span>
                   </div>
                 </div>
               </motion.div>
@@ -233,7 +226,6 @@ export default function ExamTimetablesAdmin() {
         )}
       </div>
 
-      {/* 🚀 نافذة الإضافة/التعديل */}
       <AnimatePresence>
         {isModalOpen && (
           <>
