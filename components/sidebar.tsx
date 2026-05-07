@@ -16,7 +16,8 @@ import {
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
-  ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch // 🚀 تم إضافة UserSearch لمستكشف الطلاب
+  ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch,
+  CreditCard, ClipboardList // 🚀 الأيقونات الجديدة
 } from 'lucide-react';
 
 const navigation = [
@@ -46,7 +47,7 @@ const navigation = [
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   
   // 🚀 أدوات الامتحانات والكنترول المركزية
-  { name: 'مستكشف الطلاب 360', href: '/admin/student-360', icon: UserSearch }, // 🚀 جديد للمدير
+  { name: 'مستكشف الطلاب 360', href: '/admin/student-360', icon: UserSearch },
   { name: 'فريق الكنترول', href: '/admin/control-team', icon: ShieldCheck },
   { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
   { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
@@ -55,9 +56,11 @@ const navigation = [
   { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
   { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
   
-  // 🚀 الرادارات وعمليات التتبع الجديدة المزدوجة
+  // 🚀 الرادارات وعمليات التتبع الجديدة (تمت إضافة الهويات والسجل)
   { name: 'العمليات المركزية', href: '/admin/exam-live-dashboard', icon: Activity },
+  { name: 'استوديو الهويات', href: '/admin/id-cards', icon: CreditCard }, // 👈 جديد
   { name: 'رادار البوابة', href: '/admin/gate-radar', icon: ScanLine },
+  { name: 'سجل البوابة', href: '/admin/gate-logs', icon: ClipboardList }, // 👈 جديد
   { name: 'رادار المراقب', href: '/teacher/exam-radar', icon: ScanLine },
   
   { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
@@ -118,7 +121,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
     
     // روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
-    if (item.name === 'مستكشف الطلاب 360') return (authRole === 'admin' || authRole === 'management'); // 🚀 متاح للإدارة فقط
+    if (item.name === 'مستكشف الطلاب 360') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'فريق الكنترول') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'رادار الكنترول') return (authRole === 'admin' || authRole === 'management');
@@ -129,8 +132,10 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     // الغلاف الرقمي متاح للإدارة ورؤساء الأقسام (المعلمين)
     if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher');
 
-    // روابط الرادارات والعمليات المركزية (التتبع المزدوج)
-    if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management');
+    // 🚀 روابط الرادارات والهويات والعمليات المركزية
+    if (item.name === 'استوديو الهويات') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'سجل البوابة') return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
+    if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
     if (item.name === 'العمليات المركزية') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'رادار المراقب') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
 
