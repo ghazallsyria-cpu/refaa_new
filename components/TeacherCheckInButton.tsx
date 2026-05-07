@@ -166,37 +166,33 @@ export default function TeacherCheckInButton({ teacherId, periodNumber, selected
   // استخدام AnimatePresence لتغيير شكل الزر بنعومة (Morphing)
   return (
     <AnimatePresence mode="wait">
-      
-      {/* 2. حالة "تم الحضور" (الأخضر) */}
       {status === 'present' ? (
         <motion.button key="present" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} disabled
           className={`flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2 rounded-xl font-black text-sm cursor-default shadow-inner ${className}`}
         >
+          {/* 2. حالة "تم الحضور" (الأخضر) */}
           <CheckCircle2 className="w-4 h-4" /> تم إثبات الحضور
         </motion.button>
-      
-      {/* 3. حالة "انتهى الوقت" (الأحمر) */}
       ) : status === 'ended' ? (
         <motion.button key="ended" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} disabled
           className={`flex items-center justify-center gap-2 bg-rose-50 text-rose-500 border border-rose-100 px-4 py-2 rounded-xl font-bold text-sm cursor-not-allowed ${className}`}
         >
+          {/* 3. حالة "انتهى الوقت" (الأحمر) */}
           <Lock className="w-4 h-4" /> انتهى وقت الحصة
         </motion.button>
-      
-      {/* 4. حالة "لم يبدأ الوقت" (الرمادي) */}
       ) : status === 'not_started' ? (
         <motion.button key="not_started" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} disabled
           className={`flex items-center justify-center gap-2 bg-slate-50 text-slate-500 border border-slate-200 px-4 py-2 rounded-xl font-bold text-sm cursor-not-allowed ${className}`}
         >
+          {/* 4. حالة "لم يبدأ الوقت" (الرمادي) */}
           <Clock className="w-4 h-4" /> لم يحن وقت الحصة
         </motion.button>
-      
-      {/* 5. حالة "مسموح بالبصمة" (النيلي التفاعلي) */}
       ) : (
         <motion.button key="allowed" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
           onClick={handleCheckIn} disabled={isSubmitting}
           className={`flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-black text-sm hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all ${className}`}
         >
+          {/* 5. حالة "مسموح بالبصمة" (النيلي التفاعلي) */}
           {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4 animate-pulse" />}
           {isSubmitting ? 'جاري التسجيل...' : 'إثبات حضوري للحصة'}
         </motion.button>
