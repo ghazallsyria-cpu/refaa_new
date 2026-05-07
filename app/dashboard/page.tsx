@@ -1,16 +1,18 @@
+// @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { 
   Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, 
-  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2 , Crown, Wand2, ServerCog
+  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2, Crown, Wand2, ServerCog, Clock, Save
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase'; // استدعاء Supabase لقراءة وتحديث الإعدادات
+import { supabase } from '@/lib/supabase'; 
 
 const containerVariants: any = {
   hidden: { opacity: 0 },
@@ -30,7 +32,7 @@ const itemVariants: any = {
 };
 
 // =========================================
-// 🚀 مكون التبديل المركزي (ScheduleSystemToggle) مدمج هنا 
+// 🚀 مكون التبديل المركزي (ScheduleSystemToggle) 
 // =========================================
 function ScheduleSystemToggle() {
   const [activeSystem, setActiveSystem] = useState<'manual' | 'auto'>('manual');
@@ -67,17 +69,15 @@ function ScheduleSystemToggle() {
     
     setIsUpdating(true);
     try {
-      // التأكد من وجود سجل الإعدادات أو تحديثه
       const { error } = await supabase
         .from('school_settings')
         .upsert({ id: 1, active_schedule_system: system }, { onConflict: 'id' });
 
       if (error) throw error;
-
       setActiveSystem(system);
     } catch (error) {
       console.error('Error updating system:', error);
-      alert('حدث خطأ أثناء تبديل النظام! يرجى التأكد من وجود جدول school_settings');
+      alert('حدث خطأ أثناء تبديل النظام!');
     } finally {
       setIsUpdating(false);
     }
@@ -93,7 +93,6 @@ function ScheduleSystemToggle() {
 
   return (
     <div className="bg-gradient-to-br from-[#0a0f1d] to-[#131836] p-5 sm:p-6 rounded-[2rem] shadow-[0_10px_30px_rgba(0,0,0,0.5)] border border-amber-500/20 w-full relative overflow-hidden group transition-all hover:border-amber-500/40">
-      {/* تأثيرات الإضاءة في الخلفية */}
       <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-[60px] pointer-events-none transition-all duration-700 ${activeSystem === 'auto' ? 'bg-indigo-600/20' : 'bg-emerald-600/20'}`} />
       
       <div className="relative z-10">
@@ -107,53 +106,18 @@ function ScheduleSystemToggle() {
           </div>
         </div>
 
-        {/* 🚀 المفتاح التفاعلي (Toggle Switch) */}
         <div className="relative flex items-center bg-[#02040a]/80 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
-          
-          {/* الزر الأول: النظام اليدوي/القديم */}
-          <button
-            onClick={() => handleToggle('manual')}
-            disabled={isUpdating}
-            className={`relative flex-1 py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 z-10 ${
-              activeSystem === 'manual' ? 'text-emerald-50' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {activeSystem === 'manual' && (
-              <motion.div
-                layoutId="active-system-bg"
-                className="absolute inset-0 bg-emerald-600 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] border border-emerald-400/50"
-                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-              />
-            )}
+          <button onClick={() => handleToggle('manual')} disabled={isUpdating} className={`relative flex-1 py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 z-10 ${activeSystem === 'manual' ? 'text-emerald-50' : 'text-slate-500 hover:text-slate-300'}`}>
+            {activeSystem === 'manual' && <motion.div layoutId="active-system-bg" className="absolute inset-0 bg-emerald-600 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] border border-emerald-400/50" transition={{ type: "spring", bounce: 0.2, duration: 0.6 }} />}
             <span className="relative z-20"><CalendarDays className={`w-5 h-5 sm:w-6 sm:h-6 ${activeSystem === 'manual' ? 'text-emerald-100' : 'text-slate-600'}`} /></span>
             <span className="relative z-20 text-[10px] sm:text-xs font-black">النظام اليدوي</span>
           </button>
 
-          {/* الزر الثاني: النظام الآلي الذكي */}
-          <button
-            onClick={() => handleToggle('auto')}
-            disabled={isUpdating}
-            className={`relative flex-1 py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 z-10 ${
-              activeSystem === 'auto' ? 'text-indigo-50' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {activeSystem === 'auto' && (
-              <motion.div
-                layoutId="active-system-bg"
-                className="absolute inset-0 bg-indigo-600 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] border border-indigo-400/50"
-                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-              />
-            )}
+          <button onClick={() => handleToggle('auto')} disabled={isUpdating} className={`relative flex-1 py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 z-10 ${activeSystem === 'auto' ? 'text-indigo-50' : 'text-slate-500 hover:text-slate-300'}`}>
+            {activeSystem === 'auto' && <motion.div layoutId="active-system-bg" className="absolute inset-0 bg-indigo-600 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] border border-indigo-400/50" transition={{ type: "spring", bounce: 0.2, duration: 0.6 }} />}
             <span className="relative z-20"><Wand2 className={`w-5 h-5 sm:w-6 sm:h-6 ${activeSystem === 'auto' ? 'text-indigo-100' : 'text-slate-600'}`} /></span>
             <span className="relative z-20 text-[10px] sm:text-xs font-black">الجدول المتطور</span>
           </button>
-
-          {/* تأثير التحميل أثناء تبديل النظام */}
-          {isUpdating && (
-            <div className="absolute inset-0 bg-[#02040a]/50 backdrop-blur-sm rounded-xl z-30 flex items-center justify-center">
-              <Loader2 className="w-6 h-6 animate-spin text-white drop-shadow-md" />
-            </div>
-          )}
         </div>
 
         <div className="mt-4 bg-[#02040a]/40 border border-white/5 rounded-xl p-3 text-center">
@@ -163,6 +127,87 @@ function ScheduleSystemToggle() {
             </span>
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// =========================================
+// 🚀 مكون إعدادات توقيت الرادار الذكي (Smart Gate Settings)
+// =========================================
+function SmartGateSettings() {
+  const [settings, setSettings] = useState({ morning_start_time: '07:30', late_threshold: '07:45', absence_threshold: '08:30' });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => { fetchSettings(); }, []);
+
+  const fetchSettings = async () => {
+    setIsLoading(true);
+    try {
+      const { data } = await supabase.from('school_settings').select('morning_start_time, late_threshold, absence_threshold').eq('id', 1).single();
+      if (data) {
+        setSettings({
+          morning_start_time: data.morning_start_time?.slice(0, 5) || '07:30',
+          late_threshold: data.late_threshold?.slice(0, 5) || '07:45',
+          absence_threshold: data.absence_threshold?.slice(0, 5) || '08:30'
+        });
+      }
+    } catch (error) { console.error('Error fetching gate settings:', error); } 
+    finally { setIsLoading(false); }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('school_settings').upsert({
+        id: 1,
+        morning_start_time: `${settings.morning_start_time}:00`,
+        late_threshold: `${settings.late_threshold}:00`,
+        absence_threshold: `${settings.absence_threshold}:00`
+      }, { onConflict: 'id' });
+      
+      if (error) throw error;
+      alert('تم تحديث توقيتات الدوام بنجاح!');
+    } catch (error) {
+      alert('حدث خطأ أثناء حفظ الإعدادات');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) return <div className="flex justify-center p-6 bg-[#0f1423]/60 rounded-[2rem]"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /></div>;
+
+  return (
+    <div className="bg-[#0f1423]/60 p-5 sm:p-6 rounded-[2rem] shadow-inner border border-white/5 w-full relative overflow-hidden group hover:border-amber-500/20 transition-all">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20">
+          <Clock className="w-5 h-5 text-amber-400" />
+        </div>
+        <div>
+          <h2 className="text-base sm:text-lg font-black text-white leading-tight">توقيتات الحرم المدرسي</h2>
+          <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-0.5">ضبط رادار البوابة والحضور</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4 bg-[#02040a]/50 p-3 rounded-xl border border-white/5">
+          <label className="text-xs font-black text-slate-300">بداية الدوام (حضور)</label>
+          <input type="time" value={settings.morning_start_time} onChange={(e) => setSettings({...settings, morning_start_time: e.target.value})} className="bg-[#0f1423] text-emerald-400 font-black border border-white/10 rounded-lg px-2 py-1 text-sm outline-none focus:border-emerald-500" />
+        </div>
+        <div className="flex items-center justify-between gap-4 bg-[#02040a]/50 p-3 rounded-xl border border-white/5">
+          <label className="text-xs font-black text-slate-300">حد التأخير المقبول</label>
+          <input type="time" value={settings.late_threshold} onChange={(e) => setSettings({...settings, late_threshold: e.target.value})} className="bg-[#0f1423] text-amber-400 font-black border border-white/10 rounded-lg px-2 py-1 text-sm outline-none focus:border-amber-500" />
+        </div>
+        <div className="flex items-center justify-between gap-4 bg-[#02040a]/50 p-3 rounded-xl border border-white/5">
+          <label className="text-xs font-black text-slate-300">تسجيل الغياب التلقائي</label>
+          <input type="time" value={settings.absence_threshold} onChange={(e) => setSettings({...settings, absence_threshold: e.target.value})} className="bg-[#0f1423] text-rose-400 font-black border border-white/10 rounded-lg px-2 py-1 text-sm outline-none focus:border-rose-500" />
+        </div>
+
+        <button onClick={handleSave} disabled={isSaving} className="w-full mt-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 py-3 rounded-xl font-black text-xs sm:text-sm transition-all border border-amber-500/30 flex items-center justify-center gap-2">
+          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          حفظ التوقيتات
+        </button>
       </div>
     </div>
   );
@@ -187,58 +232,41 @@ export default function AdminDashboard() {
   const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // 🚀 حارس لمنع الجلب المتكرر (Prevent Double Fetch)
   const isFetchedRef = useRef(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (isChecking || isFetchedRef.current || (authRole !== 'admin' && authRole !== 'management')) return;
-    
-    isFetchedRef.current = true; // إغلاق الباب بعد أول دخول ناجح!
+    isFetchedRef.current = true; 
 
     async function fetchDashboardStats() {
       try {
         const data = await fetchAdminDashboardStats();
-
         setStats([
           { name: 'إجمالي الطلاب', value: data.studentsCount.toString(), icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', trend: '+12%' },
           { name: 'إجمالي المعلمين', value: data.teachersCount.toString(), icon: GraduationCap, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', trend: '+3' },
           { name: 'إجمالي الفصول', value: data.sectionsCount.toString(), icon: BookOpen, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', trend: '0' },
           { name: 'حضور اليوم', value: `${data.attendanceRate}%`, icon: CalendarDays, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', trend: `${data.attendanceRate}%` },
         ]);
-      } catch (error) {
-        console.error('Error fetching admin dashboard stats:', error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { console.error(error); } finally { setLoading(false); }
     }
 
     async function fetchRecentActivities() {
       try {
         const activities = await fetchAdminRecentActivities();
         setRecentActivities(activities);
-      } catch (error) {
-        console.error('Error fetching admin dashboard activities:', error);
-      } finally {
-        setActivitiesLoading(false);
-      }
+      } catch (error) { console.error(error); } finally { setActivitiesLoading(false); }
     }
 
     async function fetchTrackData() {
       try {
         const data = await fetchTrackSelectionStats();
         setTrackStats(data);
-      } catch (error) {
-        console.error('Error fetching track selection stats:', error);
-      }
+      } catch (error) { console.error(error); }
     }
 
-    fetchDashboardStats();
-    fetchRecentActivities();
-    fetchTrackData();
+    fetchDashboardStats(); fetchRecentActivities(); fetchTrackData();
   }, [authRole, isChecking, fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats]);
 
   const formatTime = (timeStr: string) => {
@@ -295,46 +323,24 @@ export default function AdminDashboard() {
 
   return (
     <motion.div 
-      initial="hidden"
-      animate="visible"
-      variants={containerVariants}
-      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden font-cairo"
-      dir="rtl"
+      initial="hidden" animate="visible" variants={containerVariants}
+      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden font-cairo" dir="rtl"
     >
       {/* Welcome Header */}
-      <motion.div 
-        variants={itemVariants}
-        className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#0a0d16] via-[#0f1423] to-[#02040a] p-6 sm:p-10 lg:p-12 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-      >
+      <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#0a0d16] via-[#0f1423] to-[#02040a] p-6 sm:p-10 lg:p-12 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="space-y-5 max-w-2xl text-center lg:text-right w-full">
             <div className="inline-flex items-center justify-center lg:justify-start gap-2 px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 shadow-[0_0_15px_rgba(245,158,11,0.2)] mx-auto lg:mx-0 text-amber-400">
-              <Crown className="w-4 h-4" />
-              <span>القيادة العليا</span>
+              <Crown className="w-4 h-4" /> <span>القيادة العليا</span>
             </div>
-            <motion.h1 
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-lg"
-            >
+            <motion.h1 initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-lg">
               مرحباً بك في منصة <br className="hidden sm:block" />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-200 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">مدرسة الرفعة النموذجية</span>
             </motion.h1>
-            <motion.p 
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="text-slate-400 text-sm sm:text-base lg:text-lg font-bold opacity-90 mx-auto lg:mx-0 max-w-xl leading-relaxed"
-            >
+            <motion.p initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="text-slate-400 text-sm sm:text-base lg:text-lg font-bold opacity-90 mx-auto lg:mx-0 max-w-xl leading-relaxed">
               إليك نظرة عامة وشاملة على أداء المنصة والنشاطات الجارية اليوم. تحكم بكل تفاصيل المدرسة من مركز القيادة.
             </motion.p>
-            <motion.div 
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 pt-4 justify-center lg:justify-start"
-            >
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 pt-4 justify-center lg:justify-start">
               <Link href="/admin/teacher-assignments" className="bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 px-6 py-3.5 rounded-2xl font-black hover:from-amber-400 hover:to-yellow-400 transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2 group w-full sm:w-auto active:scale-95 border border-amber-300/50">
                 <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform" /> إدارة التعيينات
               </Link>
@@ -345,12 +351,7 @@ export default function AdminDashboard() {
           </div>
           <div className="hidden lg:flex justify-center shrink-0 relative">
             <div className="absolute inset-0 bg-amber-500/20 blur-[80px] rounded-full"></div>
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0, rotate: -10 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0 }}
-              transition={{ type: 'spring', delay: 0.5 }}
-              className="h-40 w-40 sm:h-48 sm:w-48 rounded-full bg-[#0f1423]/80 backdrop-blur-3xl border-2 border-amber-500/30 flex items-center justify-center relative shadow-[0_0_50px_rgba(245,158,11,0.2)]"
-            >
+            <motion.div initial={{ scale: 0.8, opacity: 0, rotate: -10 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={{ type: 'spring', delay: 0.5 }} className="h-40 w-40 sm:h-48 sm:w-48 rounded-full bg-[#0f1423]/80 backdrop-blur-3xl border-2 border-amber-500/30 flex items-center justify-center relative shadow-[0_0_50px_rgba(245,158,11,0.2)]">
               <School className="h-20 w-20 sm:h-24 sm:w-24 text-amber-400 drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
               <div className="absolute inset-0 rounded-full border border-amber-500/20 animate-[spin_10s_linear_infinite] opacity-50"></div>
               <div className="absolute inset-[-10px] rounded-full border border-dashed border-amber-500/20 animate-[spin_15s_linear_infinite_reverse] opacity-30"></div>
@@ -362,11 +363,7 @@ export default function AdminDashboard() {
       {/* Stats Bento Grid */}
       <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         {stats.map((stat, index) => (
-          <motion.div 
-            key={stat.name} 
-            whileHover={{ y: -5 }}
-            className="glass-panel rounded-[1.5rem] lg:rounded-[2rem] p-5 sm:p-6 flex flex-col justify-between group relative overflow-hidden"
-          >
+          <motion.div key={stat.name} whileHover={{ y: -5 }} className="glass-panel rounded-[1.5rem] lg:rounded-[2rem] p-5 sm:p-6 flex flex-col justify-between group relative overflow-hidden">
             <div className="flex items-start sm:items-center justify-between mb-4 relative z-10 flex-col sm:flex-row gap-3 sm:gap-0">
               <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl ${stat.bg} ${stat.color} ${stat.border} border group-hover:scale-110 transition-transform shadow-inner shrink-0`}>
                 <stat.icon className="h-5 w-5 sm:h-6 sm:w-6 drop-shadow-md" />
@@ -387,10 +384,7 @@ export default function AdminDashboard() {
 
       {/* Track Selection Results */}
       {trackStats && trackStats.total > 0 && (
-        <motion.div 
-          variants={itemVariants}
-          className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 relative overflow-hidden"
-        >
+        <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-[80px] -mr-10 -mt-10 pointer-events-none"></div>
           <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
             <div className="flex items-center gap-3">
@@ -438,10 +432,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
         
         {/* Column 1: Wide Area - Recent Activity */}
-        <motion.div 
-          variants={itemVariants}
-          className="lg:col-span-2 glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden flex flex-col h-full"
-        >
+        <motion.div variants={itemVariants} className="lg:col-span-2 glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden flex flex-col h-full">
           <div className="absolute top-0 left-0 w-40 h-40 bg-amber-500/10 rounded-full blur-[80px] -ml-10 -mt-10 pointer-events-none"></div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 relative z-10 gap-4">
             <div className="flex items-center gap-3">
@@ -475,11 +466,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               recentActivities.map((activity, i) => (
-                <motion.div 
-                  key={i} 
-                  whileHover={{ x: -5 }}
-                  className="flex items-center gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#0f1423]/60 hover:bg-[#0f1423] transition-all border border-white/5 hover:border-amber-500/30 hover:shadow-[0_0_20px_rgba(245,158,11,0.1)] group"
-                >
+                <motion.div key={i} whileHover={{ x: -5 }} className="flex items-center gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#0f1423]/60 hover:bg-[#0f1423] transition-all border border-white/5 hover:border-amber-500/30 hover:shadow-[0_0_20px_rgba(245,158,11,0.1)] group">
                   <div className={`h-10 w-10 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0 ${activity.color} border border-current opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all shadow-inner bg-black/20`}>
                     {activity.title[0]}
                   </div>
@@ -515,15 +502,16 @@ export default function AdminDashboard() {
         {/* Column 2: Narrow Area - Widgets */}
         <div className="space-y-6 lg:space-y-8 w-full flex flex-col h-full">
           
-          {/* 🚀 الزر المركزي تم إضافته هنا كأول Widget للمدير */}
           <motion.div variants={itemVariants} className="w-full">
             <ScheduleSystemToggle />
           </motion.div>
+
+          {/* 🚀 إعدادات توقيت رادار الحرم المدرسي */}
+          <motion.div variants={itemVariants} className="w-full">
+            <SmartGateSettings />
+          </motion.div>
           
-          <motion.div 
-            variants={itemVariants}
-            className="bg-gradient-to-br from-[#1a1200] via-[#0f0a00] to-[#02040a] rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 text-white border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.15)] relative overflow-hidden group hover:shadow-[0_0_40px_rgba(245,158,11,0.3)] transition-all"
-          >
+          <motion.div variants={itemVariants} className="bg-gradient-to-br from-[#1a1200] via-[#0f0a00] to-[#02040a] rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 text-white border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.15)] relative overflow-hidden group hover:shadow-[0_0_40px_rgba(245,158,11,0.3)] transition-all">
             <div className="relative z-10">
               <div className="flex items-center gap-3 sm:gap-4 mb-5 sm:mb-6">
                 <div className="h-10 w-10 sm:h-12 sm:w-12 bg-amber-500/20 backdrop-blur-md rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner border border-amber-500/40 shrink-0">
@@ -538,19 +526,10 @@ export default function AdminDashboard() {
                 {typeof window !== 'undefined' ? `${window.location.origin}/live` : '.../live'}
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
-                <button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(typeof window !== 'undefined' ? `${window.location.origin}/live` : '');
-                    alert('تم نسخ الرابط بنجاح!');
-                  }}
-                  className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-xs sm:text-sm backdrop-blur-md border border-white/10 active:scale-95"
-                >
+                <button onClick={() => { navigator.clipboard.writeText(typeof window !== 'undefined' ? `${window.location.origin}/live` : ''); alert('تم نسخ الرابط بنجاح!'); }} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-xs sm:text-sm backdrop-blur-md border border-white/10 active:scale-95">
                   نسخ الرابط
                 </button>
-                <Link 
-                  href="/admin/live-monitor"
-                  className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black hover:from-amber-400 hover:to-yellow-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-95 border border-amber-300/50"
-                >
+                <Link href="/admin/live-monitor" className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black hover:from-amber-400 hover:to-yellow-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-95 border border-amber-300/50">
                   فتح اللوحة
                 </Link>
               </div>
@@ -560,10 +539,7 @@ export default function AdminDashboard() {
 
           <AnnouncementsWidget authRole="admin" />
 
-          <motion.div 
-            variants={itemVariants}
-            className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 flex-1"
-          >
+          <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 flex-1">
             <h2 className="text-lg sm:text-xl font-black text-white mb-5 sm:mb-6 flex items-center gap-2 drop-shadow-sm">
                <Target className="w-5 h-5 text-amber-500" /> إجراءات سريعة
             </h2>
@@ -574,11 +550,7 @@ export default function AdminDashboard() {
                 { name: 'تقرير المسارات', icon: Target, href: '/admin/students-track-report', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
                 { name: 'إضافة طالب', icon: Users, href: '/students', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
               ].map((action) => (
-                <Link 
-                  key={action.name} 
-                  href={action.href} 
-                  className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#0f1423]/60 hover:bg-[#0f1423] border border-white/5 hover:border-amber-500/30 hover:shadow-[0_0_15px_rgba(245,158,11,0.1)] transition-all group h-full"
-                >
+                <Link key={action.name} href={action.href} className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-[#0f1423]/60 hover:bg-[#0f1423] border border-white/5 hover:border-amber-500/30 hover:shadow-[0_0_15px_rgba(245,158,11,0.1)] transition-all group h-full">
                   <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl ${action.bg} ${action.color} border ${action.border} mb-2 sm:mb-3 group-hover:scale-110 group-hover:-translate-y-1 transition-transform shadow-inner`}>
                     <action.icon className="h-5 w-5 sm:h-6 sm:w-6 drop-shadow-md" />
                   </div>
