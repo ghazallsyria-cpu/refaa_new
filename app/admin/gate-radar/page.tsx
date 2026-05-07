@@ -332,8 +332,12 @@ export default function SmartGateRadar() {
             ) : (
               <div className="w-full flex flex-col items-center relative z-10 flex-1">
                 <div className="w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-4 border-slate-800 shadow-2xl relative mb-4">
-                   <QrReader onResult={handleScan} constraints={{ facingMode: 'environment' }} containerStyle={{ width: '100%', height: '100%' }} videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                   
+<QrReader 
+  onResult={handleScan} 
+  constraints={{ facingMode: 'environment' }} 
+  videoContainerStyle={{ width: '100%', height: '100%', paddingTop: 0, margin: 0 }} 
+  videoStyle={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
+/>                   
                    {/* إطار التوجيه يتغير لونه حسب الوضع */}
                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
                       <div className={cn("w-full h-full border-2 rounded-2xl relative", scanMode === 'entry' ? "border-emerald-500/50" : "border-rose-500/50")}>
