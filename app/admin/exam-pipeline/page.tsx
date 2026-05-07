@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  BarChart3, Loader2, RefreshCw, BookOpen, CheckCircle2, ShieldCheck, Clock, FileSignature, ArrowRightLeft, UploadCloud
+  BarChart3, Loader2, RefreshCw, FileSignature, ArrowRightLeft, UploadCloud
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -25,7 +25,6 @@ export default function ExamPipelineDashboard() {
   const fetchPipeline = async () => {
     setIsLoading(true);
     try {
-      // جلب جميع الاختبارات مع حالة المسار الخاص بها
       const { data: exams } = await supabase
         .from('exam_timetables')
         .select(`
@@ -70,14 +69,13 @@ export default function ExamPipelineDashboard() {
     if (['admin', 'management'].includes(currentRole)) fetchPipeline();
   }, [currentRole]);
 
-  // تحديث حالة أعمال السنة والوزارة (يضغط عليها المدير يدوياً)
   const toggleStatus = async (timetableId: string, field: 'coursework_status' | 'ministry_sync_status', currentValue: boolean) => {
     try {
       await supabase.from('exam_pipeline').upsert({ 
         timetable_id: timetableId, 
         [field]: !currentValue 
       }, { onConflict: 'timetable_id' });
-      fetchPipeline(); // تحديث اللوحة
+      fetchPipeline(); 
     } catch (error) { alert('خطأ في التحديث'); }
   };
 
