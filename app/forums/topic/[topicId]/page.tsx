@@ -19,8 +19,12 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import ForumEditor from '@/components/ForumEditor';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+// 🚀 استيراد المكون المعماري الذكي للمعلمين
+import { TeacherName } from '@/components/TeacherName';
 
-// 🚀 خريطة الأيقونات للهيدر الذكي
+// ==========================================
+// 🚀 إعدادات السلايدر (Hero Slider Config)
+// ==========================================
 const ICON_MAP: Record<string, any> = {
   'Sparkles': Sparkles,
   'Trophy': Trophy,
@@ -38,6 +42,9 @@ const DEFAULT_SLIDE = {
   type: 'welcome'
 };
 
+// ==========================================
+// 🛠️ دوال مساعدة (Utility Functions)
+// ==========================================
 const extractUrlsFromHtml = (htmlStrings: string[]) => {
   const urls: string[] = [];
   const regex = /<img[^>]+src="([^">]+)"/g;
@@ -60,6 +67,10 @@ const renderContentWithMath = (content: string) => {
    return { __html: html };
 };
 
+// ==========================================
+// 🏛️ المكون الرئيسي لصفحة تفاصيل الموضوع
+// المسار: app/forums/topic/[topicId]/page.tsx
+// ==========================================
 export default function TopicDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -79,7 +90,7 @@ export default function TopicDetailsPage() {
   const [replyContent, setReplyContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 حالات السلايدر الديناميكي
+  // حالات السلايدر الديناميكي
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -107,6 +118,9 @@ export default function TopicDetailsPage() {
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
+  // ==========================================
+  // 📡 جلب بيانات الموضوع والردود
+  // ==========================================
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
@@ -118,6 +132,7 @@ export default function TopicDetailsPage() {
         
       if (topicError) throw topicError;
 
+      // منطق حساب المشاهدات الفريدة (Client-Side Session tracking)
       const viewedTopics = JSON.parse(sessionStorage.getItem('viewed_topics') || '[]');
       if (!viewedTopics.includes(topicId)) {
          const newViewsCount = (topicData.views_count || 0) + 1;
@@ -126,6 +141,7 @@ export default function TopicDetailsPage() {
          sessionStorage.setItem('viewed_topics', JSON.stringify([...viewedTopics, topicId]));
       }
 
+      // جلب بيانات كاتب الموضوع
       const { data: authorData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').eq('id', topicData.author_id).single();
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
@@ -166,6 +182,7 @@ export default function TopicDetailsPage() {
         author_earned_badges: parsedBadges 
       });
 
+      // جلب التصويت (إن وجد)
       const { data: poll } = await supabase.from('forum_polls').select('*').eq('topic_id', topicId).single();
       if (poll) {
          const { data: options } = await supabase.from('forum_poll_options').select('*').eq('poll_id', poll.id);
@@ -173,6 +190,7 @@ export default function TopicDetailsPage() {
          setPollData({ ...poll, options: options || [], votes: votes || [] });
       }
 
+      // جلب الردود مرتبة
       const { data: repliesData } = await supabase.from('forum_replies').select('*').eq('topic_id', topicId).order('is_verified', { ascending: false }).order('created_at', { ascending: true });
 
       let formattedReplies: any[] = [];
@@ -231,6 +249,7 @@ export default function TopicDetailsPage() {
           };
         });
 
+        // جلب الإعجابات للردود
         const replyIds = repliesData.map((r: any) => r.id);
         const { data: allVotes } = await supabase.from('forum_votes').select('reply_id, user_id').in('reply_id', replyIds);
         
@@ -265,6 +284,9 @@ export default function TopicDetailsPage() {
 
   useEffect(() => { fetchTopicData(); }, [fetchTopicData]);
 
+  // ==========================================
+  // ⚙️ معالجات التفاعل (Interaction Handlers)
+  // ==========================================
   const checkReplyPermission = () => {
     if (!currentRole || !topic?.category) return false;
     const perm = topic.category.reply_permission;
@@ -379,6 +401,10 @@ export default function TopicDetailsPage() {
     } catch (error) {}
   };
 
+  // ==========================================
+  // 🧩 مكون فرعي: بطاقة بيانات المستخدم (Author Column)
+  // تم تطبيق TeacherName ليكون الرابط التفاعلي للمعلمين فقط
+  // ==========================================
   const UserProfileColumn = ({ author, badgeText, badges, roleDetail, isTopicAuthor = false }: any) => (
     <div className={`w-full md:w-64 shrink-0 flex flex-col items-center p-6 bg-slate-50/50 md:bg-transparent ${isTopicAuthor ? 'md:border-l' : 'md:border-l'} border-slate-100`}>
       <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full p-1 bg-white shadow-sm border-2 ${author?.role !== 'student' ? 'border-amber-400' : 'border-slate-200'} mb-3`}>
@@ -389,8 +415,16 @@ export default function TopicDetailsPage() {
           <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400"><User className="w-10 h-10" /></div>
         )}
       </div>
+      
+      {/* 🚀 التكامل المعماري لمكون اسم المعلم: */}
       <h3 className="font-black text-base text-slate-900 text-center flex flex-col items-center gap-1">
-        {author?.full_name || 'مستخدم مجهول'}
+        {author?.role === 'teacher' ? (
+           // إذا كان الكاتب معلماً، نستخدم المكون لكي يتحول لرابط نحو ملفه
+           <TeacherName id={author.id} name={author.full_name} className="text-slate-900 text-base" showIcon={true} />
+        ) : (
+           // إن كان طالباً أو إدارة نعرض اسمه كالمعتاد
+           author?.full_name || 'مستخدم مجهول'
+        )}
       </h3>
       
       <span className={`mt-2 text-[10px] font-black px-3 py-1 rounded-full border flex items-center gap-1 ${author?.role !== 'student' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
@@ -430,6 +464,9 @@ export default function TopicDetailsPage() {
     </div>
   );
 
+  // ==========================================
+  // 🎨 الواجهة المرئية الرئيسية (Main Render)
+  // ==========================================
   if (loading) return <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin" /></div>;
   if (!topic) return <div className="text-center mt-20"><h2 className="text-xl font-bold">الموضوع غير موجود</h2></div>;
 
