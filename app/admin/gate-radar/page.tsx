@@ -101,32 +101,51 @@ export default function SmartGateRadar() {
     }
   };
 
+// 🚀 معالجة الهوية الرقمية الموحدة (مصححة التوجيه)
   const processUniversalId = async (scannedCode: string) => {
     try {
-      // استخراج الـ UUID من الشفرة raf-id:UUID
       let targetId = scannedCode;
       if (scannedCode.startsWith('raf-id:')) targetId = scannedCode.split(':')[1];
-      else if (scannedCode.startsWith('raf-exam-seat:')) targetId = scannedCode.split(':')[1]; // دعم مؤقت للبطاقات القديمة
+      else if (scannedCode.startsWith('raf-exam-seat:')) targetId = scannedCode.split(':')[1];
 
-      // جلب بيانات المستخدم من الجدولين (users + students لمعرفة حالة القيد)
+      // 🚨 التصحيح الجذري هنا: جلب (الصف) من خلال (الشعبة)
       const { data: userData, error: userErr } = await supabase
         .from('users')
-        .select(`*, students(enrollment_status, classes(name), sections(name))`)
+        .select(`
+          *, 
+          students(
+            enrollment_status, 
+            sections(
+               name, 
+               classes(name)
+            )
+          )
+        `)
         .eq('id', targetId)
         .single();
 
       if (userErr || !userData) {
+        console.error("Scan Query Error:", userErr);
         throw new Error('بطاقة غير صالحة أو غير مسجلة في النظام.');
       }
 
-      // 🚨 التحقق الأمني من الخريجين والمنقولين
-      if (userData.role === 'student' && userData.students?.enrollment_status !== 'active') {
-        throw new Error(`يُمنع الدخول! حالة الطالب: ${userData.students?.enrollment_status === 'graduated' ? 'خريج' : 'منقول/موقوف'}`);
+      let userTitle = 'عضو هيئة تدريس/إداري';
+
+      // تجهيز بيانات الطالب للعرض
+      if (userData.role === 'student') {
+        const studentInfo = Array.isArray(userData.students) ? userData.students[0] : userData.students;
+        
+        // التحقق الأمني من حالة القيد
+        if (studentInfo?.enrollment_status && studentInfo.enrollment_status !== 'active') {
+          throw new Error(`يُمنع الدخول! حالة الطالب: ${studentInfo.enrollment_status === 'graduated' ? 'خريج' : 'منقول'}`);
+        }
+        
+        const className = studentInfo?.sections?.classes?.name || 'صف غير محدد';
+        const sectionName = studentInfo?.sections?.name || '';
+        userTitle = `${className} - ${sectionName}`;
       }
 
-      const isStudent = userData.role === 'student';
-      const userTitle = isStudent ? `${userData.students?.classes?.name || ''} ${userData.students?.sections?.name || ''}` : 'عضو هيئة تدريس/إداري';
-
+      // توجيه العملية حسب زر الرادار (دخول أو خروج)
       if (scanMode === 'entry') {
         await executeEntryLogic(userData, userTitle);
       } else {
