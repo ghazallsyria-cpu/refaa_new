@@ -21,8 +21,13 @@ export default function ControlRadarPage() {
   const [scanStatus, setScanStatus] = useState<'idle' | 'success' | 'error' | 'loading' | 'vip'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
-  const [vipData, setVipData] = useState<any>(null); // لحفظ بيانات الـ VIP
+  const [vipData, setVipData] = useState<any>(null);
 
+  // 🎵 أصوات الرادار
+  const playSuccessBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); };
+  const playErrorBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4); };
+
+  // معالجة الأكواد القديمة والجديدة
   const processQRText = (text: string) => {
     if (!text) return null;
     let cleanId = text.trim();
@@ -43,18 +48,24 @@ export default function ControlRadarPage() {
     }
   };
 
+  // 🚀 المحرك المركزي لمسح الكنترول
   const handleScan = async (result: any, error: any) => {
-    if (!!result) {
-      const rawText = result?.text;
-      const extractedId = processQRText(rawText);
+    if (!!result && result?.text) {
+      const rawText = result.text.trim();
+      if (scanStatus === 'loading') return;
+
+      // استخراج الهوية سواء كانت موحدة raf-id أو نظام الكنترول raf-control أو مغلفات قديمة
+      let extractedId = rawText;
+      if (rawText.startsWith('raf-id:')) extractedId = rawText.split(':')[1];
+      else if (rawText.startsWith('raf-control:')) extractedId = rawText.split(':')[1];
+      else extractedId = processQRText(rawText);
       
-      if (extractedId && scanStatus !== 'loading' && scanResult !== extractedId) {
+      if (extractedId && scanResult !== extractedId) {
         setScanResult(extractedId);
         setCameraActive(false); 
         
-        // 🚀 معالجة حالة الـ VIP الخاصة
-        if (extractedId.startsWith('raf-control:')) {
-           await processVipScan(extractedId.split(':')[1]);
+        if (rawText.startsWith('raf-control:')) {
+           await processVipScan(extractedId);
         } else if (activeTab === 'envelope') {
           await processEnvelopeScan(extractedId);
         } else {
@@ -64,7 +75,6 @@ export default function ControlRadarPage() {
     }
   };
 
-  // 🚀 دالة التعرف على أعضاء الـ VIP في رادار الكنترول
   const processVipScan = async (userId: string) => {
     setScanStatus('loading');
     setStatusMessage('جاري التحقق من الهوية الأمنية...');
@@ -77,9 +87,11 @@ export default function ControlRadarPage() {
 
       if (error || !data) throw new Error('بطاقة كنترول غير صالحة أو ملغاة.');
 
+      playSuccessBeep();
       setVipData(data);
       setScanStatus('vip');
     } catch (err: any) {
+      playErrorBeep();
       setScanStatus('error');
       setStatusMessage(err.message);
     }
@@ -97,9 +109,7 @@ export default function ControlRadarPage() {
 
       if (fetchError || !envelope) throw new Error('لم يتم العثور على مغلف أسئلة مطابق لهذا الرمز.');
       if (envelope.is_delivered) {
-        setScanStatus('error');
-        setStatusMessage(`هذا المغلف تم تسليمه مسبقاً في ${new Date(envelope.delivered_at).toLocaleTimeString('ar-KW')}`);
-        return;
+        throw new Error(`هذا المغلف تم تسليمه مسبقاً في ${new Date(envelope.delivered_at).toLocaleTimeString('ar-KW')}`);
       }
 
       const { error: updateError } = await supabase
@@ -108,9 +118,12 @@ export default function ControlRadarPage() {
         .eq('id', envelope.id);
 
       if (updateError) throw updateError;
+      
+      playSuccessBeep();
       setScanStatus('success');
       setStatusMessage(`تم استلام مغلف (${envelope.exam_timetables?.subjects?.name} - صف ${envelope.exam_timetables?.class_level}) بنجاح!`);
     } catch (err: any) {
+      playErrorBeep();
       setScanStatus('error');
       setStatusMessage(err.message || 'حدث خطأ أثناء معالجة المغلف.');
     }
@@ -142,9 +155,7 @@ export default function ControlRadarPage() {
         .maybeSingle();
 
       if (existingAttendance) {
-         setScanStatus('error');
-         setStatusMessage(`تم تسجيل حضور هذا المراقب مسبقاً في لجنة (${assignment.exam_committees?.name}).`);
-         return;
+         throw new Error(`تم تسجيل حضور هذا المراقب مسبقاً في لجنة (${assignment.exam_committees?.name}).`);
       }
 
       const { error: insertError } = await supabase
@@ -152,9 +163,12 @@ export default function ControlRadarPage() {
         .insert({ teacher_id: teacherId, timetable_id: timetableIds[0], committee_id: assignment.committee_id, status: 'present', scanned_by: user.id });
 
       if (insertError) throw insertError;
+      
+      playSuccessBeep();
       setScanStatus('success');
       setStatusMessage(`تم تسجيل حضور المراقب للجنة (${assignment.exam_committees?.name}) بنجاح!`);
     } catch (err: any) {
+      playErrorBeep();
       setScanStatus('error');
       setStatusMessage(err.message || 'حدث خطأ أثناء تسجيل حضور المراقب.');
     }
@@ -187,11 +201,11 @@ export default function ControlRadarPage() {
              رادار الكنترول <span className="text-amber-400">الذكي</span>
            </h1>
            <p className="text-indigo-200 font-bold text-sm max-w-xl mx-auto">
-             قم بتوجيه الكاميرا نحو الـ QR Code الخاص بمغلفات الأسئلة أو بطاقات المراقبين لتسجيل الحركات فورياً في النظام المركزي.
+             قم بتوجيه الكاميرا نحو الهوية الموحدة للمراقبين أو الـ QR الخاص بمغلفات الأسئلة لتسجيل الحركات فورياً.
            </p>
         </div>
 
-        <div className="flex bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/20 mb-8 mx-auto max-w-md">
+        <div className="flex bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/20 mb-8 mx-auto max-w-md shadow-lg">
            <button onClick={() => { setActiveTab('envelope'); resetScan(); }} className={`flex-1 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'envelope' ? 'bg-white text-indigo-900 shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}>
              <Mail className="w-4 h-4"/> تسليم المغلفات
            </button>
@@ -203,28 +217,36 @@ export default function ControlRadarPage() {
         <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-6 sm:p-8 overflow-hidden">
            <div className="mb-6 text-center">
               <h2 className="text-xl font-black text-slate-800 flex items-center justify-center gap-2">
-                 {activeTab === 'envelope' ? <><ShieldCheck className="w-6 h-6 text-indigo-600"/> مسح مغلف الأسئلة</> : <><Camera className="w-6 h-6 text-indigo-600"/> مسح بطاقة المراقب</>}
+                 {activeTab === 'envelope' ? <><ShieldCheck className="w-6 h-6 text-indigo-600"/> مسح مغلف الأسئلة</> : <><Camera className="w-6 h-6 text-indigo-600"/> مسح الهوية الموحدة للمراقب</>}
               </h2>
            </div>
 
-           <div className="relative mx-auto w-full max-w-md aspect-square bg-slate-100 rounded-3xl overflow-hidden border-4 border-slate-200 shadow-inner flex flex-col items-center justify-center">
+           <div className="relative mx-auto w-full max-w-md aspect-square bg-slate-900 rounded-3xl overflow-hidden border-4 border-indigo-400 shadow-[0_0_40px_rgba(99,102,241,0.3)] flex flex-col items-center justify-center">
               {!cameraActive && scanStatus === 'idle' ? (
-                <div className="text-center p-6">
-                   <ScanLine className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                   <button onClick={() => setCameraActive(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-black shadow-md hover:bg-indigo-700 active:scale-95 transition-all">
-                     تفعيل الكاميرا والمسح
+                <div className="text-center p-6 text-indigo-200/50">
+                   <ScanLine className="w-16 h-16 mx-auto mb-4" />
+                   <button onClick={() => setCameraActive(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 active:scale-95 transition-all">
+                     تفعيل الرادار والمسح
                    </button>
                 </div>
               ) : cameraActive ? (
                 <div className="w-full h-full relative">
-                  <QrReader onResult={handleScan} constraints={{ facingMode: 'environment' }} containerStyle={{ width: '100%', height: '100%' }} videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
-                     <div className="w-full h-full border-2 border-indigo-500/50 rounded-2xl relative">
-                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-indigo-500 rounded-tl-xl -mt-1 -ml-1"></div>
-                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-indigo-500 rounded-tr-xl -mt-1 -mr-1"></div>
-                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-indigo-500 rounded-bl-xl -mb-1 -ml-1"></div>
-                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-indigo-500 rounded-br-xl -mb-1 -mr-1"></div>
-                        <div className="absolute w-full h-0.5 bg-indigo-400/80 shadow-[0_0_10px_rgba(99,102,241,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
+                  {/* 🚀 إجبار الكاميرا على ملء المربع عبر CSS */}
+                  <div className="absolute inset-0 z-0 qr-force-wrapper">
+                     <QrReader 
+                        onResult={handleScan} 
+                        constraints={{ facingMode: 'environment' }} 
+                        videoContainerStyle={{ width: '100%', height: '100%', paddingTop: 0, margin: 0 }} 
+                        videoStyle={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
+                     />
+                  </div>
+                  <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center p-8">
+                     <div className="w-full h-full border-2 border-indigo-400/50 rounded-2xl relative">
+                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-indigo-400 rounded-tl-xl -mt-1 -ml-1"></div>
+                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-indigo-400 rounded-tr-xl -mt-1 -mr-1"></div>
+                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-indigo-400 rounded-bl-xl -mb-1 -ml-1"></div>
+                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-indigo-400 rounded-br-xl -mb-1 -mr-1"></div>
+                        <div className="absolute w-full h-0.5 bg-indigo-300/80 shadow-[0_0_10px_rgba(99,102,241,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
                      </div>
                   </div>
                 </div>
@@ -232,7 +254,7 @@ export default function ControlRadarPage() {
 
               <AnimatePresence>
                 {scanStatus !== 'idle' && (
-                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute inset-0 bg-white/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center">
+                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute inset-0 bg-white/95 backdrop-blur-md z-10 flex flex-col items-center justify-center p-6 text-center">
                      {scanStatus === 'loading' && (
                         <>
                           <Loader2 className="w-16 h-16 animate-spin text-indigo-500 mb-4" />
@@ -252,7 +274,7 @@ export default function ControlRadarPage() {
                           <div className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-black flex items-center gap-2">
                              <ShieldCheck className="w-4 h-4 text-emerald-400"/> صلاحية وصول معتمدة
                           </div>
-                          <button onClick={resetScan} className="mt-6 bg-slate-100 text-slate-600 hover:bg-slate-200 px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2">
+                          <button onClick={resetScan} className="mt-6 bg-slate-100 text-slate-600 hover:bg-slate-200 px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 active:scale-95">
                              <RefreshCcw className="w-4 h-4"/> إغلاق
                           </button>
                         </>
@@ -289,7 +311,15 @@ export default function ControlRadarPage() {
            </div>
         </div>
       </div>
-      <style dangerouslySetInnerHTML={{__html:`@keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } .animate-scan { animation: scan 2s linear infinite; }`}}/>
+      
+      {/* 🚀 CSS مخصص لإجبار الكاميرا على ملء المربع */}
+      <style dangerouslySetInnerHTML={{__html:`
+        @keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } 
+        .animate-scan { animation: scan 2s linear infinite; }
+        
+        .qr-force-wrapper section { padding-top: 0 !important; height: 100% !important; display: flex; align-items: center; justify-content: center; }
+        .qr-force-wrapper video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
+      `}}/>
     </div>
   );
 }
