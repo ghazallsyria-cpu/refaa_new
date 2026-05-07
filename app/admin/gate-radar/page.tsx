@@ -4,7 +4,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  ShieldCheck, Loader2, Search, CheckCircle2, XCircle, ScanLine, AlertTriangle, Camera, LogIn, Fingerprint, Crown
+  ShieldCheck, Loader2, CheckCircle2, XCircle, ScanLine, AlertTriangle, 
+  LogIn, Fingerprint, Clock, LogOut, UserCheck, UserX, Info
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,381 +16,376 @@ import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { QrReader } from 'react-qr-reader'; 
 
-export default function GateRadar() {
+export default function SmartGateRadar() {
   const router = useRouter();
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
   const [isLoading, setIsLoading] = useState(true);
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
+  const [stats, setStats] = useState({ present: 0, late: 0, earlyExit: 0 });
   
-  const [studentMap, setStudentMap] = useState<Map<string, any>>(new Map());
-  const [totalStudents, setTotalStudents] = useState(0);
-  const [enteredToday, setEnteredToday] = useState(0);
-  
-  const [lastScanned, setLastScanned] = useState<any>(null);
-  const [vipScanned, setVipScanned] = useState<any>(null); // 🚀 حالة خاصة للـ VIP
-  
+  // أوضاع الرادار: entry (دخول صباحي) أو exit (خروج مبكر)
+  const [scanMode, setScanMode] = useState<'entry' | 'exit'>('entry');
   const [isScannerActive, setIsScannerActive] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  const currentYear = '2025-2026';
-  const currentSemester = 'الفصل الدراسي الثاني';
+  // حالة عرض النتيجة
+  const [lastScanned, setLastScanned] = useState<any>(null);
+
+  // حالة نافذة الخروج المبكر
+  const [showEscortModal, setShowEscortModal] = useState(false);
+  const [pendingExitUser, setPendingExitUser] = useState<any>(null);
+  const [escortData, setEscortData] = useState({ name: '', nationalId: '', relation: '' });
+
   const todayDate = format(new Date(), 'yyyy-MM-dd');
 
-  const fetchGateData = async () => {
+  // 1️⃣ جلب الإعدادات والإحصائيات
+  const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const { data: allocations } = await supabase
-        .from('student_seat_allocations')
-        .select(`
-          seat_number, 
-          student_id,
-          students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )
-        `)
-        .eq('academic_year', currentYear)
-        .eq('semester', currentSemester);
-
-      const { data: gateRecords } = await supabase
-        .from('school_gate_attendance')
-        .select('student_id')
-        .eq('date', todayDate);
-
-      const enteredIds = new Set(gateRecords?.map(r => r.student_id));
-
-      const map = new Map();
-      (allocations || []).forEach((alloc: any) => {
-        const studentInfo = alloc.students;
-        const userInfo = Array.isArray(studentInfo?.users) ? studentInfo?.users[0] : studentInfo?.users;
-        const sectionInfo = Array.isArray(studentInfo?.sections) ? studentInfo?.sections[0] : studentInfo?.sections;
-        const classInfo = sectionInfo?.classes;
-
-        const clsName = classInfo?.name || 'صف غير محدد';
-        const secName = sectionInfo?.name ? ` - ${sectionInfo.name}` : '';
-
-        map.set(String(alloc.seat_number), {
-          student_id: alloc.student_id,
-          seat_number: alloc.seat_number,
-          full_name: userInfo?.full_name || 'طالب مجهول',
-          avatar_url: userInfo?.avatar_url,
-          class_name: `${clsName}${secName}`,
-          has_entered: enteredIds.has(alloc.student_id)
-        });
+      const { data: settings } = await supabase.from('school_settings').select('*').single();
+      setSchoolSettings(settings || {
+        morning_start_time: '07:30:00', late_threshold: '07:45:00', absence_threshold: '08:30:00'
       });
 
-      setStudentMap(map);
-      setTotalStudents(allocations?.length || 0);
-      setEnteredToday(enteredIds.size);
+      const { data: logs } = await supabase
+        .from('school_gate_attendance')
+        .select('status, scan_type')
+        .eq('date', todayDate);
 
+      if (logs) {
+        setStats({
+          present: logs.filter(l => l.status === 'present' && l.scan_type === 'entry').length,
+          late: logs.filter(l => l.status === 'late' && l.scan_type === 'entry').length,
+          earlyExit: logs.filter(l => l.scan_type === 'exit').length,
+        });
+      }
     } catch (error) {
-      console.error('Error fetching gate data:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (['admin', 'management', 'staff'].includes(currentRole)) {
-      fetchGateData();
-    }
+    if (['admin', 'management', 'staff'].includes(currentRole)) fetchInitialData();
   }, [currentRole]);
 
-  const markGateEntry = async (student: any) => {
-    if (!user?.id || student.has_entered) return;
-    try {
-      const { error } = await supabase
-        .from('school_gate_attendance')
-        .insert({ student_id: student.student_id, date: todayDate, scanned_by: user.id });
-      if (error && error.code !== '23505') throw error; 
+  // 2️⃣ حساب حالة الدخول بناءً على الوقت (Logic Engine)
+  const calculateEntryStatus = (settings: any) => {
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    
+    const getMins = (timeStr: string) => {
+      if(!timeStr) return 0;
+      const [h, m] = timeStr.split(':');
+      return parseInt(h) * 60 + parseInt(m);
+    };
 
-      student.has_entered = true;
-      setStudentMap(new Map(studentMap));
-      setEnteredToday(prev => prev + 1);
-    } catch (error) {
-      console.error('Gate Attendance Error:', error);
+    const lateMins = getMins(settings.late_threshold);
+    const absentMins = getMins(settings.absence_threshold);
+
+    if (currentMins < lateMins) return { status: 'present', color: 'emerald', text: 'حضور مبكر/في الوقت' };
+    if (currentMins >= lateMins && currentMins < absentMins) return { status: 'late', color: 'amber', text: 'حضور متأخر' };
+    return { status: 'denied', color: 'rose', text: 'تجاوز حد الغياب - يمنع الدخول' };
+  };
+
+  // 3️⃣ معالجة مسح البطاقة الموحدة (Universal ID Scan)
+  const handleScan = async (result: any, error: any) => {
+    if (!!result && result?.text) {
+      const rawText = result.text.trim();
+      setIsScannerActive(false); 
+      await processUniversalId(rawText);
+      setTimeout(() => setIsScannerActive(true), 3000); // تجميد الكاميرا لـ 3 ثواني لعرض النتيجة
     }
   };
 
-  // 🚀 معالج قراءة بطاقات فريق الكنترول (VIP)
-  const handleVipScan = async (userId: string) => {
+  const processUniversalId = async (scannedCode: string) => {
     try {
-      const { data, error } = await supabase
-        .from('exam_control_team')
-        .select('*, users!exam_control_team_user_id_fkey(full_name, avatar_url)')
-        .eq('user_id', userId)
-        .eq('academic_year', currentYear)
-        .eq('semester', currentSemester)
+      // استخراج الـ UUID من الشفرة raf-id:UUID
+      let targetId = scannedCode;
+      if (scannedCode.startsWith('raf-id:')) targetId = scannedCode.split(':')[1];
+      else if (scannedCode.startsWith('raf-exam-seat:')) targetId = scannedCode.split(':')[1]; // دعم مؤقت للبطاقات القديمة
+
+      // جلب بيانات المستخدم من الجدولين (users + students لمعرفة حالة القيد)
+      const { data: userData, error: userErr } = await supabase
+        .from('users')
+        .select(`*, students(enrollment_status, classes(name), sections(name))`)
+        .eq('id', targetId)
         .single();
 
-      if (error || !data) {
-        playErrorBeep();
-        setLastScanned({ error: true, seat_number: 'بطاقة VIP غير صالحة' });
-        setVipScanned(null);
-        return;
+      if (userErr || !userData) {
+        throw new Error('بطاقة غير صالحة أو غير مسجلة في النظام.');
       }
 
-      playVipBeep();
-      setVipScanned(data);
-      setLastScanned(null);
-    } catch (err) {
-      console.error('VIP Scan Error', err);
-    }
-  };
+      // 🚨 التحقق الأمني من الخريجين والمنقولين
+      if (userData.role === 'student' && userData.students?.enrollment_status !== 'active') {
+        throw new Error(`يُمنع الدخول! حالة الطالب: ${userData.students?.enrollment_status === 'graduated' ? 'خريج' : 'منقول/موقوف'}`);
+      }
 
-  const handleScan = async (result: any, error: any) => {
-    if (!!result) {
-      let decodedText = result?.text;
-      if (!decodedText) return;
-      
-      let scannedCode = decodedText.trim();
-      setIsScannerActive(false); 
-      
-      // 🚀 التفريق بين الطالب والـ VIP
-      if (scannedCode.startsWith('raf-control:')) {
-         handleVipScan(scannedCode.split(':')[1]);
+      const isStudent = userData.role === 'student';
+      const userTitle = isStudent ? `${userData.students?.classes?.name || ''} ${userData.students?.sections?.name || ''}` : 'عضو هيئة تدريس/إداري';
+
+      if (scanMode === 'entry') {
+        await executeEntryLogic(userData, userTitle);
       } else {
-         let seatNumber = scannedCode;
-         if (scannedCode.startsWith('raf-exam-seat:')) seatNumber = scannedCode.split(':')[1];
-         else if (scannedCode.includes('/')) seatNumber = scannedCode.split('/').pop();
-         handleScannedSeat(seatNumber);
+        await executeExitLogic(userData, userTitle);
       }
-      
-      setTimeout(() => setIsScannerActive(true), 2500);
-    }
-  };
 
-  const handleScannedSeat = (seatNumber: string) => {
-    setVipScanned(null);
-    const student = studentMap.get(String(seatNumber));
-    if (student) {
-      setLastScanned(student);
-      if (!student.has_entered) {
-        playSuccessBeep();
-        markGateEntry(student);
-      } else {
-        playAlreadyEnteredBeep();
-      }
-    } else {
+    } catch (error: any) {
       playErrorBeep();
-      setLastScanned({ error: true, seat_number: seatNumber });
+      setLastScanned({ type: 'error', message: error.message });
     }
+  };
+
+  // 🟢 تنفيذ منطق الدخول الصباحي
+  const executeEntryLogic = async (userData: any, userTitle: string) => {
+    const entryLogic = calculateEntryStatus(schoolSettings);
+    
+    if (entryLogic.status === 'denied') {
+      playErrorBeep();
+      setLastScanned({ type: 'error', message: entryLogic.text, user: userData, title: userTitle });
+      return;
+    }
+
+    // التحقق هل سجل دخوله مسبقاً اليوم؟
+    const { data: existingLog } = await supabase
+      .from('school_gate_attendance')
+      .select('id')
+      .eq('user_id', userData.id)
+      .eq('date', todayDate)
+      .eq('scan_type', 'entry')
+      .maybeSingle();
+
+    if (existingLog) {
+      playAlreadyEnteredBeep();
+      setLastScanned({ type: 'warning', message: 'تم تسجيل الدخول مسبقاً اليوم', user: userData, title: userTitle });
+      return;
+    }
+
+    // تسجيل الدخول في قاعدة البيانات
+    await supabase.from('school_gate_attendance').insert({
+      user_id: userData.id,
+      user_role: userData.role,
+      status: entryLogic.status,
+      scan_type: 'entry',
+      scanned_by: user.id
+    });
+
+    playSuccessBeep();
+    setLastScanned({ type: 'success', statusData: entryLogic, user: userData, title: userTitle });
+    
+    // تحديث الإحصائيات
+    if(entryLogic.status === 'present') setStats(prev => ({...prev, present: prev.present + 1}));
+    if(entryLogic.status === 'late') setStats(prev => ({...prev, late: prev.late + 1}));
+  };
+
+  // 🔴 تنفيذ منطق الخروج المبكر
+  const executeExitLogic = async (userData: any, userTitle: string) => {
+    if (userData.role === 'student') {
+      // إذا كان طالباً، نوقف العملية ونظهر نافذة المستلم
+      playWarningBeep();
+      setPendingExitUser({ user: userData, title: userTitle });
+      setShowEscortModal(true);
+    } else {
+      // المعلم يخرج مباشرة
+      await recordExit(userData, userTitle, null);
+    }
+  };
+
+  const confirmStudentExit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!escortData.name || !escortData.nationalId) return;
+    
+    setShowEscortModal(false);
+    await recordExit(pendingExitUser.user, pendingExitUser.title, escortData);
+    setEscortData({ name: '', nationalId: '', relation: '' });
+    setPendingExitUser(null);
+  };
+
+  const recordExit = async (userData: any, userTitle: string, escort: any) => {
+    await supabase.from('school_gate_attendance').insert({
+      user_id: userData.id,
+      user_role: userData.role,
+      scan_type: 'exit',
+      is_early_dismissal: true,
+      escort_name: escort?.name || null,
+      escort_national_id: escort?.nationalId || null,
+      escort_relation: escort?.relation || null,
+      scanned_by: user.id
+    });
+
+    playSuccessBeep();
+    setLastScanned({ type: 'exit_success', message: 'تم تسجيل الخروج بأمان', user: userData, title: userTitle });
+    setStats(prev => ({...prev, earlyExit: prev.earlyExit + 1}));
   };
 
   const handleManualScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      const scannedCode = e.currentTarget.value.trim();
+      const code = e.currentTarget.value;
       e.currentTarget.value = '';
-      
-      if (scannedCode.startsWith('raf-control:')) {
-         handleVipScan(scannedCode.split(':')[1]);
-      } else {
-         let seatNumber = scannedCode;
-         if (scannedCode.startsWith('raf-exam-seat:')) seatNumber = scannedCode.split(':')[1];
-         handleScannedSeat(seatNumber);
-      }
+      if (code) processUniversalId(code);
     }
   };
 
   useEffect(() => {
-    if (isScannerActive && scanInputRef.current) scanInputRef.current.focus();
-  }, [isScannerActive, lastScanned, vipScanned]);
+    if (isScannerActive && !showEscortModal && scanInputRef.current) scanInputRef.current.focus();
+  }, [isScannerActive, showEscortModal]);
 
   // 🎵 أصوات النظام
-  const playSuccessBeep = () => {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime);
-    osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1);
-  };
-  const playAlreadyEnteredBeep = () => {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    osc.type = 'triangle'; osc.frequency.setValueAtTime(600, ctx.currentTime);
-    osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.2);
-  };
-  const playErrorBeep = () => {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime);
-    osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4);
-  };
-  // 🚀 نغمة ملكية خاصة بأعضاء الكنترول (VIP)
-  const playVipBeep = () => {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc1 = ctx.createOscillator(); const osc2 = ctx.createOscillator();
-    osc1.type = 'sine'; osc1.frequency.setValueAtTime(880, ctx.currentTime); 
-    osc2.type = 'sine'; osc2.frequency.setValueAtTime(1108.73, ctx.currentTime); 
-    osc1.connect(ctx.destination); osc2.connect(ctx.destination);
-    osc1.start(); osc2.start();
-    osc1.stop(ctx.currentTime + 0.3); osc2.stop(ctx.currentTime + 0.3);
-  };
+  const playSuccessBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); };
+  const playAlreadyEnteredBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(600, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.2); };
+  const playWarningBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'square'; osc.frequency.setValueAtTime(400, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.15); };
+  const playErrorBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4); };
 
   if (!['admin', 'management', 'staff'].includes(currentRole)) return null;
-  const unenteredStudents = totalStudents - enteredToday;
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 sm:p-6 md:p-8 font-cairo text-slate-200" dir="rtl">
+      
       <AnimatePresence>
         {isLoading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center">
             <div className="flex flex-col items-center gap-4 text-emerald-400">
                <Loader2 className="w-16 h-16 animate-spin" />
-               <span className="font-black text-xl tracking-widest animate-pulse">تجهيز نقطة التفتيش الرئيسية...</span>
+               <span className="font-black text-xl tracking-widest animate-pulse">تهيئة الرادار الذكي...</span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* 🛡️ الهيدر الفخم */}
         <div className="bg-slate-900 rounded-[2rem] p-6 shadow-2xl border border-slate-800 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+          
           <div className="relative z-10 flex items-center gap-4">
-            <div className="p-4 bg-emerald-500/20 rounded-2xl border border-emerald-500/30">
-              <Fingerprint className="w-8 h-8 text-emerald-400" />
+            <div className="p-4 bg-indigo-500/20 rounded-2xl border border-indigo-500/30">
+              <Fingerprint className="w-8 h-8 text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-white tracking-wide">رادار البوابة الرئيسية</h1>
-              <p className="text-emerald-400/80 font-bold mt-1 text-sm">{format(new Date(), 'dd MMMM yyyy', { locale: arSA })} | تسجيل الدخول للحرم المدرسي</p>
+              <h1 className="text-3xl font-black text-white tracking-wide">رادار الحرم المدرسي</h1>
+              <p className="text-indigo-400/80 font-bold mt-1 text-sm">{format(new Date(), 'dd MMMM yyyy', { locale: arSA })} | نظام الهوية الموحدة</p>
             </div>
           </div>
-          <div className="relative z-10 flex gap-4 w-full md:w-auto">
-             <div className="bg-slate-800 px-6 py-3 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
-                <p className="text-xs text-slate-400 font-black mb-1 uppercase">حاضر في المدرسة</p>
-                <p className="text-2xl font-black text-emerald-400">{enteredToday}</p>
+          
+          <div className="relative z-10 flex gap-3 w-full md:w-auto">
+             <div className="bg-slate-800 px-5 py-2.5 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
+                <p className="text-[10px] text-emerald-400 font-black mb-1">حضور مبكر</p>
+                <p className="text-xl font-black text-white">{stats.present}</p>
              </div>
-             <div className="bg-slate-800 px-6 py-3 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
-                <p className="text-xs text-slate-400 font-black mb-1 uppercase">لم يدخل بعد</p>
-                <p className="text-2xl font-black text-rose-400">{unenteredStudents}</p>
+             <div className="bg-slate-800 px-5 py-2.5 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
+                <p className="text-[10px] text-amber-400 font-black mb-1">تأخير</p>
+                <p className="text-xl font-black text-white">{stats.late}</p>
+             </div>
+             <div className="bg-slate-800 px-5 py-2.5 rounded-2xl border border-slate-700 text-center flex-1 md:flex-none">
+                <p className="text-[10px] text-rose-400 font-black mb-1">خروج مبكر</p>
+                <p className="text-xl font-black text-white">{stats.earlyExit}</p>
              </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-slate-900 rounded-[2rem] shadow-xl border border-slate-800 p-6 text-center flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
+          
+          {/* 🔴 نظام المسح والكاميرا */}
+          <div className="bg-slate-900 rounded-[2rem] shadow-xl border border-slate-800 p-6 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
+            
+            {/* أزرار التبديل بين وضع الدخول والخروج */}
+            <div className="flex bg-slate-800 p-1.5 rounded-2xl w-full max-w-sm mb-6 relative z-10 border border-slate-700">
+               <button onClick={() => { setScanMode('entry'); setLastScanned(null); }} className={cn("flex-1 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all", scanMode === 'entry' ? "bg-emerald-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white")}>
+                 <LogIn className="w-4 h-4" /> وضع الدخول
+               </button>
+               <button onClick={() => { setScanMode('exit'); setLastScanned(null); }} className={cn("flex-1 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all", scanMode === 'exit' ? "bg-rose-500 text-white shadow-md" : "text-slate-400 hover:text-white")}>
+                 <LogOut className="w-4 h-4" /> خروج مبكر
+               </button>
+            </div>
+
             {!isScannerActive ? (
-              <div className="flex flex-col items-center justify-center w-full h-full relative z-10">
-                <ScanLine className="w-24 h-24 text-slate-700 mb-6" />
-                <h2 className="text-2xl font-black text-white mb-2">نقطة التفتيش متوقفة</h2>
-                <p className="text-slate-400 mb-8 max-w-sm">قم بتفعيل الرادار لتتمكن من مسح بطاقات الطلاب عبر كاميرا الهاتف أو جهاز الباركود.</p>
-                <button onClick={() => setIsScannerActive(true)} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 px-10 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-3 transition-all active:scale-95">
-                   <LogIn className="w-6 h-6" /> تفعيل بوابة الدخول
+              <div className="flex flex-col items-center justify-center w-full relative z-10 flex-1">
+                <ScanLine className="w-20 h-20 text-slate-700 mb-4" />
+                <h2 className="text-xl font-black text-white mb-6">الرادار متوقف حالياً</h2>
+                <button onClick={() => setIsScannerActive(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 px-10 rounded-2xl shadow-[0_0_20px_rgba(79,70,229,0.3)] flex items-center gap-3 transition-all active:scale-95">
+                   <Camera className="w-6 h-6" /> تفعيل الكاميرا للبدء
                 </button>
               </div>
             ) : (
-              <div className="w-full flex flex-col items-center relative z-10 h-full">
-                <div className="flex justify-between items-center w-full mb-4">
-                  <div className="flex items-center gap-2 text-emerald-400 animate-pulse">
-                    <div className="w-3 h-3 bg-emerald-400 rounded-full"></div>
-                    <span className="font-black text-sm">البوابة نشطة ومستعدة</span>
-                  </div>
-                  <button onClick={() => setIsScannerActive(false)} className="text-rose-400 hover:text-rose-300 font-black text-sm flex items-center gap-1 bg-rose-500/10 px-3 py-1.5 rounded-lg transition-colors">
-                    <XCircle className="w-4 h-4"/> إيقاف
-                  </button>
-                </div>
-                
+              <div className="w-full flex flex-col items-center relative z-10 flex-1">
                 <div className="w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-4 border-slate-800 shadow-2xl relative mb-4">
-                   <QrReader
-                      onResult={handleScan}
-                      constraints={{ facingMode: 'environment' }}
-                      containerStyle={{ width: '100%', height: '100%' }}
-                      videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
-                       <div className="w-full h-full border-2 border-emerald-500/50 rounded-2xl relative">
-                          <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-500 rounded-tl-xl -mt-1 -ml-1"></div>
-                          <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-500 rounded-tr-xl -mt-1 -mr-1"></div>
-                          <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-500 rounded-bl-xl -mb-1 -ml-1"></div>
-                          <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-500 rounded-br-xl -mb-1 -mr-1"></div>
-                          <div className="absolute w-full h-0.5 bg-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan"></div>
-                       </div>
-                    </div>
+                   <QrReader onResult={handleScan} constraints={{ facingMode: 'environment' }} containerStyle={{ width: '100%', height: '100%' }} videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                   
+                   {/* إطار التوجيه يتغير لونه حسب الوضع */}
+                   <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+                      <div className={cn("w-full h-full border-2 rounded-2xl relative", scanMode === 'entry' ? "border-emerald-500/50" : "border-rose-500/50")}>
+                         <div className={cn("absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 rounded-tl-xl -mt-1 -ml-1", scanMode === 'entry' ? "border-emerald-500" : "border-rose-500")}></div>
+                         <div className={cn("absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 rounded-tr-xl -mt-1 -mr-1", scanMode === 'entry' ? "border-emerald-500" : "border-rose-500")}></div>
+                         <div className={cn("absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 rounded-bl-xl -mb-1 -ml-1", scanMode === 'entry' ? "border-emerald-500" : "border-rose-500")}></div>
+                         <div className={cn("absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 rounded-br-xl -mb-1 -mr-1", scanMode === 'entry' ? "border-emerald-500" : "border-rose-500")}></div>
+                         <div className={cn("absolute w-full h-0.5 shadow-[0_0_10px_rgba(0,0,0,0.8)] top-1/2 left-0 -translate-y-1/2 animate-scan", scanMode === 'entry' ? "bg-emerald-400/80" : "bg-rose-400/80")}></div>
+                      </div>
+                   </div>
                 </div>
 
-                <input 
-                  ref={scanInputRef}
-                  type="text" 
-                  onKeyDown={handleManualScan}
-                  onBlur={() => { if(isScannerActive) scanInputRef.current?.focus(); }}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-center font-black text-white focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-slate-600"
-                  placeholder="... يمكن استخدام مسدس الباركود هنا ..."
-                  autoFocus
-                />
+                <input ref={scanInputRef} type="text" onKeyDown={handleManualScan} onBlur={() => { if(isScannerActive && !showEscortModal) scanInputRef.current?.focus(); }} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-center font-black text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" placeholder="... مسدس الباركود يعمل هنا ..." autoFocus />
+                
+                <button onClick={() => setIsScannerActive(false)} className="mt-4 text-slate-400 hover:text-white text-sm font-bold flex items-center gap-1">
+                  <XCircle className="w-4 h-4"/> إيقاف الكاميرا
+                </button>
               </div>
             )}
           </div>
 
+          {/* 🧑‍🎓 شاشة العرض والنتائج (Dynamic Screen) */}
           <div className="bg-slate-900 rounded-[2rem] shadow-xl border border-slate-800 p-6 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
-            {/* 🚀 شاشة الترحيب الخاصة بأعضاء الكنترول VIP */}
-            {vipScanned ? (
+            {lastScanned ? (
               <AnimatePresence mode="wait">
-                 <motion.div key="vip" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center text-center w-full">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-amber-500 rounded-full blur-[100px] pointer-events-none opacity-20"></div>
-                    
-                    <div className="w-40 h-40 rounded-full p-2 mb-6 relative z-10 bg-amber-500/20 border-4 border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
-                       <div className="w-full h-full bg-slate-950 rounded-full overflow-hidden flex items-center justify-center">
-                         {vipScanned.users?.avatar_url ? (
-                           <img src={vipScanned.users.avatar_url} className="w-full h-full object-cover" alt="VIP" />
-                         ) : (
-                           <Crown className="w-16 h-16 text-amber-500" />
-                         )}
-                       </div>
-                       <div className="absolute bottom-0 right-4 w-10 h-10 rounded-full border-4 border-slate-900 flex items-center justify-center shadow-lg bg-amber-500 text-slate-900">
-                          <ShieldCheck className="w-6 h-6" />
-                       </div>
-                    </div>
-
-                    <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 mb-2 tracking-wide relative z-10">{vipScanned.users?.full_name}</h2>
-                    <p className="text-lg font-bold text-amber-200/80 mb-6 relative z-10 border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 rounded-full">{vipScanned.role_name}</p>
-
-                    <div className="bg-slate-950 px-8 py-5 rounded-2xl border border-amber-500/20 w-full relative z-10">
-                       <p className="text-sm font-black text-amber-500 uppercase tracking-widest mb-1 flex items-center justify-center gap-2">
-                         <CheckCircle2 className="w-5 h-5"/> تصريح أمني معتمد
-                       </p>
-                       <p className="text-slate-300 font-bold text-sm mt-2">عضو فريق الكنترول - يسمح بالدخول للحرم المدرسي</p>
-                    </div>
-                 </motion.div>
-              </AnimatePresence>
-            ) : lastScanned ? (
-              /* شاشة الطلاب العادية */
-              <AnimatePresence mode="wait">
-                {lastScanned.error ? (
+                {lastScanned.type === 'error' ? (
                   <motion.div key="error" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center text-center">
                     <div className="w-32 h-32 bg-rose-500/20 rounded-full flex items-center justify-center mb-6">
-                      <AlertTriangle className="w-16 h-16 text-rose-500" />
+                      <UserX className="w-16 h-16 text-rose-500" />
                     </div>
-                    <h2 className="text-3xl font-black text-white mb-2">بطاقة غير صالحة!</h2>
-                    <p className="text-rose-400 font-bold text-lg bg-rose-500/10 px-6 py-2 rounded-xl border border-rose-500/20">
-                      الكود الممسوح غير مسجل في النظام.
-                    </p>
+                    <h2 className="text-2xl font-black text-white mb-2">عملية مرفوضة!</h2>
+                    <p className="text-rose-400 font-bold text-lg bg-rose-500/10 px-6 py-3 rounded-xl border border-rose-500/20">{lastScanned.message}</p>
+                    {lastScanned.user && <p className="text-slate-400 mt-4 text-sm">{lastScanned.user.full_name}</p>}
+                  </motion.div>
+                ) : lastScanned.type === 'warning' ? (
+                  <motion.div key="warning" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center text-center w-full">
+                    <div className="w-32 h-32 bg-amber-500/20 rounded-full flex items-center justify-center mb-6">
+                      <Info className="w-16 h-16 text-amber-500" />
+                    </div>
+                    <h2 className="text-3xl font-black text-white mb-2">{lastScanned.user.full_name}</h2>
+                    <p className="text-amber-400 font-bold text-lg bg-amber-500/10 px-6 py-2 rounded-xl border border-amber-500/20">{lastScanned.message}</p>
                   </motion.div>
                 ) : (
                   <motion.div key="success" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center text-center w-full">
-                    <div className={cn("absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-20", lastScanned.has_entered ? "bg-indigo-500" : "bg-emerald-500")}></div>
+                    <div className={cn("absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-20", lastScanned.type === 'exit_success' ? 'bg-rose-500' : lastScanned.statusData?.color === 'amber' ? 'bg-amber-500' : 'bg-emerald-500')}></div>
                     
-                    <div className={cn("w-40 h-40 rounded-full p-2 mb-6 relative z-10", lastScanned.has_entered ? "bg-indigo-500/20 border-2 border-indigo-500/50" : "bg-emerald-500/20 border-2 border-emerald-500/50")}>
+                    <div className={cn("w-40 h-40 rounded-full p-2 mb-6 relative z-10 border-2", lastScanned.type === 'exit_success' ? 'bg-rose-500/20 border-rose-500/50' : lastScanned.statusData?.color === 'amber' ? 'bg-amber-500/20 border-amber-500/50' : 'bg-emerald-500/20 border-emerald-500/50')}>
                        <div className="w-full h-full bg-slate-800 rounded-full overflow-hidden flex items-center justify-center">
-                         {lastScanned.avatar_url ? (
-                           <img src={lastScanned.avatar_url} className="w-full h-full object-cover" alt="Student" />
+                         {lastScanned.user.avatar_url ? (
+                           <img src={lastScanned.user.avatar_url} className="w-full h-full object-cover" alt="User" />
                          ) : (
-                           <span className="text-4xl font-black text-slate-500">{lastScanned.full_name.charAt(0)}</span>
+                           <span className="text-4xl font-black text-slate-500">{lastScanned.user.full_name.charAt(0)}</span>
                          )}
                        </div>
-                       <div className={cn("absolute bottom-0 right-4 w-10 h-10 rounded-full border-4 border-slate-900 flex items-center justify-center shadow-lg", lastScanned.has_entered ? "bg-indigo-500 text-slate-900" : "bg-emerald-500 text-slate-900")}>
+                       <div className={cn("absolute bottom-0 right-4 w-10 h-10 rounded-full border-4 border-slate-900 flex items-center justify-center shadow-lg", lastScanned.type === 'exit_success' ? 'bg-rose-500 text-white' : lastScanned.statusData?.color === 'amber' ? 'bg-amber-500 text-slate-900' : 'bg-emerald-500 text-slate-900')}>
                           <CheckCircle2 className="w-6 h-6" />
                        </div>
                     </div>
 
-                    <h2 className="text-3xl font-black text-white mb-2 tracking-wide relative z-10">{lastScanned.full_name}</h2>
-                    <p className="text-lg font-bold text-slate-400 mb-6 relative z-10">{lastScanned.class_name}</p>
+                    <h2 className="text-3xl font-black text-white mb-2 tracking-wide relative z-10">{lastScanned.user.full_name}</h2>
+                    <p className="text-sm font-bold text-slate-400 mb-6 relative z-10">{lastScanned.title}</p>
 
                     <div className="flex gap-4 w-full justify-center relative z-10">
                        <div className="bg-slate-800 px-6 py-4 rounded-2xl border border-slate-700 min-w-[140px]">
-                          <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">رقم الجلوس</p>
-                          <p className="text-2xl font-black text-white tracking-widest">{lastScanned.seat_number}</p>
+                          <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">وقت المسح</p>
+                          <p className="text-xl font-black text-white tracking-widest">{format(new Date(), 'HH:mm')}</p>
                        </div>
-                       <div className={cn("px-6 py-4 rounded-2xl border min-w-[140px]", lastScanned.has_entered ? "bg-indigo-500/10 border-indigo-500/30" : "bg-emerald-500/10 border-emerald-500/30")}>
-                          <p className={cn("text-xs font-black uppercase tracking-widest mb-1", lastScanned.has_entered ? "text-indigo-400" : "text-emerald-500/70")}>حالة الدخول</p>
-                          <p className={cn("text-2xl font-black", lastScanned.has_entered ? "text-indigo-300" : "text-emerald-400")}>
-                             {lastScanned.has_entered ? "مسجل مسبقاً" : "تم الدخول"}
+                       <div className={cn("px-6 py-4 rounded-2xl border min-w-[140px]", lastScanned.type === 'exit_success' ? 'bg-rose-500/10 border-rose-500/30' : lastScanned.statusData?.color === 'amber' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-emerald-500/10 border-emerald-500/30')}>
+                          <p className={cn("text-xs font-black uppercase tracking-widest mb-1", lastScanned.type === 'exit_success' ? 'text-rose-400' : lastScanned.statusData?.color === 'amber' ? 'text-amber-500/70' : 'text-emerald-500/70')}>الحالة الأمنية</p>
+                          <p className={cn("text-xl font-black", lastScanned.type === 'exit_success' ? 'text-rose-400' : lastScanned.statusData?.color === 'amber' ? 'text-amber-400' : 'text-emerald-400')}>
+                             {lastScanned.type === 'exit_success' ? 'خروج مبكر' : lastScanned.statusData?.text}
                           </p>
                        </div>
                     </div>
@@ -399,25 +395,60 @@ export default function GateRadar() {
             ) : (
               <div className="text-center opacity-30 pointer-events-none">
                  <ShieldCheck className="w-32 h-32 mx-auto mb-6" />
-                 <h2 className="text-2xl font-black">جاهز لاستقبال الوافدين</h2>
+                 <h2 className="text-2xl font-black">الرادار جاهز ومستعد</h2>
+                 <p className="text-sm font-bold mt-2">الوضع الحالي: {scanMode === 'entry' ? 'تسجيل دخول' : 'خروج مبكر'}</p>
               </div>
             )}
           </div>
-
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{__html:`
-        @keyframes scan {
-          0% { top: 0%; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { top: 100%; opacity: 0; }
-        }
-        .animate-scan {
-          animation: scan 2s linear infinite;
-        }
-      `}}/>
+      {/* 🛑 نافذة إجبارية لبيانات المستلم (في الخروج المبكر للطلاب) */}
+      <AnimatePresence>
+        {showEscortModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl relative border-4 border-rose-500">
+              <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+                <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center"><AlertTriangle className="w-6 h-6 text-rose-600"/></div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">تصريح خروج مبكر</h3>
+                  <p className="text-xs font-bold text-slate-500">الطالب: {pendingExitUser?.user?.full_name}</p>
+                </div>
+              </div>
+
+              <form onSubmit={confirmStudentExit} className="space-y-4 text-slate-800">
+                <div>
+                  <label className="block text-sm font-black mb-1">الرقم المدني للمُستلم <span className="text-rose-500">*</span></label>
+                  <input type="text" required autoFocus value={escortData.nationalId} onChange={e=>setEscortData({...escortData, nationalId: e.target.value})} className="w-full border border-slate-300 rounded-xl px-4 py-3 bg-slate-50 focus:outline-none focus:border-rose-500 font-bold" placeholder="أدخل الرقم المدني..." />
+                </div>
+                <div>
+                  <label className="block text-sm font-black mb-1">الاسم الكامل للمُستلم <span className="text-rose-500">*</span></label>
+                  <input type="text" required value={escortData.name} onChange={e=>setEscortData({...escortData, name: e.target.value})} className="w-full border border-slate-300 rounded-xl px-4 py-3 bg-slate-50 focus:outline-none focus:border-rose-500 font-bold" placeholder="اسم مستلم الطالب..." />
+                </div>
+                <div>
+                  <label className="block text-sm font-black mb-1">صلة القرابة</label>
+                  <select value={escortData.relation} onChange={e=>setEscortData({...escortData, relation: e.target.value})} className="w-full border border-slate-300 rounded-xl px-4 py-3 bg-slate-50 focus:outline-none focus:border-rose-500 font-bold">
+                    <option value="">اختر صلة القرابة...</option>
+                    <option value="father">أب</option>
+                    <option value="mother">أم</option>
+                    <option value="driver">سائق</option>
+                    <option value="other">أخرى</option>
+                  </select>
+                </div>
+                
+                <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
+                  <button type="button" onClick={() => {setShowEscortModal(false); setPendingExitUser(null); setIsScannerActive(true);}} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black rounded-xl transition-colors">إلغاء</button>
+                  <button type="submit" className="flex-[2] py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl shadow-lg transition-colors flex justify-center items-center gap-2">
+                    <LogOut className="w-4 h-4"/> توثيق وإخراج الطالب
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <style dangerouslySetInnerHTML={{__html:`@keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } .animate-scan { animation: scan 2s linear infinite; }`}}/>
     </div>
   );
 }
