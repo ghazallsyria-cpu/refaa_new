@@ -36,7 +36,7 @@ export default function SmartGateRadar() {
   const [pendingExitUser, setPendingExitUser] = useState<any>(null);
   const [escortData, setEscortData] = useState({ name: '', nationalId: '', relation: '' });
 
-  // 🚀 حالات نظام "المكنسة" (إغلاق الدوام واعتماد الغياب)
+  // حالات نظام "المكنسة" (إغلاق الدوام واعتماد الغياب)
   const [showSweeperModal, setShowSweeperModal] = useState(false);
   const [missingStudents, setMissingStudents] = useState<any[]>([]);
   const [isSubmittingSweeper, setIsSubmittingSweeper] = useState(false);
@@ -167,16 +167,16 @@ export default function SmartGateRadar() {
       return;
     }
 
-// في دالة executeEntryLogic
-await supabase.from('school_gate_attendance').insert({
-  user_id: userData.id,
-  student_id: userData.id, // 👈 أضفنا هذا السطر للتوافق
-  user_role: userData.role,
-  status: entryLogic.status,
-  scan_type: 'entry',
-  scanned_by: user.id,
-  date: todayDate // 👈 نحدد التاريخ يدوياً للتأكيد
-});
+    // 🚀 تحديث الإضافة لدعم student_id القديم و user_id الجديد معاً
+    await supabase.from('school_gate_attendance').insert({
+      user_id: userData.id, 
+      student_id: userData.id,
+      user_role: userData.role, 
+      status: entryLogic.status, 
+      scan_type: 'entry', 
+      scanned_by: user.id,
+      date: todayDate
+    });
 
     playSuccessBeep();
     setLastScanned({ type: 'success', statusData: entryLogic, user: userData, title: userTitle });
@@ -205,19 +205,18 @@ await supabase.from('school_gate_attendance').insert({
   };
 
   const recordExit = async (userData: any, userTitle: string, escort: any) => {
-// وفي دالة recordExit
-await supabase.from('school_gate_attendance').insert({
-  user_id: userData.id,
-  student_id: userData.id, // 👈 أضفنا هذا السطر للتوافق
-  user_role: userData.role,
-  scan_type: 'exit',
-  is_early_dismissal: true,
-  escort_name: escort?.name || null,
-  escort_national_id: escort?.nationalId || null,
-  escort_relation: escort?.relation || null,
-  scanned_by: user.id,
-  date: todayDate // 👈 نحدد التاريخ يدوياً للتأكيد
-});
+    await supabase.from('school_gate_attendance').insert({
+      user_id: userData.id, 
+      student_id: userData.id,
+      user_role: userData.role, 
+      scan_type: 'exit', 
+      is_early_dismissal: true,
+      escort_name: escort?.name || null, 
+      escort_national_id: escort?.nationalId || null, 
+      escort_relation: escort?.relation || null, 
+      scanned_by: user.id,
+      date: todayDate
+    });
     playSuccessBeep();
     setLastScanned({ type: 'exit_success', message: 'تم تسجيل الخروج بأمان', user: userData, title: userTitle });
     setStats(prev => ({...prev, earlyExit: prev.earlyExit + 1}));
@@ -263,7 +262,7 @@ await supabase.from('school_gate_attendance').insert({
     }
   };
 
-  // 🚀 دالة تنفيذ واعتماد الغياب آلياً في السيرفر (Bulk Insert)
+  // 🚀 دالة تنفيذ واعتماد الغياب آلياً
   const executeSweeper = async () => {
     if (missingStudents.length === 0) {
       setShowSweeperModal(false);
@@ -273,6 +272,7 @@ await supabase.from('school_gate_attendance').insert({
     try {
       const payload = missingStudents.map(s => ({
         user_id: s.id,
+        student_id: s.id,
         user_role: 'student',
         status: 'absent',
         scan_type: 'entry',
@@ -285,7 +285,7 @@ await supabase.from('school_gate_attendance').insert({
 
       playSuccessBeep();
       setShowSweeperModal(false);
-      fetchInitialData(); // تحديث الإحصائيات بعد الجرد
+      fetchInitialData(); 
     } catch (error) {
       console.error(error);
       alert('حدث خطأ أثناء اعتماد الغياب في قاعدة البيانات.');
@@ -387,14 +387,18 @@ await supabase.from('school_gate_attendance').insert({
             ) : (
               <div className="w-full flex flex-col items-center relative z-10 flex-1">
                 <div className="w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-4 border-slate-800 shadow-2xl relative mb-4">
-                   {/* 🚀 إعدادات الكاميرا المصححة تماماً للظهور */}
-                   <QrReader 
-                      onResult={handleScan} 
-                      constraints={{ facingMode: 'environment' }} 
-                      videoContainerStyle={{ width: '100%', height: '100%', paddingTop: 0, margin: 0 }} 
-                      videoStyle={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
-                    />
-                   <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+                   
+                   {/* 🚀 إجبار الكاميرا على ملء المربع بكلاس qr-force-wrapper */}
+                   <div className="absolute inset-0 z-0 qr-force-wrapper">
+                      <QrReader 
+                         onResult={handleScan} 
+                         constraints={{ facingMode: 'environment' }} 
+                         containerStyle={{ width: '100%', height: '100%' }} 
+                       />
+                   </div>
+
+                   {/* إطار التوجيه الزخرفي */}
+                   <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center p-8">
                       <div className={cn("w-full h-full border-2 rounded-2xl relative", scanMode === 'entry' ? "border-emerald-500/50" : "border-rose-500/50")}>
                          <div className={cn("absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 rounded-tl-xl -mt-1 -ml-1", scanMode === 'entry' ? "border-emerald-500" : "border-rose-500")}></div>
                          <div className={cn("absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 rounded-tr-xl -mt-1 -mr-1", scanMode === 'entry' ? "border-emerald-500" : "border-rose-500")}></div>
@@ -524,7 +528,7 @@ await supabase.from('school_gate_attendance').insert({
         )}
       </AnimatePresence>
 
-      {/* 🧹 نافذة تأكيد عملية המكنسة (Sweeper Modal) */}
+      {/* 🧹 نافذة تأكيد عملية المكنسة (Sweeper Modal) */}
       <AnimatePresence>
         {showSweeperModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -551,7 +555,24 @@ await supabase.from('school_gate_attendance').insert({
         )}
       </AnimatePresence>
 
-      <style dangerouslySetInnerHTML={{__html:`@keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } .animate-scan { animation: scan 2s linear infinite; }`}}/>
+      {/* 🚀 CSS مخصص لإجبار الكاميرا على ملء المربع */}
+      <style dangerouslySetInnerHTML={{__html:`
+        @keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } 
+        .animate-scan { animation: scan 2s linear infinite; }
+        
+        .qr-force-wrapper section {
+           padding-top: 0 !important;
+           height: 100% !important;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+        }
+        .qr-force-wrapper video {
+           object-fit: cover !important;
+           width: 100% !important;
+           height: 100% !important;
+        }
+      `}}/>
     </div>
   );
 }
