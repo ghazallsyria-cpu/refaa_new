@@ -88,7 +88,6 @@ export default function ControlTeamManagement() {
     setIsAssignModalOpen(true);
   };
 
-  // 🚀 دالة التكليف المحصنة (تعرض الخطأ الحقيقي من السيرفر)
   const handleAssign = async () => {
     if (!selectedUserId || !selectedBaseRole || !customRoleTitle.trim()) return;
     
@@ -119,7 +118,6 @@ export default function ControlTeamManagement() {
       setIsAssignModalOpen(false); 
       fetchData();
     } catch (error: any) {
-      // 🚀 السحر هنا: عرض الخطأ الفعلي للمدير لكي نعالجه إن كان RLS أو Constraint
       alert(`فشل التكليف من قاعدة البيانات ⚠️\n\nتفاصيل الخطأ:\n${error.message || error.details || 'خطأ غير معروف'}`);
     } finally {
       setIsSubmitting(false);
@@ -364,6 +362,8 @@ export default function ControlTeamManagement() {
                   <div className="flex flex-wrap gap-8 justify-center content-start">
                      {chunk.map((member:any) => {
                         const safeAvatar = member.users?.avatar_url ? `${member.users.avatar_url}?t=${new Date().getTime()}` : null;
+                        
+                        // 🚀 الشفرة الخاصة بالـ VIP لرادار الكنترول
                         const qrPayload = `raf-control:${member.user_id}`;
                         const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
