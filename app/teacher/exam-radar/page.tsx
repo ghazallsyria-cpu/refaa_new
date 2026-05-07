@@ -154,11 +154,12 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
       if (error) throw error;
       setStudents(prev => prev.map(s => s.student_id === studentId ? { ...s, record_id: data.id } : s));
 
-    } catch (error) {
-      console.error('Attendance Error:', error);
-      alert('حدث خطأ بالاتصال، سيتم إعادة المحاولة.');
-      fetchStudents(todayExam.id, myCommittee.id); 
-    } finally {
+    } catch (error: any) {
+  console.error('Attendance Error Full:', error);
+  alert(JSON.stringify(error, null, 2));
+
+  fetchStudents(todayExam.id, myCommittee.id);
+} finally {
       setIsProcessing(false);
     }
   };
