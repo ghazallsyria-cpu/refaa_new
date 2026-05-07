@@ -17,7 +17,7 @@ import {
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
   ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch,
-  CreditCard, ClipboardList // 🚀 الأيقونات الجديدة
+  CreditCard, ClipboardList 
 } from 'lucide-react';
 
 const navigation = [
@@ -56,12 +56,14 @@ const navigation = [
   { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
   { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
   
-  // 🚀 الرادارات وعمليات التتبع الجديدة (تمت إضافة الهويات والسجل)
+  // 🚀 الرادارات وعمليات التتبع الجديدة
   { name: 'العمليات المركزية', href: '/admin/exam-live-dashboard', icon: Activity },
-  { name: 'استوديو الهويات', href: '/admin/id-cards', icon: CreditCard }, // 👈 جديد
+  { name: 'استوديو الهويات', href: '/admin/id-cards', icon: CreditCard }, 
   { name: 'رادار البوابة', href: '/admin/gate-radar', icon: ScanLine },
-  { name: 'سجل البوابة', href: '/admin/gate-logs', icon: ClipboardList }, // 👈 جديد
+  { name: 'سجل البوابة', href: '/admin/gate-logs', icon: ClipboardList }, 
   { name: 'رادار المراقب', href: '/teacher/exam-radar', icon: ScanLine },
+  // 🚀 الرابط الجديد للتقرير الرسمي للغياب
+  { name: 'تقرير غياب الاختبارات', href: '/admin/exam-attendance-report', icon: FileText },
   
   { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
   { name: 'الجدول الدراسي القديم', href: '/schedule', icon: CalendarDays },
@@ -128,11 +130,13 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'مسار إنجاز الكنترول') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
+    // 🚀 ظهور رابط التقرير للإدارة فقط
+    if (item.name === 'تقرير غياب الاختبارات') return (authRole === 'admin' || authRole === 'management');
 
     // الغلاف الرقمي متاح للإدارة ورؤساء الأقسام (المعلمين)
     if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher');
 
-    // 🚀 روابط الرادارات والهويات والعمليات المركزية
+    // روابط الرادارات والهويات والعمليات المركزية
     if (item.name === 'استوديو الهويات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'سجل البوابة') return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
     if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
