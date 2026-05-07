@@ -4,13 +4,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  ShieldCheck, Loader2, Calendar, Search, Filter, 
+  ShieldCheck, Loader2, Calendar, Search, 
   CheckCircle2, XCircle, Clock, LogOut, RefreshCcw
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 export default function GateLogsPage() {
@@ -26,20 +25,31 @@ export default function GateLogsPage() {
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
+      // 🚀 استعلام Supabase المصحح (بدون تعارض المفاتيح الأجنبية)
       const { data, error } = await supabase
         .from('school_gate_attendance')
         .select(`
-          *,
-          users!school_gate_attendance_user_id_fkey(full_name, avatar_url, national_id),
-          students:users!school_gate_attendance_user_id_fkey(
-             students(sections(name, classes(name)))
-          ),
-          scanned_by_user:users!school_gate_attendance_scanned_by_fkey(full_name)
+          id, status, scan_type, scanned_at, escort_name, escort_relation, user_role,
+          user_data:users!user_id (
+            full_name, 
+            avatar_url, 
+            national_id,
+            students (
+              sections (
+                name, 
+                classes (name)
+              )
+            )
+          )
         `)
         .eq('date', selectedDate)
         .order('scanned_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Query Error:", error);
+        throw error;
+      }
+      
       setLogs(data || []);
     } catch (error) {
       console.error('Error fetching logs:', error);
@@ -58,7 +68,7 @@ export default function GateLogsPage() {
     const matchStatus = filterStatus === 'all' ? true : 
                         filterStatus === 'early_exit' ? log.scan_type === 'exit' : 
                         log.status === filterStatus && log.scan_type === 'entry';
-    const matchSearch = searchTerm ? log.users?.full_name?.includes(searchTerm) || log.users?.national_id?.includes(searchTerm) : true;
+    const matchSearch = searchTerm ? log.user_data?.full_name?.includes(searchTerm) || log.user_data?.national_id?.includes(searchTerm) : true;
     return matchStatus && matchSearch;
   });
 
@@ -109,10 +119,10 @@ export default function GateLogsPage() {
                 <label className="text-xs font-black text-slate-500 mb-1 block">تصفية حسب الحالة</label>
                 <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500">
                    <option value="all">جميع الحركات</option>
-                   <option value="present">حضور في الوقت</option>
+                   <option value="present">حضور مبكر/في الوقت</option>
                    <option value="late">تأخير</option>
                    <option value="early_exit">خروج مبكر</option>
-                   <option value="absent">غياب (عبر المكنسة)</option>
+                   <option value="absent">غياب (عبر الإغلاق)</option>
                 </select>
              </div>
              <div className="relative">
@@ -125,7 +135,7 @@ export default function GateLogsPage() {
           </div>
         </div>
 
-        {/* عرض البيانات */}
+        {/* عرض البيانات المجلوبة */}
         <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
            <div className="overflow-x-auto">
               <table className="w-full text-right">
@@ -140,13 +150,13 @@ export default function GateLogsPage() {
                  </thead>
                  <tbody className="divide-y divide-slate-100">
                     {isLoading ? (
-                       <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold">جاري تحميل السجلات...</td></tr>
+                       <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold">جاري تحميل السجلات من قاعدة البيانات...</td></tr>
                     ) : filteredLogs.length === 0 ? (
-                       <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold">لا توجد حركات مسجلة تطابق بحثك.</td></tr>
+                       <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold">لا توجد حركات مسجلة تطابق بحثك أو في هذا اليوم.</td></tr>
                     ) : (
                        filteredLogs.map(log => {
                           const isStudent = log.user_role === 'student';
-                          const studentInfo = Array.isArray(log.students?.students) ? log.students.students[0] : log.students?.students;
+                          const studentInfo = Array.isArray(log.user_data?.students) ? log.user_data.students[0] : log.user_data?.students;
                           const title = isStudent ? `${studentInfo?.sections?.classes?.name || ''} - ${studentInfo?.sections?.name || ''}` : 'عضو هيئة تدريس/إداري';
                           
                           return (
@@ -154,11 +164,11 @@ export default function GateLogsPage() {
                                 <td className="p-5">
                                    <div className="flex items-center gap-3">
                                       <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
-                                         {log.users?.avatar_url ? <img src={log.users.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-black text-slate-400">{log.users?.full_name?.charAt(0)}</div>}
+                                         {log.user_data?.avatar_url ? <img src={log.user_data.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-black text-slate-400">{log.user_data?.full_name?.charAt(0) || '?'}</div>}
                                       </div>
                                       <div>
-                                         <p className="font-black text-slate-800">{log.users?.full_name}</p>
-                                         <p className="text-xs font-bold text-slate-400">{log.users?.national_id}</p>
+                                         <p className="font-black text-slate-800">{log.user_data?.full_name || 'غير معروف'}</p>
+                                         <p className="text-xs font-bold text-slate-400">{log.user_data?.national_id || 'بدون رقم'}</p>
                                       </div>
                                    </div>
                                 </td>
@@ -166,11 +176,11 @@ export default function GateLogsPage() {
                                 <td className="p-5">{getStatusBadge(log.status, log.scan_type)}</td>
                                 <td className="p-5">
                                    <p className="font-black text-slate-800">{format(new Date(log.scanned_at), 'hh:mm a')}</p>
-                                   <p className="text-xs font-bold text-slate-400">بواسطة: {log.scanned_by_user?.full_name || 'النظام'}</p>
+                                   <p className="text-xs font-bold text-slate-400">بواسطة: رادار البوابة</p>
                                 </td>
-                                <td className="p-5 text-xs font-bold text-slate-500">
+                                <td className="p-5 text-xs font-bold text-slate-500 max-w-[200px] truncate">
                                    {log.scan_type === 'exit' && log.escort_name ? (
-                                     <span className="text-rose-600">المستلم: {log.escort_name} ({log.escort_relation})</span>
+                                     <span className="text-rose-600 bg-rose-50 px-2 py-1 rounded">المستلم: {log.escort_name} ({log.escort_relation})</span>
                                    ) : log.status === 'absent' ? 'تم الرصد عبر الإغلاق الآلي' : 'مسح البوابة الاعتيادي'}
                                 </td>
                              </tr>
