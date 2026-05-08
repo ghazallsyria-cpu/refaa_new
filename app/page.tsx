@@ -3,12 +3,12 @@
  * 🏗️ التوثيق الهندسي (Engineering Documentation)
  * ============================================================================
  * @file        app/page.tsx
- * @version     3.3.0 (Aurora Glass Full Restoration)
+ * @version     3.4.0 (Aurora Glass Final Build Fix)
  * @description الواجهة الرئيسية للحرم الرقمي بنمط (Aurora Glass).
- * * 🛠️ التحديث الحالي (V3.3.0):
- * - استعادة جميع الأقسام المفقودة (الاستوديو، المجلة، الإعلانات، والخاتمة).
- * - دمج تعديلات الوشاح المتدلي (Hanging Ribbon) بالحجم الكامل.
- * - دمج تعديلات حركة الشريط العاجل (RTL Marquee) من اليسار لليمين.
+ * * 🛠️ التحديث الحالي (V3.4.0):
+ * - إصلاح خطأ `pinnedArticle is not defined` الذي تسبب في فشل البناء (Build).
+ * - استعادة كافة الأقسام (الوشاح الكامل، الاستوديو، الإعلانات، والخاتمة).
+ * - تحسين اتجاه الشريط العاجل (من اليسار لليمين).
  * ============================================================================
  */
 
@@ -100,6 +100,10 @@ export default function DigitalCampusPage() {
   const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
   const SlideIcon = ICON_MAP[currentSlideData.icon_name] || Sparkles;
 
+  // 🚀 هذه المتغيرات هي سبب انهيار البناء السابق، تمت إضافتها هنا بشكل صحيح
+  const pinnedArticle = magazineItems.find(item => item.is_pinned) || magazineItems[0];
+  const sideArticles = magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 3);
+
   if (isChecking || fetching) {
     return (
       <div className="h-screen bg-[#0B1120] flex items-center justify-center relative overflow-hidden">
@@ -115,9 +119,7 @@ export default function DigitalCampusPage() {
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-200 font-cairo overflow-x-hidden selection:bg-indigo-500/30 selection:text-white relative" dir="rtl">
       
-      {/* ========================================== */}
-      {/* 🎀 الوشاح المتدلي المطور (The Grand Hanging Ribbon) */}
-      {/* ========================================== */}
+      {/* 🎀 الوشاح المتدلي المطور */}
       {hangingRibbonUrl && (
         <motion.div 
           initial={{ y: '-100%', opacity: 0 }} 
@@ -140,7 +142,7 @@ export default function DigitalCampusPage() {
         </motion.div>
       )}
 
-      {/* 🚨 الشريط الإخباري العلوي (متحرك من اليسار لليمين للعربية) */}
+      {/* 🚨 الشريط الإخباري العلوي */}
       {breakingNews && (
         <div className="w-full bg-indigo-600/90 backdrop-blur-md text-white flex items-center h-11 relative z-50 shadow-2xl border-b border-white/10">
            <div className="bg-indigo-800 px-6 h-full font-black text-xs flex items-center gap-2 shrink-0 z-10 shadow-[10px_0_20px_rgba(0,0,0,0.3)]">
@@ -154,7 +156,7 @@ export default function DigitalCampusPage() {
         </div>
       )}
 
-      {/* 🌟 1. الواجهة الترحيبية (Aurora Glass Hero) */}
+      {/* 🌟 1. الواجهة الترحيبية */}
       <section className="relative min-h-screen flex flex-col items-center justify-center pt-12 pb-24 overflow-hidden border-b border-white/5">
         <motion.div style={{ y: yBackground }} className="absolute inset-0 z-0 pointer-events-none opacity-60">
           <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-indigo-600/20 rounded-full blur-[150px]"></div>
@@ -236,9 +238,7 @@ export default function DigitalCampusPage() {
         )}
       </section>
 
-      {/* ========================================== */}
-      {/* 📣 2. الإعلانات السريعة (Glass Cards) */}
-      {/* ========================================== */}
+      {/* 📣 2. الإعلانات السريعة */}
       <div id="explore" className="pt-10"></div>
       {announcements.length > 0 && (
         <section className="py-20 relative z-10">
@@ -263,9 +263,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* ========================================== */}
-      {/* 🎬 3. الاستوديو البصري (Cinematic Lightbox) */}
-      {/* ========================================== */}
+      {/* 🎬 3. الاستوديو البصري */}
       {studioItems.length > 0 && (
         <section className="py-24 relative z-10 bg-[#070b14] border-y border-white/5 shadow-[inset_0_20px_50px_rgba(0,0,0,0.5)]">
           <div className="absolute left-0 top-1/2 w-64 h-64 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none"></div>
@@ -315,9 +313,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* ========================================== */}
-      {/* 📰 4. المركز الإخباري (Aurora Bento Grid) */}
-      {/* ========================================== */}
+      {/* 📰 4. المركز الإخباري */}
       {magazineItems.length > 0 && (
         <section className="py-24 relative z-10 bg-[#0B1120]">
           <div className="absolute right-0 bottom-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none"></div>
@@ -383,9 +379,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* ========================================== */}
-      {/* 🚀 5. الخاتمة والدعوة (Epic CTA) */}
-      {/* ========================================== */}
+      {/* 🚀 5. الخاتمة والدعوة */}
       <section className="py-32 relative z-10 bg-[#070b14] border-t border-white/5 overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[60vw] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
         <div className="max-w-3xl mx-auto px-6 text-center relative z-10">
@@ -401,9 +395,7 @@ export default function DigitalCampusPage() {
         </div>
       </section>
 
-      {/* ========================================== */}
       {/* 🖼️ المشغلات المنبثقة الذكية (Modals & Lightboxes) */}
-      {/* ========================================== */}
       <AnimatePresence>
         {activeMedia && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1120]/95 backdrop-blur-2xl p-4 sm:p-10" onClick={() => setActiveMedia(null)}>
@@ -452,14 +444,8 @@ export default function DigitalCampusPage() {
       <style dangerouslySetInnerHTML={{ __html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; } 
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* 🚀 الشريط الإخباري المعكوس والمبطأ */
         .marquee-content { display: inline-block; animation: marquee 90s linear infinite; }
-        @keyframes marquee { 
-          0% { transform: translateX(-100vw); } 
-          100% { transform: translateX(100%); } 
-        }
-
+        @keyframes marquee { 0% { transform: translateX(-100vw); } 100% { transform: translateX(100%); } }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
