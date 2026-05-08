@@ -11,8 +11,13 @@ export function middleware(request: NextRequest) {
   // 🔓 1. تحديد المسارات العامة (Public Routes)
   // 🚀 التعديل الجوهري: أضفنا مسار الصفحة الرئيسية ( / ) ليصبح مفتوحاً للجمهور!
   // ==========================================
+// ==========================================
+  // 🔓 1. تحديد المسارات العامة (Public Routes)
+  // ==========================================
   const isPublicRoute =
-    path === '/' ||                     // <--- هذا هو السطر السحري الجديد
+    path === '/' ||
+    path === '' ||            // <--- إضافة لاحتمالات Netlify
+    path === '/index' ||      // <--- إضافة لاحتمالات Netlify
     path.startsWith('/login') ||
     path.startsWith('/reset-password') ||
     path.startsWith('/live');
