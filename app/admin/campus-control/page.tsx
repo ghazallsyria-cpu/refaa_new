@@ -92,7 +92,39 @@ export default function CampusControlPage() {
       setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 1000);
     }
   };
+const onStudioFileSelect = async (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
+  const uploaded = await handleFileUpload(file);
+
+  if (!uploaded) return;
+
+  setStudioForm(prev => ({
+    ...prev,
+    media_url: uploaded.url,
+    media_type: uploaded.type,
+    thumbnail_url: uploaded.thumb || uploaded.url
+  }));
+};
+
+const onMagazineFileSelect = async (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const uploaded = await handleFileUpload(file);
+
+  if (!uploaded) return;
+
+  setMagazineForm(prev => ({
+    ...prev,
+    cover_image: uploaded.url
+  }));
+};
   const handleDeleteStudio = async (item: any) => {
     if (!confirm('سيتم حذف الملف نهائياً. متأكد؟')) return;
     try {
