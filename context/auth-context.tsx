@@ -60,10 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
-  const isLoginPage = pathname === '/login';
+const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
-  const isPublicPage = isLoginPage || isResetPasswordPage;
-
+  const isHomePage = pathname === '/'; // 🚀 1. تعريف الصفحة الرئيسية
+  
+  // 🚀 2. إضافة الصفحة الرئيسية لقائمة الصفحات العامة المسموحة
+  const isPublicPage = isLoginPage || isResetPasswordPage || isHomePage;
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isChecking && !authRole) {
