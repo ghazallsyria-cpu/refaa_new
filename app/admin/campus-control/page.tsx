@@ -56,9 +56,12 @@ export default function CampusControlPage() {
 // ==========================================
   // 🚀 محرك الرفع الذكي والمحصن إلى Cloudinary
   // ==========================================
+// ==========================================
+  // 🚀 محرك الرفع الذكي والمحصن (مضاد لمشاكل الآيفون)
+  // ==========================================
   const handleFileUpload = async (file: File): Promise<{ url: string, type: 'image' | 'video', thumb?: string } | null> => {
-    // 🛡️ حماية مبدئية: التحقق من حجم الملف (100 ميجابايت كحد أقصى للحساب المجاني)
-    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    // 🛡️ حماية الحجم (100MB)
+    const MAX_FILE_SIZE = 100 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
       alert('حجم الملف ضخم جداً! الحد الأقصى المسموح به هو 100 ميجابايت.');
       return null;
@@ -68,8 +71,13 @@ export default function CampusControlPage() {
     setUploadProgress(10);
     
     try {
-      const isVideo = file.type.startsWith('video/');
+      // 💡 ذكاء اصطناعي للتعرف على الآيفون: نفحص امتداد الملف يدوياً إذا فشل المتصفح
+      const fileName = file.name.toLowerCase();
+      const isVideo = file.type.startsWith('video/') || fileName.endsWith('.mov') || fileName.endsWith('.mp4');
       
+      // توجيه صريح لـ Cloudinary: إذا كان فيديو، استخدم مسار الفيديو، وإلا دعه يكتشف تلقائياً
+      const resourceType = isVideo ? 'video' : 'auto'; 
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
@@ -77,8 +85,7 @@ export default function CampusControlPage() {
       // محاكاة بصرية للتقدم
       const progressInterval = setInterval(() => setUploadProgress(p => Math.min(p + 15, 90)), 500);
 
-      // 💡 السر هنا: استخدام `auto` بدلاً من تحديد image أو video لضمان قبول جميع التنسيقات
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/auto/upload`, { 
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`, { 
         method: 'POST', 
         body: formData 
       });
@@ -86,7 +93,6 @@ export default function CampusControlPage() {
       clearInterval(progressInterval);
       const data = await res.json();
 
-      // 🔍 التقاط الخطأ الحقيقي من Cloudinary إذا فشل الرفع
       if (!res.ok) {
         console.error("Cloudinary Error Details:", data);
         throw new Error(data.error?.message || 'فشل الرفع من المصدر.');
@@ -108,7 +114,6 @@ export default function CampusControlPage() {
       
     } catch (err: any) {
       console.error('Upload Exception:', err);
-      // إظهار سبب الخطأ الفعلي للمدير
       alert(`فشل الرفع: ${err.message}`);
       return null;
     } finally {
