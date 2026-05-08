@@ -53,13 +53,22 @@ export default function CampusControlPage() {
   // 🚀 محرك الرفع الذكي إلى Cloudinary (Smart Uploader)
   // يتعرف على نوع الملف تلقائياً ويولد الغلاف للفيديوهات
   // ==========================================
+// ==========================================
+  // 🚀 محرك الرفع الذكي والمحصن إلى Cloudinary
+  // ==========================================
   const handleFileUpload = async (file: File): Promise<{ url: string, type: 'image' | 'video', thumb?: string } | null> => {
+    // 🛡️ حماية مبدئية: التحقق من حجم الملف (100 ميجابايت كحد أقصى للحساب المجاني)
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    if (file.size > MAX_FILE_SIZE) {
+      alert('حجم الملف ضخم جداً! الحد الأقصى المسموح به هو 100 ميجابايت.');
+      return null;
+    }
+
     setIsUploading(true);
-    setUploadProgress(10); // بداية الرفع
+    setUploadProgress(10);
     
     try {
       const isVideo = file.type.startsWith('video/');
-      const resourceType = isVideo ? 'video' : 'image';
       
       const formData = new FormData();
       formData.append('file', file);
@@ -68,26 +77,39 @@ export default function CampusControlPage() {
       // محاكاة بصرية للتقدم
       const progressInterval = setInterval(() => setUploadProgress(p => Math.min(p + 15, 90)), 500);
 
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`, { 
+      // 💡 السر هنا: استخدام `auto` بدلاً من تحديد image أو video لضمان قبول جميع التنسيقات
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/auto/upload`, { 
         method: 'POST', 
         body: formData 
       });
       
       clearInterval(progressInterval);
       const data = await res.json();
+
+      // 🔍 التقاط الخطأ الحقيقي من Cloudinary إذا فشل الرفع
+      if (!res.ok) {
+        console.error("Cloudinary Error Details:", data);
+        throw new Error(data.error?.message || 'فشل الرفع من المصدر.');
+      }
       
       if (data.secure_url) {
         setUploadProgress(100);
         let thumbUrl = data.secure_url;
-        // 💡 خدعة معمارية: Cloudinary يولد صورة غلاف تلقائياً إذا غيرنا امتداد الفيديو إلى .jpg
+        
+        // توليد الغلاف التلقائي للفيديوهات
         if (isVideo) {
            thumbUrl = data.secure_url.replace(/\.[^/.]+$/, ".jpg");
         }
-        return { url: data.secure_url, type: resourceType, thumb: thumbUrl };
+        
+        return { url: data.secure_url, type: isVideo ? 'video' : 'image', thumb: thumbUrl };
       }
-      throw new Error('Upload failed');
-    } catch (err) {
-      alert('فشل الرفع إلى الخادم السحابي.');
+      
+      throw new Error('لم يتم إرجاع رابط آمن للملف.');
+      
+    } catch (err: any) {
+      console.error('Upload Exception:', err);
+      // إظهار سبب الخطأ الفعلي للمدير
+      alert(`فشل الرفع: ${err.message}`);
       return null;
     } finally {
       setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 1000);
