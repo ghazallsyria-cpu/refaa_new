@@ -2,28 +2,23 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 // ==========================================
 // 🛡️ حارس التوجيه المركزي (Edge Middleware)
-// يعمل هذا الملف على خوادم الحافة (Edge Servers) قبل أن تصل الطلبات إلى تطبيقك.
 // ==========================================
 
-// 🚀 ملاحظة هندسية: أزلنا كلمة 'async' لأننا لن ننتظر أي شيء من الإنترنت أو قواعد البيانات.
-// هذا يمنع تماماً أخطاء نفاد الوقت (Timeouts) في بيئات الاستضافة مثل Netlify أو Vercel.
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   // ==========================================
   // 🔓 1. تحديد المسارات العامة (Public Routes)
-  // هذه الصفحات مسموح للجميع بزيارتها دون الحاجة لوجود ملفات تعريف ارتباط (Cookies).
+  // 🚀 التعديل الجوهري: أضفنا مسار الصفحة الرئيسية ( / ) ليصبح مفتوحاً للجمهور!
   // ==========================================
   const isPublicRoute =
+    path === '/' ||                     // <--- هذا هو السطر السحري الجديد
     path.startsWith('/login') ||
     path.startsWith('/reset-password') ||
     path.startsWith('/live');
 
   // ==========================================
   // ⚡ 2. التحقق الصاروخي (Optimistic Auth)
-  // بدلاً من استدعاء Supabase API المعقد والبطيء، نقوم بفحص المتصفح مباشرة:
-  // "هل يمتلك هذا المستخدم أي كوكيز تدل على أنه مسجل دخول؟"
-  // هذا الفحص اللحظي يضمن سرعة تنقل (Navigation) خيالية للطالب والمعلم.
   // ==========================================
   const hasAuthCookie = request.cookies.getAll().some((cookie) => 
     cookie.name.includes('-auth-token') || cookie.name.startsWith('sb-')
@@ -31,8 +26,6 @@ export function middleware(request: NextRequest) {
 
   // ==========================================
   // 🛑 3. جدار الحماية (Unauthorized Access)
-  // إذا كان المستخدم لا يمتلك كوكيز (غير مسجل دخول) ويحاول الدخول لصفحة محمية (مثل /dashboard)
-  // -> يتم طرده فوراً إلى صفحة تسجيل الدخول.
   // ==========================================
   if (!hasAuthCookie && !isPublicRoute) {
     return NextResponse.redirect(new URL('/login', request.url));
@@ -40,8 +33,6 @@ export function middleware(request: NextRequest) {
 
   // ==========================================
   // 🔄 4. منع التكرار (Authenticated Redirection)
-  // إذا كان المستخدم مسجل دخول بالفعل (يمتلك كوكيز) وحاول فتح صفحة تسجيل الدخول (/login)
-  // -> يتم توجيهه تلقائياً إلى الصفحة الرئيسية حتى لا يسجل دخوله مرتين.
   // ==========================================
   if (hasAuthCookie && path === '/login') {
     return NextResponse.redirect(new URL('/', request.url));
@@ -49,7 +40,6 @@ export function middleware(request: NextRequest) {
 
   // ==========================================
   // ✅ 5. السماح بالمرور (Pass Through)
-  // إذا اجتاز المستخدم كل الفحوصات السابقة، يُسمح لطلبه بالوصول إلى الصفحة المطلوبة.
   // ==========================================
   return NextResponse.next();
 }
@@ -57,12 +47,8 @@ export function middleware(request: NextRequest) {
 // ==========================================
 // 🎯 6. إعدادات المطابقة (Matcher Configuration)
 // ==========================================
-// استبعاد الملفات الثابتة (Static Files)، الصور، ومسارات الـ API الداخلية من الفحص.
-// هذا يحمي السيرفر من تشغيل الـ Middleware عند تحميل كل صورة أو أيقونة في الموقع،
-// مما يضاعف سرعة تحميل الصفحة بشكل هائل.
 export const config = {
   matcher: [
-    // تعبير نمطي (Regex) لتجاهل مجلدات النظام وملفات الامتدادات المذكورة:
     '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
