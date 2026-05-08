@@ -97,13 +97,31 @@ export default function ExamTimetablesAdmin() {
     }
   };
 
+  // 🚀 الهدم المتسلسل الذكي (Cascading Manual Delete)
   const handleDelete = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا الاختبار من الجدول؟')) return;
+    if (!confirm('تحذير خطير: هل أنت متأكد من حذف هذا الاختبار؟ (سيتم حذف أي تكليفات لرؤساء اللجان وسجلات الحضور المرتبطة به تلقائياً)')) return;
+    
     try {
-      await supabase.from('exam_timetables').delete().eq('id', id);
+      setIsLoading(true);
+      
+      // 1. تنظيف الروابط القوية لمنع رفض قاعدة البيانات للحذف
+      await supabase.from('exam_committee_heads').delete().eq('timetable_id', id);
+      await supabase.from('exam_attendance').delete().eq('timetable_id', id);
+      await supabase.from('invigilator_attendance').delete().eq('timetable_id', id);
+      await supabase.from('exam_grading_roles').delete().eq('timetable_id', id);
+      await supabase.from('exam_pipeline').delete().eq('timetable_id', id);
+
+      // 2. حذف الاختبار نفسه
+      const { error } = await supabase.from('exam_timetables').delete().eq('id', id);
+      if (error) throw error;
+      
+      alert('تم حذف الاختبار وتنظيف سجلاته بنجاح!');
       fetchData();
-    } catch (error) {
-      alert('حدث خطأ أثناء الحذف');
+    } catch (error: any) {
+      console.error(error);
+      alert('حدث خطأ أثناء الحذف: ' + error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -114,7 +132,6 @@ export default function ExamTimetablesAdmin() {
         subject_id: exam.subject_id,
         class_level: exam.class_level,
         exam_date: exam.exam_date,
-        // 🚀 حماية برمجية لتفادي الانهيار إذا كان الوقت فارغاً
         start_time: exam.start_time ? exam.start_time.substring(0, 5) : '08:00', 
         end_time: exam.end_time ? exam.end_time.substring(0, 5) : '10:00'
       });
@@ -156,19 +173,19 @@ export default function ExamTimetablesAdmin() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-cairo" dir="rtl">
-      <div className="max-w-6xl mx-auto space-y-8 relative">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo" dir="rtl">
+      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 relative">
         
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
+        <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
           <div className="absolute -left-10 -top-10 text-indigo-50/50 pointer-events-none"><CalendarDays className="w-64 h-64" /></div>
           <div className="relative z-10">
-            <h1 className="text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
               <CalendarDays className="w-8 h-8 text-indigo-600" /> جدول الاختبارات النهائية
             </h1>
             <p className="text-slate-500 font-bold text-sm">إدارة مواعيد اختبارات الصفين العاشر والحادي عشر لعام {currentYear}</p>
           </div>
-          <div className="relative z-10">
-            <button onClick={() => openModal()} className="px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2">
+          <div className="relative z-10 w-full md:w-auto">
+            <button onClick={() => openModal()} className="w-full md:w-auto px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
               <Plus className="w-5 h-5" /> إضافة اختبار جديد
             </button>
           </div>
@@ -186,38 +203,40 @@ export default function ExamTimetablesAdmin() {
         {isLoading ? (
           <div className="flex justify-center p-20"><Loader2 className="w-12 h-12 animate-spin text-indigo-500" /></div>
         ) : filteredExams.length === 0 ? (
-          <div className="text-center p-20 bg-white rounded-3xl border border-slate-200 border-dashed">
+          <div className="text-center p-16 md:p-20 bg-white rounded-3xl border border-slate-200 border-dashed mx-auto max-w-2xl">
             <CalendarDays className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <h3 className="text-xl font-black text-slate-400 mb-2">الجدول فارغ</h3>
             <p className="text-sm font-bold text-slate-500">لم يتم إضافة أي اختبارات لهذا الصف بعد.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {filteredExams.map((exam, idx) => (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} key={exam.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group relative overflow-hidden">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} key={exam.id} className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-2 h-full bg-indigo-500"></div>
                 
-                <div className="flex justify-between items-start mb-6">
+                {/* 🚀 إظهار الأزرار دائماً لتناسب الموبايل */}
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 gap-4">
                   <div>
-                    <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg mb-2 inline-block">
+                    <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg mb-3 inline-block">
                       {activeLevel === 10 ? 'العاشر' : 'الحادي عشر'}
                     </span>
-                    <h3 className="text-2xl font-black text-slate-800">{exam.subjects?.name}</h3>
+                    <h3 className="text-2xl font-black text-slate-800 leading-tight">{exam.subjects?.name}</h3>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                     <button onClick={() => openModal(exam)} className="p-2 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-lg"><Edit3 className="w-4 h-4"/></button>
-                     <button onClick={() => handleDelete(exam.id)} className="p-2 bg-slate-50 text-slate-500 hover:text-rose-600 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                  
+                  <div className="flex gap-2 shrink-0">
+                     <button onClick={() => openModal(exam)} className="p-3 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><Edit3 className="w-4 h-4"/></button>
+                     <button onClick={() => handleDelete(exam.id)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><Trash2 className="w-4 h-4"/></button>
                   </div>
                 </div>
 
                 <div className="space-y-3 mt-auto">
-                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <CalendarDays className="w-5 h-5 text-indigo-400" />
-                    <span className="font-bold text-sm">{formatArabicDate(exam.exam_date)}</span>
+                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <CalendarDays className="w-5 h-5 text-indigo-400 shrink-0" />
+                    <span className="font-bold text-sm leading-none">{formatArabicDate(exam.exam_date)}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <Clock className="w-5 h-5 text-amber-500" />
-                    <span className="font-bold text-sm" dir="ltr">{exam.start_time?.substring(0,5)} - {exam.end_time?.substring(0,5)}</span>
+                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <Clock className="w-5 h-5 text-amber-500 shrink-0" />
+                    <span className="font-bold text-sm leading-none" dir="ltr">{exam.start_time?.substring(0,5)} - {exam.end_time?.substring(0,5)}</span>
                   </div>
                 </div>
               </motion.div>
@@ -229,8 +248,8 @@ export default function ExamTimetablesAdmin() {
       <AnimatePresence>
         {isModalOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40" onClick={() => !isSaving && setIsModalOpen(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-2xl z-50 p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => !isSaving && setIsModalOpen(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-md bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
               <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                   <BookOpen className="w-6 h-6 text-indigo-600"/> {formData.id ? 'تعديل الاختبار' : 'إضافة اختبار جديد'}
