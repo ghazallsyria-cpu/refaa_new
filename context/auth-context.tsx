@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMustResetPassword(true);
       router.push('/reset-password');
     } else {
-      const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', staff: '/dashboard/staff' };
+      const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/', student: '/', staff: '/' };
       router.push(paths[userData.role] || '/');
     }
   }; 
