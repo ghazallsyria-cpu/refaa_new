@@ -3,12 +3,13 @@
  * 🏗️ التوثيق الهندسي (Engineering Documentation)
  * ============================================================================
  * @file        app/page.tsx
- * @version     3.4.0 (Aurora Glass Final Build Fix)
- * @description الواجهة الرئيسية للحرم الرقمي بنمط (Aurora Glass).
- * * 🛠️ التحديث الحالي (V3.4.0):
- * - إصلاح خطأ `pinnedArticle is not defined` الذي تسبب في فشل البناء (Build).
- * - استعادة كافة الأقسام (الوشاح الكامل، الاستوديو، الإعلانات، والخاتمة).
- * - تحسين اتجاه الشريط العاجل (من اليسار لليمين).
+ * @version     4.0.0 (Premium Architectural Edition)
+ * @description الواجهة الرئيسية للحرم الرقمي بتصميم (Bento Box) الفاخر.
+ * * 🛠️ التحديث الحالي (V4.0.0):
+ * - إزالة جميع تأثيرات البهتان والرمادي عن الصور (True Colors 100%).
+ * - تطبيق شبكة معمارية (Architectural Grid) لعرض الأخبار والميديا.
+ * - تفاعلية حركية عالية (Framer Motion) لجميع العناصر والبطاقات.
+ * - تصميم كبسولة زجاجية (Glass Pill) للشريط الإخباري العاجل.
  * ============================================================================
  */
 
@@ -17,8 +18,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { 
-  Play, ImageIcon, BookOpen, Sparkles, 
-  ArrowLeft, Star, Crown, Compass, Newspaper, Video, BellRing, Megaphone, ArrowUpRight, Quote, Trophy, X, Calendar, User
+  Play, ImageIcon, BookOpen, Sparkles, ArrowLeft, Star, Crown, Compass, 
+  Newspaper, Video, BellRing, Megaphone, ArrowUpRight, Quote, Trophy, 
+  X, Calendar, User, LayoutGrid, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
@@ -32,8 +34,18 @@ const DEFAULT_SLIDE = {
   badge_text: 'نظام إدارة التعلم الذكي 2026',
   title: 'مدرسة الرفعة',
   description: 'بيئة تعليمية متكاملة تجمع بين أصالة التربية وحداثة التكنولوجيا. تواصل، تعلم، واكتشف إمكانياتك في حرمنا الرقمي.',
-  color_gradient: 'from-indigo-400 via-purple-400 to-emerald-400',
+  color_gradient: 'from-blue-400 via-indigo-400 to-emerald-400',
   type: 'welcome'
+};
+
+// تأثيرات الدخول المتدرج
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.15 } }
+};
+const fadeUpItem = {
+  hidden: { opacity: 0, y: 30 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring', damping: 20 } }
 };
 
 export default function DigitalCampusPage() {
@@ -41,13 +53,13 @@ export default function DigitalCampusPage() {
   const { scrollYProgress } = useScroll();
   
   const yBackground = useTransform(scrollYProgress, [0, 1], ['0%', '40%']);
+  const opacityHero = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
 
   const [studioItems, setStudioItems] = useState<any[]>([]);
   const [magazineItems, setMagazineItems] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [tickers, setTickers] = useState<any[]>([]);
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
-  
   const [hangingRibbonUrl, setHangingRibbonUrl] = useState<string | null>(null);
 
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -61,7 +73,7 @@ export default function DigitalCampusPage() {
       try {
         const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes] = await Promise.all([
           supabase.from('school_studio').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(8),
-          supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(4),
+          supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(5),
           supabase.from('school_announcements').select('*').order('created_at', { ascending: false }).limit(3),
           supabase.from('school_ticker').select('*').order('created_at', { ascending: false }).limit(5),
           supabase.from('forum_hero_slides').select('*').eq('is_active', true).order('sort_order', { ascending: false }).order('created_at', { ascending: false }),
@@ -81,231 +93,217 @@ export default function DigitalCampusPage() {
 
   useEffect(() => {
     if (heroSlides.length <= 1) return;
-    const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % heroSlides.length), 7000); 
+    const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % heroSlides.length), 8000); 
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
   const breakingNews = tickers.length > 0 ? tickers.map(t => `✨ ${t.content}`).join('   |   ') : null;
 
   const portal = (() => {
-    if (!user) return { href: '/login', text: 'تسجيل الدخول', icon: ArrowLeft };
+    if (!user) return { href: '/login', text: 'تسجيل الدخول للمنصة', icon: ArrowLeft };
     const routes: any = { admin: '/dashboard', management: '/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', parent: '/dashboard/parent' };
-    return { 
-      href: routes[authRole] || '/dashboard', 
-      text: authRole === 'student' ? 'الدخول لحقيبتي' : authRole === 'teacher' ? 'قاعة المعلمين' : 'مركز القيادة', 
-      icon: ArrowLeft 
-    };
+    return { href: routes[authRole] || '/dashboard', text: authRole === 'student' ? 'الدخول لحقيبتي' : authRole === 'teacher' ? 'قاعة المعلمين' : 'مركز القيادة', icon: ArrowLeft };
   })();
 
   const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
   const SlideIcon = ICON_MAP[currentSlideData.icon_name] || Sparkles;
 
-  // 🚀 هذه المتغيرات هي سبب انهيار البناء السابق، تمت إضافتها هنا بشكل صحيح
   const pinnedArticle = magazineItems.find(item => item.is_pinned) || magazineItems[0];
-  const sideArticles = magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 3);
+  const sideArticles = magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 4);
 
   if (isChecking || fetching) {
     return (
-      <div className="h-screen bg-[#0B1120] flex items-center justify-center relative overflow-hidden">
-         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px]"></div>
+      <div className="h-screen bg-[#020617] flex items-center justify-center relative overflow-hidden">
          <motion.div animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="relative z-10 flex flex-col items-center gap-4">
-            <Compass className="w-16 h-16 text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
-            <p className="text-indigo-200 font-bold tracking-widest text-sm">جاري بناء العالم...</p>
+            <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+            <p className="text-indigo-300 font-black tracking-widest text-sm uppercase">جاري التكوين...</p>
          </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0B1120] text-slate-200 font-cairo overflow-x-hidden selection:bg-indigo-500/30 selection:text-white relative" dir="rtl">
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-cairo overflow-x-hidden selection:bg-indigo-500/30 relative" dir="rtl">
       
-      {/* 🎀 الوشاح المتدلي المطور */}
+      {/* 🎀 الوشاح المتدلي (واضح وبدون تأثيرات مظلمة) */}
       {hangingRibbonUrl && (
         <motion.div 
-          initial={{ y: '-100%', opacity: 0 }} 
-          animate={{ y: 0, opacity: 1 }} 
-          transition={{ type: 'spring', damping: 15, stiffness: 50, delay: 0.8 }}
+          initial={{ y: '-100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', damping: 15, stiffness: 50, delay: 0.5 }}
           whileHover={{ rotate: [-1, 1, -0.5, 0.5, 0], scale: 1.02 }}
-          className="absolute top-0 left-6 sm:left-16 lg:left-24 z-[60] w-24 sm:w-36 md:w-44 lg:w-52 h-[350px] sm:h-[500px] md:h-[600px] pointer-events-auto"
-          style={{ 
-            transformOrigin: 'top center',
-            filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.5))'
-          }}
+          className="absolute top-0 left-6 sm:left-16 lg:left-24 z-[60] w-24 sm:w-36 md:w-44 lg:w-48 h-[350px] sm:h-[450px] md:h-[550px] pointer-events-auto shadow-[0_20px_40px_rgba(0,0,0,0.5)]"
+          style={{ transformOrigin: 'top center' }}
         >
-          <div 
-            className="w-full h-full relative"
-            style={{ clipPath: 'polygon(100% 0, 100% 100%, 50% 92%, 0 100%, 0 0)' }}
-          >
+          <div className="w-full h-full relative" style={{ clipPath: 'polygon(100% 0, 100% 100%, 50% 90%, 0 100%, 0 0)' }}>
+            {/* الصورة تظهر بألوانها الحقيقية 100% */}
             <img src={hangingRibbonUrl} alt="School Ribbon" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/20 pointer-events-none"></div>
           </div>
         </motion.div>
       )}
 
-      {/* 🚨 الشريط الإخباري العلوي */}
+      {/* 🚨 الشريط الإخباري (كبسولة طافية معمارية) */}
       {breakingNews && (
-        <div className="w-full bg-indigo-600/90 backdrop-blur-md text-white flex items-center h-11 relative z-50 shadow-2xl border-b border-white/10">
-           <div className="bg-indigo-800 px-6 h-full font-black text-xs flex items-center gap-2 shrink-0 z-10 shadow-[10px_0_20px_rgba(0,0,0,0.3)]">
-             <BellRing className="w-4 h-4 animate-pulse" /> إعلان عاجل
-           </div>
-           <div className="flex-1 overflow-hidden h-full flex items-center">
-             <div className="marquee-content whitespace-nowrap font-bold text-xs sm:text-sm tracking-wide flex gap-16">
-                <span>{breakingNews}</span><span>{breakingNews}</span>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-4xl z-50 pointer-events-none">
+          <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 1, type: "spring" }} className="w-full bg-[#0F172A]/90 backdrop-blur-2xl border border-white/10 rounded-full flex items-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden pointer-events-auto">
+             <div className="bg-indigo-600 px-6 py-3 font-black text-xs sm:text-sm text-white flex items-center gap-2 shrink-0 z-10 shadow-lg">
+               <BellRing className="w-4 h-4 animate-pulse" /> عاجل
              </div>
-           </div>
+             <div className="flex-1 overflow-hidden h-full flex items-center">
+               <div className="marquee-content whitespace-nowrap font-bold text-slate-200 text-xs sm:text-sm tracking-wide flex gap-16 py-3">
+                 <span>{breakingNews}</span><span>{breakingNews}</span>
+               </div>
+             </div>
+          </motion.div>
         </div>
       )}
 
-      {/* 🌟 1. الواجهة الترحيبية */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center pt-12 pb-24 overflow-hidden border-b border-white/5">
-        <motion.div style={{ y: yBackground }} className="absolute inset-0 z-0 pointer-events-none opacity-60">
-          <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-indigo-600/20 rounded-full blur-[150px]"></div>
-          <div className="absolute top-[20%] right-[-10%] w-[40vw] h-[40vw] bg-emerald-500/15 rounded-full blur-[150px]"></div>
-          <div className="absolute bottom-[-20%] left-[20%] w-[60vw] h-[60vw] bg-purple-600/15 rounded-full blur-[150px]"></div>
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
+      {/* 🌟 1. الواجهة الترحيبية (Architectural Hero) */}
+      <section className="relative min-h-[90vh] flex flex-col items-center justify-center pt-24 pb-20 overflow-hidden">
+        {/* خلفية هندسية عميقة */}
+        <motion.div style={{ y: yBackground, opacity: opacityHero }} className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute top-[-20%] right-[-10%] w-[50vw] h-[50vw] bg-indigo-600/10 rounded-full blur-[150px]"></div>
+          <div className="absolute bottom-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-emerald-600/10 rounded-full blur-[150px]"></div>
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_80%,transparent_100%)]"></div>
         </motion.div>
 
-        <div className="absolute top-16 right-8 z-20">
-          <Link href={portal.href} className="px-7 py-3 bg-white/10 hover:bg-white text-white hover:text-[#0B1120] backdrop-blur-md rounded-2xl font-black text-sm flex items-center gap-3 transition-all shadow-2xl border border-white/20 hover:scale-105 active:scale-95">
-             <portal.icon className="w-5 h-5 rotate-180" /> {portal.text}
+        <div className="absolute top-8 right-8 z-20">
+          <Link href={portal.href} className="group relative inline-flex items-center gap-3 px-8 py-4 bg-white text-[#020617] rounded-full font-black text-sm transition-all shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] hover:scale-105 active:scale-95">
+             <span>{portal.text}</span>
+             <div className="w-8 h-8 bg-[#020617] text-white rounded-full flex items-center justify-center group-hover:-translate-x-1 transition-transform">
+               <portal.icon className="w-4 h-4 rotate-180" />
+             </div>
           </Link>
         </div>
 
-        <div className="relative z-10 text-center max-w-5xl px-6 w-full flex flex-col items-center mt-[-5vh]">
+        <div className="relative z-10 text-center max-w-6xl px-6 w-full flex flex-col items-center">
           <AnimatePresence mode="wait">
-            <motion.div 
-              key={currentSlideData.id}
-              initial={{ opacity: 0, y: 30, filter: 'blur(15px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -30, filter: 'blur(15px)' }}
-              transition={{ duration: 0.7, ease: "circOut" }}
-              className="flex flex-col items-center text-center w-full"
-            >
+            <motion.div key={currentSlideData.id} initial={{ opacity: 0, y: 30, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -30, scale: 0.98 }} transition={{ duration: 0.6, ease: "easeOut" }} className="flex flex-col items-center text-center w-full">
+              
               {currentSlideData.badge_text && (
-                <div className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white/5 border border-white/10 text-indigo-200 text-xs sm:text-sm font-bold mb-8 shadow-inner backdrop-blur-xl">
+                <div className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#0F172A] border border-indigo-500/30 text-indigo-300 text-sm font-black mb-8 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
                   <SlideIcon className="w-4 h-4 text-emerald-400" /> {currentSlideData.badge_text}
                 </div>
               )}
               
-              <h1 className={`text-6xl sm:text-8xl md:text-9xl font-black tracking-tighter leading-[1.1] mb-8 text-transparent bg-clip-text bg-gradient-to-l ${currentSlideData.color_gradient || 'from-indigo-300 via-white to-emerald-300'} drop-shadow-2xl`}>
+              <h1 className={`text-6xl sm:text-8xl md:text-[10rem] font-black tracking-tighter leading-[1] mb-8 text-transparent bg-clip-text bg-gradient-to-l ${currentSlideData.color_gradient || 'from-indigo-300 via-white to-emerald-300'} drop-shadow-2xl`}>
                 {currentSlideData.title}
               </h1>
               
               {currentSlideData.description && (
-                <p className="text-slate-300/80 text-lg sm:text-2xl font-medium max-w-3xl mx-auto leading-relaxed mb-12">
+                <p className="text-slate-300 text-lg sm:text-2xl font-bold max-w-3xl mx-auto leading-relaxed mb-12">
                   {currentSlideData.description}
                 </p>
               )}
 
+              {/* بطاقات الطلاب (تصميم معماري بارز) */}
               {currentSlideData.metadata?.students && (
-                <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-12">
+                <div className="flex flex-wrap justify-center gap-6 mb-12">
                   {currentSlideData.metadata.students.map((student: any, i: number) => (
-                    <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-3.5 flex items-center gap-4 pr-6 shadow-2xl hover:bg-white/10 transition-all cursor-default group">
+                    <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-[#0F172A]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-3 flex items-center gap-5 pr-6 shadow-2xl hover:border-indigo-500/50 hover:-translate-y-2 transition-all group">
                       <div className="relative">
-                        <Crown className="absolute -top-4 -right-3 w-7 h-7 text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.6)] z-10 rotate-12 group-hover:scale-110 transition-transform" />
-                        <img src={student.img} alt={student.name} className="w-16 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-white/20 object-cover shadow-inner" />
+                        <Crown className="absolute -top-5 -right-4 w-8 h-8 text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.8)] z-10 rotate-12 group-hover:scale-125 transition-transform" />
+                        <img src={student.img} alt={student.name} className="w-16 h-16 rounded-full border-2 border-white/10 object-cover" />
                       </div>
-                      <div className="text-right">
-                        <p className="text-base sm:text-lg font-black text-white">{student.name}</p>
-                        <p className="text-xs font-bold text-emerald-400 tracking-wider">{student.grade}</p>
+                      <div className="text-right py-2">
+                        <p className="text-lg font-black text-white">{student.name}</p>
+                        <p className="text-sm font-bold text-emerald-400">{student.grade}</p>
                       </div>
                     </motion.div>
                   ))}
                 </div>
               )}
 
+              {/* صورة الهيرو - ألوان حقيقية 100% */}
               {currentSlideData.type === 'media' && currentSlideData.media_url && (
-                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="mb-12 w-full max-w-4xl mx-auto rounded-[3rem] overflow-hidden shadow-[0_40px_80px_rgba(0,0,0,0.6)] border border-white/10 bg-black/40 backdrop-blur-md p-2.5">
-                    <img src={currentSlideData.media_url} alt="Campus Event" className="w-full h-auto max-h-[450px] object-cover rounded-[2rem]" />
+                 <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-5xl mx-auto rounded-[3rem] overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-white/10 relative group">
+                    <img src={currentSlideData.media_url} alt="Hero Media" className="w-full h-auto max-h-[500px] object-cover group-hover:scale-105 transition-transform duration-1000 ease-out" />
                  </motion.div>
               )}
             </motion.div>
           </AnimatePresence>
-
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-4">
-            <a href="#explore" className="inline-flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors">
-              استكشف الحرم <ArrowLeft className="w-4 h-4 animate-bounce-x" />
-            </a>
-          </motion.div>
         </div>
 
         {heroSlides.length > 1 && (
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-3 z-30">
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-3 z-30 bg-[#0F172A]/80 backdrop-blur-md p-3 rounded-full border border-white/5">
             {heroSlides.map((_, i) => (
-              <button key={i} onClick={() => setCurrentSlide(i)} className={`h-1.5 rounded-full transition-all duration-500 ${currentSlide === i ? 'w-12 bg-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)]' : 'w-2.5 bg-white/10 hover:bg-white/30'}`} />
+              <button key={i} onClick={() => setCurrentSlide(i)} className={`h-2.5 rounded-full transition-all duration-500 ${currentSlide === i ? 'w-10 bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'w-2.5 bg-white/20 hover:bg-white/40'}`} />
             ))}
           </div>
         )}
       </section>
 
-      {/* 📣 2. الإعلانات السريعة */}
-      <div id="explore" className="pt-10"></div>
+      {/* 📣 2. الإعلانات السريعة (Floating Cards) */}
       {announcements.length > 0 && (
-        <section className="py-20 relative z-10">
+        <section className="py-20 relative z-10 border-t border-white/5 bg-[#050A15]">
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-4 mb-12">
-              <div className="w-14 h-14 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Megaphone className="w-7 h-7 text-rose-400" /></div>
-              <h2 className="text-3xl sm:text-4xl font-black text-white">إعلانات <span className="text-transparent bg-clip-text bg-gradient-to-l from-rose-400 to-orange-300">سريعة</span></h2>
+            <div className="flex items-center gap-4 mb-14">
+              <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/20 rounded-[2rem] flex items-center justify-center"><Megaphone className="w-8 h-8 text-rose-500" /></div>
+              <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tight">إعلانات <span className="text-rose-500">سريعة</span></h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {announcements.map((ann, i) => (
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} key={ann.id} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 hover:border-rose-400/50 hover:bg-white/10 transition-all hover:-translate-y-2 shadow-2xl relative group overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-[50px] group-hover:bg-rose-500/20 transition-colors"></div>
-                  <div className="flex justify-between items-start mb-6 relative z-10">
-                    <span className="text-[11px] font-black text-rose-300 bg-rose-500/10 px-4 py-2 rounded-full border border-rose-500/20">{ann.tag || 'إعلان'}</span>
-                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(ann.created_at).toLocaleDateString('ar-SA')}</span>
+            
+            <motion.div variants={staggerContainer} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-100px" }} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {announcements.map((ann) => (
+                <motion.div variants={fadeUpItem} key={ann.id} className="bg-[#0F172A] p-8 rounded-[2.5rem] border border-white/5 hover:border-rose-500/50 transition-all hover:-translate-y-3 shadow-xl hover:shadow-[0_20px_40px_rgba(225,29,72,0.15)] relative group overflow-hidden flex flex-col justify-between min-h-[220px]">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-[50px] group-hover:bg-rose-500/20 transition-colors"></div>
+                  <div className="relative z-10">
+                    <div className="flex justify-between items-center mb-6">
+                      <span className="text-xs font-black text-rose-400 bg-rose-500/10 px-4 py-2 rounded-full border border-rose-500/20">{ann.tag || 'إعلان'}</span>
+                      <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {new Date(ann.created_at).toLocaleDateString('ar-SA')}</span>
+                    </div>
+                    <h3 className="text-xl sm:text-2xl font-black text-white leading-snug group-hover:text-rose-200 transition-colors">{ann.title}</h3>
                   </div>
-                  <h3 className="text-xl font-bold text-slate-200 leading-relaxed relative z-10 group-hover:text-white transition-colors">{ann.title}</h3>
                 </motion.div>
               ))}
-            </div>
+            </motion.div>
           </div>
         </section>
       )}
 
-      {/* 🎬 3. الاستوديو البصري */}
+      {/* 🎬 3. الاستوديو البصري (True Colors & Architectural Layout) */}
       {studioItems.length > 0 && (
-        <section className="py-24 relative z-10 bg-[#070b14] border-y border-white/5 shadow-[inset_0_20px_50px_rgba(0,0,0,0.5)]">
-          <div className="absolute left-0 top-1/2 w-64 h-64 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none"></div>
-          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mb-16 flex flex-col sm:flex-row sm:items-end justify-between gap-6 relative z-10">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Video className="w-7 h-7 text-indigo-400" /></div>
+        <section className="py-28 relative z-10 bg-[#020617] border-y border-white/5">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mb-16 flex flex-col sm:flex-row sm:items-end justify-between gap-8 relative z-10">
+            <div className="flex items-center gap-5">
+              <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/20 rounded-[2rem] flex items-center justify-center"><Video className="w-8 h-8 text-indigo-500" /></div>
               <div>
-                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2">المكتبة البصرية</h2>
-                <p className="text-indigo-200/60 font-bold text-sm">نظرة حية من داخل أسوار الرفعة.</p>
+                <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-2">المكتبة البصرية</h2>
+                <p className="text-slate-400 font-bold text-base">نظرة حية، زاهية، ومباشرة من داخل أسوار الرفعة.</p>
               </div>
             </div>
-            <Link href="/archive/gallery" className="px-6 py-3.5 rounded-2xl bg-white/5 text-slate-300 font-bold text-sm hover:bg-white hover:text-black transition-all flex items-center gap-2 shadow-sm border border-white/10 hover:scale-105">
-              الأرشيف الكامل <ArrowLeft className="w-4 h-4" />
+            <Link href="/archive/gallery" className="px-8 py-4 rounded-full bg-white/5 text-white font-black text-sm hover:bg-indigo-600 transition-all flex items-center gap-3 border border-white/10 hover:scale-105">
+              تصفح الأرشيف <ArrowLeft className="w-4 h-4" />
             </Link>
           </div>
 
-          <div className="flex overflow-x-auto gap-6 px-4 sm:px-6 lg:px-8 pb-12 snap-x snap-mandatory hide-scrollbar relative z-10" dir="rtl">
+          {/* سكرول أفقي فاخر للصور */}
+          <div className="flex overflow-x-auto gap-8 px-4 sm:px-6 lg:px-8 pb-12 snap-x snap-mandatory hide-scrollbar relative z-10" dir="rtl">
             {studioItems.map((media, index) => (
               <motion.div 
-                initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, margin: "-50px" }} transition={{ delay: index * 0.1 }}
+                initial={{ opacity: 0, x: 50 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, margin: "-50px" }} transition={{ delay: index * 0.1, type: "spring", stiffness: 50 }}
                 key={media.id} 
-                className="relative shrink-0 w-[85vw] sm:w-[500px] aspect-[4/3] rounded-[2.5rem] overflow-hidden snap-center group bg-[#0B1120] shadow-2xl cursor-pointer border border-white/10"
+                className="relative shrink-0 w-[85vw] sm:w-[450px] aspect-square sm:aspect-[4/3] rounded-[3rem] overflow-hidden snap-center group bg-[#0F172A] shadow-2xl cursor-pointer border border-white/10 hover:border-indigo-500/50 transition-colors"
                 onClick={() => setActiveMedia(media)} 
               >
-                <img src={media.media_type === 'video' ? media.thumbnail_url : media.media_url} alt={media.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 group-hover:opacity-60 transition-all duration-700 ease-out" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-500"></div>
+                {/* 🚀 الصور بألوانها الحقيقية بدون فلاتر رمادية */}
+                <img src={media.media_type === 'video' ? media.thumbnail_url : media.media_url} alt={media.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 ease-out z-0" />
+                
+                {/* 🚀 تدرج أسود في الجزء السفلي فقط لضمان قراءة النص */}
+                <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-[#020617] via-[#020617]/80 to-transparent z-10"></div>
                 
                 {media.media_type === 'video' && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center group-hover:bg-indigo-600 group-hover:border-indigo-500 group-hover:scale-110 transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                      <Play className="w-8 h-8 text-white ml-2 drop-shadow-md" fill="currentColor" />
+                  <div className="absolute inset-0 flex items-center justify-center z-20">
+                    <div className="w-20 h-20 rounded-full bg-indigo-600/90 backdrop-blur-md border border-indigo-400 flex items-center justify-center group-hover:bg-indigo-500 group-hover:scale-110 transition-all shadow-[0_0_30px_rgba(99,102,241,0.6)]">
+                      <Play className="w-8 h-8 text-white ml-2" fill="currentColor" />
                     </div>
                   </div>
                 )}
                 
-                <div className="absolute top-6 right-6 z-10 px-4 py-2 rounded-xl bg-black/40 backdrop-blur-md text-white text-[11px] font-black flex items-center gap-2 border border-white/10 shadow-lg">
-                  {media.media_type === 'video' ? <Video className="w-3.5 h-3.5 text-indigo-400" /> : <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />} {media.media_type === 'video' ? 'فيديو' : 'صورة'}
+                {/* علامة نوع الميديا المرتفعة */}
+                <div className="absolute top-6 right-6 z-20 px-4 py-2 rounded-xl bg-black/60 backdrop-blur-md text-white text-xs font-black flex items-center gap-2 border border-white/20 shadow-lg">
+                  {media.media_type === 'video' ? <Video className="w-4 h-4 text-indigo-400" /> : <ImageIcon className="w-4 h-4 text-emerald-400" />} {media.media_type === 'video' ? 'فيديو' : 'صورة'}
                 </div>
 
-                <div className="absolute bottom-0 left-0 w-full p-8 z-10 translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
-                  <h3 className="text-xl sm:text-2xl font-black text-white leading-snug drop-shadow-2xl line-clamp-2 mb-3">{media.title}</h3>
-                  <div className="w-12 h-1 bg-indigo-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="absolute bottom-0 left-0 w-full p-8 z-20 translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                  <h3 className="text-xl sm:text-2xl font-black text-white leading-snug drop-shadow-md line-clamp-2">{media.title}</h3>
                 </div>
               </motion.div>
             ))}
@@ -313,127 +311,112 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* 📰 4. المركز الإخباري */}
+      {/* 📰 4. المركز الإخباري (Bento Grid Architecture) */}
       {magazineItems.length > 0 && (
-        <section className="py-24 relative z-10 bg-[#0B1120]">
-          <div className="absolute right-0 bottom-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+        <section className="py-28 relative z-10 bg-[#050A15]">
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-12">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Newspaper className="w-7 h-7 text-emerald-400" /></div>
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-8 mb-16">
+              <div className="flex items-center gap-5">
+                <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 rounded-[2rem] flex items-center justify-center"><Newspaper className="w-8 h-8 text-emerald-500" /></div>
                 <div>
-                  <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2">المركز الإخباري</h2>
-                  <p className="text-emerald-200/60 font-bold text-sm">تغطية شاملة لأهم الأخبار والمقالات.</p>
+                  <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-2">المركز الإخباري</h2>
+                  <p className="text-slate-400 font-bold text-base">تغطية معمارية لأهم المنجزات.</p>
                 </div>
               </div>
-              <Link href="/archive/news" className="px-6 py-3.5 rounded-2xl bg-white/5 text-slate-300 font-bold text-sm hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2 shadow-sm border border-white/10 hover:scale-105">
-                جميع الأخبار <ArrowLeft className="w-4 h-4" />
+              <Link href="/archive/news" className="px-8 py-4 rounded-full bg-white/5 text-white font-black text-sm hover:bg-emerald-600 transition-all flex items-center gap-3 border border-white/10 hover:scale-105">
+                الأرشيف الصحفي <ArrowLeft className="w-4 h-4" />
               </Link>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+              
+              {/* الخبر الرئيسي - يأخذ مساحة كبيرة (Bento Big Box) */}
               {pinnedArticle && (
-                <motion.div onClick={() => setActiveArticle(pinnedArticle)} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="lg:col-span-8 group cursor-pointer relative h-[500px] sm:h-[600px] rounded-[3rem] overflow-hidden shadow-2xl bg-black border border-white/10">
-                  <img src={pinnedArticle.cover_image} alt={pinnedArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-105 group-hover:opacity-40 transition-all duration-1000 ease-out mix-blend-luminosity group-hover:mix-blend-normal" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
+                <motion.div onClick={() => setActiveArticle(pinnedArticle)} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="lg:col-span-7 xl:col-span-8 group cursor-pointer relative h-[500px] sm:h-[650px] rounded-[3rem] overflow-hidden shadow-2xl bg-[#0F172A] border border-white/5 hover:border-emerald-500/50 transition-colors flex flex-col">
+                  {/* 🚀 صورة 100% حقيقية في النصف العلوي أو كخلفية صافية */}
+                  <img src={pinnedArticle.cover_image} alt={pinnedArticle.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out z-0" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/70 to-transparent z-10"></div>
                   
-                  <div className="absolute inset-0 p-8 sm:p-12 flex flex-col justify-end z-10">
-                    <div className="flex items-center gap-3 mb-6">
-                      {pinnedArticle.is_pinned && <span className="px-4 py-1.5 bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] text-[11px] font-black rounded-xl">رئيسي</span>}
-                      <span className="text-slate-300 text-xs font-bold flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-xl border border-white/10"><User className="w-3.5 h-3.5 text-emerald-400" /> {pinnedArticle.author_name}</span>
+                  <div className="relative z-20 p-8 sm:p-14 flex flex-col justify-end h-full">
+                    <div className="flex flex-wrap items-center gap-3 mb-6">
+                      {pinnedArticle.is_pinned && <span className="px-4 py-2 bg-emerald-500 text-[#020617] shadow-[0_0_20px_rgba(16,185,129,0.4)] text-xs font-black rounded-xl flex items-center gap-1.5"><Star className="w-4 h-4" /> رئيسي</span>}
+                      <span className="text-white text-xs font-bold flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10"><User className="w-4 h-4 text-emerald-400" /> {pinnedArticle.author_name}</span>
                     </div>
-                    <h3 className="text-3xl sm:text-5xl md:text-6xl font-black text-white leading-[1.2] mb-6 group-hover:text-emerald-300 transition-colors drop-shadow-xl">{pinnedArticle.title}</h3>
-                    <p className="text-slate-300 font-medium text-sm sm:text-lg max-w-3xl line-clamp-2 mb-8 leading-relaxed opacity-90">{pinnedArticle.excerpt}</p>
+                    <h3 className="text-4xl sm:text-5xl md:text-6xl font-black text-white leading-[1.2] mb-6 group-hover:text-emerald-400 transition-colors drop-shadow-xl">{pinnedArticle.title}</h3>
+                    <p className="text-slate-300 font-bold text-base sm:text-lg max-w-3xl line-clamp-2 mb-8 leading-relaxed">{pinnedArticle.excerpt}</p>
                     
-                    <div className="inline-flex items-center gap-2 text-white font-black text-sm bg-white/10 w-max px-6 py-3.5 rounded-full backdrop-blur-md border border-white/20 group-hover:bg-emerald-500 group-hover:border-emerald-400 transition-all shadow-lg">
-                      اقرأ المقال كاملاً <ArrowUpRight className="w-4 h-4" />
+                    <div className="inline-flex items-center gap-2 text-[#020617] font-black text-sm bg-white w-max px-8 py-4 rounded-full group-hover:bg-emerald-400 transition-all shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
+                      اقرأ التفاصيل <ArrowUpRight className="w-5 h-5" />
                     </div>
                   </div>
                 </motion.div>
               )}
 
-              <div className="lg:col-span-4 flex flex-col gap-6 sm:gap-8">
+              {/* الأخبار الفرعية - مقسمة كبطاقات أصغر (Bento Small Boxes) */}
+              <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-6 sm:gap-8">
                 {sideArticles.map((article, idx) => (
-                  <motion.div onClick={() => setActiveArticle(article)} key={article.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.1 }} className="flex-1 group cursor-pointer relative rounded-[2.5rem] overflow-hidden shadow-xl bg-black border border-white/10 min-h-[250px]">
-                    <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-110 group-hover:opacity-60 transition-all duration-700 ease-out mix-blend-luminosity group-hover:mix-blend-normal" />
-                    <div className="absolute inset-0 p-8 flex flex-col justify-end z-10 bg-gradient-to-t from-black via-black/80 to-transparent">
-                      <span className="text-emerald-400/90 text-[11px] font-bold mb-3 flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {article.author_name}</span>
-                      <h3 className="text-xl sm:text-2xl font-black text-white leading-snug group-hover:text-emerald-300 transition-colors">{article.title}</h3>
+                  <motion.div onClick={() => setActiveArticle(article)} key={article.id} initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.15, type: 'spring' }} className="flex-1 group cursor-pointer relative rounded-[2.5rem] overflow-hidden shadow-xl bg-[#0F172A] border border-white/5 hover:border-white/20 min-h-[200px] flex flex-col">
+                    <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out z-0" />
+                    <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#020617] via-[#020617]/80 to-transparent"></div>
+                    <div className="relative z-20 p-6 sm:p-8 flex flex-col justify-end h-full">
+                      <span className="text-emerald-400 text-xs font-black mb-3 flex items-center gap-2 drop-shadow-md"><User className="w-4 h-4" /> {article.author_name}</span>
+                      <h3 className="text-xl sm:text-2xl font-black text-white leading-snug group-hover:text-emerald-300 transition-colors drop-shadow-md">{article.title}</h3>
                     </div>
                   </motion.div>
                 ))}
-
-                {sideArticles.length < 2 && (
-                  <Link href="/archive/news" className="flex-1 bg-white/5 p-8 rounded-[2.5rem] border border-white/10 flex flex-col justify-center text-center group hover:bg-white/10 transition-all backdrop-blur-md shadow-inner">
-                    <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4 border border-white/5 group-hover:scale-110 transition-transform">
-                       <BookOpen className="w-8 h-8 text-slate-300 group-hover:text-white" />
-                    </div>
-                    <h3 className="text-2xl font-black text-white mb-2">أرشيف الأخبار</h3>
-                    <p className="text-xs text-slate-400 font-bold mb-6">استكشف جميع المقالات السابقة.</p>
-                    <span className="text-emerald-400 font-black text-sm flex items-center justify-center gap-2">تصفح المكتبة <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /></span>
-                  </Link>
-                )}
               </div>
             </div>
           </div>
         </section>
       )}
 
-      {/* 🚀 5. الخاتمة والدعوة */}
-      <section className="py-32 relative z-10 bg-[#070b14] border-t border-white/5 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[60vw] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
-        <div className="max-w-3xl mx-auto px-6 text-center relative z-10">
-           <div className="w-24 h-24 bg-white/5 rounded-[2.5rem] border border-white/10 flex items-center justify-center mx-auto mb-10 shadow-2xl backdrop-blur-xl">
-              <Compass className="w-12 h-12 text-indigo-400 drop-shadow-[0_0_10px_rgba(99,102,241,0.8)]" />
-           </div>
-           <h2 className="text-5xl sm:text-7xl font-black text-white mb-8 tracking-tight">جاهز للانطلاق؟</h2>
-           <p className="text-slate-400 font-bold text-xl mb-14 max-w-xl mx-auto leading-relaxed">انضم الآن إلى مجتمع مدرستك في منصة التعليم الرقمي الأقوى والأكثر تطوراً.</p>
-           <Link href={portal.href} className="inline-flex items-center justify-center gap-4 px-12 py-6 bg-white text-[#0B1120] rounded-full font-black text-xl hover:bg-indigo-50 hover:scale-105 transition-all shadow-[0_0_50px_rgba(255,255,255,0.2)] active:scale-95">
-             <span>{user ? 'العودة للوحة القيادة' : 'تسجيل الدخول للمنصة'}</span>
+      {/* 🚀 5. الخاتمة والدعوة (Grand Footer CTA) */}
+      <section className="py-32 relative z-10 bg-[#020617] border-t border-white/5 overflow-hidden text-center">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[60vw] bg-indigo-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+        <div className="max-w-4xl mx-auto px-6 relative z-10">
+           <div className="w-28 h-28 bg-[#0F172A] rounded-[2.5rem] border border-white/10 flex items-center justify-center mx-auto mb-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"><Compass className="w-14 h-14 text-indigo-500" /></div>
+           <h2 className="text-5xl sm:text-8xl font-black text-white mb-8 tracking-tighter">جاهز للانطلاق؟</h2>
+           <p className="text-slate-400 font-bold text-xl sm:text-2xl mb-14 max-w-2xl mx-auto leading-relaxed">انضم الآن إلى مجتمع مدرستك في منصة التعليم الرقمي الأقوى والأكثر تطوراً على مستوى البلاد.</p>
+           <Link href={portal.href} className="inline-flex items-center justify-center gap-4 px-14 py-7 bg-white text-[#020617] rounded-full font-black text-xl hover:bg-indigo-600 hover:text-white hover:scale-105 transition-all shadow-[0_20px_50px_rgba(255,255,255,0.1)] active:scale-95">
+             <span>{user ? 'دخول لوحة القيادة' : 'تسجيل الدخول للمنصة'}</span>
              <ArrowLeft className="w-6 h-6" />
            </Link>
         </div>
       </section>
 
-      {/* 🖼️ المشغلات المنبثقة الذكية (Modals & Lightboxes) */}
+      {/* 🖼️ النوافذ المنبثقة (Cinematic Modals) */}
       <AnimatePresence>
         {activeMedia && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1120]/95 backdrop-blur-2xl p-4 sm:p-10" onClick={() => setActiveMedia(null)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-6xl bg-black rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.8)] relative border border-white/10" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setActiveMedia(null)} className="absolute top-6 left-6 z-50 w-12 h-12 bg-white/10 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-colors border border-white/20 shadow-xl"><X className="w-6 h-6" /></button>
-              {activeMedia.media_type === 'video' ? (
-                <video src={activeMedia.media_url} controls autoPlay className="w-full max-h-[85vh] object-contain bg-black" />
-              ) : (
-                <img src={activeMedia.media_url} alt={activeMedia.title} className="w-full max-h-[85vh] object-contain bg-black" />
-              )}
-              <div className="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-black to-transparent pointer-events-none">
-                <h3 className="text-white font-black text-2xl drop-shadow-md">{activeMedia.title}</h3>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/95 backdrop-blur-2xl p-4 sm:p-10" onClick={() => setActiveMedia(null)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 30 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-6xl bg-black rounded-[3rem] overflow-hidden shadow-[0_40px_80px_rgba(0,0,0,0.8)] relative border border-white/10 flex flex-col" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setActiveMedia(null)} className="absolute top-6 left-6 z-50 w-14 h-14 bg-white/10 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-xl transition-colors border border-white/20 shadow-2xl"><X className="w-6 h-6" /></button>
+              <div className="relative w-full flex-1 bg-black flex items-center justify-center min-h-[50vh] max-h-[85vh]">
+                {activeMedia.media_type === 'video' ? (<video src={activeMedia.media_url} controls autoPlay className="w-full h-full max-h-[85vh] object-contain" />) : (<img src={activeMedia.media_url} alt={activeMedia.title} className="w-full h-full max-h-[85vh] object-contain" />)}
+              </div>
+              <div className="p-8 bg-[#0F172A] border-t border-white/5 relative z-10">
+                <h3 className="text-white font-black text-3xl">{activeMedia.title}</h3>
               </div>
             </motion.div>
           </motion.div>
         )}
 
         {activeArticle && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1120]/80 backdrop-blur-md p-4 sm:p-6" onClick={() => setActiveArticle(null)}>
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-4xl bg-[#0F172A] rounded-[3rem] overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh] border border-white/10" onClick={e => e.stopPropagation()}>
-              <div className="relative h-72 sm:h-96 shrink-0 bg-black">
-                <button onClick={() => setActiveArticle(null)} className="absolute top-6 left-6 z-50 w-12 h-12 bg-black/40 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-xl transition-colors border border-white/20"><X className="w-6 h-6" /></button>
-                <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-luminosity" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-[#0F172A]/20 to-transparent"></div>
-                <div className="absolute bottom-6 right-8 z-10 flex gap-3">
-                   {activeArticle.is_pinned && <span className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg">خبر رئيسي</span>}
-                </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/90 backdrop-blur-xl p-4 sm:p-6" onClick={() => setActiveArticle(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 50 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 50 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-5xl bg-[#0F172A] rounded-[3rem] overflow-hidden shadow-[0_40px_80px_rgba(0,0,0,0.8)] relative flex flex-col max-h-[90vh] border border-white/10" onClick={e => e.stopPropagation()}>
+              <div className="relative h-72 sm:h-[400px] shrink-0 bg-black">
+                <button onClick={() => setActiveArticle(null)} className="absolute top-6 left-6 z-50 w-14 h-14 bg-black/50 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-2xl transition-colors border border-white/20"><X className="w-7 h-7" /></button>
+                <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-transparent to-transparent"></div>
               </div>
-              <div className="px-8 sm:px-14 pb-14 pt-2 overflow-y-auto custom-scrollbar relative z-10">
-                <div className="flex items-center gap-4 mb-6 border-b border-white/5 pb-6">
-                  <span className="text-slate-400 flex items-center gap-1.5 text-sm font-bold"><Calendar className="w-4 h-4" /> {new Date(activeArticle.created_at).toLocaleDateString('ar-SA')}</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-white/20"></span>
-                  <span className="text-emerald-400 flex items-center gap-1.5 text-sm font-bold"><User className="w-4 h-4" /> بقلم: {activeArticle.author_name}</span>
+              <div className="px-8 sm:px-16 pb-16 pt-8 overflow-y-auto custom-scrollbar relative z-10 bg-[#0F172A]">
+                <div className="flex items-center gap-4 mb-8 border-b border-white/5 pb-6">
+                  <span className="text-slate-400 flex items-center gap-2 text-base font-bold"><Calendar className="w-5 h-5" /> {new Date(activeArticle.created_at).toLocaleDateString('ar-SA')}</span>
+                  <span className="w-2 h-2 rounded-full bg-white/20"></span>
+                  <span className="text-emerald-400 flex items-center gap-2 text-base font-bold"><User className="w-5 h-5" /> {activeArticle.author_name}</span>
                 </div>
-                <h2 className="text-3xl sm:text-5xl font-black text-white mb-8 leading-[1.3] tracking-tight">{activeArticle.title}</h2>
-                <div className="prose prose-invert prose-lg max-w-none text-slate-300 font-medium leading-loose">
-                  <p className="text-xl text-slate-200 font-bold mb-6 p-6 bg-white/5 rounded-2xl border-l-4 border-emerald-500">{activeArticle.excerpt}</p>
-                  <p className="opacity-50">تفاصيل المقال الكاملة ستتاح قريباً مع محرر الإدارة المتقدم...</p>
+                <h2 className="text-4xl sm:text-6xl font-black text-white mb-10 leading-[1.2] tracking-tight">{activeArticle.title}</h2>
+                <div className="prose prose-invert prose-xl max-w-none text-slate-300 font-medium leading-loose">
+                  <p className="text-2xl text-white font-bold mb-10 p-8 sm:p-10 bg-white/5 rounded-3xl border-l-4 border-emerald-500 shadow-inner">{activeArticle.excerpt}</p>
                 </div>
               </div>
             </motion.div>
@@ -444,12 +427,15 @@ export default function DigitalCampusPage() {
       <style dangerouslySetInnerHTML={{ __html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; } 
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 🚀 الشريط الإخباري (RTL) البطيء */
         .marquee-content { display: inline-block; animation: marquee 90s linear infinite; }
         @keyframes marquee { 0% { transform: translateX(-100vw); } 100% { transform: translateX(100%); } }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
       `}} />
     </div>
   );
