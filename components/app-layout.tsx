@@ -82,19 +82,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAuthorized = getAuthorization();
 
-  // ==========================================
+// ==========================================
   // 🚀 7. التوجيه الإجباري (Auto-Redirect)
-  // 🚀 التعديل الجوهري: حذفنا كود 'if (isRoot) router.push(...)'
-  // الآن لن يتم تحويل المستخدم تلقائياً عند زيارة الصفحة الرئيسية
   // ==========================================
   useEffect(() => {
     if (isChecking || isPublicPage || !user) return;
     
+    // إجباره على صفحة تغيير كلمة المرور
     if (mustResetPassword && !isResetPasswordPage) { router.push('/reset-password'); return; }
     if (!authRole) return;
     
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
+    // 🌟 الخدعة الذكية: إجبار الجميع على رؤية "الحرم الرقمي" في أول دخول
+    if (isDashboardRoute) {
+      const hasSeenNewCampus = localStorage.getItem('seen_campus_v1');
+      if (!hasSeenNewCampus) {
+        // نعطيه الختم لكي لا نزعجه في المرات القادمة
+        localStorage.setItem('seen_campus_v1', 'true'); 
+        // ونرسله فوراً وبقوة إلى الصفحة الرئيسية الساحرة!
+        router.push('/'); 
+        return; 
+      }
+    }
+
+    // توجيه كل رتبة للوحة القيادة (Dashboard) الخاصة بها بعد التحقق
     if (authRole === 'student') { 
       if (isDashboardRoute && !pathname.startsWith('/dashboard/student')) router.push('/dashboard/student'); 
     }
