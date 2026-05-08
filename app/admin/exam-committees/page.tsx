@@ -44,7 +44,7 @@ export default function ExamCommitteesControl() {
   const [selectedCommittee, setSelectedCommittee] = useState<any>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [teacherSearchTerm, setTeacherSearchTerm] = useState(''); 
-  const [builderData, setBuilderData] = useState({ count: 20, capacity: 15 });
+  const [builderData, setBuilderData] = useState({ count: 21, capacity: 14 });
   const [editCommitteeData, setEditCommitteeData] = useState({ id: '', name: '', capacity: 14, location: '' });
   const [viewCommitteeDetails, setViewCommitteeDetails] = useState<{ students: any[], invigs: any[] }>({ students: [], invigs: [] });
 
@@ -69,7 +69,6 @@ export default function ExamCommitteesControl() {
     try {
       const { data: comms } = await supabase.from('exam_committees').select('*').eq('academic_year', currentYear).eq('semester', currentSemester);
       
-      // 🚀 فرز رقمي ذكي للجان
       const sortedComms = (comms || []).sort((a, b) => {
         const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
@@ -199,7 +198,6 @@ export default function ExamCommitteesControl() {
     try { await supabase.from('exam_committees').delete().eq('id', id); fetchData(); } catch (error) { alert('خطأ في الحذف'); }
   };
 
-  // 🚀 الهدم الشامل باستخدام nukeEverything
   const handleNuclear = async () => {
     if (!confirm('سيتم هدم اللجان ومسح توزيع الطلاب والمراقبين بالكامل! تأكيد؟')) return;
     const ok = await nukeEverything(currentYear, currentSemester);
@@ -292,7 +290,7 @@ export default function ExamCommitteesControl() {
           const pdf = new jsPDF('p', 'mm', 'a4');
           for (let i = 0; i < pages.length; i++) {
             const canvas = await html2canvas(pages[i] as HTMLElement, { scale: isMobile ? 1.5 : 2, useCORS: true, allowTaint: false, logging: false, width: 794, height: 1122, backgroundColor: '#ffffff' });
-            const imgData = canvas.toDataURL('image/jpeg', 0.85); 
+            const imgData = canvas.toDataURL('image/jpeg', 1.0); // استخدام جودة عالية للطباعة 
             const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = pdf.internal.pageSize.getHeight(); 
             if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
           }
@@ -467,14 +465,21 @@ export default function ExamCommitteesControl() {
         </div>
       </div>
 
-      {/* 🚀 نافذة بناء اللجان الديناميكية */}
+      {/* 🚀 نافذة بناء اللجان الديناميكية (بحماية قصوى) */}
       {isBuilderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-emerald-600"/> هندسة اللجان</h3>
             <div className="space-y-4">
-              <div><label className="text-sm font-bold text-slate-600">كم عدد اللجان الإجمالي؟</label><input type="number" value={builderData.count} onChange={e=>setBuilderData({...builderData, count: Number(e.target.value)})} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center" /></div>
-              <div><label className="text-sm font-bold text-slate-600">سعة اللجنة الواحدة؟</label><input type="number" value={builderData.capacity} onChange={e=>setBuilderData({...builderData, capacity: Number(e.target.value)})} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center" /></div>
+              <div>
+                <label className="text-sm font-bold text-slate-600">كم عدد اللجان الإجمالي؟</label>
+                <input type="number" min="1" max="100" value={builderData.count} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, count: isNaN(v) ? 1 : Math.min(100, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-600">سعة اللجنة الواحدة؟</label>
+                <input type="number" min="1" max="50" value={builderData.capacity} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, capacity: isNaN(v) ? 1 : Math.min(50, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" />
+                <p className="text-[10px] text-slate-400 text-center mt-1">السعة القصوى 50 طالب للجنة.</p>
+              </div>
               <div className="flex gap-2 pt-2">
                  <button onClick={handleBuild} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700">بناء واعتماد</button>
                  <button onClick={() => setIsBuilderModalOpen(false)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black hover:bg-slate-200">إلغاء</button>
@@ -575,10 +580,10 @@ export default function ExamCommitteesControl() {
                        <table className="w-full border-collapse border border-slate-200 text-right text-sm rounded-xl overflow-hidden shadow-sm">
                          <thead className="bg-slate-100">
                            <tr>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">الجلوس</th>
+                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">رقم الجلوس</th>
                              <th className="p-3 border-b border-slate-200 font-black text-slate-700">اسم الطالب</th>
                              <th className="p-3 border-b border-slate-200 font-black text-slate-700">الصف</th>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700 text-center">إجراء النقل</th>
+                             <th className="p-3 border-b border-slate-200 font-black text-slate-700 text-center">إجراء النقل اليدوي</th>
                            </tr>
                          </thead>
                          <tbody>
@@ -612,7 +617,7 @@ export default function ExamCommitteesControl() {
                                        }}
                                        defaultValue=""
                                     >
-                                       <option value="" disabled>🔄 نقل لـ...</option>
+                                       <option value="" disabled>🔄 نقل إلى لجنة...</option>
                                        {committees.filter(c => c.id !== selectedCommittee.id).map(c => (
                                          <option key={c.id} value={c.id}>{c.name}</option>
                                        ))}
@@ -713,7 +718,7 @@ export default function ExamCommitteesControl() {
               <div className="grid grid-cols-2 gap-4">
                  <div>
                    <label className="block text-sm font-bold text-slate-600 mb-2">السعة القصوى</label>
-                   <input type="number" min="1" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
+                   <input type="number" min="1" max="50" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Math.min(50, Number(e.target.value))})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
                  </div>
                  <div>
                    <label className="block text-sm font-bold text-slate-600 mb-2">المكان (اختياري)</label>
@@ -731,40 +736,40 @@ export default function ExamCommitteesControl() {
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10 bg-white" dir="rtl">
             
-            {/* 📄 1. كشف الباب الرسمي (Door Sheet) */}
+            {/* 📄 1. كشف الباب الرسمي (Door Sheet) - 🚀 التصحيح: الألوان الخالصة */}
             {printType === 'door_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px', height: '1122px' }}>
-                 <div className="text-center mb-8 border-b-2 border-slate-800 pb-4">
-                    <h1 className="text-2xl font-black text-slate-900">وزارة التربية - منطقة العاصمة التعليمية</h1>
-                    <h2 className="text-xl font-black text-slate-800 mt-1">مدرسة الرفعة النموذجية</h2>
-                    <h3 className="text-3xl font-black text-indigo-700 mt-4 border border-indigo-200 inline-block px-8 py-2 bg-indigo-50 rounded-2xl">{printData.committee.name}</h3>
-                    <p className="text-sm font-bold text-slate-500 mt-2">كشف مناداة وحضور الطلاب - الفصل الدراسي الثاني 2025/2026</p>
+                 <div className="text-center mb-8 border-b-2 border-black pb-4">
+                    <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
+                    <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
+                    <h3 className="text-3xl font-black text-black mt-4 border-2 border-black inline-block px-8 py-2 bg-slate-100 rounded-2xl">{printData.committee.name}</h3>
+                    <p className="text-sm font-bold text-black mt-2">كشف مناداة وحضور الطلاب - الفصل الدراسي الثاني 2025/2026</p>
                  </div>
-                 <table className="w-full border-collapse border-2 border-slate-800 text-sm">
+                 <table className="w-full border-collapse border-2 border-black text-sm text-black">
                    <thead>
-                     <tr className="bg-slate-100 border-b-2 border-slate-800">
-                       <th className="border border-slate-800 p-3 w-12">م</th>
-                       <th className="border border-slate-800 p-3 w-32">رقم الجلوس</th>
-                       <th className="border border-slate-800 p-3">اسم الطالب الرباعي</th>
-                       <th className="border border-slate-800 p-3 w-24">الصف</th>
-                       <th className="border border-slate-800 p-3 w-24">توقيع الحضور</th>
+                     <tr className="bg-slate-100 border-b-2 border-black text-black">
+                       <th className="border border-black p-3 w-12 text-black">م</th>
+                       <th className="border border-black p-3 w-32 text-black">رقم الجلوس</th>
+                       <th className="border border-black p-3 text-black">اسم الطالب الرباعي</th>
+                       <th className="border border-black p-3 w-24 text-black">الصف</th>
+                       <th className="border border-black p-3 w-24 text-black">توقيع الحضور</th>
                      </tr>
                    </thead>
                    <tbody>
                      {printData.students.map((s:any, i:number) => (
-                       <tr key={i} className="border-b border-slate-800 h-12">
-                         <td className="border border-slate-800 p-2 text-center font-bold">{i + 1}</td>
-                         <td className="border border-slate-800 p-2 text-center font-black text-lg tracking-widest">{s.seat_number}</td>
-                         <td className="border border-slate-800 p-2 font-bold px-4">{s.students?.users?.full_name || s.students?.users?.[0]?.full_name}</td>
-                         <td className="border border-slate-800 p-2 text-center font-bold text-xs">{s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level}</td>
-                         <td className="border border-slate-800 p-2"></td>
+                       <tr key={i} className="border-b border-black h-12 text-black">
+                         <td className="border border-black p-2 text-center font-bold text-black">{i + 1}</td>
+                         <td className="border border-black p-2 text-center font-black text-lg tracking-widest text-black">{s.seat_number}</td>
+                         <td className="border border-black p-2 font-bold px-4 text-black">{s.students?.users?.full_name || s.students?.users?.[0]?.full_name}</td>
+                         <td className="border border-black p-2 text-center font-bold text-xs text-black">الصف {s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level}</td>
+                         <td className="border border-black p-2"></td>
                        </tr>
                      ))}
                    </tbody>
                  </table>
-                 <div className="mt-10 flex justify-between px-10">
-                    <div className="text-center"><p className="font-bold mb-8">المراقب الأول</p><p>.................................</p></div>
-                    <div className="text-center"><p className="font-bold mb-8">المراقب الثاني</p><p>.................................</p></div>
+                 <div className="mt-10 flex justify-between px-10 text-black">
+                    <div className="text-center"><p className="font-bold mb-8 text-black">المراقب الأول</p><p className="text-black">.................................</p></div>
+                    <div className="text-center"><p className="font-bold mb-8 text-black">المراقب الثاني</p><p className="text-black">.................................</p></div>
                  </div>
               </div>
             )}
@@ -783,7 +788,7 @@ export default function ExamCommitteesControl() {
                           <div className="bg-slate-900 text-white p-3 flex justify-between items-center shrink-0">
                              <div className="flex items-center gap-3">
                                 <ShieldCheck className="w-8 h-8 text-emerald-400" />
-                                <div><h3 className="font-black text-lg">مدرسة الرفعة النموذجية</h3><p className="text-[10px] text-slate-300">لجان الامتحانات الرسمية 2026</p></div>
+                                <div><h3 className="font-black text-lg">مدرسة الرفعة النموذجية بنين</h3><p className="text-[10px] text-slate-300">لجان الامتحانات الرسمية 2026</p></div>
                              </div>
                              <div className="bg-white text-slate-900 px-6 py-2 rounded-xl font-black text-xl border-2 border-emerald-500">{printData.committee.name}</div>
                           </div>
@@ -819,7 +824,7 @@ export default function ExamCommitteesControl() {
                     return (
                       <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-slate-900 rounded-2xl relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
                         <div className="absolute top-0 left-0 w-full h-[30mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-3">
-                           <p className="text-white font-black text-[13px] mt-1">مدرسة الرفعة النموذجية</p>
+                           <p className="text-white font-black text-[13px] mt-1">مدرسة الرفعة النموذجية بنين</p>
                            <p className="text-emerald-400 font-bold text-[10px] mt-1">هوية مراقب معتمد</p>
                         </div>
                         <div className="relative z-10 w-[22mm] h-[22mm] mt-[18mm] mb-2 rounded-full bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
@@ -827,7 +832,7 @@ export default function ExamCommitteesControl() {
                         </div>
                         <div className="relative z-10 w-full px-3 flex-1 flex flex-col items-center">
                            <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{invName}</h2>
-                           <p className="text-[10px] font-bold text-slate-500 mb-2 border-b border-slate-200 pb-2 w-full">وزارة التربية - لجان الامتحانات</p>
+                           <p className="text-[10px] font-bold text-slate-500 mb-2 border-b border-slate-200 pb-2 w-full">إدارة التعليم الخاص</p>
                            <div className="mt-auto mb-3 flex flex-col items-center">
                               <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-lg border border-slate-300 mb-1"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
                               <p className="text-[8px] font-black text-slate-400">امسح الكود للتحقق</p>
