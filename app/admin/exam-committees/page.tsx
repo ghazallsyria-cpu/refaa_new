@@ -65,7 +65,12 @@ export default function ExamCommitteesControl() {
     try {
       const { data: comms } = await supabase.from('exam_committees').select('*').eq('academic_year', currentYear).eq('semester', currentSemester);
       
-      const sortedComms = (comms || []).sort((a, b) => a.name.localeCompare(b.name, 'ar', { numeric: true }));
+      // 🚀 فرز رقمي ذكي للجان (1، 2، 3... 10، 11)
+      const sortedComms = (comms || []).sort((a, b) => {
+        const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
 
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, users(full_name, avatar_url)');
@@ -91,10 +96,14 @@ export default function ExamCommitteesControl() {
 
   useEffect(() => { if (currentRole === 'admin' || currentRole === 'management') fetchData(); }, [currentRole]);
 
+  // 🚀 تصحيح جلب رؤساء اللجان
   const fetchHeads = async (timetableId: string) => {
     if (!timetableId) return;
-    const { data } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name, avatar_url)').eq('timetable_id', timetableId);
-    setCurrentHeads(data || []);
+    try {
+      const { data, error } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name, avatar_url)').eq('timetable_id', timetableId);
+      if (error) console.error(error);
+      setCurrentHeads(data || []);
+    } catch (e) { console.error(e); }
   };
 
   const handleAssignHead = async () => {
@@ -109,7 +118,8 @@ export default function ExamCommitteesControl() {
       });
       setHeadAssignment({...headAssignment, head_teacher_id: '', committees_range: ''});
       fetchHeads(headAssignment.timetable_id);
-    } catch (error) { alert('هذا المعلم مكلف كرئيس لجان في هذه المادة مسبقاً!'); }
+      alert('تم التكليف بنجاح!');
+    } catch (error) { console.error(error); alert('حدث خطأ! قد يكون هذا المعلم مكلفاً مسبقاً في نفس التوقيت.'); }
   };
 
   const handleDeleteHead = async (id: string) => {
@@ -180,13 +190,24 @@ export default function ExamCommitteesControl() {
     try { await supabase.from('exam_committees').delete().eq('id', id); fetchData(); } catch (error) { alert('خطأ في الحذف'); }
   };
 
-  // 🚀 التصفير القوي (يهدم اللجان بالكامل)
+  // 🚀 تصحيح الهدم الشامل لتجنب مشاكل القيود (Foreign Keys)
   const handleNuclearReset = async () => {
-    if (!confirm('تحذير خطير: سيتم حذف جميع اللجان، والمراقبين، وأرقام جلوس الطلاب لهذا الفصل بالكامل للبدء من الصفر! هل أنت متأكد؟')) return;
-    try { setIsLoading(true); await supabase.from('exam_committees').delete().eq('academic_year', currentYear).eq('semester', currentSemester); fetchData(); } catch (error) { alert('خطأ'); }
+    if (!confirm('تحذير خطير: سيتم هدم اللجان ومسح التوزيع بالكامل! هل أنت متأكد؟')) return;
+    try { 
+      setIsLoading(true); 
+      // تفريغ الطلاب أولاً
+      await supabase.from('student_seat_allocations').delete().eq('academic_year', currentYear).eq('semester', currentSemester); 
+      // تفريغ المراقبين المرتبطين باللجان الحالية
+      const commIds = committees.map(c => c.id);
+      if(commIds.length > 0) {
+        await supabase.from('committee_invigilators').delete().in('committee_id', commIds);
+      }
+      // أخيراً مسح اللجان
+      await supabase.from('exam_committees').delete().eq('academic_year', currentYear).eq('semester', currentSemester); 
+      fetchData(); 
+    } catch (error) { alert('حدث خطأ أثناء الهدم. قد يكون هناك ارتباطات أخرى تمنع الحذف.'); }
   };
 
-  // 🚀 التصفير الناعم (تفريغ الطلاب فقط)
   const handleSoftReset = async () => {
     if (!confirm('تفريغ جميع الطلاب؟ ستبقى أسماء اللجان والمراقبين كما هي.')) return;
     try { 
@@ -215,9 +236,9 @@ export default function ExamCommitteesControl() {
   };
 
   const handleDistribute = async () => {
-    if (!confirm('هل أنت متأكد من بدء عملية الفرز الأبجدي والسحّاب؟ (سيمسح أي توزيع سابق)')) return;
+    if (!confirm('هل أنت متأكد من بدء التوزيع الأبجدي والسحّاب لعاشر وحادي عشر؟ (سيمسح أي توزيع سابق)')) return;
     const result = await generateSeatingAndDistribute(currentYear, currentSemester);
-    if (result.success) { alert('تم توزيع الطلاب بالتبادل الأبجدي بنجاح!'); fetchData(); }
+    if (result.success) { alert('تم التوزيع بنجاح!'); fetchData(); }
   };
 
   const handleAddInvigilator = async () => {
@@ -331,7 +352,7 @@ export default function ExamCommitteesControl() {
               </h1>
               <p className="text-slate-500 font-bold text-sm">إدارة اللجان، التوزيع السحّاب (Zipper)، تكليف الرؤساء وإحصائيات المراقبة.</p>
             </div>
-            {/* 🚀 قسم الأزرار المحدثة (التوزيع وتفريغ الطلاب) */}
+            
             <div className="flex flex-wrap gap-3">
               <button onClick={() => openCommitteeModal()} className="px-5 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-emerald-200">
                 <Plus className="w-4 h-4" /> إضافة لجنة
@@ -400,19 +421,20 @@ export default function ExamCommitteesControl() {
               const studentsCount = allocationsStats[committee.id] || 0;
               const committeeInvigs = invigilators.filter(i => i.committee_id === committee.id);
               const isFull = studentsCount >= committee.capacity;
-              const isOverflow = committee.name.includes('لجنة الفائض'); // 🚀 تحديد لجنة الفائض باللون الأحمر
+              const isOverflow = committee.name.includes('لجنة الفائض');
 
               return (
-                <div key={committee.id} className={`bg-white rounded-3xl p-6 border shadow-sm hover:shadow-md transition-all flex flex-col group ${isOverflow ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'}`}>
+                <div key={committee.id} className={`bg-white rounded-3xl p-6 border shadow-sm hover:shadow-md transition-all flex flex-col ${isOverflow ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'}`}>
                   <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-4 relative">
                     <div>
                       <h3 className={`text-xl font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{committee.name}</h3>
                       <p className="text-[10px] font-bold text-slate-400 mt-1 flex items-center gap-1">السعة: {committee.capacity} {committee.location && `| 📍 ${committee.location}`}</p>
                     </div>
-                    <div className="flex gap-1">
-                       <button onClick={() => openViewModal(committee)} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
-                       <button onClick={() => openCommitteeModal(committee)} className="p-2 bg-slate-50 text-slate-500 hover:text-emerald-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Edit3 className="w-4 h-4"/></button>
-                       <button onClick={() => handleDeleteCommittee(committee.id)} className="p-2 bg-slate-50 text-slate-500 hover:text-rose-600 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4"/></button>
+                    {/* 🚀 إظهار أزرار التحكم دائماً لضمان عملها على الجوال */}
+                    <div className="flex gap-2">
+                       <button onClick={() => openViewModal(committee)} className="p-2.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl transition-colors"><Eye className="w-4 h-4"/></button>
+                       <button onClick={() => openCommitteeModal(committee)} className="p-2.5 bg-slate-50 text-slate-500 hover:text-emerald-600 rounded-xl transition-colors"><Edit3 className="w-4 h-4"/></button>
+                       <button onClick={() => handleDeleteCommittee(committee.id)} className="p-2.5 bg-rose-50 text-rose-500 hover:text-rose-700 rounded-xl transition-colors"><Trash2 className="w-4 h-4"/></button>
                     </div>
                   </div>
 
@@ -747,7 +769,7 @@ export default function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 بطاقات الطاولة للطلاب (Desk Cards) */}
+            {/* 📄 🚀 بطاقات الطاولة للطلاب (تم إضافة رقم واسم اللجنة) */}
             {printType === 'desk_cards' && chunkArray(printData.students, 6).map((studentChunk, pageIndex) => (
               <div key={pageIndex} className="print-page-wrapper bg-white mx-auto" style={{ width: '794px', height: '1122px', padding: '20px', boxSizing: 'border-box' }}>
                 <div className="flex flex-wrap gap-4 justify-center">
@@ -767,13 +789,22 @@ export default function ExamCommitteesControl() {
                            <div className="flex-1 flex flex-col justify-center">
                              <p className="text-[10px] font-bold text-slate-500 mb-0.5">اسم الطالب</p>
                              <h3 className="font-black text-sm text-slate-900 leading-tight mb-2 line-clamp-2">{stdName}</h3>
-                             <p className="text-[10px] font-bold text-slate-500 mb-0.5">الصف والشعبة</p>
-                             <p className="font-black text-xs text-indigo-700">{fullClassName}</p>
+                             <div className="flex gap-2 mt-1">
+                               <div>
+                                 <p className="text-[9px] font-bold text-slate-500 mb-0.5">الصف والشعبة</p>
+                                 <p className="font-black text-xs text-indigo-700">{fullClassName}</p>
+                               </div>
+                               {/* 🚀 إبراز رقم واسم اللجنة للطالب */}
+                               <div className="border-r border-slate-200 pr-2">
+                                 <p className="text-[9px] font-bold text-slate-500 mb-0.5">اللجنة</p>
+                                 <p className="font-black text-xs text-emerald-600 bg-emerald-50 px-1 rounded">{printData.committee.name}</p>
+                               </div>
+                             </div>
                            </div>
                            <div className="flex flex-col items-center justify-center shrink-0 w-[25mm]">
                              <div className="w-full text-center border-b border-slate-200 pb-1 mb-2">
                                <p className="text-[8px] font-black text-slate-400">رقم الجلوس</p>
-                               <p className="font-black text-2xl text-rose-600 tracking-widest">{student.seat_number}</p>
+                               <p className="font-black text-xl text-rose-600 tracking-widest">{student.seat_number}</p>
                              </div>
                              <div className="w-[18mm] h-[18mm] p-0.5 bg-white border border-slate-200 rounded"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
                            </div>
