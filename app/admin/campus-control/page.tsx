@@ -80,7 +80,7 @@ export default function CampusControlPage() {
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+formData.append('upload_preset', 'ml_default');
 
       // محاكاة بصرية للتقدم
       const progressInterval = setInterval(() => setUploadProgress(p => Math.min(p + 15, 90)), 500);
