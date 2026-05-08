@@ -24,38 +24,41 @@ const DEFAULT_SLIDE = {
 
 export default function DigitalCampusPage() {
   const { user, authRole, isChecking } = useAuth() as any;
+  const { scrollYProgress } = useScroll();
   
+  const yBackground = useTransform(scrollYProgress, [0, 1], ['0%', '30%']);
+
   const [studioItems, setStudioItems] = useState<any[]>([]);
   const [magazineItems, setMagazineItems] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [tickers, setTickers] = useState<any[]>([]);
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   
+  const [hangingRibbonUrl, setHangingRibbonUrl] = useState<string | null>(null); // 🎀 حالة الوشاح
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [fetching, setFetching] = useState(true);
 
   const [activeMedia, setActiveMedia] = useState<any | null>(null); 
   const [activeArticle, setActiveArticle] = useState<any | null>(null); 
 
-  // 🎀 رابط الوشاح المتدلي (افتراضي: علم الكويت كعينة)
-  // (لاحقاً سنربط هذا المتغير بلوحة تحكم المدير ليتمكن من تغييره)
-  const [hangingRibbonUrl, setHangingRibbonUrl] = useState('https://images.unsplash.com/photo-1627885444005-59b9a62aa539?q=80&w=600&auto=format&fit=crop');
-
   useEffect(() => {
     const fetchCampusContent = async () => {
       try {
-        const [studioRes, magazineRes, annRes, tickerRes, heroRes] = await Promise.all([
+        const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes] = await Promise.all([
           supabase.from('school_studio').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(8),
           supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(4),
           supabase.from('school_announcements').select('*').order('created_at', { ascending: false }).limit(3),
           supabase.from('school_ticker').select('*').order('created_at', { ascending: false }).limit(5),
-          supabase.from('forum_hero_slides').select('*').eq('is_active', true).order('sort_order', { ascending: false }).order('created_at', { ascending: false })
+          supabase.from('forum_hero_slides').select('*').eq('is_active', true).order('sort_order', { ascending: false }).order('created_at', { ascending: false }),
+          supabase.from('school_ribbon').select('image_url').eq('id', 1).maybeSingle() // 🎀 جلب الوشاح من الداتا بيز
         ]);
         if (studioRes.data) setStudioItems(studioRes.data);
         if (magazineRes.data) setMagazineItems(magazineRes.data);
         if (annRes.data) setAnnouncements(annRes.data);
         if (tickerRes.data) setTickers(tickerRes.data);
         if (heroRes.data && heroRes.data.length > 0) setHeroSlides(heroRes.data);
+        if (ribbonRes.data?.image_url) setHangingRibbonUrl(ribbonRes.data.image_url);
       } catch (e) { console.error("Content fetch failed", e); } 
       finally { setFetching(false); }
     };
@@ -102,7 +105,6 @@ export default function DigitalCampusPage() {
       
       {/* ========================================== */}
       {/* 🎀 الوشاح العمودي المتدلي (The Hanging Ribbon) */}
-      {/* تصميم خارج الصندوق يتدلى من أعلى الشاشة ويهتز كالبندول */}
       {/* ========================================== */}
       {hangingRibbonUrl && (
         <motion.div 
@@ -180,7 +182,6 @@ export default function DigitalCampusPage() {
                     <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="bg-white border border-slate-100 rounded-2xl p-3 flex items-center gap-3 pr-4 shadow-xl shadow-slate-200/50">
                       <div className="relative">
                         <Crown className="absolute -top-3 -right-2 w-5 h-5 text-amber-500 drop-shadow-md z-10 rotate-12" />
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={student.img} alt={student.name} className="w-12 h-12 rounded-full border border-slate-200 object-cover" />
                       </div>
                       <div className="text-right">
@@ -194,7 +195,6 @@ export default function DigitalCampusPage() {
 
               {currentSlideData.type === 'media' && currentSlideData.media_url && (
                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="mb-10 w-full max-w-3xl mx-auto rounded-[2rem] overflow-hidden shadow-2xl border border-slate-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={currentSlideData.media_url} alt="Media" className="w-full h-auto max-h-96 object-cover" />
                  </motion.div>
               )}
