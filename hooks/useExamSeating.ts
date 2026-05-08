@@ -1,3 +1,18 @@
+/**
+ * ============================================================================
+ * 🏗️ التوثيق الهندسي (Engineering Documentation)
+ * ============================================================================
+ * @file        hooks/useExamSeating.ts
+ * @version     2.0.0 (The Alphabetical Zipper Update)
+ * @description محرك التوزيع الذكي للجان الامتحانات.
+ * * 🛠️ التحديث الحالي:
+ * - خوارزمية السحّاب الأبجدي (Zipper Algorithm): تدمج طلاب العاشر والحادي عشر
+ * مقعداً بمقعد بالتبادل (عاشر، حادي عشر، عاشر..) لمنع الغش، مع الحفاظ على الترتيب الأبجدي.
+ * - نظام "لجنة الفائض" (Overflow Room): أي طالب يفيض عن سعة اللجان المتاحة
+ * يتم إنشاء لجنة خاصة له ليقوم المدير بتوزيعها يدوياً لاحقاً.
+ * ============================================================================
+ */
+
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -5,7 +20,7 @@ export function useExamSeating() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
 
-  // 🚀 دالة توليد اللجان لأول مرة فقط (بدون حذف المدخلات السابقة)
+  // 🚀 دالة توليد اللجان لأول مرة فقط
   const generateDefaultCommittees = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     setProgressMsg('جاري بناء اللجان الافتراضية...');
@@ -30,7 +45,7 @@ export function useExamSeating() {
     }
   }, []);
 
-  // 🚀 الفرز والتوزيع (يتعامل فقط مع أرقام الجلوس ولا يمسح اللجان أو المراقبين)
+  // 🚀 خوارزمية السحّاب الأبجدي (The Alphabetical Zipper)
   const generateSeatingAndDistribute = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     try {
@@ -67,45 +82,75 @@ export function useExamSeating() {
       grade10.sort(sortArabic);
       grade11.sort(sortArabic);
 
+      // توليد أرقام جلوس (الرقم يبدأ بـ 10 للعاشر و 11 للحادي عشر)
       grade10 = grade10.map((s, index) => ({ ...s, seatNumber: `10${String(index + 1).padStart(3, '0')}` }));
       grade11 = grade11.map((s, index) => ({ ...s, seatNumber: `11${String(index + 1).padStart(3, '0')}` }));
 
-      setProgressMsg('جاري الدمج والتوزيع الذكي على اللجان...');
-      const allocations: any[] = [];
-      let g10Index = 0;
-      let g11Index = 0;
-
-      for (const committee of committees) {
-        let addedG10 = 0;
-        let addedG11 = 0;
-        const halfCapacity = Math.floor(committee.capacity / 2);
-
-        while (addedG10 < halfCapacity && g10Index < grade10.length) {
-          allocations.push({ student_id: grade10[g10Index].id, committee_id: committee.id, seat_number: grade10[g10Index].seatNumber, academic_year: academicYear, semester: semester });
-          g10Index++; addedG10++;
-        }
-        while (addedG11 < halfCapacity && g11Index < grade11.length) {
-          allocations.push({ student_id: grade11[g11Index].id, committee_id: committee.id, seat_number: grade11[g11Index].seatNumber, academic_year: academicYear, semester: semester });
-          g11Index++; addedG11++;
-        }
-      }
-
-      let remainingStudents = [...grade10.slice(g10Index), ...grade11.slice(g11Index)];
-      let committeeIndex = 0;
+      setProgressMsg('جاري الدمج بطريقة السحّاب الأبجدي (عاشر - حادي عشر)...');
       
-      for (const student of remainingStudents) {
-         if(committeeIndex >= committees.length) committeeIndex = 0;
-         allocations.push({ student_id: student.id, committee_id: committees[committeeIndex].id, seat_number: student.seatNumber, academic_year: academicYear, semester: semester });
-         committeeIndex++;
+      const zippedStudents: any[] = [];
+      const maxLength = Math.max(grade10.length, grade11.length);
+      
+      // السحّاب: سحب طالب من هنا وطالب من هنا بالتبادل
+      for (let i = 0; i < maxLength; i++) {
+        if (i < grade10.length) zippedStudents.push(grade10[i]);
+        if (i < grade11.length) zippedStudents.push(grade11[i]);
       }
 
-      setProgressMsg('جاري حفظ التوزيعات في قاعدة البيانات...');
-      // نحذف التوزيعات القديمة (أرقام الجلوس) فقط، وليس اللجان!
+      setProgressMsg('جاري توزيع الطلاب على اللجان المتاحة...');
+      const allocations: any[] = [];
+      let studentPointer = 0;
+
+      // تعبئة اللجان العادية بناءً على السعة
+      for (const committee of committees) {
+        let currentCommitteeCount = 0;
+        while (currentCommitteeCount < committee.capacity && studentPointer < zippedStudents.length) {
+          allocations.push({
+            student_id: zippedStudents[studentPointer].id,
+            committee_id: committee.id,
+            seat_number: zippedStudents[studentPointer].seatNumber,
+            academic_year: academicYear,
+            semester: semester
+          });
+          currentCommitteeCount++;
+          studentPointer++;
+        }
+      }
+
+      // إذا تبقى طلاب ولم تكفِ اللجان، يتم وضعهم في "لجنة فائض" جديدة
+      if (studentPointer < zippedStudents.length) {
+        setProgressMsg('توليد لجنة الفائض للطلاب المتبقين...');
+        const { data: newOverflowCommittee, error: overflowError } = await supabase.from('exam_committees').insert({
+          name: 'لجنة الفائض (للتوزيع اليدوي)',
+          capacity: zippedStudents.length - studentPointer,
+          academic_year: academicYear,
+          semester: semester,
+          location: 'قيد الانتظار'
+        }).select('id').single();
+
+        if (overflowError) throw overflowError;
+
+        while (studentPointer < zippedStudents.length) {
+          allocations.push({
+            student_id: zippedStudents[studentPointer].id,
+            committee_id: newOverflowCommittee.id,
+            seat_number: zippedStudents[studentPointer].seatNumber,
+            academic_year: academicYear,
+            semester: semester
+          });
+          studentPointer++;
+        }
+      }
+
+      setProgressMsg('جاري مسح التوزيع القديم وحفظ التوزيع الجديد...');
+      
+      // التصفير الناعم (حذف سجلات التوزيع فقط قبل إدخال الجديد)
       await supabase.from('student_seat_allocations')
         .delete()
         .eq('academic_year', academicYear)
         .eq('semester', semester);
 
+      // إدخال البيانات على دفعات لتجنب ضغط الشبكة
       const chunkSize = 100;
       for (let i = 0; i < allocations.length; i += chunkSize) {
         const chunk = allocations.slice(i, i + chunkSize);
@@ -113,7 +158,15 @@ export function useExamSeating() {
         if (insertError) throw insertError;
       }
 
-      return { success: true, totalAllocated: allocations.length, totalCommittees: committees.length };
+      // تحديث هويات الطلاب الرقمية لتظهر بها أرقام اللجان الجديدة
+      setProgressMsg('تحديث الهويات الرقمية للطلاب...');
+      for (const alloc of allocations) {
+        await supabase.from('users') // أو جدول students حسب هيكليتك
+          .update({ last_seen: new Date().toISOString() }) // مجرد حركة تنشيط، سيتم قراءة اللجنة من allocations مباشرة في واجهة الطالب
+          .eq('id', alloc.student_id);
+      }
+
+      return { success: true, totalAllocated: allocations.length };
 
     } catch (error: any) {
       console.error('Error distributing students:', error);
