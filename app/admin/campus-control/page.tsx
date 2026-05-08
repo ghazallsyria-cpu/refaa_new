@@ -9,7 +9,7 @@ import {
 import { supabase } from '@/lib/supabase';
 
 // ==========================================
-// 🎛️ مركز تحكم الحرم الرقمي المتقدم (Pro Campus CMS)
+// 🎛️ محطة البث المركزية لمدير النظام (Pro Campus CMS)
 // المسار: app/admin/campus-control/page.tsx
 // ==========================================
 export default function CampusControlPage() {
@@ -30,7 +30,9 @@ export default function CampusControlPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ==========================================
   // 📡 جلب البيانات
+  // ==========================================
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
@@ -50,17 +52,10 @@ export default function CampusControlPage() {
   };
 
   // ==========================================
-  // 🚀 محرك الرفع الذكي إلى Cloudinary (Smart Uploader)
-  // يتعرف على نوع الملف تلقائياً ويولد الغلاف للفيديوهات
-  // ==========================================
-// ==========================================
-  // 🚀 محرك الرفع الذكي والمحصن إلى Cloudinary
-  // ==========================================
-// ==========================================
-  // 🚀 محرك الرفع الذكي والمحصن (مضاد لمشاكل الآيفون)
+  // 🚀 محرك الرفع الذكي (المضاد لمشاكل الآيفون و Netlify)
   // ==========================================
   const handleFileUpload = async (file: File): Promise<{ url: string, type: 'image' | 'video', thumb?: string } | null> => {
-    // 🛡️ حماية الحجم (100MB)
+    // 🛡️ حماية الحجم (100MB للحد الأقصى المجاني)
     const MAX_FILE_SIZE = 100 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
       alert('حجم الملف ضخم جداً! الحد الأقصى المسموح به هو 100 ميجابايت.');
@@ -71,18 +66,20 @@ export default function CampusControlPage() {
     setUploadProgress(10);
     
     try {
-      // 💡 ذكاء اصطناعي للتعرف على الآيفون: نفحص امتداد الملف يدوياً إذا فشل المتصفح
+      // 💡 ذكاء اصطناعي للتعرف على الآيفون: نفحص امتداد الملف يدوياً
       const fileName = file.name.toLowerCase();
       const isVideo = file.type.startsWith('video/') || fileName.endsWith('.mov') || fileName.endsWith('.mp4');
       
-      // توجيه صريح لـ Cloudinary: إذا كان فيديو، استخدم مسار الفيديو، وإلا دعه يكتشف تلقائياً
+      // توجيه صريح لـ Cloudinary لتفادي خطأ "Image format mov not allowed"
       const resourceType = isVideo ? 'video' : 'auto'; 
 
       const formData = new FormData();
       formData.append('file', file);
-formData.append('upload_preset', 'ml_default');
+      
+      // 💡 الحل السحري لتجاوز إعدادات Netlify: استخدام ml_default إجبارياً هنا فقط
+      formData.append('upload_preset', 'ml_default');
 
-      // محاكاة بصرية للتقدم
+      // محاكاة بصرية لسرعة الرفع
       const progressInterval = setInterval(() => setUploadProgress(p => Math.min(p + 15, 90)), 500);
 
       const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`, { 
@@ -102,7 +99,7 @@ formData.append('upload_preset', 'ml_default');
         setUploadProgress(100);
         let thumbUrl = data.secure_url;
         
-        // توليد الغلاف التلقائي للفيديوهات
+        // استخراج غلاف تلقائي للفيديوهات
         if (isVideo) {
            thumbUrl = data.secure_url.replace(/\.[^/.]+$/, ".jpg");
         }
@@ -122,7 +119,7 @@ formData.append('upload_preset', 'ml_default');
   };
 
   // ==========================================
-  // 🎬 نماذج بيانات الاستوديو
+  // 🎬 إدارة بيانات الاستوديو
   // ==========================================
   const [studioForm, setStudioForm] = useState({ title: '', media_type: 'image', media_url: '', thumbnail_url: '' });
 
@@ -146,7 +143,6 @@ formData.append('upload_preset', 'ml_default');
     
     setIsSubmitting(true);
     try {
-      // إذا ترك العنوان فارغاً، نضع تاريخ اليوم كافتراضي
       const finalTitle = studioForm.title.trim() || `ميديا جديدة - ${new Date().toLocaleDateString('ar-SA')}`;
       
       const { error } = await supabase.from('school_studio').insert([{ ...studioForm, title: finalTitle }]);
@@ -163,14 +159,14 @@ formData.append('upload_preset', 'ml_default');
   };
 
   // ==========================================
-  // 📰 نماذج بيانات المجلة
+  // 📰 إدارة بيانات المجلة
   // ==========================================
   const [magazineForm, setMagazineForm] = useState({ title: '', excerpt: '', author_name: '', cover_image: '', is_pinned: false });
 
   const onMagazineFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type.startsWith('video/')) return alert('المجلة تقبل الصور فقط للغلاف.');
+    if (file.type.startsWith('video/') || file.name.toLowerCase().endsWith('.mov')) return alert('المجلة تقبل الصور فقط للغلاف.');
     
     const uploaded = await handleFileUpload(file);
     if (uploaded) {
@@ -212,6 +208,9 @@ formData.append('upload_preset', 'ml_default');
     setList((prev: any[]) => prev.filter(item => item.id !== id));
   };
 
+  // ==========================================
+  // 🎨 واجهة المستخدم الرئيسية (الريندر)
+  // ==========================================
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 font-cairo p-4 sm:p-8" dir="rtl">
       <div className="max-w-7xl mx-auto space-y-8 relative z-10">
@@ -244,6 +243,7 @@ formData.append('upload_preset', 'ml_default');
           <div className="flex justify-center py-32"><Loader2 className="w-16 h-16 text-indigo-500 animate-spin drop-shadow-[0_0_20px_rgba(79,70,229,0.5)]" /></div>
         ) : (
           <AnimatePresence mode="wait">
+            
             {/* ========================================== */}
             {/* 🎬 تبويب الاستوديو */}
             {/* ========================================== */}
@@ -275,9 +275,12 @@ formData.append('upload_preset', 'ml_default');
                             {item.media_type === 'video' ? <Video className="w-4 h-4 text-amber-400" /> : <ImageIcon className="w-4 h-4 text-indigo-400" />}
                             {item.media_type === 'video' ? 'فيديو' : 'صورة'}
                           </div>
-                          <button onClick={() => deleteRecord('school_studio', item.id, setStudioItems)} className="absolute top-4 left-4 w-10 h-10 bg-rose-500/90 hover:bg-rose-500 text-white rounded-xl flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all shadow-lg border border-rose-400/50 active:scale-95">
+                          
+                          {/* 💡 التعديل: إزالة opacity-0 لتكون أيقونة الحذف ظاهرة دائماً في الجوال والآيباد */}
+                          <button onClick={() => deleteRecord('school_studio', item.id, setStudioItems)} className="absolute top-4 left-4 w-10 h-10 bg-rose-500/90 hover:bg-rose-500 text-white rounded-xl flex items-center justify-center backdrop-blur-md transition-all shadow-lg border border-rose-400/50 active:scale-95 z-20">
                             <Trash2 className="w-5 h-5" />
                           </button>
+
                         </div>
                         <div className="p-5 bg-white/[0.02] border-t border-white/5">
                           <h3 className="font-black text-base text-white line-clamp-1">{item.title}</h3>
@@ -337,7 +340,7 @@ formData.append('upload_preset', 'ml_default');
       </div>
 
       {/* ========================================== */}
-      {/* 🛠️ نوافذ الرفع والإضافة (Pro Modals with Cloudinary) */}
+      {/* 🛠️ نوافذ الرفع والإضافة */}
       {/* ========================================== */}
       
       {/* 1. استوديو المدرسة */}
