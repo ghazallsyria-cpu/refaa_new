@@ -1,13 +1,8 @@
 /**
  * ============================================================================
- * 🏗️ التوثيق الهندسي (Engineering Documentation)
- * ============================================================================
  * @file        hooks/useExamSeating.ts
- * @version     2.2.0 (Numeric Sort & Strict Grades Update)
- * @description محرك التوزيع الذكي للجان الامتحانات.
- * * 🛠️ التحديثات:
- * - تصحيح الفرز ليقرأ الأرقام (لجنة 9 تأتي قبل لجنة 10).
- * - التأكيد الصارم على جلب صفوف (العاشر والحادي عشر) فقط وتجاهل البقية.
+ * @version     3.0.0 (The Architect Update)
+ * @description محرك التوزيع وبناء اللجان مع الهدم الآمن (Cascading Delete).
  * ============================================================================
  */
 
@@ -20,13 +15,14 @@ export function useExamSeating() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
 
-  const generateDefaultCommittees = useCallback(async (academicYear: string, semester: string) => {
+  // 🚀 1. بناء اللجان الديناميكي (بناءً على طلب المدير)
+  const buildCommittees = useCallback(async (academicYear: string, semester: string, count: number, capacity: number) => {
     setIsLoading(true);
-    setProgressMsg('جاري بناء اللجان الافتراضية...');
+    setProgressMsg('جاري صب القواعد وبناء اللجان...');
     try {
-      const newCommittees = Array.from({ length: 22 }).map((_, i) => ({
+      const newCommittees = Array.from({ length: count }).map((_, i) => ({
         name: `لجنة ${i + 1}`,
-        capacity: 14,
+        capacity: capacity,
         academic_year: academicYear,
         semester: semester,
       }));
@@ -35,8 +31,8 @@ export function useExamSeating() {
       if (error) throw error;
       return true;
     } catch (error: any) {
-      console.error('Error initializing committees:', error);
-      alert('حدث خطأ أثناء بناء اللجان: ' + error.message);
+      console.error(error);
+      alert('خطأ في البناء: ' + error.message);
       return false;
     } finally {
       setIsLoading(false);
@@ -44,150 +40,130 @@ export function useExamSeating() {
     }
   }, []);
 
+  // 🚀 2. الهدم الشامل الآمن (Cascading Delete)
+  const nukeEverything = useCallback(async (academicYear: string, semester: string) => {
+    setIsLoading(true);
+    setProgressMsg('بدء بروتوكول الهدم الشامل...');
+    try {
+      // 1. جلب اللجان الحالية
+      const { data: comms } = await supabase.from('exam_committees').select('id').eq('academic_year', academicYear).eq('semester', semester);
+      if (!comms || comms.length === 0) return true;
+      const commIds = comms.map(c => c.id);
+
+      setProgressMsg('إخلاء مقاعد الطلاب...');
+      await supabase.from('student_seat_allocations').delete().eq('academic_year', academicYear).eq('semester', semester);
+
+      setProgressMsg('إلغاء تكاليف المراقبين والحضور...');
+      await supabase.from('invigilator_attendance').delete().in('committee_id', commIds);
+      await supabase.from('exam_attendance').delete().in('committee_id', commIds);
+      await supabase.from('committee_invigilators').delete().in('committee_id', commIds);
+
+      setProgressMsg('إلغاء تكاليف رؤساء اللجان...');
+      const { data: timetables } = await supabase.from('exam_timetables').select('id').eq('academic_year', academicYear).eq('semester', semester);
+      if (timetables && timetables.length > 0) {
+        await supabase.from('exam_committee_heads').delete().in('timetable_id', timetables.map(t => t.id));
+      }
+
+      setProgressMsg('هدم جدران اللجان...');
+      const { error } = await supabase.from('exam_committees').delete().eq('academic_year', academicYear).eq('semester', semester);
+      if (error) throw error;
+
+      return true;
+    } catch (error: any) {
+      console.error(error);
+      alert('فشل الهدم لوجود ارتباطات قوية: ' + error.message);
+      return false;
+    } finally {
+      setIsLoading(false);
+      setProgressMsg('');
+    }
+  }, []);
+
+  // 🚀 3. السحّاب الأبجدي للتوزيع
   const generateSeatingAndDistribute = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     try {
       setProgressMsg('جاري قراءة اللجان المتاحة...');
       const { data: fetchedCommittees, error: commError } = await supabase.from('exam_committees')
         .select('id, name, capacity')
-        .eq('academic_year', academicYear)
-        .eq('semester', semester);
+        .eq('academic_year', academicYear).eq('semester', semester);
 
-      if (commError || !fetchedCommittees || fetchedCommittees.length === 0) {
-        throw new Error('لم يتم العثور على لجان! يرجى إنشاء اللجان أولاً.');
-      }
+      if (commError || !fetchedCommittees || fetchedCommittees.length === 0) throw new Error('لا يوجد لجان!');
 
-      // 🚀 التصحيح: فرز اللجان "رقمياً" لكي لا تأتي 10 قبل 9
       const committees = fetchedCommittees.sort((a, b) => {
         const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
         return numA - numB;
       });
 
-      setProgressMsg('جاري سحب بيانات الطلاب من السيرفر...');
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select(`id, users!inner(full_name), sections!inner(classes!inner(level))`);
+      setProgressMsg('جاري سحب بيانات العاشر والحادي عشر...');
+      const { data: studentsData } = await supabase.from('students').select(`id, users!inner(full_name), sections!inner(classes!inner(level))`);
+      let grade10: any[] = []; let grade11: any[] = [];
 
-      if (studentsError) throw studentsError;
-
-      let grade10: any[] = [];
-      let grade11: any[] = [];
-
-      studentsData.forEach((s: any) => {
+      (studentsData || []).forEach((s: any) => {
         const level = s.sections?.classes?.level;
-        const studentObj = { id: s.id, fullName: s.users?.full_name || '' };
-        // 🛡️ التأكيد الصارم: العاشر والحادي عشر فقط
-        if (level === 10) grade10.push(studentObj);
-        else if (level === 11) grade11.push(studentObj);
+        const obj = { id: s.id, fullName: s.users?.full_name || '' };
+        if (level === 10) grade10.push(obj);
+        else if (level === 11) grade11.push(obj);
       });
 
-      setProgressMsg('جاري تطهير الأسماء والفرز الأبجدي...');
-      
-      const cleanNameForSort = (name: string) => {
-        if (!name) return '';
-        return name.replace(/^[\s\.\-\_]+/, '').replace(/[أإآ]/g, 'ا').trim();
-      };
+      setProgressMsg('التطهير والفرز الأبجدي...');
+      const clean = (name: string) => name.replace(/^[\s\.\-\_]+/, '').replace(/[أإآ]/g, 'ا').trim();
+      const sortAr = (a: any, b: any) => clean(a.fullName).localeCompare(clean(b.fullName), 'ar');
+      grade10.sort(sortAr); grade11.sort(sortAr);
 
-      const sortArabic = (a: any, b: any) => {
-        const nameA = cleanNameForSort(a.fullName);
-        const nameB = cleanNameForSort(b.fullName);
-        return nameA.localeCompare(nameB, 'ar');
-      };
+      grade10 = grade10.map((s, idx) => ({ ...s, seatNumber: `10${String(idx + 1).padStart(3, '0')}` }));
+      grade11 = grade11.map((s, idx) => ({ ...s, seatNumber: `11${String(idx + 1).padStart(3, '0')}` }));
 
-      grade10.sort(sortArabic);
-      grade11.sort(sortArabic);
-
-      grade10 = grade10.map((s, index) => ({ ...s, seatNumber: `10${String(index + 1).padStart(3, '0')}` }));
-      grade11 = grade11.map((s, index) => ({ ...s, seatNumber: `11${String(index + 1).padStart(3, '0')}` }));
-
-      setProgressMsg('جاري الدمج بطريقة السحّاب الأبجدي (عاشر - حادي عشر)...');
-      
-      const zippedStudents: any[] = [];
-      const maxLength = Math.max(grade10.length, grade11.length);
-      
-      for (let i = 0; i < maxLength; i++) {
-        if (i < grade10.length) zippedStudents.push(grade10[i]);
-        if (i < grade11.length) zippedStudents.push(grade11[i]);
+      const zipped: any[] = [];
+      const max = Math.max(grade10.length, grade11.length);
+      for (let i = 0; i < max; i++) {
+        if (i < grade10.length) zipped.push(grade10[i]);
+        if (i < grade11.length) zipped.push(grade11[i]);
       }
 
-      setProgressMsg('جاري توزيع الطلاب على اللجان المتاحة...');
+      setProgressMsg('جاري التوزيع بالتبادل...');
       const allocations: any[] = [];
-      let studentPointer = 0;
+      let pointer = 0;
 
-      for (const committee of committees) {
-        if (committee.name.includes('لجنة الفائض')) continue;
-
-        let currentCommitteeCount = 0;
-        while (currentCommitteeCount < committee.capacity && studentPointer < zippedStudents.length) {
-          allocations.push({
-            student_id: zippedStudents[studentPointer].id,
-            committee_id: committee.id,
-            seat_number: zippedStudents[studentPointer].seatNumber,
-            academic_year: academicYear,
-            semester: semester
-          });
-          currentCommitteeCount++;
-          studentPointer++;
+      for (const comm of committees) {
+        if (comm.name.includes('الفائض')) continue;
+        let c = 0;
+        while (c < comm.capacity && pointer < zipped.length) {
+          allocations.push({ student_id: zipped[pointer].id, committee_id: comm.id, seat_number: zipped[pointer].seatNumber, academic_year: academicYear, semester: semester });
+          c++; pointer++;
         }
       }
 
-      if (studentPointer < zippedStudents.length) {
-        setProgressMsg('توليد لجنة الفائض للطلاب المتبقين...');
-        let overflowCommittee = committees.find(c => c.name.includes('لجنة الفائض'));
-        
-        if (!overflowCommittee) {
-          const { data: newOverflowCommittee, error: overflowError } = await supabase.from('exam_committees').insert({
-            name: 'لجنة الفائض (للتوزيع اليدوي)',
-            capacity: zippedStudents.length - studentPointer,
-            academic_year: academicYear,
-            semester: semester,
-            location: 'قيد الانتظار'
-          }).select('id, name, capacity').single();
-
-          if (overflowError) throw overflowError;
-          overflowCommittee = newOverflowCommittee;
+      if (pointer < zipped.length) {
+        setProgressMsg('إنشاء لجنة الفائض...');
+        let overflow = committees.find(c => c.name.includes('الفائض'));
+        if (!overflow) {
+          const { data: newO, error: err } = await supabase.from('exam_committees').insert({ name: 'لجنة الفائض (للتوزيع اليدوي)', capacity: zipped.length - pointer, academic_year: academicYear, semester: semester, location: 'الانتظار' }).select('id').single();
+          if (err) throw err;
+          overflow = newO;
         }
-
-        while (studentPointer < zippedStudents.length) {
-          allocations.push({
-            student_id: zippedStudents[studentPointer].id,
-            committee_id: overflowCommittee.id,
-            seat_number: zippedStudents[studentPointer].seatNumber,
-            academic_year: academicYear,
-            semester: semester
-          });
-          studentPointer++;
+        while (pointer < zipped.length) {
+          allocations.push({ student_id: zipped[pointer].id, committee_id: overflow.id, seat_number: zipped[pointer].seatNumber, academic_year: academicYear, semester: semester });
+          pointer++;
         }
       }
 
-      setProgressMsg('جاري مسح التوزيع القديم وحفظ التوزيع الجديد...');
-      
       await supabase.from('student_seat_allocations').delete().eq('academic_year', academicYear).eq('semester', semester);
-
+      
       const chunkSize = 100;
       for (let i = 0; i < allocations.length; i += chunkSize) {
-        const chunk = allocations.slice(i, i + chunkSize);
-        const { error: insertError } = await supabase.from('student_seat_allocations').insert(chunk);
-        if (insertError) throw insertError;
+        await supabase.from('student_seat_allocations').insert(allocations.slice(i, i + chunkSize));
       }
 
-      setProgressMsg('تحديث الهويات الرقمية للطلاب...');
-      for (const alloc of allocations) {
-        await supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', alloc.student_id);
+      setProgressMsg('تحديث هويات الطلاب...');
+      for (const a of allocations) {
+        await supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', a.student_id);
       }
 
-      return { success: true, totalAllocated: allocations.length };
-
-    } catch (error: any) {
-      console.error('Error distributing students:', error);
-      alert('فشل التوزيع: ' + error.message);
-      return { success: false };
-    } finally {
-      setIsLoading(false);
-      setTimeout(() => setProgressMsg(''), 2000);
-    }
+      return { success: true };
+    } catch (e: any) { alert(e.message); return { success: false }; } finally { setIsLoading(false); setProgressMsg(''); }
   }, []);
 
-  return { isLoading, progressMsg, generateDefaultCommittees, generateSeatingAndDistribute };
+  return { isLoading, progressMsg, buildCommittees, nukeEverything, generateSeatingAndDistribute };
 }
