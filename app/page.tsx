@@ -3,13 +3,13 @@
  * 🏗️ التوثيق الهندسي (Engineering Documentation)
  * ============================================================================
  * @file        app/page.tsx
- * @version     4.2.0 (Mobile Responsiveness & Elegance Update)
+ * @version     4.3.0 (Mobile-First Perfection)
  * @description الواجهة الرئيسية للحرم الرقمي بتصميم (Bento Box) الفاخر.
- * * 🛠️ التحديث الحالي (V4.2.0):
- * - ضبط شامل لاستجابة الشاشات (Mobile Responsiveness).
- * - تقليص حجم الوشاح المتدلي في شاشات الجوال لمنع التداخل البصري.
- * - إعادة هندسة أحجام الخطوط (Typography) والهوامش (Paddings) لتكون مريحة للعين في الجوال.
- * - تحسين بطاقات الأخبار والميديا لتعرض المحتوى بشكل متناسق ومنظم على الشاشات الصغيرة.
+ * * 🛠️ التحديث الحالي (V4.3.0) بناءً على اختبارات الجوال:
+ * - حل مشكلة تداخل الشريط العاجل مع زر "الدخول للمنصة" في ذيل الصفحة (Footer).
+ * - تصحيح أبعاد نافذة المقال (Reading Modal) لضمان تعبئة الصورة للمساحة (Object-Cover).
+ * - تنحيف وتقصير الوشاح المتدلي على شاشات الجوال ليكون أكثر أناقة.
+ * - إعادة ضبط ارتفاعات بطاقات الأخبار (Magazine) لتمنع تكدس النصوص.
  * ============================================================================
  */
 
@@ -113,14 +113,14 @@ export default function DigitalCampusPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 font-cairo overflow-x-hidden selection:bg-indigo-500/30 relative" dir="rtl">
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-cairo overflow-x-hidden selection:bg-indigo-500/30 relative pb-20 sm:pb-0" dir="rtl">
       
-      {/* 🎀 الوشاح المتدلي (متجاوب مع الجوال) */}
+      {/* 🎀 الوشاح المتدلي (أنحف للجوال) */}
       {hangingRibbonUrl && (
         <motion.div 
           initial={{ y: '-100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', damping: 15, stiffness: 50, delay: 0.5 }}
           whileHover={{ rotate: [-1, 1, -0.5, 0.5, 0], scale: 1.02 }}
-          className="absolute top-0 left-4 sm:left-12 lg:left-24 z-[60] w-14 sm:w-24 md:w-32 lg:w-44 h-[200px] sm:h-[350px] md:h-[450px] lg:h-[550px] pointer-events-auto shadow-[0_15px_30px_rgba(0,0,0,0.5)]"
+          className="absolute top-0 left-4 sm:left-16 lg:left-24 z-[60] w-12 sm:w-24 md:w-32 lg:w-44 h-[180px] sm:h-[350px] md:h-[450px] lg:h-[550px] pointer-events-auto shadow-[0_15px_30px_rgba(0,0,0,0.5)]"
           style={{ transformOrigin: 'top center' }}
         >
           <div className="w-full h-full relative" style={{ clipPath: 'polygon(100% 0, 100% 100%, 50% 90%, 0 100%, 0 0)' }}>
@@ -132,7 +132,7 @@ export default function DigitalCampusPage() {
       {/* 🚨 الشريط الإخباري (كبسولة طافية متجاوبة) */}
       {breakingNews && (
         <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 w-[92%] sm:w-[90%] max-w-4xl z-50 pointer-events-none">
-          <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 1, type: "spring" }} className="w-full bg-[#0F172A]/95 backdrop-blur-2xl border border-white/10 rounded-full flex items-center shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden pointer-events-auto">
+          <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 1, type: "spring" }} className="w-full bg-[#0F172A]/95 backdrop-blur-2xl border border-white/10 rounded-full flex items-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden pointer-events-auto">
              <div className="bg-indigo-600 px-4 sm:px-6 py-2.5 sm:py-3 font-black text-[10px] sm:text-xs text-white flex items-center gap-1.5 sm:gap-2 shrink-0 z-10 shadow-lg">
                <BellRing className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-pulse" /> عاجل
              </div>
@@ -145,16 +145,14 @@ export default function DigitalCampusPage() {
         </div>
       )}
 
-      {/* 🌟 1. الواجهة الترحيبية (Architectural Hero) */}
+      {/* 🌟 1. الواجهة الترحيبية */}
       <section className="relative min-h-[85vh] flex flex-col items-center justify-center pt-24 pb-16 overflow-hidden">
-        {/* خلفية هندسية عميقة */}
         <motion.div style={{ y: yBackground, opacity: opacityHero }} className="absolute inset-0 z-0 pointer-events-none">
-          <div className="absolute top-[-20%] right-[-10%] w-[50vw] h-[50vw] bg-indigo-600/10 rounded-full blur-[100px] sm:blur-[150px]"></div>
-          <div className="absolute bottom-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-emerald-600/10 rounded-full blur-[100px] sm:blur-[150px]"></div>
+          <div className="absolute top-[-20%] right-[-10%] w-[60vw] h-[60vw] sm:w-[50vw] sm:h-[50vw] bg-indigo-600/10 rounded-full blur-[100px] sm:blur-[150px]"></div>
+          <div className="absolute bottom-[-10%] left-[-10%] w-[50vw] h-[50vw] sm:w-[40vw] sm:h-[40vw] bg-emerald-600/10 rounded-full blur-[100px] sm:blur-[150px]"></div>
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:3rem_3rem] sm:bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_80%,transparent_100%)]"></div>
         </motion.div>
 
-        {/* زر الدخول (متجاوب للجوال) */}
         <div className="absolute top-6 right-4 sm:top-10 sm:right-8 z-50">
           <Link href={portal.href} className="group relative inline-flex items-center gap-2 sm:gap-3 px-5 py-2.5 sm:px-8 sm:py-4 bg-white text-[#020617] rounded-full font-black text-[11px] sm:text-sm transition-all shadow-[0_0_20px_rgba(255,255,255,0.15)] hover:scale-105 active:scale-95">
              <span>{portal.text}</span>
@@ -184,13 +182,12 @@ export default function DigitalCampusPage() {
                 </p>
               )}
 
-              {/* بطاقات الطلاب المتجاوبة */}
               {currentSlideData.metadata?.students && (
                 <div className="flex flex-wrap justify-center gap-3 sm:gap-6 mb-10 sm:mb-12">
                   {currentSlideData.metadata.students.map((student: any, i: number) => (
-                    <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="bg-[#0F172A]/80 backdrop-blur-xl border border-white/10 rounded-[1.5rem] sm:rounded-[2.5rem] p-2 sm:p-3 flex items-center gap-3 sm:gap-5 pr-4 sm:pr-6 shadow-xl hover:border-indigo-500/50 hover:-translate-y-1 sm:hover:-translate-y-2 transition-all group">
+                    <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="bg-[#0F172A]/80 backdrop-blur-xl border border-white/10 rounded-[1.5rem] sm:rounded-[2.5rem] p-2 sm:p-3 flex items-center gap-3 sm:gap-5 pr-4 sm:pr-6 shadow-xl hover:border-indigo-500/50 transition-all group">
                       <div className="relative">
-                        <Crown className="absolute -top-3 -right-2 sm:-top-5 sm:-right-4 w-5 h-5 sm:w-8 sm:h-8 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)] z-10 rotate-12 group-hover:scale-110 sm:group-hover:scale-125 transition-transform" />
+                        <Crown className="absolute -top-3 -right-2 sm:-top-5 sm:-right-4 w-5 h-5 sm:w-8 sm:h-8 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)] z-10 rotate-12" />
                         <img src={student.img} alt={student.name} className="w-10 h-10 sm:w-16 sm:h-16 rounded-full border border-white/20 sm:border-2 sm:border-white/10 object-cover" />
                       </div>
                       <div className="text-right py-1 sm:py-2">
@@ -202,9 +199,8 @@ export default function DigitalCampusPage() {
                 </div>
               )}
 
-              {/* صورة الهيرو المتجاوبة */}
               {currentSlideData.type === 'media' && currentSlideData.media_url && (
-                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-4xl mx-auto rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.5)] border border-white/10 relative group">
+                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-4xl mx-auto rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.5)] border border-white/10 relative group bg-[#0F172A]">
                     <img src={currentSlideData.media_url} alt="Hero Media" className="w-full h-auto max-h-[300px] sm:max-h-[500px] object-cover group-hover:scale-105 transition-transform duration-1000 ease-out" />
                  </motion.div>
               )}
@@ -215,7 +211,7 @@ export default function DigitalCampusPage() {
         {heroSlides.length > 1 && (
           <div className="absolute bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 flex gap-2 sm:gap-3 z-30 bg-[#0F172A]/80 backdrop-blur-md p-2 sm:p-3 rounded-full border border-white/5">
             {heroSlides.map((_, i) => (
-              <button key={i} onClick={() => setCurrentSlide(i)} className={`h-1.5 sm:h-2.5 rounded-full transition-all duration-500 ${currentSlide === i ? 'w-6 sm:w-10 bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'w-1.5 sm:w-2.5 bg-white/20 hover:bg-white/40'}`} />
+              <button key={i} onClick={() => setCurrentSlide(i)} className={`h-1.5 sm:h-2.5 rounded-full transition-all duration-500 ${currentSlide === i ? 'w-6 sm:w-10 bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'w-1.5 sm:w-2.5 bg-white/20'}`} />
             ))}
           </div>
         )}
@@ -232,14 +228,14 @@ export default function DigitalCampusPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
               {announcements.map((ann) => (
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} key={ann.id} className="bg-[#0F172A] p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 hover:border-rose-500/50 transition-all hover:-translate-y-2 shadow-lg relative group overflow-hidden flex flex-col justify-between min-h-[180px] sm:min-h-[220px]">
-                  <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-rose-500/5 rounded-full blur-[40px] group-hover:bg-rose-500/20 transition-colors"></div>
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} key={ann.id} className="bg-[#0F172A] p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 shadow-lg relative group overflow-hidden flex flex-col justify-between min-h-[160px] sm:min-h-[220px]">
+                  <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-rose-500/5 rounded-full blur-[40px]"></div>
                   <div className="relative z-10">
                     <div className="flex justify-between items-center mb-4 sm:mb-6">
                       <span className="text-[10px] sm:text-xs font-black text-rose-400 bg-rose-500/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-rose-500/20">{ann.tag || 'إعلان'}</span>
                       <span className="text-[10px] sm:text-xs font-bold text-slate-400 flex items-center gap-1.5"><Calendar className="w-3 sm:w-4 h-3 sm:h-4" /> {new Date(ann.created_at).toLocaleDateString('ar-SA')}</span>
                     </div>
-                    <h3 className="text-lg sm:text-2xl font-black text-white leading-snug group-hover:text-rose-200 transition-colors">{ann.title}</h3>
+                    <h3 className="text-lg sm:text-2xl font-black text-white leading-snug">{ann.title}</h3>
                   </div>
                 </motion.div>
               ))}
@@ -267,12 +263,12 @@ export default function DigitalCampusPage() {
           <div className="flex overflow-x-auto gap-4 sm:gap-8 px-4 sm:px-6 lg:px-8 pb-8 sm:pb-12 snap-x snap-mandatory hide-scrollbar relative z-10" dir="rtl">
             {studioItems.map((media, index) => (
               <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.1 }} key={media.id} className="relative shrink-0 w-[80vw] sm:w-[450px] aspect-[4/3] rounded-[2rem] sm:rounded-[3rem] overflow-hidden snap-center group bg-[#0F172A] shadow-xl cursor-pointer border border-white/10" onClick={() => setActiveMedia(media)}>
-                <img src={media.media_type === 'video' ? media.thumbnail_url : media.media_url} alt={media.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out z-0" />
+                <img src={media.media_type === 'video' ? media.thumbnail_url : media.media_url} alt={media.title} className="absolute inset-0 w-full h-full object-cover z-0" />
                 <div className="absolute bottom-0 left-0 right-0 h-2/3 bg-gradient-to-t from-[#020617] via-[#020617]/70 to-transparent z-10"></div>
                 
                 {media.media_type === 'video' && (
                   <div className="absolute inset-0 flex items-center justify-center z-20">
-                    <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-indigo-600/90 backdrop-blur-md border border-indigo-400 flex items-center justify-center group-hover:bg-indigo-500 group-hover:scale-110 transition-all shadow-lg">
+                    <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-indigo-600/90 backdrop-blur-md border border-indigo-400 flex items-center justify-center shadow-lg">
                       <Play className="w-6 h-6 sm:w-8 sm:h-8 text-white ml-1 sm:ml-2" fill="currentColor" />
                     </div>
                   </div>
@@ -291,7 +287,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* 📰 4. المركز الإخباري (Mobile Optimized Bento Grid) */}
+      {/* 📰 4. المركز الإخباري (Mobile Responsive Bento Grid) */}
       {magazineItems.length > 0 && (
         <section className="py-16 sm:py-28 relative z-10 bg-[#050A15]">
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -310,10 +306,10 @@ export default function DigitalCampusPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-8">
               
-              {/* الخبر الرئيسي (متجاوب) */}
+              {/* الخبر الرئيسي */}
               {pinnedArticle && (
-                <motion.div onClick={() => setActiveArticle(pinnedArticle)} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="lg:col-span-7 xl:col-span-8 group cursor-pointer relative h-[380px] sm:h-[500px] lg:h-[650px] rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl bg-[#0F172A] border border-white/5 hover:border-emerald-500/50 transition-colors flex flex-col">
-                  <img src={pinnedArticle.cover_image} alt={pinnedArticle.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out z-0" />
+                <motion.div onClick={() => setActiveArticle(pinnedArticle)} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="lg:col-span-7 xl:col-span-8 group cursor-pointer relative h-[380px] sm:h-[500px] lg:h-[650px] rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl bg-[#0F172A] border border-white/5 flex flex-col">
+                  <img src={pinnedArticle.cover_image} alt={pinnedArticle.title} className="absolute inset-0 w-full h-full object-cover z-0" />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/80 to-transparent z-10"></div>
                   
                   <div className="relative z-20 p-6 sm:p-10 lg:p-14 flex flex-col justify-end h-full">
@@ -321,25 +317,25 @@ export default function DigitalCampusPage() {
                       {pinnedArticle.is_pinned && <span className="px-3 py-1.5 sm:px-4 sm:py-2 bg-emerald-500 text-[#020617] shadow-[0_0_15px_rgba(16,185,129,0.4)] text-[10px] sm:text-xs font-black rounded-lg sm:rounded-xl flex items-center gap-1.5"><Star className="w-3 h-3 sm:w-4 sm:h-4" /> رئيسي</span>}
                       <span className="text-white text-[10px] sm:text-xs font-bold flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl border border-white/10"><User className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-400" /> {pinnedArticle.author_name}</span>
                     </div>
-                    <h3 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.3] sm:leading-[1.2] mb-3 sm:mb-6 group-hover:text-emerald-400 transition-colors drop-shadow-xl">{pinnedArticle.title}</h3>
+                    <h3 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.3] sm:leading-[1.2] mb-3 sm:mb-6 drop-shadow-xl">{pinnedArticle.title}</h3>
                     <p className="text-slate-300 font-bold text-xs sm:text-base lg:text-lg max-w-3xl line-clamp-2 mb-6 sm:mb-8 leading-relaxed opacity-90">{pinnedArticle.excerpt}</p>
                     
-                    <div className="inline-flex items-center justify-center gap-2 text-[#020617] font-black text-xs sm:text-sm bg-white w-max px-6 py-3 sm:px-8 sm:py-4 rounded-full group-hover:bg-emerald-400 transition-all shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
+                    <div className="inline-flex items-center justify-center gap-2 text-[#020617] font-black text-xs sm:text-sm bg-white w-max px-6 py-3 sm:px-8 sm:py-4 rounded-full shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
                       اقرأ التفاصيل <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5" />
                     </div>
                   </div>
                 </motion.div>
               )}
 
-              {/* الأخبار الفرعية (متجاوبة) */}
+              {/* الأخبار الفرعية */}
               <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-4 sm:gap-8">
                 {sideArticles.map((article, idx) => (
-                  <motion.div onClick={() => setActiveArticle(article)} key={article.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.1 }} className="flex-1 group cursor-pointer relative rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-lg bg-[#0F172A] border border-white/5 hover:border-white/20 min-h-[160px] sm:min-h-[200px] flex flex-col">
-                    <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out z-0" />
+                  <motion.div onClick={() => setActiveArticle(article)} key={article.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.1 }} className="flex-1 group cursor-pointer relative rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-lg bg-[#0F172A] border border-white/5 min-h-[160px] sm:min-h-[200px] flex flex-col">
+                    <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover z-0" />
                     <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#020617] via-[#020617]/80 to-transparent"></div>
                     <div className="relative z-20 p-5 sm:p-8 flex flex-col justify-end h-full">
                       <span className="text-emerald-400 text-[10px] sm:text-xs font-black mb-2 sm:mb-3 flex items-center gap-1.5 drop-shadow-md"><User className="w-3 h-3 sm:w-4 sm:h-4" /> {article.author_name}</span>
-                      <h3 className="text-base sm:text-xl font-black text-white leading-snug group-hover:text-emerald-300 transition-colors drop-shadow-md">{article.title}</h3>
+                      <h3 className="text-base sm:text-xl font-black text-white leading-snug drop-shadow-md">{article.title}</h3>
                     </div>
                   </motion.div>
                 ))}
@@ -349,14 +345,15 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* 🚀 5. الخاتمة والدعوة (Mobile Optimized) */}
-      <section className="py-20 sm:py-32 relative z-10 bg-[#020617] border-t border-white/5 overflow-hidden text-center">
+      {/* 🚀 5. الخاتمة والدعوة (Mobile Optimized & Padded for Ticker) */}
+      {/* ⚠️ ملاحظة: تم إضافة pb-24 لكي لا يغطي الشريط العاجل على الزر */}
+      <section className="py-20 sm:py-32 pb-32 sm:pb-40 relative z-10 bg-[#020617] border-t border-white/5 overflow-hidden text-center">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] sm:w-[60vw] sm:h-[60vw] bg-indigo-600/10 rounded-full blur-[100px] sm:blur-[150px] pointer-events-none"></div>
         <div className="max-w-4xl mx-auto px-6 relative z-10">
            <div className="w-20 h-20 sm:w-28 sm:h-28 bg-[#0F172A] rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 flex items-center justify-center mx-auto mb-6 sm:mb-10 shadow-2xl"><Compass className="w-10 h-10 sm:w-14 sm:h-14 text-indigo-500" /></div>
            <h2 className="text-4xl sm:text-6xl md:text-8xl font-black text-white mb-6 sm:mb-8 tracking-tighter">جاهز للانطلاق؟</h2>
            <p className="text-slate-400 font-bold text-sm sm:text-xl md:text-2xl mb-10 sm:mb-14 max-w-2xl mx-auto leading-relaxed px-4">انضم الآن إلى مجتمع مدرستك في منصة التعليم الرقمي الأقوى والأكثر تطوراً على مستوى البلاد.</p>
-           <Link href={portal.href} className="inline-flex items-center justify-center gap-3 sm:gap-4 px-8 py-4 sm:px-14 sm:py-7 bg-white text-[#020617] rounded-full font-black text-sm sm:text-xl hover:bg-indigo-600 hover:text-white hover:scale-105 transition-all active:scale-95 shadow-xl">
+           <Link href={portal.href} className="inline-flex items-center justify-center gap-3 sm:gap-4 px-8 py-4 sm:px-14 sm:py-7 bg-white text-[#020617] rounded-full font-black text-sm sm:text-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-xl">
              <span>{user ? 'دخول لوحة القيادة' : 'تسجيل الدخول للمنصة'}</span>
              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
            </Link>
@@ -380,11 +377,14 @@ export default function DigitalCampusPage() {
         {activeArticle && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/90 backdrop-blur-xl p-2 sm:p-6" onClick={() => setActiveArticle(null)}>
             <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-5xl bg-[#0F172A] rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh] sm:max-h-[85vh] border border-white/10" onClick={e => e.stopPropagation()}>
-              <div className="relative h-48 sm:h-72 lg:h-[400px] shrink-0 bg-black">
+              
+              <div className="relative h-56 sm:h-[400px] shrink-0 bg-black rounded-t-[2rem] sm:rounded-t-[3rem] overflow-hidden">
                 <button onClick={() => setActiveArticle(null)} className="absolute top-4 left-4 sm:top-6 sm:left-6 z-50 w-10 h-10 sm:w-14 sm:h-14 bg-black/50 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-2xl transition-colors border border-white/20"><X className="w-5 h-5 sm:w-7 sm:h-7" /></button>
+                {/* 🚀 إجبار الصورة على تعبئة المساحة (object-cover) لمنع ظهور حواف سوداء/بيضاء */}
                 <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-transparent to-transparent"></div>
               </div>
+              
               <div className="px-5 sm:px-16 pb-10 sm:pb-16 pt-4 sm:pt-8 overflow-y-auto custom-scrollbar relative z-10 bg-[#0F172A]">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-6 sm:mb-8 border-b border-white/5 pb-4 sm:pb-6">
                   <span className="text-slate-400 flex items-center gap-1 sm:gap-2 text-xs sm:text-base font-bold"><Calendar className="w-3.5 h-3.5 sm:w-5 sm:h-5" /> {new Date(activeArticle.created_at).toLocaleDateString('ar-SA')}</span>
