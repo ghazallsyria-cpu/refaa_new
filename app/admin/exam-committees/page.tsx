@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, FileText, Printer, ShieldCheck, 
   Settings, Loader2, Search, Trash2, PrinterIcon, IdCard, DoorOpen, LayoutGrid, CheckCircle2, Download, X, Edit3, Plus, Eye, AlertTriangle, Contact, BarChart2,
-  Camera, UploadCloud, Crown, BookOpen
+  Camera, UploadCloud, Crown, BookOpen, Layers
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -53,7 +53,8 @@ export default function ExamCommitteesControl() {
 
   const [isPrinting, setIsPrinting] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
-  const [printType, setPrintType] = useState<'door_sheet' | 'desk_cards' | 'invigilator_ids' | null>(null);
+  // إضافة نوع جديد للطباعة الشاملة حسب الفصول
+  const [printType, setPrintType] = useState<'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'all_desk_cards' | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
@@ -258,14 +259,77 @@ export default function ExamCommitteesControl() {
     try { await supabase.from('committee_invigilators').delete().eq('id', id); fetchData(); } catch (error) { alert('خطأ'); }
   };
 
+  // 🚀 دالة مجددة لتوليد اسم الصف والشعبة بوضوح تام (مثال: العاشر - 1)
   const getFullClassName = (studentData: any) => {
     const classLvl = studentData?.sections?.classes?.level || studentData?.sections?.[0]?.classes?.level;
-    let classNameDisplay = 'صف غير محدد';
-    if (classLvl === 10) classNameDisplay = 'الصف العاشر';
-    if (classLvl === 11) classNameDisplay = 'الصف الحادي عشر';
-    if (classLvl === 12) classNameDisplay = 'الصف الثاني عشر';
     const secName = studentData?.sections?.name || studentData?.sections?.[0]?.name || '';
+    let classNameDisplay = '';
+    if (classLvl === 10) classNameDisplay = 'العاشر';
+    else if (classLvl === 11) classNameDisplay = 'الحادي عشر';
+    else if (classLvl === 12) classNameDisplay = 'الثاني عشر';
+    else classNameDisplay = 'صف غير محدد';
     return `${classNameDisplay} ${secName ? '- ' + secName : ''}`;
+  };
+
+  // 🚀 دالة جديدة: طباعة البطاقات الشاملة حسب الفصول
+  const printAllCardsByClass = async () => {
+    setIsPrinting(true);
+    try {
+      const { data } = await supabase.from('student_seat_allocations')
+        .select(`
+          seat_number,
+          student_id,
+          students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) ),
+          exam_committees ( name )
+        `)
+        .eq('academic_year', currentYear)
+        .eq('semester', currentSemester);
+
+      if (!data || data.length === 0) {
+        alert('لا يوجد طلاب موزعون للطباعة!');
+        setIsPrinting(false);
+        return;
+      }
+
+      // فرز الطلاب: حسب المستوى (10 ثم 11)، ثم اسم الشعبة، ثم أبجدياً بالاسم
+      const sortedData = data.sort((a: any, b: any) => {
+        const lvlA = a.students?.sections?.classes?.level || a.students?.sections?.[0]?.classes?.level || 0;
+        const lvlB = b.students?.sections?.classes?.level || b.students?.sections?.[0]?.classes?.level || 0;
+        if (lvlA !== lvlB) return lvlA - lvlB;
+
+        const secA = a.students?.sections?.name || a.students?.sections?.[0]?.name || '';
+        const secB = b.students?.sections?.name || b.students?.sections?.[0]?.name || '';
+        if (secA !== secB) return secA.localeCompare(secB, 'ar');
+
+        const nameA = a.students?.users?.full_name || a.students?.users?.[0]?.full_name || '';
+        const nameB = b.students?.users?.full_name || b.students?.users?.[0]?.full_name || '';
+        return nameA.localeCompare(nameB, 'ar');
+      });
+
+      setPrintData({ students: sortedData });
+      setPrintType('all_desk_cards');
+
+      setTimeout(async () => {
+        if (!printRef.current) return;
+        try {
+          window.scrollTo(0, 0); const isMobile = window.innerWidth < 768;
+          const pages = printRef.current.querySelectorAll('.print-page-wrapper');
+          if (pages.length === 0) return;
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          for (let i = 0; i < pages.length; i++) {
+            const canvas = await html2canvas(pages[i] as HTMLElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff' });
+            const imgData = canvas.toDataURL('image/jpeg', 1.0); 
+            const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = pdf.internal.pageSize.getHeight(); 
+            if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+          }
+          pdf.save(`بطاقات_الطلاب_مفرزة_بالفصول.pdf`);
+        } catch (err: any) { alert('حدث خطأ أثناء معالجة الصور.'); } finally { setPrintData(null); setPrintType(null); setIsPrinting(false); }
+      }, 3000); 
+
+    } catch (e) {
+      alert('خطأ في تحضير الطباعة الشاملة');
+      setIsPrinting(false);
+    }
   };
 
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids') => {
@@ -289,8 +353,8 @@ export default function ExamCommitteesControl() {
           if (pages.length === 0) return;
           const pdf = new jsPDF('p', 'mm', 'a4');
           for (let i = 0; i < pages.length; i++) {
-            const canvas = await html2canvas(pages[i] as HTMLElement, { scale: isMobile ? 1.5 : 2, useCORS: true, allowTaint: false, logging: false, width: 794, height: 1122, backgroundColor: '#ffffff' });
-            const imgData = canvas.toDataURL('image/jpeg', 1.0); // استخدام جودة عالية للطباعة 
+            const canvas = await html2canvas(pages[i] as HTMLElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff' });
+            const imgData = canvas.toDataURL('image/jpeg', 1.0); 
             const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = pdf.internal.pageSize.getHeight(); 
             if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
           }
@@ -400,6 +464,8 @@ export default function ExamCommitteesControl() {
                 ) : (
                   <>
                     <button onClick={handleDistribute} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Users className="w-5 h-5" /> توزيع السحّاب</button>
+                    {/* 🚀 الزر الجديد: طباعة شاملة حسب الفصول لتسهيل التوزيع باليد */}
+                    <button onClick={printAllCardsByClass} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"><Layers className="w-5 h-5" /> طباعة البطاقات (مفرزة بالفصول)</button>
                     <button onClick={() => setIsHeadsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-amber-100 hover:bg-amber-200 text-amber-800 font-black rounded-xl flex justify-center items-center gap-2"><Crown className="w-5 h-5" /> رؤساء اللجان</button>
                     <button onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> إضافة لجنة</button>
                     <button onClick={handleSoftReset} className="flex-1 sm:flex-none px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-black rounded-xl flex justify-center items-center gap-2"><Trash2 className="w-5 h-5" /> تفريغ المقاعد</button>
@@ -736,14 +802,14 @@ export default function ExamCommitteesControl() {
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10 bg-white" dir="rtl">
             
-            {/* 📄 1. كشف الباب الرسمي (Door Sheet) - 🚀 التصحيح: الألوان الخالصة */}
+            {/* 📄 1. كشف الباب الرسمي (Door Sheet) - 🚀 التصحيح: إزالة عمود التوقيع والاسم الكامل للفصل */}
             {printType === 'door_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px', height: '1122px' }}>
                  <div className="text-center mb-8 border-b-2 border-black pb-4">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
-                    <h3 className="text-3xl font-black text-black mt-4 border-2 border-black inline-block px-8 py-2 bg-slate-100 rounded-2xl">{printData.committee.name}</h3>
-                    <p className="text-sm font-bold text-black mt-2">كشف مناداة وحضور الطلاب - الفصل الدراسي الثاني 2025/2026</p>
+                    <h3 className="text-3xl font-black text-black mt-4 border-2 border-black inline-block px-8 py-2 bg-slate-100 rounded-2xl">{printData.committee?.name}</h3>
+                    <p className="text-sm font-bold text-black mt-2">كشف مناداة الطلاب - الفصل الدراسي الثاني 2025/2026</p>
                  </div>
                  <table className="w-full border-collapse border-2 border-black text-sm text-black">
                    <thead>
@@ -751,20 +817,21 @@ export default function ExamCommitteesControl() {
                        <th className="border border-black p-3 w-12 text-black">م</th>
                        <th className="border border-black p-3 w-32 text-black">رقم الجلوس</th>
                        <th className="border border-black p-3 text-black">اسم الطالب الرباعي</th>
-                       <th className="border border-black p-3 w-24 text-black">الصف</th>
-                       <th className="border border-black p-3 w-24 text-black">توقيع الحضور</th>
+                       <th className="border border-black p-3 w-32 text-black">الصف والشعبة</th>
                      </tr>
                    </thead>
                    <tbody>
-                     {printData.students.map((s:any, i:number) => (
-                       <tr key={i} className="border-b border-black h-12 text-black">
-                         <td className="border border-black p-2 text-center font-bold text-black">{i + 1}</td>
-                         <td className="border border-black p-2 text-center font-black text-lg tracking-widest text-black">{s.seat_number}</td>
-                         <td className="border border-black p-2 font-bold px-4 text-black">{s.students?.users?.full_name || s.students?.users?.[0]?.full_name}</td>
-                         <td className="border border-black p-2 text-center font-bold text-xs text-black">الصف {s.students?.sections?.classes?.level || s.students?.sections?.[0]?.classes?.level}</td>
-                         <td className="border border-black p-2"></td>
-                       </tr>
-                     ))}
+                     {printData.students.map((s:any, i:number) => {
+                       const fullClassName = getFullClassName(s.students);
+                       return (
+                         <tr key={i} className="border-b border-black h-12 text-black">
+                           <td className="border border-black p-2 text-center font-bold text-black">{i + 1}</td>
+                           <td className="border border-black p-2 text-center font-black text-lg tracking-widest text-black">{s.seat_number}</td>
+                           <td className="border border-black p-2 font-bold px-4 text-black">{s.students?.users?.full_name || s.students?.users?.[0]?.full_name}</td>
+                           <td className="border border-black p-2 text-center font-bold text-xs text-black">{fullClassName}</td>
+                         </tr>
+                       );
+                     })}
                    </tbody>
                  </table>
                  <div className="mt-10 flex justify-between px-10 text-black">
@@ -774,13 +841,12 @@ export default function ExamCommitteesControl() {
               </div>
             )}
 
-            {/* 📄 2. بطاقات الطاولة المحسنة */}
+            {/* 📄 2. بطاقات الطاولة العادية (Committee specific) */}
             {printType === 'desk_cards' && chunkArray(printData.students, 4).map((chunk, pageIdx) => (
               <div key={pageIdx} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-1 gap-8" style={{ width: '794px', height: '1122px' }}>
                  {chunk.map((student:any) => {
                     const stdName = student.students?.users?.full_name || student.students?.users?.[0]?.full_name || 'غير معروف';
-                    const lvl = student.students?.sections?.classes?.level || student.students?.sections?.[0]?.classes?.level;
-                    const className = lvl === 10 ? 'الصف العاشر' : 'الصف الحادي عشر';
+                    const fullClassName = getFullClassName(student.students);
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-id:${student.student_id}&margin=0`;
 
                     return (
@@ -790,14 +856,14 @@ export default function ExamCommitteesControl() {
                                 <ShieldCheck className="w-8 h-8 text-emerald-400" />
                                 <div><h3 className="font-black text-lg">مدرسة الرفعة النموذجية بنين</h3><p className="text-[10px] text-slate-300">لجان الامتحانات الرسمية 2026</p></div>
                              </div>
-                             <div className="bg-white text-slate-900 px-6 py-2 rounded-xl font-black text-xl border-2 border-emerald-500">{printData.committee.name}</div>
+                             <div className="bg-white text-slate-900 px-6 py-2 rounded-xl font-black text-xl border-2 border-emerald-500">{printData.committee?.name}</div>
                           </div>
                           <div className="flex p-6 gap-6 items-center flex-1">
                              <div className="w-[30mm] h-[30mm] p-1 border-2 border-slate-300 rounded-xl shrink-0"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
                              <div className="flex-1">
                                 <p className="text-sm font-bold text-slate-500 mb-1">اسم الطالب الرباعي</p>
                                 <h2 className="text-3xl font-black text-slate-900 mb-4">{stdName}</h2>
-                                <div className="inline-block bg-slate-100 border border-slate-300 px-4 py-2 rounded-lg font-black text-lg text-slate-700">{className}</div>
+                                <div className="inline-block bg-slate-100 border border-slate-300 px-4 py-2 rounded-lg font-black text-lg text-slate-700">{fullClassName}</div>
                              </div>
                              <div className="shrink-0 text-center border-r-2 border-slate-200 pr-6">
                                 <p className="text-sm font-bold text-slate-500 mb-2">رقم الجلوس</p>
@@ -810,7 +876,43 @@ export default function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 3. هويات المراقبين */}
+            {/* 📄 3. بطاقات الطاولة الشاملة (All classes sorted) - 🚀 الجديد */}
+            {printType === 'all_desk_cards' && chunkArray(printData.students, 4).map((chunk, pageIdx) => (
+              <div key={pageIdx} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-1 gap-8" style={{ width: '794px', height: '1122px' }}>
+                 {chunk.map((student:any) => {
+                    const stdName = student.students?.users?.full_name || student.students?.users?.[0]?.full_name || 'غير معروف';
+                    const fullClassName = getFullClassName(student.students);
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-id:${student.student_id}&margin=0`;
+                    const assignedCommitteeName = student.exam_committees?.name || 'غير محدد';
+
+                    return (
+                       <div key={student.seat_number} className="w-full h-[60mm] border-4 border-slate-900 rounded-[2rem] flex flex-col overflow-hidden bg-white shadow-md relative" style={{ pageBreakInside: 'avoid' }}>
+                          <div className="bg-slate-900 text-white p-3 flex justify-between items-center shrink-0">
+                             <div className="flex items-center gap-3">
+                                <ShieldCheck className="w-8 h-8 text-emerald-400" />
+                                <div><h3 className="font-black text-lg">مدرسة الرفعة النموذجية بنين</h3><p className="text-[10px] text-slate-300">لجان الامتحانات الرسمية 2026</p></div>
+                             </div>
+                             <div className="bg-white text-slate-900 px-6 py-2 rounded-xl font-black text-xl border-2 border-emerald-500">{assignedCommitteeName}</div>
+                          </div>
+                          <div className="flex p-6 gap-6 items-center flex-1">
+                             <div className="w-[30mm] h-[30mm] p-1 border-2 border-slate-300 rounded-xl shrink-0"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
+                             <div className="flex-1">
+                                <p className="text-sm font-bold text-slate-500 mb-1">اسم الطالب الرباعي</p>
+                                <h2 className="text-3xl font-black text-slate-900 mb-4">{stdName}</h2>
+                                <div className="inline-block bg-slate-100 border border-slate-300 px-4 py-2 rounded-lg font-black text-lg text-slate-700">{fullClassName}</div>
+                             </div>
+                             <div className="shrink-0 text-center border-r-2 border-slate-200 pr-6">
+                                <p className="text-sm font-bold text-slate-500 mb-2">رقم الجلوس</p>
+                                <p className="text-6xl font-black text-rose-600 tracking-tighter">{student.seat_number}</p>
+                             </div>
+                          </div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
+            {/* 📄 4. هويات المراقبين */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((invigChunk, pageIndex) => (
               <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
                 <div className="flex flex-wrap gap-8 justify-center content-start">
