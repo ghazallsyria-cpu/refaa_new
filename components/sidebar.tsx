@@ -26,7 +26,10 @@ const navigation = [
   // ==========================================
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
   
-  // 🚀 الزر الجديد: مركز التحكم بالحرم الرقمي (الصفحة الرئيسية)
+  // 🚀 الزر الجديد: الحرم الرقمي (الصفحة الرئيسية المتاحة للجميع)
+  { name: 'الرئيسية (الحرم الرقمي)', href: '/', icon: Compass },
+
+  // 🚀 مركز تحكم المدير للحرم الرقمي
   { name: 'إدارة الحرم الرقمي', href: '/admin/campus-control', icon: Globe },
   
   { name: 'ملف الإدارة', href: '/admin/profile', icon: Crown }, 
@@ -70,7 +73,7 @@ const navigation = [
   // ==========================================
   { name: 'إدارة المنتديات', href: '/admin/forums-management', icon: LayoutGrid },
   { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate },
-  { name: 'المنتديات', href: '/forums', icon: Compass },
+  { name: 'المنتديات', href: '/forums', icon: MessageSquare },
 
   // ==========================================
   // 🎯 التقييم المستمر والاختبارات القصيرة
@@ -165,6 +168,9 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
 
   const filteredNavigation = navigation.filter(item => {
+    // 🚀 السماح للجميع بمشاهدة رابط الرئيسية
+    if (item.name === 'الرئيسية (الحرم الرقمي)') return true;
+
     // 🚀 ظهور إدارة الحرم الرقمي للمدير والإدارة فقط
     if (item.name === 'إدارة الحرم الرقمي') return (authRole === 'admin' || authRole === 'management');
 
@@ -204,11 +210,11 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     
     if (isGlobalWatcher) return true;
     
-    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل', 'رادار المراقب', 'الغلاف الرقمي'].includes(item.name);
+    if (authRole === 'teacher') return ['لوحة التحكم', 'الرئيسية (الحرم الرقمي)', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل', 'رادار المراقب', 'الغلاف الرقمي'].includes(item.name);
     
-    if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
+    if (authRole === 'student') return ['لوحة التحكم', 'الرئيسية (الحرم الرقمي)', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
     
-    if (authRole === 'parent') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
+    if (authRole === 'parent') return ['لوحة التحكم', 'الرئيسية (الحرم الرقمي)', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     
     return false;
   });
@@ -269,7 +275,10 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
               itemHref = `/teachers/${user?.id || user?.user_id}`; 
             }
 
-            const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
+            // 🚀 تصليح Active State للرئيسية لكي لا تتعارض مع لوحة التحكم
+            const isActive = item.name === 'الرئيسية (الحرم الرقمي)' 
+              ? pathname === '/' 
+              : pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
 
             return (
               <motion.div key={item.name} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.02 }}>
