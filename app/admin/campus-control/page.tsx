@@ -1,3 +1,27 @@
+/**
+ * ============================================================================
+ * 🏗️ التوثيق الهندسي (Engineering Documentation)
+ * ============================================================================
+ * @file        app/admin/campus-control/page.tsx
+ * @component   CampusControlPage
+ * @description مركز العمليات المركزية لإدارة محتوى "الحرم الرقمي" (الصفحة الرئيسية).
+ * هذه اللوحة تتيح للإدارة العليا التحكم الفوري بجميع أجزاء الواجهة 
+ * الأمامية دون الحاجة لأي تعديلات برمجية.
+ * * * 🎯 الميزات المعمارية (Core Features):
+ * 1. 🎀 إدارة الوشاح (Ribbon): رفع/إزالة البانر العمودي المتدلي للمناسبات الخاصة.
+ * 2. 🎬 إدارة الاستوديو (Visual Library): رفع الصور والفيديوهات إلى Cloudinary وعرضها في السلايدر التفاعلي.
+ * 3. 📰 إدارة المجلة (News Center): صياغة ونشر الأخبار وتحديد الأخبار "الرئيسية" (Pinned).
+ * 4. 📣 إدارة الإعلانات (Announcements): نشر إعلانات فلاشية سريعة ببطاقات منفصلة.
+ * 5. 🚨 إدارة البث الحي (Live Ticker): إضافة أسطر نصية تتحرك في الشريط العاجل أسفل الشاشة.
+ * * * ☁️ محرك الرفع (Upload Engine):
+ * - متكامل مع Cloudinary API لرفع الوسائط مباشرة.
+ * - يكتشف نوع الملف (صورة/فيديو) تلقائياً ويولد روابط مصغرة (Thumbnails) للفيديوهات.
+ * * * @version     3.0.0 (Aurora Glass Control Panel)
+ * @date        مايو 2026
+ * @author      إدارة تطوير الرفعة
+ * ============================================================================
+ */
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -141,7 +165,7 @@ export default function CampusControlPage() {
   const [announceForm, setAnnounceForm] = useState({ title: '', tag: 'إعلان عام' });
   const [tickerForm, setTickerForm] = useState({ content: '' });
 
-  // 🚀 هذه هي الدوال التي كانت مفقودة (onStudioFileSelect و onMagazineFileSelect)
+  // 🚀 الدوال المسؤولة عن ربط الملفات المرفوعة بالنماذج
   const onStudioFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
