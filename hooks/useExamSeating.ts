@@ -3,8 +3,11 @@
  * 🏗️ التوثيق الهندسي (Engineering Documentation)
  * ============================================================================
  * @file        hooks/useExamSeating.ts
- * @version     2.1.0 (The Alphabetical Sanitizer Update)
- * @description محرك التوزيع الذكي للجان الامتحانات (السحّاب الأبجدي).
+ * @version     2.2.0 (Numeric Sort & Strict Grades Update)
+ * @description محرك التوزيع الذكي للجان الامتحانات.
+ * * 🛠️ التحديثات:
+ * - تصحيح الفرز ليقرأ الأرقام (لجنة 9 تأتي قبل لجنة 10).
+ * - التأكيد الصارم على جلب صفوف (العاشر والحادي عشر) فقط وتجاهل البقية.
  * ============================================================================
  */
 
@@ -17,7 +20,6 @@ export function useExamSeating() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
 
-  // 🚀 دالة توليد اللجان لأول مرة فقط
   const generateDefaultCommittees = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     setProgressMsg('جاري بناء اللجان الافتراضية...');
@@ -42,20 +44,25 @@ export function useExamSeating() {
     }
   }, []);
 
-  // 🚀 خوارزمية السحّاب الأبجدي والتطهير (The Alphabetical Zipper & Sanitizer)
   const generateSeatingAndDistribute = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     try {
       setProgressMsg('جاري قراءة اللجان المتاحة...');
-      const { data: committees, error: commError } = await supabase.from('exam_committees')
+      const { data: fetchedCommittees, error: commError } = await supabase.from('exam_committees')
         .select('id, name, capacity')
         .eq('academic_year', academicYear)
-        .eq('semester', semester)
-        .order('name', { ascending: true });
+        .eq('semester', semester);
 
-      if (commError || !committees || committees.length === 0) {
+      if (commError || !fetchedCommittees || fetchedCommittees.length === 0) {
         throw new Error('لم يتم العثور على لجان! يرجى إنشاء اللجان أولاً.');
       }
+
+      // 🚀 التصحيح: فرز اللجان "رقمياً" لكي لا تأتي 10 قبل 9
+      const committees = fetchedCommittees.sort((a, b) => {
+        const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
 
       setProgressMsg('جاري سحب بيانات الطلاب من السيرفر...');
       const { data: studentsData, error: studentsError } = await supabase
@@ -70,19 +77,16 @@ export function useExamSeating() {
       studentsData.forEach((s: any) => {
         const level = s.sections?.classes?.level;
         const studentObj = { id: s.id, fullName: s.users?.full_name || '' };
+        // 🛡️ التأكيد الصارم: العاشر والحادي عشر فقط
         if (level === 10) grade10.push(studentObj);
         else if (level === 11) grade11.push(studentObj);
       });
 
       setProgressMsg('جاري تطهير الأسماء والفرز الأبجدي...');
       
-      // 🛡️ فلتر تطهير الأسماء لضمان ترتيب أبجدي صارم
       const cleanNameForSort = (name: string) => {
         if (!name) return '';
-        return name
-          .replace(/^[\s\.\-\_]+/, '') // مسح أي مسافات أو نقاط في بداية الاسم
-          .replace(/[أإآ]/g, 'ا')      // توحيد الهمزات لضمان الترتيب الدقيق
-          .trim();
+        return name.replace(/^[\s\.\-\_]+/, '').replace(/[أإآ]/g, 'ا').trim();
       };
 
       const sortArabic = (a: any, b: any) => {
@@ -159,10 +163,7 @@ export function useExamSeating() {
 
       setProgressMsg('جاري مسح التوزيع القديم وحفظ التوزيع الجديد...');
       
-      await supabase.from('student_seat_allocations')
-        .delete()
-        .eq('academic_year', academicYear)
-        .eq('semester', semester);
+      await supabase.from('student_seat_allocations').delete().eq('academic_year', academicYear).eq('semester', semester);
 
       const chunkSize = 100;
       for (let i = 0; i < allocations.length; i += chunkSize) {
@@ -173,9 +174,7 @@ export function useExamSeating() {
 
       setProgressMsg('تحديث الهويات الرقمية للطلاب...');
       for (const alloc of allocations) {
-        await supabase.from('users')
-          .update({ last_seen: new Date().toISOString() })
-          .eq('id', alloc.student_id);
+        await supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', alloc.student_id);
       }
 
       return { success: true, totalAllocated: allocations.length };
