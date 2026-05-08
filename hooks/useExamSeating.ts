@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * @file        hooks/useExamSeating.ts
- * @version     3.0.0 (The Architect Update)
+ * @version     3.1.0 (TypeScript Strict Type Fix)
  * @description محرك التوزيع وبناء اللجان مع الهدم الآمن (Cascading Delete).
  * ============================================================================
  */
@@ -139,7 +139,10 @@ export function useExamSeating() {
         setProgressMsg('إنشاء لجنة الفائض...');
         let overflow = committees.find(c => c.name.includes('الفائض'));
         if (!overflow) {
-          const { data: newO, error: err } = await supabase.from('exam_committees').insert({ name: 'لجنة الفائض (للتوزيع اليدوي)', capacity: zipped.length - pointer, academic_year: academicYear, semester: semester, location: 'الانتظار' }).select('id').single();
+          // 🚀 الحل: إضافة name و capacity في أمر الـ select
+          const { data: newO, error: err } = await supabase.from('exam_committees')
+            .insert({ name: 'لجنة الفائض (للتوزيع اليدوي)', capacity: zipped.length - pointer, academic_year: academicYear, semester: semester, location: 'الانتظار' })
+            .select('id, name, capacity').single();
           if (err) throw err;
           overflow = newO;
         }
