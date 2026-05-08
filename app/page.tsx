@@ -23,29 +23,28 @@ export default function DigitalCampusPage() {
 
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   
+  // 🗃️ مساحات تخزين البيانات الحقيقية
   const [studioItems, setStudioItems] = useState<any[]>([]);
   const [magazineItems, setMagazineItems] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [tickers, setTickers] = useState<any[]>([]);
   const [fetching, setFetching] = useState(true);
 
-  // 🔔 إعلانات تجريبية مبهرة (سنربطها لاحقاً بلوحة الإدارة)
-  const dummyAnnouncements = [
-    { id: 1, title: 'عطلة رسمية يوم الخميس القادم بمناسبة الأعياد الوطنية', tag: 'هام جداً', date: 'الآن' },
-    { id: 2, title: 'بدء التسجيل لاختبارات القدرات التجريبية لطلاب الصف الثاني عشر', tag: 'أكاديمي', date: 'منذ ساعتين' },
-    { id: 3, title: 'تكريم الطلاب الفائقين في طابور الصباح يوم الأحد', tag: 'فعاليات', date: 'أمس' }
-  ];
-
-  const breakingNews = "🔥 عاجل: نرحب بالطلاب في الفصل الدراسي الجديد... 🚀 تهانينا لأبطال فريق الرفعة لكرة القدم لحصولهم على المركز الأول... 📚 تذكير: يبدأ تسليم المشاريع العلمية الأسبوع القادم...";
-
+  // 📡 جلب البيانات الديناميكية من لوحة تحكم المدير
   useEffect(() => {
     const fetchCampusContent = async () => {
       try {
-        const [studioRes, magazineRes] = await Promise.all([
-          // 💡 هنا جلبنا أحدث 8 لقطات فقط لحل مشكلة الـ 100 صورة!
-          supabase.from('school_studio').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(8),
-          supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(4)
+        const [studioRes, magazineRes, annRes, tickerRes] = await Promise.all([
+          supabase.from('school_studio').select('*').order('created_at', { ascending: false }).limit(8),
+          supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(4),
+          supabase.from('school_announcements').select('*').order('created_at', { ascending: false }).limit(6),
+          supabase.from('school_ticker').select('*').order('created_at', { ascending: false }).limit(10)
         ]);
+        
         if (studioRes.data) setStudioItems(studioRes.data);
         if (magazineRes.data) setMagazineItems(magazineRes.data);
+        if (annRes.data) setAnnouncements(annRes.data);
+        if (tickerRes.data) setTickers(tickerRes.data);
       } catch (e) {
         console.error("Content fetch failed", e);
       } finally {
@@ -55,15 +54,14 @@ export default function DigitalCampusPage() {
     fetchCampusContent();
   }, []);
 
+  // 🚨 تجميع شريط الأخبار العاجلة الحقيقي
+  const breakingNews = tickers.length > 0 
+    ? tickers.map(t => `🔥 ${t.content}`).join('   |   ')
+    : "✨ أهلاً بكم في الحرم الرقمي الذكي لمدرسة الرفعة...";
+
   const getPortalLink = () => {
     if (!user) return { href: '/login', text: 'بوابة تسجيل الدخول', icon: ArrowLeft };
-    const routes = {
-      admin: '/dashboard',
-      management: '/dashboard',
-      teacher: '/dashboard/teacher',
-      student: '/dashboard/student',
-      parent: '/dashboard/parent'
-    };
+    const routes = { admin: '/dashboard', management: '/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', parent: '/dashboard/parent' };
     return { 
       href: routes[authRole as keyof typeof routes] || '/dashboard', 
       text: authRole === 'student' ? 'انطلق لحقيبتك الدراسية' : authRole === 'teacher' ? 'الدخول لقاعة المعلمين' : 'مركز القيادة العليا', 
@@ -91,9 +89,7 @@ export default function DigitalCampusPage() {
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 font-cairo overflow-x-hidden selection:bg-amber-500 selection:text-slate-900" dir="rtl">
       
-      {/* ========================================== */}
       {/* 🌌 1. قسم البداية (The Hyper-Cinematic Hero) */}
-      {/* ========================================== */}
       <section className="relative h-screen flex flex-col items-center justify-center overflow-hidden">
         <motion.div style={{ y: yBackground }} className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-screen"></div>
@@ -103,7 +99,6 @@ export default function DigitalCampusPage() {
         </motion.div>
 
         <motion.div style={{ opacity: opacityHero, scale: scaleHero }} className="relative z-10 text-center max-w-5xl px-6 flex flex-col items-center mt-[-5vh]">
-          
           <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', damping: 20, duration: 1.2 }} className="relative mb-10 group">
             <div className="absolute inset-0 bg-gradient-to-tr from-amber-400 to-yellow-200 blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-700 rounded-full"></div>
             <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-[2.5rem] bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[inset_0_0_20px_rgba(255,255,255,0.05),0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center relative overflow-hidden">
@@ -117,13 +112,11 @@ export default function DigitalCampusPage() {
               <Sparkles className="w-4 h-4 text-amber-400" />
               <span className="text-amber-100/80 font-bold tracking-[0.2em] uppercase text-xs">صرح تعليمي ينبض بالحياة</span>
             </div>
-            
             <h1 className="text-6xl sm:text-8xl md:text-[10rem] font-black tracking-tight leading-none mb-6 relative">
               <span className="text-transparent bg-clip-text bg-gradient-to-b from-white via-white/90 to-white/40 drop-shadow-[0_0_40px_rgba(255,255,255,0.2)]">
                 الـرفــعــة
               </span>
             </h1>
-            
             <p className="text-slate-400/90 text-lg sm:text-2xl font-bold max-w-2xl mx-auto leading-relaxed mb-12">
               تجاوز حدود التعليم التقليدي. مرحباً بك في تجربة <span className="text-white">الحرم المدرسي الرقمي</span> الأكثر تطوراً.
             </p>
@@ -138,48 +131,47 @@ export default function DigitalCampusPage() {
           </motion.div>
         </motion.div>
 
-        {/* 🚨 شريط الأخبار العاجلة (المفاجأة الأولى) 🚨 */}
-        <div className="absolute bottom-0 left-0 w-full bg-amber-500/10 border-y border-amber-500/20 backdrop-blur-md overflow-hidden z-20 flex items-center">
-           <div className="bg-amber-500 text-black px-6 py-3 font-black text-sm z-10 flex items-center gap-2 shrink-0 shadow-[20px_0_30px_rgba(2,4,10,0.8)]">
-             <BellRing className="w-4 h-4 animate-bounce" /> البث الحي
-           </div>
-           <div className="flex-1 overflow-hidden relative">
-             <div className="marquee-content whitespace-nowrap text-amber-100 font-bold text-sm tracking-wide py-3 flex gap-8">
-                <span>{breakingNews}</span>
-                <span>{breakingNews}</span>
+        {/* 🚨 شريط الأخبار العاجلة الحقيقي */}
+        {tickers.length > 0 && (
+          <div className="absolute bottom-0 left-0 w-full bg-amber-500/10 border-y border-amber-500/20 backdrop-blur-md overflow-hidden z-20 flex items-center">
+             <div className="bg-amber-500 text-black px-6 py-3 font-black text-sm z-10 flex items-center gap-2 shrink-0 shadow-[20px_0_30px_rgba(2,4,10,0.8)]">
+               <BellRing className="w-4 h-4 animate-bounce" /> البث الحي
              </div>
-           </div>
-        </div>
+             <div className="flex-1 overflow-hidden relative">
+               <div className="marquee-content whitespace-nowrap text-amber-100 font-bold text-sm tracking-wide py-3 flex gap-8">
+                  <span>{breakingNews}</span>
+                  <span>{breakingNews}</span>
+               </div>
+             </div>
+          </div>
+        )}
       </section>
 
-      {/* ========================================== */}
-      {/* 📣 2. لوحة الإعلانات السريعة (المفاجأة الثانية) */}
-      {/* ========================================== */}
-      <section className="py-20 relative z-10 bg-[#02040a]">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 mb-10">
-            <Megaphone className="w-8 h-8 text-rose-400" />
-            <h2 className="text-3xl font-black text-white">إعلانات <span className="text-rose-400">سريعة</span></h2>
+      {/* 📣 2. لوحة الإعلانات السريعة الحقيقية */}
+      {announcements.length > 0 && (
+        <section className="py-20 relative z-10 bg-[#02040a]">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3 mb-10">
+              <Megaphone className="w-8 h-8 text-rose-400" />
+              <h2 className="text-3xl font-black text-white">إعلانات <span className="text-rose-400">سريعة</span></h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {announcements.map((ann, i) => (
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} key={ann.id} className="glass-panel p-6 rounded-[2rem] border border-white/5 hover:border-rose-500/30 transition-colors bg-gradient-to-br from-[#0f1423] to-[#02040a] shadow-lg relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-2xl group-hover:bg-rose-500/10 transition-colors"></div>
+                  <div className="flex justify-between items-start mb-4 relative z-10">
+                    <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">{ann.tag || 'إعلان'}</span>
+                    <span className="text-xs font-bold text-slate-500">{new Date(ann.created_at).toLocaleDateString('ar-SA')}</span>
+                  </div>
+                  <h3 className="text-lg font-black text-white leading-snug relative z-10">{ann.title}</h3>
+                </motion.div>
+              ))}
+            </div>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {dummyAnnouncements.map((ann, i) => (
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} key={ann.id} className="glass-panel p-6 rounded-[2rem] border border-white/5 hover:border-rose-500/30 transition-colors bg-gradient-to-br from-[#0f1423] to-[#02040a] shadow-lg relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-2xl group-hover:bg-rose-500/10 transition-colors"></div>
-                <div className="flex justify-between items-start mb-4 relative z-10">
-                  <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">{ann.tag}</span>
-                  <span className="text-xs font-bold text-slate-500">{ann.date}</span>
-                </div>
-                <h3 className="text-lg font-black text-white leading-snug relative z-10">{ann.title}</h3>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* ========================================== */}
-      {/* 🎬 3. استوديو الرفعة (The Glass Gallery) */}
-      {/* ========================================== */}
+      {/* 🎬 3. استوديو الرفعة */}
       {studioItems.length > 0 && (
         <section className="py-24 relative z-10 bg-[#02040a] border-t border-white/5">
           <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mb-16 flex flex-col sm:flex-row sm:items-end justify-between gap-6">
@@ -189,9 +181,7 @@ export default function DigitalCampusPage() {
               </div>
               <h2 className="text-4xl sm:text-6xl font-black text-white tracking-tight">عدسة <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-300">الرفعة</span></h2>
             </div>
-            
             <div className="flex items-center gap-4">
-              {/* 💡 حل مشكلة الـ 100 عنصر: زر تصفح الأرشيف الكامل */}
               <button className="px-6 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-white font-black text-sm hover:bg-white hover:text-black transition-all backdrop-blur-md active:scale-95 flex items-center gap-2">
                 الأرشيف الكامل <ArrowLeft className="w-4 h-4" />
               </button>
@@ -240,9 +230,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* ========================================== */}
-      {/* 📰 4. مجلة المعرفة (The Premium Bento Grid) */}
-      {/* ========================================== */}
+      {/* 📰 4. مجلة المعرفة */}
       {magazineItems.length > 0 && (
         <section className="py-32 relative z-10 bg-[#02040a] border-t border-white/5">
           <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/5 to-transparent"></div>
@@ -305,9 +293,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* ========================================== */}
-      {/* 🚀 5. الخاتمة والدعوة للانضمام */}
-      {/* ========================================== */}
+      {/* 🚀 5. الخاتمة */}
       <section className="py-32 relative z-10 bg-[#02040a] border-t border-white/5 overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-amber-500/5 rounded-full blur-[150px] pointer-events-none"></div>
         <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
@@ -321,20 +307,11 @@ export default function DigitalCampusPage() {
         </div>
       </section>
 
-      {/* 🎨 Animations & Styling */}
       <style dangerouslySetInnerHTML={{ __html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; } 
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* تأثير شريط الأخبار العاجلة */
-        .marquee-content {
-          display: inline-block;
-          animation: marquee 30s linear infinite;
-        }
-        @keyframes marquee {
-          0% { transform: translateX(100%); }
-          100% { transform: translateX(-100%); }
-        }
+        .marquee-content { display: inline-block; animation: marquee 30s linear infinite; }
+        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
       `}} />
     </div>
   );
