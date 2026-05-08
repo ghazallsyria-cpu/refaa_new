@@ -17,221 +17,123 @@ import {
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
   ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch,
-  CreditCard, ClipboardList 
+  CreditCard, ClipboardList, Globe 
 } from 'lucide-react';
 
 const navigation = [
   // ==========================================
   // 🏠 اللوحات الرئيسية والملفات الشخصية
   // ==========================================
-  // 📍 الصفحة الرئيسية: تتغير ديناميكياً حسب دور المستخدم (مدير، معلم، طالب، ولي أمر)
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
   
-  // 📍 إعدادات الإدارة العليا: لتعديل بيانات المدرسة (الاسم، الشعار، الرؤية)
+  // 🚀 الزر الجديد: مركز التحكم بالحرم الرقمي (الصفحة الرئيسية)
+  { name: 'إدارة الحرم الرقمي', href: '/admin/campus-control', icon: Globe },
+  
   { name: 'ملف الإدارة', href: '/admin/profile', icon: Crown }, 
-  
-  // 📍 السيرة الذاتية للمعلم: تظهر للمعلمين فقط لتعديل بياناتهم وتخصصاتهم
   { name: 'ملفي الشخصي (CV)', href: '/teachers/profile', icon: UserCircle }, 
-  
-  // 📍 إدارة الكوادر: لإضافة الموظفين الإداريين وتحديد صلاحياتهم (مشرف، مراقب عام)
   { name: 'الفريق الإداري', href: '/admin/staff', icon: UserCog },
 
   // ==========================================
   // 🏛️ الهيكلة الأكاديمية والمستخدمين
   // ==========================================
-  // 📍 هيكل المدرسة: إدارة الأقسام العلمية ورؤساء الأقسام (HODs)
   { name: 'الهيكل الأكاديمي', href: '/hierarchy', icon: Network },
-  
-  // 📍 سجل الطلاب: إضافة، حذف، وتعديل بيانات الطلاب الأساسية
   { name: 'الطلاب', href: '/students', icon: Users },
-  
-  // 📍 سجل المعلمين: إضافة، حذف، وتعديل بيانات المعلمين الأساسية
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
-  
-  // 📍 حسابات الأهالي: ربط أولياء الأمور بأبنائهم لمتابعة أدائهم
   { name: 'أولياء الأمور', href: '/parents', icon: Users },
 
   // ==========================================
   // 👥 شؤون المعلمين (HR & Performance)
   // ==========================================
-  // 📍 المراقبة الحية: تتبع دخول المعلمين للمنصة ونشاطهم الرقمي
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
-  
-  // 📍 تقرير الأداء: إحصائيات شاملة عن إنجازات كل معلم
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
-  
-  // 📍 زيارات الفصول: لتقييم أداء المعلم داخل الحصة (من قبل الإدارة أو رئيس القسم)
   { name: 'تقييم المعلمين', href: '/admin/evaluations', icon: Activity },
-  
-  // 📍 جدول التكليفات: لربط المعلم بالمواد والفصول التي يدرسها
   { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
 
   // ==========================================
   // 🛡️ الانضباط المدرسي (الحضور والغياب)
   // ==========================================
-  // 📍 الرادار المباشر: شاشة عرض حية للحضور تستخدم في شاشات المدرسة الذكية
   { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity },
-  
-  // 📍 غياب المعلمين: رصد وتسجيل غياب وتأخير الكادر التعليمي
   { name: 'رصد الغياب الآلي', href: '/admin/teacher-attendance', icon: ShieldAlert },
-  
-  // 📍 إنذارات الطلاب: نظام يرسل تحذيرات آلية للطلاب المتجاوزين لنسبة الغياب
   { name: 'إنذارات الغياب', href: '/admin/absence-warnings', icon: AlertTriangle },
-  
-  // 📍 الغياب اليدوي: صفحة المعلم لأخذ الغياب داخل الحصة التقليدية
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
-  
-  // 📍 الأعذار الطبية: لاستقبال وقبول/رفض الإجازات المرفوعة من الأهالي
   { name: 'مراجعة الأعذار', href: '/admin/excuses', icon: HeartPulse },
-  
-  // 📍 الخصومات: تطبيق عقوبات الحرمان من الدرجات بسبب الغياب المتكرر
   { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale },
 
   // ==========================================
   // 📚 البنية التحتية التعليمية
   // ==========================================
-  // 📍 الفصول والشعب: إنشاء الصفوف (عاشر، حادي عشر) والشعب (أ، ب)
   { name: 'الفصول', href: '/classes', icon: School },
-  
-  // 📍 المواد: تعريف المقررات الدراسية وربطها بالصفوف
   { name: 'المواد الدراسية', href: '/subjects', icon: BookOpen },
 
   // ==========================================
   // 💬 المجتمع والمنتديات (Social Learning)
   // ==========================================
-  // 📍 إدارة الأقسام: إنشاء وتعديل أقسام المنتدى وصلاحيات النشر
   { name: 'إدارة المنتديات', href: '/admin/forums-management', icon: LayoutGrid },
-  
-  // 📍 البانر الإعلاني: تغيير الصور والروابط في أعلى صفحة المنتدى
   { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate },
-  
-  // 📍 واجهة المنتدى: الدخول للمجتمع للنقاش وطرح الأسئلة (للجميع)
   { name: 'المنتديات', href: '/forums', icon: Compass },
 
   // ==========================================
   // 🎯 التقييم المستمر والاختبارات القصيرة
   // ==========================================
-  // 📍 منصة الاختبارات: إنشاء الكويزات، بنوك الأسئلة، والتصحيح الآلي
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
 
   // ==========================================
   // 🕵️‍♂️ أدوات الامتحانات والكنترول المركزية (VIP)
   // ==========================================
-  // 📍 ملف الطالب الشامل: عرض 360 درجة (درجات، غياب، ملاحظات سرية) لمتخذ القرار
   { name: 'مستكشف الطلاب 360', href: '/admin/student-360', icon: UserSearch },
-  
-  // 📍 تشكيل الكنترول: تكليف فريق العمل وتحديد أدوارهم وطباعة بطاقات VIP
   { name: 'فريق الكنترول', href: '/admin/control-team', icon: ShieldCheck },
-  
-  // 📍 توزيع اللجان: الخلط الأبجدي، إصدار أرقام الجلوس، وطباعة الكشوف
   { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
-  
-  // 📍 ماسح الكنترول: لاستلام مظاريف الأسئلة الممسوحة وتسجيل حضور المراقبين
   { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
-  
-  // 📍 مسار الإنجاز: تتبع رحلة تصحيح المادة حتى الرفع لنظام الوزارة
   { name: 'مسار إنجاز الكنترول', href: '/admin/exam-pipeline', icon: BarChart3 },
-  
-  // 📍 تسليم الدرجات: يستخدمه رئيس القسم لتوقيع كشوف الدرجات رقمياً
   { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature },
-  
-  // 📍 الجداول النهائية: برمجة أيام وأوقات الاختبارات النهائية للطلاب
   { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
-  
-  // 📍 نماذج الإجابة: لرفع مفاتيح التصحيح الرسمية للمواد
   { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
 
   // ==========================================
   // 🚀 الرادارات وعمليات التتبع الذكية (Smart Campus)
   // ==========================================
-  // 📍 غرفة العمليات: لوحة مراقبة حية للمدير لرؤية حضور اللجان لحظياً
   { name: 'العمليات المركزية', href: '/admin/exam-live-dashboard', icon: Activity },
-  
-  // 📍 مصنع البطاقات: لتوليد وطباعة الهويات البلاستيكية (PVC) التي تحمل raf-id
   { name: 'استوديو الهويات', href: '/admin/id-cards', icon: CreditCard },
-  
-  // 📍 ماسح البوابة: النظام المركزي عند باب المدرسة لتسجيل حضور/تأخير الكل
   { name: 'رادار البوابة', href: '/admin/gate-radar', icon: ScanLine },
-  
-  // 📍 أرشيف البوابة: جدول يعرض بالتفصيل وقت وتاريخ مسح كل بطاقة على البوابة
   { name: 'سجل البوابة', href: '/admin/gate-logs', icon: ClipboardList },
-  
-  // 📍 ماسح المراقب: يستخدمه المعلم داخل القاعة لمسح بطاقات الطلاب وتسجيل حضورهم
   { name: 'رادار المراقب', href: '/teacher/exam-radar', icon: ScanLine },
-  
-  // 📍 تقرير الغياب الرسمي: لاستخراج كشف PDF معتمد بأسماء المحرومين/الغائبين
   { name: 'تقرير غياب الاختبارات', href: '/admin/exam-attendance-report', icon: FileText },
 
   // ==========================================
   // 📊 السجلات الأكاديمية والجدولة
   // ==========================================
-  // 📍 سجل الدرجات: صفحة رصد درجات الفترات والشفوي (Gradebook)
   { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
-  
-  // 📍 الجدول التقليدي: النظام القديم لجدولة الحصص يدوياً
   { name: 'الجدول الدراسي القديم', href: '/schedule', icon: CalendarDays },
-  
-  // 📍 الجدول الذكي: محرك يعمل بالذكاء الاصطناعي لتوزيع الحصص دون تعارض
   { name: 'محرك الجدولة الذكي', href: '/admin/auto-schedule', icon: Wand2 },
-  
-  // 📍 عارض الجداول: لعرض الجدول النهائي للطالب أو المعلم
   { name: 'شاشة العرض المركزية', href: '/schedules-view', icon: MonitorUp },
-  
-  // 📍 حصص اليوم: لمعرفة أين يتواجد المعلمون في هذه اللحظة بالذات
   { name: 'الحصص الحية', href: '/live', icon: Clock },
-  
-  // 📍 التوقيتات: إعداد أوقات بدايات ونهايات الحصص والفسح
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
 
   // ==========================================
   // 📝 الواجبات والتعليم المدمج
   // ==========================================
-  // 📍 الواجبات التقليدية: لرفع الملفات والتقارير بالطريقة الكلاسيكية
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
-  
-  // 📍 ساحة التدريب: بيئة للطالب لحل الأسئلة التفاعلية (لعبة/تحدي)
   { name: 'ساحة التدريب', href: '/arena', icon: Target },
-  
-  // 📍 مراقبة الساحة: للمعلم لمتابعة أداء الطلاب داخل الساحة الحية
   { name: 'مراقبة الساحة', href: '/arena-monitor', icon: MonitorPlay },
-  
-  // 📍 الواجبات الذكية: أداة توليد واجبات وتصحيحها فورياً باستخدام Gemini AI
   { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments-v2', icon: Sparkles },
 
   // ==========================================
   // 🏆 التقارير والتلعيب (Gamification)
   // ==========================================
-  // 📍 الإحصائيات: رسوم بيانية وتقارير شاملة لأداء المدرسة
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
-  
-  // 📍 ملف إنجاز الطالب: صفحة مخصصة للطالب تظهر مستواه وتطوره
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
-  
-  // 📍 إدارة الأوسمة: لابتكار شارات رقمية ومنحها للطلاب المتميزين
   { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
 
   // ==========================================
   // 📢 التواصل والإعدادات (Comms & SysAdmin)
   // ==========================================
-  // 📍 البريد الداخلي: نظام رسائل بين الإدارة، المعلمين، والطلاب
   { name: 'الرسائل', href: '/messages', icon: MessageSquare },
-  
-  // 📍 اللوحة الإعلانية: لنشر التعاميم والأخبار العاجلة على مستوى المدرسة
   { name: 'الإعلانات', href: '/announcements', icon: Bell },
-  
-  // 📍 المكتبة الرقمية: لرفع التعاميم الرسمية والملفات بصيغة PDF للتحميل
   { name: 'المستندات', href: '/documents', icon: FolderOpen },
-  
-  // 📍 حقن البيانات: أدوات المطورين لرفع ملفات Excel ضخمة بضغطة زر
   { name: 'استيراد البيانات', href: '/seed', icon: Database },
-  
-  // 📍 سجل النظام: (Audit Log) لتتبع أي تغيير أو حذف قام به أي مستخدم
   { name: 'تقرير التدقيق', href: '/report', icon: FileText },
-  
-  // 📍 لوحة التحكم التقنية: لإعدادات المنصة المعقدة (أغلاق المنصة، الصيانة)
   { name: 'الإعدادات', href: '/settings', icon: Settings },
 ];
-
 
 export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onToggleCollapse }: { onClose?: () => void, authRole?: string, isCollapsed?: boolean, onToggleCollapse?: () => void }) {
   const pathname = usePathname();
@@ -263,13 +165,14 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
 
   const filteredNavigation = navigation.filter(item => {
-    // إخفاء الأزرار الإدارية البحتة
+    // 🚀 ظهور إدارة الحرم الرقمي للمدير والإدارة فقط
+    if (item.name === 'إدارة الحرم الرقمي') return (authRole === 'admin' || authRole === 'management');
+
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'استيراد البيانات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
     
-    // روابط الكنترول والامتحانات الجديدة للمدير والإدارة فقط
     if (item.name === 'مستكشف الطلاب 360') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'فريق الكنترول') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'كنترول اللجان') return (authRole === 'admin' || authRole === 'management');
@@ -277,39 +180,30 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'مسار إنجاز الكنترول') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
-    // 🚀 ظهور رابط التقرير للإدارة فقط
     if (item.name === 'تقرير غياب الاختبارات') return (authRole === 'admin' || authRole === 'management');
 
-    // الغلاف الرقمي متاح للإدارة ورؤساء الأقسام (المعلمين)
     if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher');
 
-    // روابط الرادارات والهويات والعمليات المركزية
     if (item.name === 'استوديو الهويات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'سجل البوابة') return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
     if (item.name === 'رادار البوابة') return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
     if (item.name === 'العمليات المركزية') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'رادار المراقب') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
 
-    // الروابط الجديدة للجدول للمدير والإدارة فقط
     if (item.name === 'محرك الجدولة الذكي') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'شاشة العرض المركزية') return (authRole === 'admin' || authRole === 'management' || authRole === 'student' || authRole === 'teacher' || authRole === 'parent');
 
-    // ظهور الملف الشخصي للمعلم فقط
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
     
-    // ظهور رابط الواجبات الذكية للإدارة فقط
     if (item.name === 'الواجبات بالذكاء الاصطناعي') return (authRole === 'admin' || authRole === 'management');
 
-    // ظهور رابط الساحة (طالب) ومراقبة الساحة (معلم + إدارة)
     if (item.name === 'ساحة التدريب') return (authRole === 'student');
     if (item.name === 'مراقبة الساحة') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
 
     if (authRole === 'admin' || authRole === 'management') return true; 
     
-    // إذا كان مشرفاً إدارياً ولديه صلاحية المراقبة
     if (isGlobalWatcher) return true;
     
-    // باقي الصلاحيات 
     if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'شاشة العرض المركزية', 'الواجبات', 'مراقبة الساحة', 'الرسائل', 'رادار المراقب', 'الغلاف الرقمي'].includes(item.name);
     
     if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'شاشة العرض المركزية', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
@@ -430,9 +324,3 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     </div>
   );
 }
-
-
-
-
-
-
