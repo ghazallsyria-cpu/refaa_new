@@ -11,7 +11,6 @@ import { supabase } from '@/lib/supabase';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 
 export default function CampusControlPage() {
-  // 🎛️ أضفنا تبويبات جديدة للإعلانات والبث الحي
   const [activeTab, setActiveTab] = useState<'studio' | 'magazine' | 'announcements' | 'ticker'>('studio');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -38,7 +37,6 @@ export default function CampusControlPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // 📡 جلب جميع البيانات من 4 جداول
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -95,7 +93,6 @@ export default function CampusControlPage() {
     }
   };
 
-  // 🗑️ محركات الحذف المخصصة
   const handleDeleteStudio = async (item: any) => {
     if (!confirm('سيتم حذف الملف نهائياً. متأكد؟')) return;
     try {
@@ -122,7 +119,6 @@ export default function CampusControlPage() {
     } catch (e) { showToast('خطأ في الحذف', 'error'); }
   };
 
-  // 📝 النماذج (Forms)
   const [studioForm, setStudioForm] = useState({ title: '', media_type: 'image', media_url: '', thumbnail_url: '' });
   const [magazineForm, setMagazineForm] = useState({ title: '', excerpt: '', author_name: '', cover_image: '', is_pinned: false });
   const [announceForm, setAnnounceForm] = useState({ title: '', tag: 'إعلان عام' });
@@ -201,7 +197,6 @@ export default function CampusControlPage() {
               </div>
             </div>
 
-            {/* 🎛️ 4 تبويبات احترافية */}
             <div className="flex flex-wrap sm:flex-nowrap bg-black/40 backdrop-blur-md p-1.5 rounded-[1.5rem] border border-white/5 relative shadow-inner gap-1">
               {[
                 { id: 'studio', icon: Video, label: 'الاستوديو' },
@@ -224,40 +219,75 @@ export default function CampusControlPage() {
           <div className="flex justify-center py-32"><Loader2 className="w-16 h-16 text-indigo-500/50 animate-spin" /></div>
         ) : (
           <AnimatePresence mode="wait">
-            {/* 1. الاستوديو والمجلة (كما هما سابقاً - تم اختصارهما لتوضيح الجديد، الكود الحقيقي سيبقيهما) */}
+            
+            {/* 🎬 1. الاستوديو */}
             {activeTab === 'studio' && (
               <motion.div key="studio" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
                 <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-black text-white">المكتبة البصرية</h2>
-                  <button onClick={() => setIsStudioModalOpen(true)} className="bg-white text-[#02040a] px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl"><Plus className="w-5 h-5"/> رفع ميديا</button>
+                  <button onClick={() => setIsStudioModalOpen(true)} className="bg-white hover:bg-slate-200 text-[#02040a] px-6 py-3.5 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl"><Plus className="w-5 h-5"/> رفع ميديا</button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                  {studioItems.map((item) => (
-                    <div key={item.id} className="relative aspect-[4/5] rounded-[2rem] overflow-hidden border border-white/5 shadow-lg group">
-                      <img src={item.media_type === 'video' ? item.thumbnail_url : item.media_url} className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform" alt="media" />
-                      <button onClick={() => handleDeleteStudio(item)} className="absolute top-4 left-4 w-9 h-9 bg-rose-500 text-white rounded-xl flex items-center justify-center border border-white/10 shadow-xl z-20"><Trash2 className="w-4 h-4" /></button>
+                  {studioItems.length === 0 ? (
+                    <div className="col-span-full py-20 text-center rounded-[3rem] border border-white/5 bg-[#0f1423]/30">
+                      <p className="text-slate-400 font-black">الاستوديو فارغ حالياً.</p>
                     </div>
-                  ))}
+                  ) : (
+                    studioItems.map((item) => (
+                      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={item.id} className="group relative aspect-[4/5] rounded-[2rem] overflow-hidden bg-[#0f1423] border border-white/5 shadow-lg">
+                        <img src={item.media_type === 'video' ? item.thumbnail_url : item.media_url} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700" alt="media" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-transparent to-transparent opacity-90"></div>
+                        {item.media_type === 'video' && <div className="absolute inset-0 flex items-center justify-center"><Play className="w-14 h-14 text-white/80 fill-current drop-shadow-2xl" /></div>}
+                        <div className="absolute top-4 right-4 flex gap-2">
+                          <span className="bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-[10px] font-black text-white shadow-sm flex items-center gap-1.5">
+                            {item.media_type === 'video' ? <Video className="w-3.5 h-3.5 text-amber-400" /> : <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />} {item.media_type === 'video' ? 'فيديو' : 'صورة'}
+                          </span>
+                        </div>
+                        <button onClick={() => handleDeleteStudio(item)} className="absolute top-4 left-4 w-10 h-10 bg-rose-500/80 hover:bg-rose-500 text-white rounded-xl flex items-center justify-center backdrop-blur-md transition-all border border-white/10 active:scale-95 shadow-xl">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                        <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/80 to-transparent">
+                          <h3 className="font-black text-base text-white line-clamp-2 drop-shadow-md leading-snug">{item.title}</h3>
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
                 </div>
               </motion.div>
             )}
 
+            {/* 📰 2. المجلة */}
             {activeTab === 'magazine' && (
               <motion.div key="magazine" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
                 <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-black text-white">مركز النشر</h2>
-                  <button onClick={() => setIsMagazineModalOpen(true)} className="bg-emerald-500 text-[#02040a] px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl"><Plus className="w-5 h-5"/> صياغة خبر</button>
+                  <button onClick={() => setIsMagazineModalOpen(true)} className="bg-emerald-500 hover:bg-emerald-400 text-[#02040a] px-6 py-3.5 rounded-2xl font-black text-sm flex items-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.3)]"><Plus className="w-5 h-5"/> صياغة خبر</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {magazineItems.map((article) => (
-                    <div key={article.id} className="p-4 rounded-[2rem] bg-[#0f1423] border border-white/5 flex gap-6 shadow-lg">
-                      <img src={article.cover_image} className="w-32 h-32 rounded-xl object-cover" alt="cover" />
-                      <div className="flex-1 py-2 flex flex-col justify-between">
-                        <h3 className="font-black text-lg text-white line-clamp-2">{article.title}</h3>
-                        <button onClick={() => handleDeleteMagazine(article)} className="text-rose-500 self-end p-2 bg-rose-500/10 rounded-xl"><Trash2 className="w-4 h-4" /></button>
-                      </div>
+                  {magazineItems.length === 0 ? (
+                    <div className="col-span-full py-20 text-center rounded-[3rem] border border-white/5 bg-[#0f1423]/30">
+                      <p className="text-slate-400 font-black">المجلة فارغة حالياً.</p>
                     </div>
-                  ))}
+                  ) : (
+                    magazineItems.map((article) => (
+                      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} key={article.id} className="group p-4 rounded-[2.5rem] bg-[#0f1423] border border-white/5 hover:border-white/10 transition-colors flex gap-6 shadow-lg">
+                        <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-[1.5rem] overflow-hidden bg-black relative shrink-0">
+                          <img src={article.cover_image} className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-500" alt="cover" />
+                          {article.is_pinned && <div className="absolute top-2 right-2 bg-amber-500 text-black p-1.5 rounded-lg shadow-lg"><Star className="w-3.5 h-3.5 fill-current" /></div>}
+                        </div>
+                        <div className="flex-1 min-w-0 py-2 flex flex-col justify-between">
+                          <div>
+                            <h3 className="font-black text-lg text-white mb-2 line-clamp-2 leading-snug">{article.title}</h3>
+                            <p className="text-xs text-slate-400 font-bold line-clamp-2">{article.excerpt}</p>
+                          </div>
+                          <div className="flex items-center justify-between mt-4">
+                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg">{article.author_name}</span>
+                            <button onClick={() => handleDeleteMagazine(article)} className="text-rose-500 p-2.5 hover:bg-rose-500/20 rounded-xl transition-colors"><Trash2 className="w-5 h-5" /></button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
                 </div>
               </motion.div>
             )}
@@ -284,11 +314,11 @@ export default function CampusControlPage() {
                     announcements.map((ann) => (
                       <div key={ann.id} className="glass-panel p-6 rounded-[2rem] border border-white/5 bg-[#0f1423] shadow-lg relative flex flex-col justify-between min-h-[160px]">
                         <div>
-                          <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">{ann.tag}</span>
+                          <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">{ann.tag || 'إعلان'}</span>
                           <h3 className="text-lg font-black text-white mt-4">{ann.title}</h3>
                         </div>
                         <div className="flex justify-end mt-4">
-                          <button onClick={() => handleDeleteRecord('school_announcements', ann.id, setAnnouncements)} className="text-rose-500 p-2 hover:bg-rose-500/20 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          <button onClick={() => handleDeleteRecord('school_announcements', ann.id, setAnnouncements)} className="text-rose-500 p-2 hover:bg-rose-500/20 rounded-xl transition-colors"><Trash2 className="w-5 h-5" /></button>
                         </div>
                       </div>
                     ))
@@ -322,7 +352,7 @@ export default function CampusControlPage() {
                            <Radio className="w-5 h-5 text-amber-500 animate-pulse shrink-0" />
                            <p className="text-white font-bold text-sm sm:text-base line-clamp-1">{ticker.content}</p>
                         </div>
-                        <button onClick={() => handleDeleteRecord('school_ticker', ticker.id, setTickers)} className="text-rose-500 p-2 hover:bg-rose-500/20 rounded-xl transition-colors ml-4 shrink-0"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => handleDeleteRecord('school_ticker', ticker.id, setTickers)} className="text-rose-500 p-2 hover:bg-rose-500/20 rounded-xl transition-colors ml-4 shrink-0"><Trash2 className="w-5 h-5" /></button>
                       </div>
                     ))
                   )}
@@ -334,17 +364,75 @@ export default function CampusControlPage() {
       </div>
 
       {/* ========================================== */}
-      {/* 🛠️ النوافذ المنبثقة الجديدة (Modals) */}
+      {/* 🛠️ النوافذ المنبثقة (Modals) */}
       {/* ========================================== */}
       <AnimatePresence>
-        {/* نافذة الإعلان السريع */}
+        {isStudioModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#02040a]/90 backdrop-blur-2xl">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-[#0f1423] w-full max-w-xl rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl relative">
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 to-blue-500"></div>
+              <div className="p-8 pb-4 flex justify-between items-center">
+                <h3 className="text-2xl font-black text-white">إضافة للمكتبة</h3>
+                <button onClick={() => !isUploading && setIsStudioModalOpen(false)} className="bg-white/5 p-2 rounded-full text-slate-400 hover:bg-white/10"><XCircle className="w-6 h-6" /></button>
+              </div>
+              <form onSubmit={handleSaveStudio} className="p-8 pt-4 space-y-6">
+                <div onClick={() => !isUploading && fileInputRef.current?.click()} className={`w-full h-56 rounded-[2rem] border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all relative overflow-hidden ${studioForm.media_url ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-indigo-500/30 bg-indigo-500/5 hover:bg-indigo-500/10'}`}>
+                  <input type="file" accept="image/*,video/*" className="hidden" ref={fileInputRef} onChange={onStudioFileSelect} />
+                  {isUploading ? (
+                    <div className="text-center px-10 w-full">
+                      <Loader2 className="w-12 h-12 text-indigo-400 animate-spin mx-auto mb-4" />
+                      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-indigo-500" style={{ width: `${uploadProgress}%` }} /></div>
+                      <p className="text-indigo-400 font-black text-xs mt-3">جاري المعالجة... {uploadProgress}%</p>
+                    </div>
+                  ) : studioForm.media_url ? (
+                    <div className="text-center z-10"><CheckCircle2 className="w-14 h-14 text-emerald-400 mx-auto mb-2" /><p className="text-emerald-400 font-black text-sm">تم الرفع والتجهيز بنجاح</p></div>
+                  ) : (
+                    <div className="text-center z-10"><UploadCloud className="w-14 h-14 text-indigo-400 mx-auto mb-3 opacity-80" /><p className="text-white font-black text-sm">انقر لاختيار ملف</p><p className="text-slate-500 text-[10px] mt-1 font-bold">صور أو فيديوهات حتى 100MB</p></div>
+                  )}
+                  {studioForm.thumbnail_url && <img src={studioForm.thumbnail_url} className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none" />}
+                </div>
+                <input type="text" value={studioForm.title} onChange={e => setStudioForm({...studioForm, title: e.target.value})} placeholder="العنوان (يتم توليده تلقائياً إن تُرك فارغاً)" className="w-full bg-[#02040a] border border-white/5 rounded-2xl p-5 text-white font-bold outline-none focus:border-indigo-500/50 transition-colors" />
+                <button type="submit" disabled={isSubmitting || !studioForm.media_url} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-5 rounded-2xl font-black shadow-lg disabled:opacity-50 transition-colors">اعتماد ونشر للرئيسية</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {isMagazineModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#02040a]/90 backdrop-blur-2xl overflow-y-auto">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-[#0f1423] w-full max-w-2xl rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl relative my-auto">
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+              <div className="p-8 pb-4 flex justify-between items-center">
+                <h3 className="text-2xl font-black text-white">صياغة خبر جديد</h3>
+                <button onClick={() => !isUploading && setIsMagazineModalOpen(false)} className="bg-white/5 p-2 rounded-full text-slate-400 hover:bg-white/10"><XCircle className="w-6 h-6" /></button>
+              </div>
+              <form onSubmit={handleSaveMagazine} className="p-8 pt-4 space-y-6">
+                <div onClick={() => !isUploading && fileInputRef.current?.click()} className={`w-full h-40 rounded-[2rem] border-2 border-dashed flex items-center justify-center cursor-pointer overflow-hidden relative ${magazineForm.cover_image ? 'border-emerald-500/50' : 'border-white/10 hover:border-white/20'}`}>
+                  <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={onMagazineFileSelect} />
+                  {isUploading ? <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" /> : magazineForm.cover_image ? <img src={magazineForm.cover_image} className="w-full h-full object-cover" /> : <div className="text-center"><ImageIcon className="w-10 h-10 text-slate-500 mx-auto mb-2" /><p className="text-slate-400 text-sm font-black">رفع صورة الغلاف</p></div>}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input type="text" value={magazineForm.title} onChange={e => setMagazineForm({...magazineForm, title: e.target.value})} placeholder="عنوان الخبر الأساسي..." className="w-full bg-[#02040a] border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-emerald-500/50" />
+                  <input type="text" value={magazineForm.author_name} onChange={e => setMagazineForm({...magazineForm, author_name: e.target.value})} placeholder="المؤلف (مثال: الإدارة)" className="w-full bg-[#02040a] border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-emerald-500/50" />
+                </div>
+                <textarea rows={3} value={magazineForm.excerpt} onChange={e => setMagazineForm({...magazineForm, excerpt: e.target.value})} placeholder="مقتطف قصير يظهر في الصفحة الرئيسية..." className="w-full bg-[#02040a] border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-emerald-500/50 resize-none" />
+                <label className="flex items-center gap-3 cursor-pointer p-5 bg-[#02040a] rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
+                  <input type="checkbox" checked={magazineForm.is_pinned} onChange={e => setMagazineForm({...magazineForm, is_pinned: e.target.checked})} className="w-5 h-5 accent-emerald-500" />
+                  <span className="text-sm font-black text-white flex items-center gap-2"><Star className="w-4 h-4 text-emerald-400" /> تثبيت كخبر رئيسي (يظهر ضخماً)</span>
+                </label>
+                <button type="submit" disabled={isSubmitting || !magazineForm.cover_image} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 rounded-2xl font-black shadow-lg disabled:opacity-50 transition-colors">نشر في المجلة</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
         {isAnnounceModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#02040a]/90 backdrop-blur-2xl">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-[#0f1423] w-full max-w-lg rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl relative">
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-rose-500 to-pink-500"></div>
               <div className="p-8 pb-4 flex justify-between items-center">
                 <h3 className="text-2xl font-black text-white">إعلان سريع</h3>
-                <button onClick={() => setIsAnnounceModalOpen(false)} className="bg-white/5 p-2 rounded-full text-slate-400"><XCircle className="w-6 h-6" /></button>
+                <button onClick={() => setIsAnnounceModalOpen(false)} className="bg-white/5 p-2 rounded-full text-slate-400 hover:bg-white/10"><XCircle className="w-6 h-6" /></button>
               </div>
               <form onSubmit={handleSaveAnnounce} className="p-8 pt-4 space-y-5">
                 <input type="text" value={announceForm.title} onChange={e => setAnnounceForm({...announceForm, title: e.target.value})} placeholder="اكتب نص الإعلان (مثال: عطلة غداً)..." className="w-full bg-[#02040a] border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-rose-500/50" required />
@@ -355,14 +443,13 @@ export default function CampusControlPage() {
           </div>
         )}
 
-        {/* نافذة الشريط العاجل */}
         {isTickerModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#02040a]/90 backdrop-blur-2xl">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-[#0f1423] w-full max-w-lg rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl relative">
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-500 to-yellow-400"></div>
               <div className="p-8 pb-4 flex justify-between items-center">
                 <h3 className="text-2xl font-black text-white">خبر للبث الحي</h3>
-                <button onClick={() => setIsTickerModalOpen(false)} className="bg-white/5 p-2 rounded-full text-slate-400"><XCircle className="w-6 h-6" /></button>
+                <button onClick={() => setIsTickerModalOpen(false)} className="bg-white/5 p-2 rounded-full text-slate-400 hover:bg-white/10"><XCircle className="w-6 h-6" /></button>
               </div>
               <form onSubmit={handleSaveTicker} className="p-8 pt-4 space-y-5">
                 <textarea rows={4} value={tickerForm.content} onChange={e => setTickerForm({...tickerForm, content: e.target.value})} placeholder="اكتب الخبر العاجل هنا ليتحرك في الشريط أسفل الشاشة..." className="w-full bg-[#02040a] border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-amber-500/50 resize-none" required />
