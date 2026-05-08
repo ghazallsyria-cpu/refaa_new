@@ -236,13 +236,23 @@ export default function DigitalCampusPage() {
       {/* تم اختصارها هنا لسهولة النسخ، الكود الحقيقي يحتوي عليها كاملة */}
       {/* [INSERT ALL PREVIOUS SECTIONS HERE: Announcements, Gallery, Magazine, CTA] */}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+<style dangerouslySetInnerHTML={{ __html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; } 
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .marquee-content { display: inline-block; animation: marquee 45s linear infinite; }
-        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+        
+        /* 🚀 تعديل الشريط العاجل: إبطاء السرعة (90s) وعكس الاتجاه للعربية (من اليسار لليمين) */
+        .marquee-content { display: inline-block; animation: marquee 90s linear infinite; }
+        @keyframes marquee { 
+          0% { transform: translateX(-100vw); } 
+          100% { transform: translateX(100%); } 
+        }
+
+        .animate-bounce-x { animation: bounce-x 1s infinite; }
+        @keyframes bounce-x { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-25%); } }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
       `}} />
     </div>
   );
