@@ -3,13 +3,12 @@
  * 🏗️ التوثيق الهندسي (Engineering Documentation)
  * ============================================================================
  * @file        app/page.tsx
- * @version     3.2.0 (Ribbon Scale & Transparency Fix)
+ * @version     3.3.0 (Aurora Glass Full Restoration)
  * @description الواجهة الرئيسية للحرم الرقمي بنمط (Aurora Glass).
- * * 🛠️ التحديث الحالي (V3.2.0):
- * - تم تحرير الوشاح المتدلي من القيود الحجمية القديمة.
- * - زيادة الارتفاع (Height) والعرض (Width) بنسبة 40% لضمان ظهور التصميم كاملاً.
- * - إزالة أي حدود (Borders) أو خلفيات (Backgrounds) قد تسبب ظهور "صندوق" حول الوشاح.
- * - تحسين الـ Clip-path ليكون أكثر انسيابية مع التصاميم الطولية.
+ * * 🛠️ التحديث الحالي (V3.3.0):
+ * - استعادة جميع الأقسام المفقودة (الاستوديو، المجلة، الإعلانات، والخاتمة).
+ * - دمج تعديلات الوشاح المتدلي (Hanging Ribbon) بالحجم الكامل.
+ * - دمج تعديلات حركة الشريط العاجل (RTL Marquee) من اليسار لليمين.
  * ============================================================================
  */
 
@@ -118,7 +117,6 @@ export default function DigitalCampusPage() {
       
       {/* ========================================== */}
       {/* 🎀 الوشاح المتدلي المطور (The Grand Hanging Ribbon) */}
-      {/* تم توسيعه وزيادة طوله ليتناسب مع التصاميم الاحترافية */}
       {/* ========================================== */}
       {hangingRibbonUrl && (
         <motion.div 
@@ -142,7 +140,7 @@ export default function DigitalCampusPage() {
         </motion.div>
       )}
 
-      {/* 🚨 الشريط الإخباري العلوي */}
+      {/* 🚨 الشريط الإخباري العلوي (متحرك من اليسار لليمين للعربية) */}
       {breakingNews && (
         <div className="w-full bg-indigo-600/90 backdrop-blur-md text-white flex items-center h-11 relative z-50 shadow-2xl border-b border-white/10">
            <div className="bg-indigo-800 px-6 h-full font-black text-xs flex items-center gap-2 shrink-0 z-10 shadow-[10px_0_20px_rgba(0,0,0,0.3)]">
@@ -157,7 +155,7 @@ export default function DigitalCampusPage() {
       )}
 
       {/* 🌟 1. الواجهة الترحيبية (Aurora Glass Hero) */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center pt-12 pb-24 overflow-hidden">
+      <section className="relative min-h-screen flex flex-col items-center justify-center pt-12 pb-24 overflow-hidden border-b border-white/5">
         <motion.div style={{ y: yBackground }} className="absolute inset-0 z-0 pointer-events-none opacity-60">
           <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-indigo-600/20 rounded-full blur-[150px]"></div>
           <div className="absolute top-[20%] right-[-10%] w-[40vw] h-[40vw] bg-emerald-500/15 rounded-full blur-[150px]"></div>
@@ -221,6 +219,12 @@ export default function DigitalCampusPage() {
               )}
             </motion.div>
           </AnimatePresence>
+
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-4">
+            <a href="#explore" className="inline-flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors">
+              استكشف الحرم <ArrowLeft className="w-4 h-4 animate-bounce-x" />
+            </a>
+          </motion.div>
         </div>
 
         {heroSlides.length > 1 && (
@@ -232,23 +236,230 @@ export default function DigitalCampusPage() {
         )}
       </section>
 
-      {/* باقي الأقسام (الاستوديو، المجلة، الخ) بنفس الكود الفاخر السابق... */}
-      {/* تم اختصارها هنا لسهولة النسخ، الكود الحقيقي يحتوي عليها كاملة */}
-      {/* [INSERT ALL PREVIOUS SECTIONS HERE: Announcements, Gallery, Magazine, CTA] */}
+      {/* ========================================== */}
+      {/* 📣 2. الإعلانات السريعة (Glass Cards) */}
+      {/* ========================================== */}
+      <div id="explore" className="pt-10"></div>
+      {announcements.length > 0 && (
+        <section className="py-20 relative z-10">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-4 mb-12">
+              <div className="w-14 h-14 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Megaphone className="w-7 h-7 text-rose-400" /></div>
+              <h2 className="text-3xl sm:text-4xl font-black text-white">إعلانات <span className="text-transparent bg-clip-text bg-gradient-to-l from-rose-400 to-orange-300">سريعة</span></h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {announcements.map((ann, i) => (
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} key={ann.id} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 hover:border-rose-400/50 hover:bg-white/10 transition-all hover:-translate-y-2 shadow-2xl relative group overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-[50px] group-hover:bg-rose-500/20 transition-colors"></div>
+                  <div className="flex justify-between items-start mb-6 relative z-10">
+                    <span className="text-[11px] font-black text-rose-300 bg-rose-500/10 px-4 py-2 rounded-full border border-rose-500/20">{ann.tag || 'إعلان'}</span>
+                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(ann.created_at).toLocaleDateString('ar-SA')}</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-200 leading-relaxed relative z-10 group-hover:text-white transition-colors">{ann.title}</h3>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
-<style dangerouslySetInnerHTML={{ __html: `
+      {/* ========================================== */}
+      {/* 🎬 3. الاستوديو البصري (Cinematic Lightbox) */}
+      {/* ========================================== */}
+      {studioItems.length > 0 && (
+        <section className="py-24 relative z-10 bg-[#070b14] border-y border-white/5 shadow-[inset_0_20px_50px_rgba(0,0,0,0.5)]">
+          <div className="absolute left-0 top-1/2 w-64 h-64 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mb-16 flex flex-col sm:flex-row sm:items-end justify-between gap-6 relative z-10">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Video className="w-7 h-7 text-indigo-400" /></div>
+              <div>
+                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2">المكتبة البصرية</h2>
+                <p className="text-indigo-200/60 font-bold text-sm">نظرة حية من داخل أسوار الرفعة.</p>
+              </div>
+            </div>
+            <Link href="/archive/gallery" className="px-6 py-3.5 rounded-2xl bg-white/5 text-slate-300 font-bold text-sm hover:bg-white hover:text-black transition-all flex items-center gap-2 shadow-sm border border-white/10 hover:scale-105">
+              الأرشيف الكامل <ArrowLeft className="w-4 h-4" />
+            </Link>
+          </div>
+
+          <div className="flex overflow-x-auto gap-6 px-4 sm:px-6 lg:px-8 pb-12 snap-x snap-mandatory hide-scrollbar relative z-10" dir="rtl">
+            {studioItems.map((media, index) => (
+              <motion.div 
+                initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, margin: "-50px" }} transition={{ delay: index * 0.1 }}
+                key={media.id} 
+                className="relative shrink-0 w-[85vw] sm:w-[500px] aspect-[4/3] rounded-[2.5rem] overflow-hidden snap-center group bg-[#0B1120] shadow-2xl cursor-pointer border border-white/10"
+                onClick={() => setActiveMedia(media)} 
+              >
+                <img src={media.media_type === 'video' ? media.thumbnail_url : media.media_url} alt={media.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 group-hover:opacity-60 transition-all duration-700 ease-out" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                {media.media_type === 'video' && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center group-hover:bg-indigo-600 group-hover:border-indigo-500 group-hover:scale-110 transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                      <Play className="w-8 h-8 text-white ml-2 drop-shadow-md" fill="currentColor" />
+                    </div>
+                  </div>
+                )}
+                
+                <div className="absolute top-6 right-6 z-10 px-4 py-2 rounded-xl bg-black/40 backdrop-blur-md text-white text-[11px] font-black flex items-center gap-2 border border-white/10 shadow-lg">
+                  {media.media_type === 'video' ? <Video className="w-3.5 h-3.5 text-indigo-400" /> : <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />} {media.media_type === 'video' ? 'فيديو' : 'صورة'}
+                </div>
+
+                <div className="absolute bottom-0 left-0 w-full p-8 z-10 translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                  <h3 className="text-xl sm:text-2xl font-black text-white leading-snug drop-shadow-2xl line-clamp-2 mb-3">{media.title}</h3>
+                  <div className="w-12 h-1 bg-indigo-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ========================================== */}
+      {/* 📰 4. المركز الإخباري (Aurora Bento Grid) */}
+      {/* ========================================== */}
+      {magazineItems.length > 0 && (
+        <section className="py-24 relative z-10 bg-[#0B1120]">
+          <div className="absolute right-0 bottom-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-12">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Newspaper className="w-7 h-7 text-emerald-400" /></div>
+                <div>
+                  <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2">المركز الإخباري</h2>
+                  <p className="text-emerald-200/60 font-bold text-sm">تغطية شاملة لأهم الأخبار والمقالات.</p>
+                </div>
+              </div>
+              <Link href="/archive/news" className="px-6 py-3.5 rounded-2xl bg-white/5 text-slate-300 font-bold text-sm hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2 shadow-sm border border-white/10 hover:scale-105">
+                جميع الأخبار <ArrowLeft className="w-4 h-4" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+              {pinnedArticle && (
+                <motion.div onClick={() => setActiveArticle(pinnedArticle)} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="lg:col-span-8 group cursor-pointer relative h-[500px] sm:h-[600px] rounded-[3rem] overflow-hidden shadow-2xl bg-black border border-white/10">
+                  <img src={pinnedArticle.cover_image} alt={pinnedArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-105 group-hover:opacity-40 transition-all duration-1000 ease-out mix-blend-luminosity group-hover:mix-blend-normal" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
+                  
+                  <div className="absolute inset-0 p-8 sm:p-12 flex flex-col justify-end z-10">
+                    <div className="flex items-center gap-3 mb-6">
+                      {pinnedArticle.is_pinned && <span className="px-4 py-1.5 bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] text-[11px] font-black rounded-xl">رئيسي</span>}
+                      <span className="text-slate-300 text-xs font-bold flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-xl border border-white/10"><User className="w-3.5 h-3.5 text-emerald-400" /> {pinnedArticle.author_name}</span>
+                    </div>
+                    <h3 className="text-3xl sm:text-5xl md:text-6xl font-black text-white leading-[1.2] mb-6 group-hover:text-emerald-300 transition-colors drop-shadow-xl">{pinnedArticle.title}</h3>
+                    <p className="text-slate-300 font-medium text-sm sm:text-lg max-w-3xl line-clamp-2 mb-8 leading-relaxed opacity-90">{pinnedArticle.excerpt}</p>
+                    
+                    <div className="inline-flex items-center gap-2 text-white font-black text-sm bg-white/10 w-max px-6 py-3.5 rounded-full backdrop-blur-md border border-white/20 group-hover:bg-emerald-500 group-hover:border-emerald-400 transition-all shadow-lg">
+                      اقرأ المقال كاملاً <ArrowUpRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              <div className="lg:col-span-4 flex flex-col gap-6 sm:gap-8">
+                {sideArticles.map((article, idx) => (
+                  <motion.div onClick={() => setActiveArticle(article)} key={article.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.1 }} className="flex-1 group cursor-pointer relative rounded-[2.5rem] overflow-hidden shadow-xl bg-black border border-white/10 min-h-[250px]">
+                    <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-110 group-hover:opacity-60 transition-all duration-700 ease-out mix-blend-luminosity group-hover:mix-blend-normal" />
+                    <div className="absolute inset-0 p-8 flex flex-col justify-end z-10 bg-gradient-to-t from-black via-black/80 to-transparent">
+                      <span className="text-emerald-400/90 text-[11px] font-bold mb-3 flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {article.author_name}</span>
+                      <h3 className="text-xl sm:text-2xl font-black text-white leading-snug group-hover:text-emerald-300 transition-colors">{article.title}</h3>
+                    </div>
+                  </motion.div>
+                ))}
+
+                {sideArticles.length < 2 && (
+                  <Link href="/archive/news" className="flex-1 bg-white/5 p-8 rounded-[2.5rem] border border-white/10 flex flex-col justify-center text-center group hover:bg-white/10 transition-all backdrop-blur-md shadow-inner">
+                    <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4 border border-white/5 group-hover:scale-110 transition-transform">
+                       <BookOpen className="w-8 h-8 text-slate-300 group-hover:text-white" />
+                    </div>
+                    <h3 className="text-2xl font-black text-white mb-2">أرشيف الأخبار</h3>
+                    <p className="text-xs text-slate-400 font-bold mb-6">استكشف جميع المقالات السابقة.</p>
+                    <span className="text-emerald-400 font-black text-sm flex items-center justify-center gap-2">تصفح المكتبة <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /></span>
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ========================================== */}
+      {/* 🚀 5. الخاتمة والدعوة (Epic CTA) */}
+      {/* ========================================== */}
+      <section className="py-32 relative z-10 bg-[#070b14] border-t border-white/5 overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[60vw] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+        <div className="max-w-3xl mx-auto px-6 text-center relative z-10">
+           <div className="w-24 h-24 bg-white/5 rounded-[2.5rem] border border-white/10 flex items-center justify-center mx-auto mb-10 shadow-2xl backdrop-blur-xl">
+              <Compass className="w-12 h-12 text-indigo-400 drop-shadow-[0_0_10px_rgba(99,102,241,0.8)]" />
+           </div>
+           <h2 className="text-5xl sm:text-7xl font-black text-white mb-8 tracking-tight">جاهز للانطلاق؟</h2>
+           <p className="text-slate-400 font-bold text-xl mb-14 max-w-xl mx-auto leading-relaxed">انضم الآن إلى مجتمع مدرستك في منصة التعليم الرقمي الأقوى والأكثر تطوراً.</p>
+           <Link href={portal.href} className="inline-flex items-center justify-center gap-4 px-12 py-6 bg-white text-[#0B1120] rounded-full font-black text-xl hover:bg-indigo-50 hover:scale-105 transition-all shadow-[0_0_50px_rgba(255,255,255,0.2)] active:scale-95">
+             <span>{user ? 'العودة للوحة القيادة' : 'تسجيل الدخول للمنصة'}</span>
+             <ArrowLeft className="w-6 h-6" />
+           </Link>
+        </div>
+      </section>
+
+      {/* ========================================== */}
+      {/* 🖼️ المشغلات المنبثقة الذكية (Modals & Lightboxes) */}
+      {/* ========================================== */}
+      <AnimatePresence>
+        {activeMedia && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1120]/95 backdrop-blur-2xl p-4 sm:p-10" onClick={() => setActiveMedia(null)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-6xl bg-black rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.8)] relative border border-white/10" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setActiveMedia(null)} className="absolute top-6 left-6 z-50 w-12 h-12 bg-white/10 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-colors border border-white/20 shadow-xl"><X className="w-6 h-6" /></button>
+              {activeMedia.media_type === 'video' ? (
+                <video src={activeMedia.media_url} controls autoPlay className="w-full max-h-[85vh] object-contain bg-black" />
+              ) : (
+                <img src={activeMedia.media_url} alt={activeMedia.title} className="w-full max-h-[85vh] object-contain bg-black" />
+              )}
+              <div className="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-black to-transparent pointer-events-none">
+                <h3 className="text-white font-black text-2xl drop-shadow-md">{activeMedia.title}</h3>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {activeArticle && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1120]/80 backdrop-blur-md p-4 sm:p-6" onClick={() => setActiveArticle(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-4xl bg-[#0F172A] rounded-[3rem] overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh] border border-white/10" onClick={e => e.stopPropagation()}>
+              <div className="relative h-72 sm:h-96 shrink-0 bg-black">
+                <button onClick={() => setActiveArticle(null)} className="absolute top-6 left-6 z-50 w-12 h-12 bg-black/40 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-xl transition-colors border border-white/20"><X className="w-6 h-6" /></button>
+                <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-luminosity" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-[#0F172A]/20 to-transparent"></div>
+                <div className="absolute bottom-6 right-8 z-10 flex gap-3">
+                   {activeArticle.is_pinned && <span className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg">خبر رئيسي</span>}
+                </div>
+              </div>
+              <div className="px-8 sm:px-14 pb-14 pt-2 overflow-y-auto custom-scrollbar relative z-10">
+                <div className="flex items-center gap-4 mb-6 border-b border-white/5 pb-6">
+                  <span className="text-slate-400 flex items-center gap-1.5 text-sm font-bold"><Calendar className="w-4 h-4" /> {new Date(activeArticle.created_at).toLocaleDateString('ar-SA')}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/20"></span>
+                  <span className="text-emerald-400 flex items-center gap-1.5 text-sm font-bold"><User className="w-4 h-4" /> بقلم: {activeArticle.author_name}</span>
+                </div>
+                <h2 className="text-3xl sm:text-5xl font-black text-white mb-8 leading-[1.3] tracking-tight">{activeArticle.title}</h2>
+                <div className="prose prose-invert prose-lg max-w-none text-slate-300 font-medium leading-loose">
+                  <p className="text-xl text-slate-200 font-bold mb-6 p-6 bg-white/5 rounded-2xl border-l-4 border-emerald-500">{activeArticle.excerpt}</p>
+                  <p className="opacity-50">تفاصيل المقال الكاملة ستتاح قريباً مع محرر الإدارة المتقدم...</p>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <style dangerouslySetInnerHTML={{ __html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; } 
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* 🚀 تعديل الشريط العاجل: إبطاء السرعة (90s) وعكس الاتجاه للعربية (من اليسار لليمين) */
+        /* 🚀 الشريط الإخباري المعكوس والمبطأ */
         .marquee-content { display: inline-block; animation: marquee 90s linear infinite; }
         @keyframes marquee { 
           0% { transform: translateX(-100vw); } 
           100% { transform: translateX(100%); } 
         }
 
-        .animate-bounce-x { animation: bounce-x 1s infinite; }
-        @keyframes bounce-x { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-25%); } }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
