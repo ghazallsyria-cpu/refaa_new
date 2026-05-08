@@ -176,13 +176,27 @@ export default function ExamCommitteesControl() {
   };
 
   const handleDeleteCommittee = async (id: string) => {
-    if (!confirm('تأكيد الحذف؟')) return;
+    if (!confirm('تأكيد الحذف؟ (سيتم حذف المراقبين المرتبطين بهذه اللجنة أيضاً)')) return;
     try { await supabase.from('exam_committees').delete().eq('id', id); fetchData(); } catch (error) { alert('خطأ في الحذف'); }
   };
 
+  // 🚀 التصفير القوي (يهدم اللجان بالكامل)
   const handleNuclearReset = async () => {
     if (!confirm('تحذير خطير: سيتم حذف جميع اللجان، والمراقبين، وأرقام جلوس الطلاب لهذا الفصل بالكامل للبدء من الصفر! هل أنت متأكد؟')) return;
     try { setIsLoading(true); await supabase.from('exam_committees').delete().eq('academic_year', currentYear).eq('semester', currentSemester); fetchData(); } catch (error) { alert('خطأ'); }
+  };
+
+  // 🚀 التصفير الناعم (تفريغ الطلاب فقط)
+  const handleSoftReset = async () => {
+    if (!confirm('تفريغ جميع الطلاب؟ ستبقى أسماء اللجان والمراقبين كما هي.')) return;
+    try { 
+      setIsLoading(true); 
+      await supabase.from('student_seat_allocations').delete().eq('academic_year', currentYear).eq('semester', currentSemester); 
+      fetchData(); 
+      alert('تم تفريغ اللجان بنجاح!');
+    } catch (error) { 
+      alert('خطأ أثناء التصفير'); 
+    }
   };
 
   const openCommitteeModal = (committee: any = null) => {
@@ -201,9 +215,9 @@ export default function ExamCommitteesControl() {
   };
 
   const handleDistribute = async () => {
-    if (!confirm('إعادة التوزيع؟')) return;
+    if (!confirm('هل أنت متأكد من بدء عملية الفرز الأبجدي والسحّاب؟ (سيمسح أي توزيع سابق)')) return;
     const result = await generateSeatingAndDistribute(currentYear, currentSemester);
-    if (result.success) { alert('تم التوزيع بنجاح!'); fetchData(); }
+    if (result.success) { alert('تم توزيع الطلاب بالتبادل الأبجدي بنجاح!'); fetchData(); }
   };
 
   const handleAddInvigilator = async () => {
@@ -315,22 +329,28 @@ export default function ExamCommitteesControl() {
               <h1 className="text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
                 <LayoutGrid className="w-8 h-8 text-indigo-600" /> غرفة كنترول الامتحانات
               </h1>
-              <p className="text-slate-500 font-bold text-sm">إدارة اللجان، التوزيع، تكليف الرؤساء وإحصائيات المراقبة.</p>
+              <p className="text-slate-500 font-bold text-sm">إدارة اللجان، التوزيع السحّاب (Zipper)، تكليف الرؤساء وإحصائيات المراقبة.</p>
             </div>
+            {/* 🚀 قسم الأزرار المحدثة (التوزيع وتفريغ الطلاب) */}
             <div className="flex flex-wrap gap-3">
               <button onClick={() => openCommitteeModal()} className="px-5 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-emerald-200">
                 <Plus className="w-4 h-4" /> إضافة لجنة
               </button>
               <button onClick={() => setIsHeadsModalOpen(true)} className="px-5 py-3 bg-amber-50 hover:bg-amber-100 text-amber-700 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-amber-200">
-                <Crown className="w-4 h-4" /> تكليف رؤساء اللجان
+                <Crown className="w-4 h-4" /> رؤساء اللجان
               </button>
               <button onClick={handleDistribute} disabled={committees.length === 0} className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-50">
-                <Users className="w-4 h-4" /> الخلط الأبجدي
+                <Users className="w-4 h-4" /> التوزيع الأبجدي
               </button>
               {committees.length > 0 && (
-                <button onClick={handleNuclearReset} className="px-5 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-rose-200">
-                  <Trash2 className="w-4 h-4" /> تصفير شامل
-                </button>
+                <>
+                  <button onClick={handleSoftReset} className="px-5 py-3 bg-orange-50 hover:bg-orange-100 text-orange-600 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-orange-200" title="مسح التوزيع لإعادته">
+                    <Trash2 className="w-4 h-4" /> تفريغ الطلاب
+                  </button>
+                  <button onClick={handleNuclearReset} className="px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black rounded-xl transition-all shadow-sm flex items-center gap-2 border border-rose-200" title="هدم اللجان وبناء من الصفر">
+                    <AlertTriangle className="w-4 h-4" /> هدم اللجان
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -380,12 +400,13 @@ export default function ExamCommitteesControl() {
               const studentsCount = allocationsStats[committee.id] || 0;
               const committeeInvigs = invigilators.filter(i => i.committee_id === committee.id);
               const isFull = studentsCount >= committee.capacity;
+              const isOverflow = committee.name.includes('لجنة الفائض'); // 🚀 تحديد لجنة الفائض باللون الأحمر
 
               return (
-                <div key={committee.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group">
+                <div key={committee.id} className={`bg-white rounded-3xl p-6 border shadow-sm hover:shadow-md transition-all flex flex-col group ${isOverflow ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'}`}>
                   <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-4 relative">
                     <div>
-                      <h3 className="text-xl font-black text-slate-800">{committee.name}</h3>
+                      <h3 className={`text-xl font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{committee.name}</h3>
                       <p className="text-[10px] font-bold text-slate-400 mt-1 flex items-center gap-1">السعة: {committee.capacity} {committee.location && `| 📍 ${committee.location}`}</p>
                     </div>
                     <div className="flex gap-1">
@@ -398,7 +419,7 @@ export default function ExamCommitteesControl() {
                   <div className="flex-1 mb-4">
                     <div className="flex justify-between items-center mb-3">
                        <p className="text-xs font-black text-slate-500 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-indigo-400"/> المراقبون ({committeeInvigs.length}/2)</p>
-                       <div className={`px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 ${isFull ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                       <div className={`px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 ${isOverflow ? 'bg-rose-100 text-rose-700' : isFull ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                          <Users className="w-3 h-3"/> {studentsCount} طالب
                        </div>
                     </div>
@@ -684,7 +705,7 @@ export default function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🖨️ قوالب الطباعة (مخفية) - 🚀 محدثة لتدعم raf-id */}
+      {/* 🖨️ قوالب الطباعة (مخفية) */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10" dir="rtl">
@@ -698,7 +719,6 @@ export default function ExamCommitteesControl() {
                     const invName = invig.users?.full_name || invig.users?.[0]?.full_name;
                     const safeAvatar = invAvatar ? `${invAvatar}?t=${new Date().getTime()}` : null;
                     
-                    // 🚀 التحديث الأهم: استخدام الهوية الرقمية الموحدة للمعلم
                     const qrPayload = `raf-id:${invig.teacher_id}`;
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
@@ -734,7 +754,7 @@ export default function ExamCommitteesControl() {
                   {studentChunk.map((student:any) => {
                     const stdName = student.students?.users?.full_name || student.students?.users?.[0]?.full_name || 'غير معروف';
                     const fullClassName = getFullClassName(student.students);
-                    const qrPayload = `raf-id:${student.student_id}`; // 🚀 تحديث لشفرة الطالب
+                    const qrPayload = `raf-id:${student.student_id}`; 
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
