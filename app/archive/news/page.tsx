@@ -3,19 +3,11 @@
  * 🏗️ التوثيق الهندسي (Engineering Documentation)
  * ============================================================================
  * @file        app/archive/news/page.tsx
- * @component   NewsArchivePage
+ * @version     1.1.0 (True Colors Update)
  * @description الأرشيف الإخباري الشامل للحرم الرقمي (مدرسة الرفعة).
- * يعرض جميع الأخبار، التعاميم، والمقالات الأكاديمية بنمط (Aurora Glass) الفاخر.
- * * 🎯 الميزات المعمارية (Core Features):
- * 1. 🔍 محرك بحث ذكي حي: تصفية المقالات فورياً عبر العنوان أو المقتطف السريع.
- * 2. 📰 شبكة عرض هجينة (Hybrid Grid): الأخبار المثبتة (Pinned) تظهر بشكل بارز
- * عن باقي الأخبار لتمييز الأهمية.
- * 3. 📖 القارئ المتطور (Reading Modal): نافذة قراءة منبثقة بتصميم مريح للعين
- * تمنع التشتت وتحافظ على سياق تصفح المستخدم (بدون إعادة تحميل الصفحة).
- * 4. 📱 تصميم متجاوب (Responsive): يتكيف بسلاسة مع الجوال والأجهزة اللوحية.
- * * @version     1.0.0 (Aurora Glass Edition)
- * @date        مايو 2026
- * @author      إدارة تطوير الرفعة
+ * * 🛠️ التحديث الحالي:
+ * - إزالة فلاتر (mix-blend-luminosity) والشفافية المنخفضة لاستعادة الألوان الحقيقية للصور.
+ * - تحسين التدرجات اللونية (Gradients) لتكون في الأسفل فقط خلف النصوص.
  * ============================================================================
  */
 
@@ -23,9 +15,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Newspaper, ArrowRight, X, Compass, Search, Loader2, Calendar, User, Star, BookOpen
-} from 'lucide-react';
+import { Newspaper, ArrowRight, X, Compass, Search, Loader2, Calendar, User, Star, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
@@ -33,35 +23,26 @@ export default function NewsArchivePage() {
   const [articles, setArticles] = useState<any[]>([]);
   const [filteredArticles, setFilteredArticles] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
   const [searchQuery, setSearchQuery] = useState('');
   const [activeArticle, setActiveArticle] = useState<any | null>(null);
 
-  // 📡 جلب البيانات من قاعدة البيانات
   useEffect(() => {
     const fetchNews = async () => {
       try {
         const { data, error } = await supabase
           .from('school_magazine')
           .select('*')
-          .order('is_pinned', { ascending: false }) // الأخبار المثبتة أولاً
+          .order('is_pinned', { ascending: false })
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        if (data) {
-          setArticles(data);
-          setFilteredArticles(data);
-        }
-      } catch (error) {
-        console.error('Error fetching news:', error);
-      } finally {
-        setIsLoading(false);
-      }
+        if (data) { setArticles(data); setFilteredArticles(data); }
+      } catch (error) { console.error('Error fetching news:', error); } 
+      finally { setIsLoading(false); }
     };
     fetchNews();
   }, []);
 
-  // 🔍 محرك البحث اللحظي
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredArticles(articles);
@@ -79,15 +60,12 @@ export default function NewsArchivePage() {
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-200 font-cairo overflow-x-hidden selection:bg-emerald-500/30 selection:text-white" dir="rtl">
       
-      {/* 🌌 خلفية أورورا الزجاجية الساحرة */}
       <div className="fixed inset-0 z-0 pointer-events-none opacity-40">
         <div className="absolute top-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-emerald-600/10 rounded-full blur-[150px]"></div>
         <div className="absolute bottom-[20%] left-[-10%] w-[40vw] h-[40vw] bg-indigo-500/15 rounded-full blur-[150px]"></div>
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
       </div>
 
-      {/* 🧭 شريط التنقل العلوي */}
-      <nav className="fixed top-0 left-0 w-full z-40 bg-[#0B1120]/80 backdrop-blur-xl border-b border-white/5 shadow-sm transition-all">
+      <nav className="fixed top-0 left-0 w-full z-40 bg-[#0B1120]/90 backdrop-blur-xl border-b border-white/5 shadow-sm transition-all">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center shadow-inner">
@@ -105,24 +83,18 @@ export default function NewsArchivePage() {
         </div>
       </nav>
 
-      {/* 🚀 المحتوى الرئيسي */}
       <main className="relative z-10 pt-32 pb-24 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* 🎛️ شريط البحث */}
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center mb-12 bg-white/5 backdrop-blur-md p-4 rounded-[2rem] border border-white/5 shadow-lg max-w-3xl mx-auto">
           <div className="relative w-full">
             <Search className="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input 
-              type="text" 
-              placeholder="ابحث في العناوين، المقتطفات، أو بأسماء الكتاب..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              type="text" placeholder="ابحث في العناوين، المقتطفات، أو بأسماء الكتاب..." 
+              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-black/40 border border-white/10 rounded-full py-4 pr-14 pl-6 text-white font-bold text-sm focus:outline-none focus:border-emerald-500/50 focus:bg-black/60 transition-all placeholder-slate-500 shadow-inner"
             />
           </div>
         </div>
 
-        {/* 📰 شبكة العرض (News Grid) */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-32">
             <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mb-4" />
@@ -139,25 +111,21 @@ export default function NewsArchivePage() {
             <AnimatePresence>
               {filteredArticles.map((article, index) => (
                 <motion.div 
-                  layout
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }} 
-                  animate={{ opacity: 1, scale: 1, y: 0 }} 
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.4, delay: index * 0.05 }}
-                  key={article.id} 
-                  className={`group cursor-pointer relative overflow-hidden shadow-xl bg-black border border-white/10 flex flex-col justify-end
-                    ${article.is_pinned ? 'md:col-span-2 lg:col-span-2 rounded-[3rem] min-h-[400px] sm:min-h-[500px]' : 'rounded-[2.5rem] min-h-[300px] sm:min-h-[350px]'}
-                  `}
+                  layout initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.4, delay: index * 0.05 }} key={article.id} 
+                  className={`group cursor-pointer relative overflow-hidden shadow-xl bg-black border border-white/10 flex flex-col justify-end ${article.is_pinned ? 'md:col-span-2 lg:col-span-2 rounded-[3rem] min-h-[400px] sm:min-h-[500px]' : 'rounded-[2.5rem] min-h-[300px] sm:min-h-[350px]'}`}
                   onClick={() => setActiveArticle(article)} 
                 >
-                  <img src={article.cover_image} alt={article.title} className={`absolute inset-0 w-full h-full object-cover transition-all duration-700 ease-out mix-blend-luminosity group-hover:mix-blend-normal ${article.is_pinned ? 'opacity-70 group-hover:scale-105 group-hover:opacity-50' : 'opacity-40 group-hover:scale-110 group-hover:opacity-60'}`} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent"></div>
+                  {/* 🚀 إزالة التأثيرات الرمادية واستعادة الألوان الطبيعية */}
+                  <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out opacity-90 group-hover:opacity-100" />
+                  
+                  {/* 🚀 جعل التدرج الأسود فقط في الأسفل ليظهر جمال الصورة في الأعلى */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/60 to-transparent opacity-90"></div>
                   
                   <div className={`relative z-10 flex flex-col justify-end ${article.is_pinned ? 'p-8 sm:p-12' : 'p-6 sm:p-8'}`}>
                     <div className="flex flex-wrap items-center gap-2 mb-4">
                       {article.is_pinned && <span className="px-3 py-1 bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] text-[10px] font-black rounded-lg flex items-center gap-1"><Star className="w-3 h-3" /> رئيسي</span>}
-                      <span className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10"><User className="w-3 h-3 text-emerald-400" /> {article.author_name}</span>
-                      <span className="text-slate-400 text-[10px] font-bold flex items-center gap-1 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-lg"><Calendar className="w-3 h-3" /> {new Date(article.created_at).toLocaleDateString('ar-SA')}</span>
+                      <span className="text-slate-200 text-[11px] font-bold flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10"><User className="w-3 h-3 text-emerald-400" /> {article.author_name}</span>
+                      <span className="text-slate-300 text-[10px] font-bold flex items-center gap-1 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10"><Calendar className="w-3 h-3" /> {new Date(article.created_at).toLocaleDateString('ar-SA')}</span>
                     </div>
                     
                     <h3 className={`font-black text-white leading-[1.3] group-hover:text-emerald-300 transition-colors drop-shadow-xl ${article.is_pinned ? 'text-3xl sm:text-4xl mb-4' : 'text-xl sm:text-2xl mb-2'}`}>
@@ -165,7 +133,7 @@ export default function NewsArchivePage() {
                     </h3>
                     
                     {article.is_pinned && (
-                      <p className="text-slate-300 font-medium text-sm sm:text-base max-w-2xl line-clamp-2 leading-relaxed opacity-90">
+                      <p className="text-slate-200 font-medium text-sm sm:text-base max-w-2xl line-clamp-2 leading-relaxed drop-shadow-md">
                         {article.excerpt}
                       </p>
                     )}
@@ -177,24 +145,19 @@ export default function NewsArchivePage() {
         )}
       </main>
 
-      {/* ========================================== */}
-      {/* 📖 القارئ السينمائي (Reading Modal) */}
-      {/* ========================================== */}
       <AnimatePresence>
         {activeArticle && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1120]/80 backdrop-blur-md p-4 sm:p-6" onClick={() => setActiveArticle(null)}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1120]/90 backdrop-blur-md p-4 sm:p-6" onClick={() => setActiveArticle(null)}>
             <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-4xl bg-[#0F172A] rounded-[3rem] overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh] border border-white/10" onClick={e => e.stopPropagation()}>
               
-              <div className="relative h-64 sm:h-80 md:h-96 shrink-0 bg-black">
+              <div className="relative h-72 sm:h-96 shrink-0 bg-black">
                 <button onClick={() => setActiveArticle(null)} className="absolute top-6 left-6 z-50 w-12 h-12 bg-black/40 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-xl transition-colors border border-white/20 shadow-xl"><X className="w-6 h-6" /></button>
-                <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-luminosity" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-[#0F172A]/40 to-transparent"></div>
-                <div className="absolute bottom-6 right-8 z-10 flex gap-3">
-                   {activeArticle.is_pinned && <span className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg">خبر رئيسي</span>}
-                </div>
+                {/* 🚀 استعادة ألوان الصورة في النافذة المنبثقة */}
+                <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-90" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-transparent to-transparent"></div>
               </div>
               
-              <div className="px-6 sm:px-14 pb-14 pt-2 overflow-y-auto custom-scrollbar relative z-10">
+              <div className="px-6 sm:px-14 pb-14 pt-6 overflow-y-auto custom-scrollbar relative z-10 bg-[#0F172A]">
                 <div className="flex items-center flex-wrap gap-4 mb-8 border-b border-white/5 pb-6">
                   <span className="text-slate-400 flex items-center gap-1.5 text-sm font-bold"><Calendar className="w-4 h-4" /> {new Date(activeArticle.created_at).toLocaleDateString('ar-SA')}</span>
                   <span className="hidden sm:block w-1.5 h-1.5 rounded-full bg-white/20"></span>
@@ -204,15 +167,9 @@ export default function NewsArchivePage() {
                 <h2 className="text-3xl sm:text-5xl font-black text-white mb-8 leading-[1.3] tracking-tight">{activeArticle.title}</h2>
                 
                 <div className="prose prose-invert prose-lg sm:prose-xl max-w-none text-slate-300 font-medium leading-loose">
-                  <p className="text-xl sm:text-2xl text-slate-200 font-bold mb-8 p-6 sm:p-8 bg-white/5 rounded-3xl border-l-4 border-emerald-500 shadow-inner">
+                  <p className="text-xl sm:text-2xl text-slate-100 font-bold mb-8 p-6 sm:p-8 bg-white/5 rounded-3xl border-l-4 border-emerald-500 shadow-inner">
                     {activeArticle.excerpt}
                   </p>
-                  
-                  {/* مكان النص الكامل للمقال الذي سيُضاف مستقبلاً */}
-                  <div className="opacity-50 flex items-center gap-3 bg-black/20 p-6 rounded-2xl border border-white/5">
-                    <BookOpen className="w-6 h-6" />
-                    <p className="text-sm">تفاصيل المقال الكاملة (النص الغني) ستتاح هنا قريباً عند ربط محرر النصوص المتقدم للإدارة...</p>
-                  </div>
                 </div>
               </div>
             </motion.div>
