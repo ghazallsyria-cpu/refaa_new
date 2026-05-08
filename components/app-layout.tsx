@@ -14,43 +14,38 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // ==========================================
   // 🧭 1. أدوات التوجيه ومعلومات الصفحة الحالية
   // ==========================================
-  const pathname = usePathname(); // لمعرفة الرابط الحالي (مثال: /dashboard/student)
-  const router = useRouter(); // أداة نقل المستخدم من صفحة لأخرى برمجياً
+  const pathname = usePathname(); 
+  const router = useRouter(); 
 
   // ==========================================
-  // 🔐 2. جلب بيانات المستخدم وصلاحياته من "السياق المركزي" (Context)
+  // 🔐 2. جلب بيانات المستخدم وصلاحياته
   // ==========================================
   const { 
-    user,             // بيانات المستخدم الأساسية (ID, Email)
-    authRole,         // دور المستخدم (مدير، معلم، طالب...)
-    userName,         // اسم المستخدم للعرض
-    mustResetPassword,// حالة إجبار المستخدم على تغيير كلمة مروره الافتراضية
-    isChecking,       // هل النظام لا يزال يفحص بيانات الدخول؟ (حالة التحميل)
-    isAdminByEmail,   // هل هذا المستخدم مدير بناءً على بريده الإلكتروني (صلاحية عليا)؟
-    platformClosed,   // هل المنصة مغلقة حالياً للصيانة أو انتهاء الدوام؟
-    closeMessage,     // الرسالة التي تظهر عند إغلاق المنصة
-    signOut           // دالة تسجيل الخروج
+    user, 
+    authRole, 
+    userName, 
+    mustResetPassword,
+    isChecking, 
+    isAdminByEmail, 
+    platformClosed, 
+    closeMessage, 
+    signOut 
   } = useAuth() as any;
   
-  // ==========================================
-  // 📱 3. حالات التحكم في الواجهة (الشريط الجانبي)
-  // ==========================================
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // هل الشريط مفتوح في الجوال؟
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // هل الشريط مصغر (أيقونات فقط) في الشاشات الكبيرة؟
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); 
   
   // ==========================================
-  // 🌍 4. الصفحات العامة (التي لا تحتاج تسجيل دخول)
+  // 🌍 4. الصفحات العامة (التي لا تحتاج تسجيل دخول أو تحويل قسري)
+  // 🚀 التعديل: أضفنا المسار '/' لكي نعتبر الصفحة الرئيسية "عامة" ولا يتم طرد المستخدم منها
   // ==========================================
   const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
-  const isLivePage = pathname === '/live'; // شاشة العرض المباشرة في ساحة المدرسة
-  // إذا كانت إحدى هذه الصفحات، نعتبرها "صفحة عامة"
-  const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
+  const isLivePage = pathname === '/live'; 
+  const isRootPage = pathname === '/'; // الصفحة الرئيسية الجديدة (الحرم الرقمي)
 
-  // ==========================================
-  // 🛠️ 5. صائد الأخطاء الشامل (Global Error Handler)
-  // يمنع الشاشة البيضاء ويطبع الأخطاء في الكونسول بهدوء
-  // ==========================================
+  const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage || isRootPage;
+
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent) => { console.error("Global Error:", event.error); };
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => { console.error("Unhandled Rejection:", event.reason); };
@@ -64,68 +59,58 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ==========================================
   // 👮 6. جدار الحماية (Authorization Guard)
-  // هذه الدالة تقرر: هل يحق لهذا المستخدم رؤية هذه الصفحة؟
+  // 🚀 التعديل: حذفنا شرط 'isRoot' من عمليات المنع لكي يسمح النظام بدخولها
   // ==========================================
   const getAuthorization = () => {
-    if (isChecking || isPublicPage || !user || !authRole) return true; // تخطي الفحص للروابط العامة
-    if (mustResetPassword && !isResetPasswordPage) return false; // منع الدخول إذا كان يجب تغيير الباسورد
+    if (isChecking || isPublicPage || !user || !authRole) return true; 
+    if (mustResetPassword && !isResetPasswordPage) return false; 
     
-    const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
-    // منع الطالب من دخول لوحات الإدارة أو المعلمين
     if (authRole === 'student') { 
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) return false; 
+      if (isDashboardRoute && !pathname.startsWith('/dashboard/student')) return false; 
     }
-    // منع المعلم من دخول لوحة الإدارة
     else if (authRole === 'teacher') { 
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) return false; 
+      if (isDashboardRoute && !pathname.startsWith('/dashboard/teacher')) return false; 
     }
-    // منع ولي الأمر من دخول لوحة الطلاب
     else if (authRole === 'parent') { 
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) return false; 
-    }
-    // الإدارة تُمنع من الصفحة الجذرية وتوجه للوحة التحكم مباشرة
-    else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) { 
-      if (isRoot) return false; 
+      if (isDashboardRoute && !pathname.startsWith('/dashboard/parent')) return false; 
     }
     
-    return true; // إذا اجتاز كل الشروط السابقة، يُسمح له بالدخول
+    return true; 
   };
 
   const isAuthorized = getAuthorization();
 
   // ==========================================
   // 🚀 7. التوجيه الإجباري (Auto-Redirect)
-  // إذا كان غير مصرح له، إلى أين نرسله؟
+  // 🚀 التعديل الجوهري: حذفنا كود 'if (isRoot) router.push(...)'
+  // الآن لن يتم تحويل المستخدم تلقائياً عند زيارة الصفحة الرئيسية
   // ==========================================
   useEffect(() => {
     if (isChecking || isPublicPage || !user) return;
     
-    // إجباره على صفحة تغيير كلمة المرور
     if (mustResetPassword && !isResetPasswordPage) { router.push('/reset-password'); return; }
     if (!authRole) return;
     
-    const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
-    // توجيه كل رتبة للوحة القيادة (Dashboard) الخاصة بها
     if (authRole === 'student') { 
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) router.push('/dashboard/student'); 
+      if (isDashboardRoute && !pathname.startsWith('/dashboard/student')) router.push('/dashboard/student'); 
     }
     else if (authRole === 'teacher') { 
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) router.push('/dashboard/teacher'); 
+      if (isDashboardRoute && !pathname.startsWith('/dashboard/teacher')) router.push('/dashboard/teacher'); 
     }
     else if (authRole === 'parent') { 
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) router.push('/dashboard/parent'); 
+      if (isDashboardRoute && !pathname.startsWith('/dashboard/parent')) router.push('/dashboard/parent'); 
     }
     else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) { 
-      if (isRoot) router.push('/dashboard'); 
+      if (isDashboardRoute && pathname === '/dashboard/student') router.push('/dashboard'); 
     }
   }, [pathname, authRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
 
   // ==========================================
-  // ⏳ 8. شاشة التحميل (أثناء فحص الصلاحيات)
+  // ⏳ 8. شاشة التحميل
   // ==========================================
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
@@ -139,7 +124,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   // ==========================================
-  // 🛑 9. شاشة إغلاق المنصة (عندما يوقف المدير النظام)
+  // 🛑 9. شاشة إغلاق المنصة
   // ==========================================
   if (platformClosed && !isPublicPage) {
     return (
@@ -158,7 +143,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   // ==========================================
-  // 🔓 10. تخطيط الصفحات العامة (بدون هيدر وسايد بار)
+  // 🔓 10. تخطيط الصفحات العامة (الرئيسية، تسجيل الدخول)
+  // 🚀 التعديل: جعلنا الصفحة الرئيسية تظهر بدون شريط جانبي وبدون هيدر 
+  // لكي نترك مجالاً لعرض التصميم السينمائي الذي بنيناه في app/page.tsx
   // ==========================================
   if (isPublicPage) { 
     return (
@@ -172,42 +159,34 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const showSidebar = !isPublicPage;
 
   // ==========================================
-  // 🏗️ 11. الهيكل الرئيسي للتطبيق (الهيدر، السايد بار، المحتوى)
+  // 🏗️ 11. الهيكل الرئيسي للتطبيق (لوحات التحكم)
   // ==========================================
   return (
     <div className="flex h-full overflow-hidden bg-transparent selection:bg-amber-500/30 selection:text-amber-200" dir="rtl">
-      
-      {/* 📱 خلفية معتمة للجوال عند فتح الشريط الجانبي */}
       <AnimatePresence>
         {isSidebarOpen && showSidebar && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-[#02040a]/80 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
         )}
       </AnimatePresence>
       
-      {/* 🧩 الشريط الجانبي (Sidebar) */}
       {showSidebar && (
         <div className={cn("fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] print:hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] lg:shadow-none", isSidebarCollapsed ? "w-20" : "w-72", isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0", !isSidebarOpen && "lg:translate-x-full lg:w-0", isSidebarOpen && "lg:translate-x-0 lg:static")}>
           <Sidebar onClose={() => setIsSidebarOpen(false)} authRole={authRole || 'student'} isCollapsed={isSidebarCollapsed} onToggleCollapse={() => { setIsSidebarCollapsed(!isSidebarCollapsed); if (window.innerWidth >= 1024) setIsSidebarOpen(false); }} />
         </div>
       )}
       
-      {/* 📄 منطقة المحتوى الرئيسي (Main Content Area) */}
       <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full relative bg-transparent">
-        
-        {/* 🔝 الهيدر العلوي */}
         <div className="print:hidden sticky top-0 z-30">
           <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} showMenuButton={showSidebar} user={user} authRole={authRole || ''} userName={userName} isSidebarCollapsed={!isSidebarOpen} />
         </div>
         
-        {/* 🖼️ المحتوى الفعلي للصفحة المعروضة */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 print:p-0 print:overflow-visible flex flex-col scroll-smooth">
           <div className="flex-1 max-w-[1600px] mx-auto w-full">
-            {children} {/* 👈 هنا يتم حقن الصفحات (مثل /dashboard أو /students) */}
+            {children} 
           </div>
           <Footer />
         </main>
       </div>
-      
     </div>
   );
 }
