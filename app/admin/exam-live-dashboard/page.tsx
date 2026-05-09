@@ -14,7 +14,7 @@ import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import * as Dialog from '@radix-ui/react-dialog'; // للنوافذ المنبثقة
+import * as Dialog from '@radix-ui/react-dialog';
 
 export default function ExamLiveDashboard() {
   const router = useRouter();
@@ -25,14 +25,12 @@ export default function ExamLiveDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // البيانات الأساسية
   const [timetables, setTimetables] = useState<any[]>([]);
   const [selectedTimetableId, setSelectedTimetableId] = useState<string>('');
   const [committees, setCommittees] = useState<any[]>([]);
   const [allocations, setAllocations] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   
-  // 🚀 بيانات محاضر الغش
   const [cheatingReports, setCheatingReports] = useState<any[]>([]);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -43,14 +41,11 @@ export default function ExamLiveDashboard() {
   const currentSemester = 'الفصل الدراسي الثاني';
   const todayDate = format(new Date(), 'yyyy-MM-dd');
 
-  // تحديث الساعة الحية
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // 1️⃣ جلب اختبارات اليوم واللجان
-// 1️⃣ جلب اختبارات اليوم واللجان
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
@@ -67,9 +62,8 @@ export default function ExamLiveDashboard() {
         .select('*')
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
-        // تم إزالة .order('name') من هنا لأننا سنرتبها برمجياً
 
-      // 🚀 الخوارزمية الذكية للفرز الرقمي (Natural Numeric Sort)
+      // 🚀 الخوارزمية الذكية للفرز الرقمي للجان (1, 2, ..., 10, 11)
       const sortedComms = (comms || []).sort((a, b) => {
         const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
@@ -77,7 +71,7 @@ export default function ExamLiveDashboard() {
       });
 
       setTimetables(todayExams || []);
-      setCommittees(sortedComms); // 🚀 تمرير المصفوفة المرتبة بدلاً من العشوائية
+      setCommittees(sortedComms); // 🚀 تمرير اللجان مرتبة رقمياً
       
       if (todayExams && todayExams.length > 0) {
         setSelectedTimetableId(todayExams[0].id);
@@ -95,13 +89,14 @@ export default function ExamLiveDashboard() {
     }
   }, [currentRole]);
 
-  // 2️⃣ جلب التوزيع، الحضور، ومحاضر الغش (الرصد المباشر)
   const fetchLiveStats = async (showRefreshAnimation = false) => {
     if (!selectedTimetableId) return;
     if (showRefreshAnimation) setIsRefreshing(true);
     
     try {
-      // أ. جلب توزيع الطلاب على اللجان
+      // جلب التوزيع وتصفية الطلاب ليكونوا من نفس الصف الدراسي للاختبار المحدد
+      const selectedExam = timetables.find(t => t.id === selectedTimetableId);
+      
       const { data: allocs } = await supabase
         .from('student_seat_allocations')
         .select(`
@@ -111,22 +106,23 @@ export default function ExamLiveDashboard() {
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
 
-      // ب. جلب سجلات الحضور
+      // 🚀 تصفية السحّاب (عرض طلاب العاشر فقط في فيزياء عاشر، وتجاهل طلاب حادي عشر)
+      const filteredAllocs = (allocs || []).filter((a: any) => {
+         const classLvl = a.students?.sections?.classes?.level;
+         return classLvl === selectedExam?.class_level;
+      });
+
       const { data: attRecords } = await supabase
         .from('exam_attendance')
         .select('*')
         .eq('timetable_id', selectedTimetableId);
 
-      // 🚀 ج. جلب محاضر الغش الحية
       const { data: cheatRecords } = await supabase
         .from('exam_cheating_reports')
-        .select(`
-          *,
-          reporter:users!reporter_id(full_name)
-        `)
+        .select(`*, reporter:users!reporter_id(full_name)`)
         .eq('timetable_id', selectedTimetableId);
 
-      setAllocations(allocs || []);
+      setAllocations(filteredAllocs);
       setAttendance(attRecords || []);
       setCheatingReports(cheatRecords || []);
     } catch (error) {
@@ -138,16 +134,13 @@ export default function ExamLiveDashboard() {
 
   useEffect(() => {
     fetchLiveStats();
-    // تحديث تلقائي كل 15 ثانية لجعل اللوحة "حية" تماماً وتلتقط محاضر الغش
     const interval = setInterval(() => fetchLiveStats(false), 15000);
     return () => clearInterval(interval);
   }, [selectedTimetableId]);
 
-  // 3️⃣ التدخل اليدوي للمدير
   const handleManualAttendance = async (studentId: string, committeeId: string, newStatus: 'present' | 'absent') => {
     if (!selectedTimetableId || !user?.id) return;
     
-    // منع تحضير طالب لديه محضر غش إلا إذا تم حذف المحضر أولاً
     if (cheatingReports.some(c => c.student_id === studentId)) {
        alert('تنبيه: هذا الطالب موقوف حالياً بسبب محضر غش! لا يمكن تغيير حالته يدوياً.');
        return;
@@ -168,7 +161,6 @@ export default function ExamLiveDashboard() {
       if (error) throw error;
       await fetchLiveStats(); 
     } catch (error) {
-      console.error('Error updating manual attendance:', error);
       alert('حدث خطأ أثناء التحديث اليدوي.');
       setIsRefreshing(false);
     }
@@ -182,42 +174,25 @@ export default function ExamLiveDashboard() {
     }
   };
 
-  if (currentRole !== 'admin' && currentRole !== 'management') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4 font-cairo" dir="rtl">
-        <div className="bg-slate-800 p-8 rounded-3xl shadow-xl text-center max-w-md w-full border border-slate-700">
-          <ShieldCheck className="w-16 h-16 text-rose-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-black text-white mb-2">غرفة تحكم مغلقة! 🛑</h1>
-          <p className="text-slate-400 font-bold mb-6">هذه الغرفة المركزية مشفرة ومخصصة للمدير العام فقط.</p>
-          <button onClick={() => router.back()} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all">العودة للخلف</button>
-        </div>
-      </div>
-    );
-  }
+  if (currentRole !== 'admin' && currentRole !== 'management') return null;
 
-  // حساب الإحصائيات الشاملة
   const totalExpected = allocations.length;
   const totalAbsent = attendance.filter(a => a.status === 'absent').length;
   const totalCheating = cheatingReports.length;
-  // الحاضر الفعلي هو من سجل حضوره ولم يتم عمل محضر غش له
   const totalPresent = attendance.filter(a => a.status === 'present' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
   const totalPending = totalExpected - totalPresent - totalAbsent - totalCheating;
   
   const attendancePercentage = totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
 
-  // 🚀 تجهيز بيانات البحث اليدوي
   const searchResults = allocations.filter(a => {
     if (!searchTerm) return false;
     const term = searchTerm.toLowerCase().trim();
-
     let searchId = term;
     if (term.startsWith('raf-id:')) searchId = term.split(':')[1];
     else if (term.startsWith('raf-exam-seat:')) searchId = term.split(':')[1];
-
     const studentName = String(a.students?.users?.full_name || '').toLowerCase();
     const seatNum = String(a.seat_number || '');
     const stdId = String(a.student_id || '').toLowerCase();
-
     return studentName.includes(term) || seatNum.includes(term) || stdId === searchId;
   }).slice(0, 5); 
 
@@ -234,8 +209,6 @@ export default function ExamLiveDashboard() {
       )}
 
       <div className="max-w-7xl mx-auto space-y-6 relative">
-        
-        {/* 🎛️ الهيدر المظلم */}
         <div className="bg-slate-800/50 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 border border-slate-700/50 relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
           
@@ -282,9 +255,7 @@ export default function ExamLiveDashboard() {
         {selectedTimetableId ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* 📊 القسم الأيمن: الإحصائيات الحية والبحث */}
             <div className="space-y-6">
-              
               <div className="bg-slate-800/50 backdrop-blur-xl rounded-[2rem] p-6 border border-slate-700/50 shadow-xl relative overflow-hidden">
                 {totalCheating > 0 && <div className="absolute top-0 right-0 w-32 h-32 bg-rose-600/20 blur-2xl rounded-full pointer-events-none animate-pulse"></div>}
                 
@@ -298,7 +269,6 @@ export default function ExamLiveDashboard() {
                   <motion.div initial={{ width: 0 }} animate={{ width: `${attendancePercentage}%` }} transition={{ duration: 1 }} className="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full shadow-[0_0_10px_rgba(52,211,153,0.5)]"></motion.div>
                 </div>
 
-                {/* 🚀 إضافة عداد الغش للمدير */}
                 <div className="grid grid-cols-2 gap-4 relative z-10">
                   <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 flex flex-col items-center justify-center">
                     <p className="text-[10px] sm:text-[11px] font-black text-slate-400 mb-1 uppercase tracking-widest">إجمالي الطلاب</p>
@@ -319,7 +289,6 @@ export default function ExamLiveDashboard() {
                 </div>
               </div>
 
-              {/* 🎯 التدخل اليدوي للمدير والبحث */}
               <div className="bg-indigo-900/20 backdrop-blur-xl rounded-[2rem] p-6 border border-indigo-500/30 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                 <h3 className="text-lg font-black text-white mb-2 flex items-center gap-2 relative z-10"><Search className="w-5 h-5 text-indigo-400"/> البحث والتدخل اليدوي</h3>
@@ -364,7 +333,6 @@ export default function ExamLiveDashboard() {
                              </div>
                            </div>
                            
-                           {/* 🚀 إظهار زر "عرض المحضر" إذا كان الطالب غشاشاً بدلاً من أزرار الحضور */}
                            {isCheater ? (
                               <button onClick={() => openEvidenceModal(stdId)} className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white border border-rose-500/50 shadow-[0_0_15px_rgba(225,29,72,0.3)] rounded-lg text-xs font-black transition-all flex justify-center items-center gap-2">
                                 <Siren className="w-4 h-4"/> عرض المحضر والأدلة
@@ -372,7 +340,7 @@ export default function ExamLiveDashboard() {
                            ) : (
                               <div className="grid grid-cols-2 gap-2">
                                 <button onClick={() => { handleManualAttendance(stdId, commId, 'present'); setSearchTerm(''); }} className="py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-black transition-all">حاضر (يدوي)</button>
-                                <button onClick={() => { handleManualAttendance(stdId, commId, 'absent'); setSearchTerm(''); }} className="py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-xs font-black transition-all">غائب (يدوي)</button>
+                                <button onClick={() => { handleManualAttendance(stdId, commId, 'absent'); setSearchTerm(''); }} className="py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-xs font-black transition-all">غائب (يدوي)</button>
                               </div>
                            )}
                          </div>
@@ -385,22 +353,20 @@ export default function ExamLiveDashboard() {
               </div>
             </div>
 
-            {/* 🏫 القسم الأيسر: شاشات اللجان الحية */}
             <div className="lg:col-span-2 space-y-4">
-              <h2 className="text-xl font-black text-white flex items-center gap-2 ml-2"><LayoutGrid className="w-6 h-6 text-indigo-400"/> حالة اللجان المباشرة</h2>
+              <h2 className="text-xl font-black text-white flex items-center gap-2 ml-2"><LayoutGrid className="w-6 h-6 text-indigo-400"/> حالة اللجان المباشرة (للمادة المحددة)</h2>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {committees.map(committee => {
                    const commAllocs = allocations.filter(a => a.committee_id === committee.id);
                    const commCapacity = commAllocs.length;
+                   // 🚀 إخفاء اللجان التي لا يوجد بها طلاب لهذه المادة بالتحديد
                    if (commCapacity === 0) return null; 
 
-                   // 🚀 حساب الغش لهذه اللجنة
                    const commCheatCount = cheatingReports.filter(c => c.committee_id === committee.id).length;
                    const hasCheating = commCheatCount > 0;
 
                    const commAtts = attendance.filter(a => a.committee_id === committee.id);
-                   // الحاضر الصافي (بدون الغشاشين)
                    const commPresent = commAtts.filter(a => a.status === 'present' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
                    const commAbsent = commAtts.filter(a => a.status === 'absent').length;
                    const commPending = commCapacity - commPresent - commAbsent - commCheatCount;
@@ -478,7 +444,6 @@ export default function ExamLiveDashboard() {
         )}
       </div>
 
-      {/* 🚀 نافذة قراءة محضر الغش (Evidence Modal) */}
       <AnimatePresence>
         {isReportModalOpen && selectedReport && (
           <Dialog.Root open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
@@ -486,7 +451,6 @@ export default function ExamLiveDashboard() {
               <Dialog.Overlay className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200]" />
               <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#0f1423] border-2 border-rose-500/50 rounded-[2rem] w-[95%] max-w-lg shadow-[0_0_80px_rgba(225,29,72,0.3)] z-[200] overflow-hidden" dir="rtl">
                 
-                {/* رأس النافذة الأحمر */}
                 <div className="bg-rose-600 p-5 sm:p-6 flex justify-between items-center shrink-0">
                   <Dialog.Title className="text-xl font-black text-white flex items-center gap-3">
                     <Siren className="w-6 h-6 animate-pulse" /> تفاصيل محضر الغش
@@ -495,7 +459,6 @@ export default function ExamLiveDashboard() {
                 </div>
 
                 <div className="p-6 sm:p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                   {/* صورة الدليل المرفوع */}
                    {selectedReport.evidence_url ? (
                      <div className="rounded-2xl overflow-hidden border-2 border-slate-700 bg-black relative group">
                         <img src={selectedReport.evidence_url} alt="Evidence" className="w-full h-48 sm:h-64 object-contain" />
