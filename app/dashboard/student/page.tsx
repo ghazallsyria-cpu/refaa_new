@@ -43,6 +43,7 @@ const checkIsLocked = (examData: any) => {
   }
 };
 
+// 🌟 مكون النجوم التفاعلي
 const StarRating = ({ rating, setRating, label }: { rating: number, setRating: (r: number) => void, label: string }) => (
   <div className="flex flex-col gap-2">
     <label className="text-xs font-black text-slate-300 uppercase tracking-widest">{label}</label>
@@ -79,20 +80,23 @@ export default function StudentDashboard() {
   const [absentPeriods, setAbsentPeriods] = useState<number>(0);
   const [fullDaysAbsent, setFullDaysAbsent] = useState<number>(0);
 
+  // حالات نظام الأعذار الطبية
   const [excuses, setExcuses] = useState<any[]>([]);
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
   
+  // حالات المنظومة الامتحانية
   const [seatAllocation, setSeatAllocation] = useState<any>(null);
   const [examTimetables, setExamTimetables] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
+  // حالات وثائق التخرج
   const [docRequest, setDocRequest] = useState({ cert_ar: 0, cert_en: 0, twimc_ar: 0, twimc_en: 0, conduct_ar: 0, conduct_en: 0 });
   const [existingDocRequest, setExistingDocRequest] = useState<any>(null);
   const [isSubmittingDocs, setIsSubmittingDocs] = useState(false);
 
-  // حالات نظام التقييم الجامعي
+  // 🚀 حالات نظام التقييم الجامعي (The Gatekeeper)
   const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
   const [currentEvalIndex, setCurrentEvalIndex] = useState(0);
   const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
@@ -125,137 +129,118 @@ export default function StudentDashboard() {
     try {
       setLoading(true);
       
-      let dashboardData: any = {};
-      try {
-         dashboardData = await fetchStudentDashboardData(true) || {}; 
-      } catch (e) {
-         console.warn("Hook fetch failed, using manual fallback");
-      }
+      const data = await fetchStudentDashboardData(true); 
       
-      let currentStudent = dashboardData.student;
-      
-      // 🚀 إصلاح نظام الطوارئ: البحث يجب أن يكون بالـ user_id لتفادي الـ null
-      if (!currentStudent) {
-         const { data: manualStudent } = await supabase
-            .from('students')
-            .select('id, user_id, section_id, next_year_track, track_selection_date, sections(id, name, classes(name, level)), users(full_name, avatar_url)')
-            .eq('user_id', user.id)
-            .maybeSingle();
-            
-         if (manualStudent) currentStudent = manualStudent;
-      }
+      if (data) {
+        setStudentData(data.student);
+        setUpcomingExams(data.exams || []);
+        setUpcomingAssignments(data.assignments || []);
+        setTodaysSchedule(data.todaysSchedule || []);
+        setPeriods(data.periods || []);
 
-      if (currentStudent) {
-        setStudentData(currentStudent);
-        setUpcomingExams(dashboardData.exams || []);
-        setUpcomingAssignments(dashboardData.assignments || []);
-        setPeriods(dashboardData.periods || []);
-
-        const studentId = currentStudent.id;
-        let sectionIdForEvals = currentStudent.section_id || currentStudent.sections?.id;
-
-        // 🚀 إصلاح اختفاء الحصص: إذا فشل الهوك في إحضار الجدول، نجلبه يدوياً فوراً!
-        let tSchedule = dashboardData.todaysSchedule || [];
-        if (tSchedule.length === 0 && sectionIdForEvals) {
-           const currentDayOfWeek = new Date().getDay() + 1;
-           const { data: manualSchedule } = await supabase
-              .from('schedule')
-              .select('*, teachers(users(full_name, avatar_url)), subjects(name)')
-              .eq('section_id', sectionIdForEvals)
-              .eq('day_of_week', currentDayOfWeek)
-              .order('period', { ascending: true });
-           if (manualSchedule) tSchedule = manualSchedule;
-        }
-        setTodaysSchedule(tSchedule);
-
-        const [ badgesRes, gradesRes, absentCountRes, totalCountRes, excusesRes, docsRes, settingsRes ] = await Promise.all([
-          supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
-          supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
-          supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
-          supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
-          supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
-          supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', currentYear).maybeSingle(),
-          supabase.from('platform_settings').select('is_evaluations_active').limit(1).maybeSingle()
-        ]);
+        const studentId = data.student?.id;
         
-        if (badgesRes.data) setMyBadges(badgesRes.data);
-        if (excusesRes.data) setExcuses(excusesRes.data);
-        if (docsRes.data) setExistingDocRequest(docsRes.data);
+        if (studentId) {
+            const [ badgesRes, gradesRes, absentCountRes, totalCountRes, excusesRes, trackRes, docsRes ] = await Promise.all([
+              supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
+              supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
+              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
+              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
+              supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
+              supabase.from('students').select('next_year_track, track_selection_date, sections(id, name, classes(name, level))').eq('id', studentId).maybeSingle(),
+              supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', currentYear).maybeSingle()
+            ]);
+            
+            if (badgesRes.data) setMyBadges(badgesRes.data);
+            if (excusesRes.data) setExcuses(excusesRes.data);
+            if (docsRes.data) setExistingDocRequest(docsRes.data);
 
-        if (gradesRes.data && gradesRes.data.length > 0) {
-            const formattedGrades = gradesRes.data.map((g: any) => ({ ...g, exam: { ...g.exams, subject: g.exams?.subjects } }));
-            setRecentGrades(formattedGrades);
-        } else { setRecentGrades(dashboardData.grades || []); }
+            let sectionIdForEvals = data.student?.section_id;
 
-        if (!absentCountRes.error && absentCountRes.count !== null) {
-          setAbsentPeriods(absentCountRes.count);
-          setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
-          if (totalCountRes.count && totalCountRes.count > 0) {
-            setAttendanceStats({ rate: Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100) });
-          } else { setAttendanceStats({ rate: 100 }); }
+            if (trackRes.data) {
+                setStudentData((prev: any) => ({ ...prev, ...trackRes.data }));
+                if(trackRes.data.sections?.id) sectionIdForEvals = trackRes.data.sections.id;
+            }
+
+            if (gradesRes.data && gradesRes.data.length > 0) {
+                const formattedGrades = gradesRes.data.map((g: any) => ({ ...g, exam: { ...g.exams, subject: g.exams?.subjects } }));
+                setRecentGrades(formattedGrades);
+            } else { setRecentGrades(data.grades || []); }
+
+            if (!absentCountRes.error && absentCountRes.count !== null) {
+              setAbsentPeriods(absentCountRes.count);
+              setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
+              if (totalCountRes.count && totalCountRes.count > 0) {
+                setAttendanceStats({ rate: Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100) });
+              } else { setAttendanceStats({ rate: 100 }); }
+            }
+
+            // 🚀 نظام استخراج المعلمين للتقييم الإجباري (تم ربطه بالجدول الجديد)
+            if (sectionIdForEvals) {
+               // 1. نجلب كل المعلمين اللي يدرسون في صف الطالب من الجدول
+               const { data: myScheduleRaw } = await supabase
+                 .from('schedule')
+                 .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
+                 .eq('section_id', sectionIdForEvals);
+
+               if (myScheduleRaw && myScheduleRaw.length > 0) {
+                  // تنظيف التكرارات (المعلم يظهر مرة واحدة)
+                  const uniqueTeachersMap = new Map();
+                  myScheduleRaw.forEach((slot:any) => {
+                     if(slot.teacher_id && !uniqueTeachersMap.has(slot.teacher_id)) {
+                        const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
+                        uniqueTeachersMap.set(slot.teacher_id, {
+                           teacher_id: slot.teacher_id,
+                           full_name: u?.full_name || 'معلم',
+                           avatar_url: u?.avatar_url,
+                           subject_name: slot.subjects?.name || 'مادة دراسية'
+                        });
+                     }
+                  });
+                  const allMyTeachers = Array.from(uniqueTeachersMap.values());
+
+                  // 2. نجلب التقييمات السابقة للتأكد من عدم الإزعاج (تم التحديث هنا للجدول الجديد)
+                  const { data: myEvals } = await supabase
+                     .from('student_evaluations_of_teachers')
+                     .select('teacher_id')
+                     .eq('student_id', studentId)
+                     .eq('academic_year', currentYear)
+                     .eq('semester', currentSemester);
+
+                  const evaluatedTeacherIds = new Set((myEvals || []).map(e => e.teacher_id));
+
+                  // 3. الفلترة للوصول إلى المعلمين غير المقيمين
+                  const pending = allMyTeachers.filter(t => !evaluatedTeacherIds.has(t.teacher_id));
+                  if(pending.length > 0) {
+                     setPendingEvaluations(pending);
+                     setIsEvalModalOpen(true); // 🚀 تفعيل البوابة الإلزامية
+                  }
+               }
+            }
+
+            // جلب بيانات المنظومة الامتحانية بشكل معزول
+            try {
+               const classLevelStr = String(trackRes.data?.sections?.classes?.name || data.student?.sections?.classes?.name || '');
+               const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
+               
+               if (cLevel) {
+                  const [allocRes, timeRes, keysRes] = await Promise.all([
+                    supabase.from('student_seat_allocations').select('seat_number, exam_committees(name, location)').eq('student_id', studentId).maybeSingle(),
+                    supabase.from('exam_timetables').select('*, subjects(name)').eq('class_level', cLevel).order('exam_date', { ascending: true }).order('start_time', { ascending: true }),
+                    supabase.from('exam_answer_keys').select('*, subjects(name)').eq('class_level', cLevel).eq('is_published', true).order('created_at', { ascending: false })
+                  ]);
+                  if (allocRes.data) setSeatAllocation(allocRes.data);
+                  if (timeRes.data) setExamTimetables(timeRes.data);
+                  if (keysRes.data) setAnswerKeys(keysRes.data);
+               }
+            } catch (examErr) { console.error(examErr); }
         }
-
-        // 🚀 نظام التقييم الإجباري للجامعة (The Gatekeeper)
-        const isEvalActive = settingsRes.data?.is_evaluations_active === true;
-
-        if (isEvalActive && sectionIdForEvals) {
-           const { data: myScheduleRaw } = await supabase
-             .from('schedule')
-             .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
-             .eq('section_id', sectionIdForEvals);
-
-           if (myScheduleRaw && myScheduleRaw.length > 0) {
-              const uniqueTeachersMap = new Map();
-              myScheduleRaw.forEach((slot:any) => {
-                 if(slot.teacher_id && !uniqueTeachersMap.has(slot.teacher_id)) {
-                    const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
-                    uniqueTeachersMap.set(slot.teacher_id, {
-                       teacher_id: slot.teacher_id,
-                       full_name: u?.full_name || 'معلم',
-                       avatar_url: u?.avatar_url,
-                       subject_name: slot.subjects?.name || 'مادة دراسية'
-                    });
-                 }
-              });
-              const allMyTeachers = Array.from(uniqueTeachersMap.values());
-
-              const { data: myEvals } = await supabase
-                 .from('student_evaluations_of_teachers')
-                 .select('teacher_id')
-                 .eq('student_id', studentId)
-                 .eq('academic_year', currentYear)
-                 .eq('semester', currentSemester);
-
-              const evaluatedTeacherIds = new Set((myEvals || []).map(e => e.teacher_id));
-
-              const pending = allMyTeachers.filter(t => !evaluatedTeacherIds.has(t.teacher_id));
-              if(pending.length > 0) {
-                 setPendingEvaluations(pending);
-                 setIsEvalModalOpen(true); 
-              }
-           }
-        }
-
-        try {
-           const classLevelStr = String(currentStudent.next_year_track || currentStudent.sections?.classes?.name || currentStudent.sections?.classes?.level || currentStudent.class_name || '');
-           const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
-           
-           if (cLevel) {
-              const [allocRes, timeRes, keysRes] = await Promise.all([
-                supabase.from('student_seat_allocations').select('seat_number, exam_committees(name, location)').eq('student_id', studentId).maybeSingle(),
-                supabase.from('exam_timetables').select('*, subjects(name)').eq('class_level', cLevel).order('exam_date', { ascending: true }).order('start_time', { ascending: true }),
-                supabase.from('exam_answer_keys').select('*, subjects(name)').eq('class_level', cLevel).eq('is_published', true).order('created_at', { ascending: false })
-              ]);
-              if (allocRes.data) setSeatAllocation(allocRes.data);
-              if (timeRes.data) setExamTimetables(timeRes.data);
-              if (keysRes.data) setAnswerKeys(keysRes.data);
-           }
-        } catch (examErr) { console.error(examErr); }
       }
     } catch (error) { console.error(error); } 
     finally { setLoading(false); isFetchingRef.current = false; }
   }, [fetchStudentDashboardData, user?.id, authRole]);
 
+  // 🚀 دالة حفظ التقييم الإجباري (تم التحديث للجدول الجديد)
   const handleEvalSubmit = async () => {
      if(evalForm.scientific === 0 || evalForm.management === 0 || evalForm.humanity === 0) {
         alert('يرجى تقييم جميع المحاور للمتابعة!'); return;
@@ -277,8 +262,9 @@ export default function StudentDashboard() {
         };
 
         const { error } = await supabase.from('student_evaluations_of_teachers').insert([payload]);
-        if(error && !error.message.includes('duplicate key')) throw error; 
+        if(error && !error.message.includes('duplicate key')) throw error; // تجاهل خطأ التكرار لو تم بالخطأ
 
+        // مسح النموذج وتجهيز المعلم القادم أو إنهاء الإجبار
         setEvalForm({ scientific: 0, management: 0, humanity: 0, feedback: '' });
         
         if (currentEvalIndex + 1 < pendingEvaluations.length) {
@@ -294,6 +280,7 @@ export default function StudentDashboard() {
      }
   };
 
+  // دوال وثائق التخرج
   const handleDocChange = (field: string, delta: number) => {
     setDocRequest(prev => { const newVal = Math.max(0, prev[field as keyof typeof prev] + delta); return { ...prev, [field]: newVal }; });
   };
@@ -475,7 +462,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* 🚀 الهوية الامتحانية الحية */}
+        {/* 🚀 الهوية الامتحانية الحية (بانر منفصل) */}
         <AnimatePresence>
           {seatAllocation && (
              <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
@@ -725,7 +712,7 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* 🚀 البانر السينمائي (مجلس الصف) */}
+        {/* 🚀 البانر السينمائي (مجلس الصف - للطالب) */}
         {studentData?.section_id && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(99,102,241,0.15)] border border-indigo-500/30 backdrop-blur-xl bg-[#0f1423]">
             <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-600/20 to-transparent pointer-events-none z-0"></div>
@@ -753,14 +740,17 @@ export default function StudentDashboard() {
           </motion.div>
         )}
 
-        {/* 🚀 بطاقة إنذار الغياب الذكية */}
+        {/* 🚀 بطاقة إنذار الغياب الذكية (Smart Warning Banner) */}
         <AnimatePresence>
           {warningLevel > 0 && (
             <motion.div 
-              initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              initial={{ opacity: 0, y: -20, height: 0 }} 
+              animate={{ opacity: 1, y: 0, height: 'auto' }} 
+              exit={{ opacity: 0, height: 0 }}
               className={`relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] border-2 backdrop-blur-xl p-6 sm:p-8 shadow-lg bg-gradient-to-r ${warningColors}`}
             >
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                
                 <div className="flex items-start gap-4 sm:gap-6 w-full md:w-auto flex-1">
                   <div className={`p-4 rounded-2xl bg-white/10 shrink-0 border border-white/10 shadow-inner ${warningPulse ? 'animate-pulse' : ''}`}>
                     <WarningIcon className={`w-8 h-8 sm:w-10 sm:h-10 ${warningIconColor}`} />
@@ -785,7 +775,9 @@ export default function StudentDashboard() {
                   </div>
                   <div className="h-2.5 w-full bg-[#02040a] rounded-full overflow-hidden border border-white/5 shadow-inner">
                     <motion.div 
-                      initial={{ width: 0 }} animate={{ width: `${dangerPercentage}%` }} transition={{ duration: 1.5, ease: "easeOut" }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${dangerPercentage}%` }}
+                      transition={{ duration: 1.5, ease: "easeOut" }}
                       className={`h-full rounded-full shadow-[0_0_10px_currentColor] ${warningLevel >= 3 ? 'bg-rose-500 text-rose-500' : warningLevel === 2 ? 'bg-orange-500 text-orange-500' : 'bg-amber-500 text-amber-500'}`}
                     />
                   </div>
@@ -951,6 +943,7 @@ export default function StudentDashboard() {
                                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)]"></span>
                               </span>
                             )}
+
                             <div className={`absolute top-0 left-0 w-1 h-full ${
                               current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' 
                               : isPast ? 'bg-slate-800' 
@@ -1023,6 +1016,7 @@ export default function StudentDashboard() {
 
           </div>
 
+          {/* 🌟 Column 2: Narrow Area */}
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
@@ -1166,148 +1160,6 @@ export default function StudentDashboard() {
           </div>
         </div>
       </div>
-
-      {/* 🚀 نافذة التقييم الإجباري للجامعة (The Gatekeeper) */}
-      <AnimatePresence>
-        {isEvalModalOpen && pendingEvaluations.length > 0 && (
-          <Dialog.Root open={isEvalModalOpen}>
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/98 backdrop-blur-xl z-[9999] transition-all" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-2xl z-[9999] outline-none" dir="rtl">
-                 <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', damping: 20 }} className="bg-[#131836] border border-amber-500/50 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_80px_rgba(245,158,11,0.2)] relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 blur-[80px] pointer-events-none rounded-full"></div>
-                    
-                    <div className="flex flex-col items-center text-center mb-8 relative z-10">
-                       <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-4 border border-amber-500/30 shadow-inner">
-                         <Star className="w-8 h-8 text-amber-400" />
-                       </div>
-                       <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">تقييم الأداء الأكاديمي</h2>
-                       <p className="text-sm font-bold text-amber-200/80 max-w-md">يرجى تقييم أداء معلميك لضمان جودة التعليم. <br/><span className="text-rose-400 font-black">هذا التقييم إجباري وسري تماماً ولن يعرف المعلم هويتك.</span></p>
-                    </div>
-
-                    <div className="bg-[#0a0d1a]/50 p-6 rounded-3xl border border-white/5 relative z-10">
-                       <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/5">
-                          <div className="flex items-center gap-4">
-                             <div className="w-14 h-14 bg-slate-800 rounded-full border-2 border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                                {pendingEvaluations[currentEvalIndex]?.avatar_url ? (
-                                   <img src={pendingEvaluations[currentEvalIndex].avatar_url} alt="t" className="w-full h-full object-cover" />
-                                ) : <UserCircle className="w-8 h-8 text-slate-500"/>}
-                             </div>
-                             <div className="text-right">
-                                <p className="text-lg font-black text-white">{pendingEvaluations[currentEvalIndex]?.full_name}</p>
-                                <p className="text-xs font-bold text-amber-400 mt-1">مادة: {pendingEvaluations[currentEvalIndex]?.subject_name}</p>
-                             </div>
-                          </div>
-                          <div className="bg-slate-900 px-4 py-2 rounded-xl border border-white/5">
-                             <span className="text-xs font-black text-slate-400">معلم {currentEvalIndex + 1} من {pendingEvaluations.length}</span>
-                          </div>
-                       </div>
-
-                       <div className="space-y-6">
-                          <StarRating rating={evalForm.scientific} setRating={(r) => setEvalForm({...evalForm, scientific: r})} label="المحور العلمي (الشرح وتوصيل المعلومة)" />
-                          <StarRating rating={evalForm.management} setRating={(r) => setEvalForm({...evalForm, management: r})} label="المحور الإداري (إدارة الفصل والوقت)" />
-                          <StarRating rating={evalForm.humanity} setRating={(r) => setEvalForm({...evalForm, humanity: r})} label="المحور الإنساني (التعامل والتحفيز)" />
-                          
-                          <div className="space-y-2 pt-4">
-                             <label className="text-xs font-black text-slate-300 uppercase tracking-widest">رسالة أو ملاحظة للإدارة (اختياري)</label>
-                             <textarea 
-                                value={evalForm.feedback} onChange={(e) => setEvalForm({...evalForm, feedback: e.target.value})}
-                                placeholder="اكتب رأيك بصدق هنا..."
-                                className="w-full bg-[#02040a] border border-white/10 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-amber-500/50 h-24 resize-none custom-scrollbar"
-                             />
-                          </div>
-                       </div>
-
-                       <button 
-                          onClick={handleEvalSubmit} disabled={isSubmittingEval || evalForm.scientific === 0 || evalForm.management === 0 || evalForm.humanity === 0}
-                          className="w-full mt-8 py-4 bg-amber-500 hover:bg-amber-400 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50 disabled:scale-100"
-                       >
-                          {isSubmittingEval ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-5 h-5" /> إرسال التقييم السري والانتقال</>}
-                       </button>
-                    </div>
-                 </motion.div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-        )}
-      </AnimatePresence>
-
-      {/* 🚀 نافذة العذر الطبي العادي */}
-      <AnimatePresence>
-        {isExcuseModalOpen && (
-          <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/90 backdrop-blur-md z-50" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 p-6 sm:p-8" dir="rtl">
-                
-                <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
-                  <div>
-                    <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3"><Stethoscope className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" /> تقديم عذر طبي</Dialog.Title>
-                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-2">يرجى تعبئة تفاصيل الغياب وإرفاق التقرير لاعتماده من الإدارة.</p>
-                  </div>
-                  <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="space-y-3 bg-[#090b14]/50 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
-                    <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها</label>
-                    <div className="flex items-center gap-2">
-                      <input type="date" value={currentDateInput} onChange={(e) => setCurrentDateInput(e.target.value)} className="flex-1 bg-[#131836] border border-white/10 rounded-xl p-3 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50" style={{ colorScheme: 'dark' }} />
-                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-xs sm:text-sm transition-all shadow-sm active:scale-95">إضافة</button>
-                    </div>
-                    {excuseForm.absent_dates.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/5">
-                        {excuseForm.absent_dates.map(date => (
-                          <div key={date} className="flex items-center gap-2 bg-[#02040a]/80 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
-                            <span className="text-[10px] sm:text-xs font-bold text-slate-200" dir="ltr">{date}</span>
-                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300"><Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">نوع الدوام</label>
-                    <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 appearance-none [&>option]:bg-[#131836]">
-                      <option value="full_day">غياب يوم كامل</option>
-                      <option value="partial_day">غياب جزئي (استئذان حصص)</option>
-                    </select>
-                  </div>
-                  <AnimatePresence>
-                    {excuseForm.duration_type === 'partial_day' && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                        <div className="space-y-2 pt-2">
-                          <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /> حدد الحصص التي غبت عنها</label>
-                          <div className="flex flex-wrap gap-2">
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
-                              <button key={p} type="button" onClick={() => togglePeriod(p)} className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all border", excuseForm.target_periods.includes(p) ? "bg-amber-500 text-slate-900 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]" : "bg-[#090b14] text-slate-400 border-white/10 hover:border-amber-500/50")}>{p}</button>
-                            ))}
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">إرفاق التقرير الطبي (صورة)</label>
-                    <label className={cn("relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingReport ? "border-amber-500/50 bg-amber-500/5" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 bg-[#090b14] hover:border-amber-500/30 hover:bg-white/5")}>
-                      <input type="file" accept="image/*" className="hidden" onChange={handleReportUpload} disabled={isUploadingReport} />
-                      {isUploadingReport ? <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" /><span className="text-[10px] sm:text-xs font-black">جاري الرفع السحابي...</span></div> : excuseForm.attachment_url ? <div className="flex flex-col items-center gap-2 text-emerald-400"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-black text-center">تم الإرفاق بنجاح</span></div> : <div className="flex flex-col items-center gap-2 text-slate-500"><UploadCloud className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-bold text-center">اضغط لاختيار صورة</span></div>}
-                    </label>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات (اختياري)</label>
-                    <textarea value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3 sm:p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 h-20 sm:h-24 resize-none custom-scrollbar" />
-                  </div>
-                </div>
-                <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/5 flex gap-3">
-                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-slate-900 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2"><Loader2 className={cn("w-5 h-5", isSubmittingExcuse ? "animate-spin" : "hidden")} /> إرسال الطلب</button>
-                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10">إلغاء</button>
-                </div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-        )}
-      </AnimatePresence>
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
