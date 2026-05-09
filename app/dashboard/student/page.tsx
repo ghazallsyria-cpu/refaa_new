@@ -92,6 +92,7 @@ export default function StudentDashboard() {
   const [existingDocRequest, setExistingDocRequest] = useState<any>(null);
   const [isSubmittingDocs, setIsSubmittingDocs] = useState(false);
 
+  // حالات نظام التقييم الجامعي
   const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
   const [currentEvalIndex, setCurrentEvalIndex] = useState(0);
   const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
@@ -126,38 +127,47 @@ export default function StudentDashboard() {
       
       let dashboardData: any = {};
       try {
-         // محاولة سحب البيانات من الهوك
          dashboardData = await fetchStudentDashboardData(true) || {}; 
       } catch (e) {
-         console.warn("Hook fetch failed, using fallback");
+         console.warn("Hook fetch failed, using manual fallback");
       }
       
       let currentStudent = dashboardData.student;
       
-      // 🚀 نظام الطوارئ (Fallback) - إذا فشل الهوك (خطأ 400)، نسحب بيانات الطالب يدوياً وبقوة
+      // 🚀 إصلاح نظام الطوارئ: البحث يجب أن يكون بالـ user_id لتفادي الـ null
       if (!currentStudent) {
          const { data: manualStudent } = await supabase
             .from('students')
-            .select('id, section_id, next_year_track, track_selection_date, sections(id, name, classes(name, level)), users(full_name, avatar_url)')
-            .eq('id', user.id)
+            .select('id, user_id, section_id, next_year_track, track_selection_date, sections(id, name, classes(name, level)), users(full_name, avatar_url)')
+            .eq('user_id', user.id)
             .maybeSingle();
             
-         if (manualStudent) {
-            currentStudent = manualStudent;
-         }
+         if (manualStudent) currentStudent = manualStudent;
       }
 
       if (currentStudent) {
         setStudentData(currentStudent);
         setUpcomingExams(dashboardData.exams || []);
         setUpcomingAssignments(dashboardData.assignments || []);
-        setTodaysSchedule(dashboardData.todaysSchedule || []);
         setPeriods(dashboardData.periods || []);
 
         const studentId = currentStudent.id;
-        // الاعتماد على section_id لتحديد المعلمين
         let sectionIdForEvals = currentStudent.section_id || currentStudent.sections?.id;
-        
+
+        // 🚀 إصلاح اختفاء الحصص: إذا فشل الهوك في إحضار الجدول، نجلبه يدوياً فوراً!
+        let tSchedule = dashboardData.todaysSchedule || [];
+        if (tSchedule.length === 0 && sectionIdForEvals) {
+           const currentDayOfWeek = new Date().getDay() + 1;
+           const { data: manualSchedule } = await supabase
+              .from('schedule')
+              .select('*, teachers(users(full_name, avatar_url)), subjects(name)')
+              .eq('section_id', sectionIdForEvals)
+              .eq('day_of_week', currentDayOfWeek)
+              .order('period', { ascending: true });
+           if (manualSchedule) tSchedule = manualSchedule;
+        }
+        setTodaysSchedule(tSchedule);
+
         const [ badgesRes, gradesRes, absentCountRes, totalCountRes, excusesRes, docsRes, settingsRes ] = await Promise.all([
           supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
           supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
@@ -185,11 +195,10 @@ export default function StudentDashboard() {
           } else { setAttendanceStats({ rate: 100 }); }
         }
 
-        // 🚀 نظام التقييم الإجباري للجامعة (The Gatekeeper) - تم إصلاح أخطاء 404
+        // 🚀 نظام التقييم الإجباري للجامعة (The Gatekeeper)
         const isEvalActive = settingsRes.data?.is_evaluations_active === true;
 
         if (isEvalActive && sectionIdForEvals) {
-           // نعتمد فقط على جدول `schedule` لتجنب خطأ 404 الخاص بـ teacher_assignments
            const { data: myScheduleRaw } = await supabase
              .from('schedule')
              .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
@@ -227,7 +236,6 @@ export default function StudentDashboard() {
            }
         }
 
-        // جلب بيانات المنظومة الامتحانية بشكل معزول
         try {
            const classLevelStr = String(currentStudent.next_year_track || currentStudent.sections?.classes?.name || currentStudent.sections?.classes?.level || currentStudent.class_name || '');
            const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
@@ -420,7 +428,7 @@ export default function StudentDashboard() {
       
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* 🚀 الهيدر الفخم */}
+        {/* 🚀 الهيدر الفخم الموحد للطلاب */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10">
           <div className="absolute inset-0 bg-blue-500/5 blur-[100px] pointer-events-none"></div>
           
@@ -1015,7 +1023,6 @@ export default function StudentDashboard() {
 
           </div>
 
-          {/* 🌟 Column 2: Narrow Area */}
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
@@ -1160,7 +1167,7 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة التقييم الإجباري (The Gatekeeper) */}
+      {/* 🚀 نافذة التقييم الإجباري للجامعة (The Gatekeeper) */}
       <AnimatePresence>
         {isEvalModalOpen && pendingEvaluations.length > 0 && (
           <Dialog.Root open={isEvalModalOpen}>
