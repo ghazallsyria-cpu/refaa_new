@@ -17,7 +17,7 @@ import {
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
   ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch,
-  CreditCard, ClipboardList, Globe, ScrollText, ChevronDown
+  CreditCard, ClipboardList, Globe, ScrollText, ChevronDown, Star // 🚀 تم استيراد أيقونة النجمة هنا
 } from 'lucide-react';
 
 // 🚀 الهيكلة الجديدة: تجميع القوائم في مجلدات ذكية (Smart Workspaces)
@@ -52,7 +52,8 @@ const navigationGroups = [
       { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
       { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
       { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
-      { name: 'تقييم المعلمين', href: '/admin/evaluations', icon: Activity },
+      { name: 'تقييم المعلمين (الإدارة)', href: '/admin/evaluations', icon: Activity },
+      { name: 'تقييم الطلاب للمُعلمين', href: '/admin/student-evaluations', icon: Star }, // 🚀 الرابط الجديد
       { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
     ]
   },
@@ -167,7 +168,10 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const isItemVisible = (item: any) => {
     if (item.name === 'الرئيسية (الحرم الرقمي)') return true;
     if (item.name === 'إدارة الحرم الرقمي') return (authRole === 'admin' || authRole === 'management');
-    if (['ملف الإدارة', 'الفريق الإداري', 'استيراد البيانات', 'الإعدادات', 'مستكشف الطلاب 360', 'فريق الكنترول', 'كنترول اللجان', 'رادار الكنترول', 'مسار إنجاز الكنترول', 'جداول الاختبارات', 'نماذج الإجابات', 'تقرير غياب الاختبارات', 'وثائق التخرج', 'استوديو الهويات', 'العمليات المركزية', 'محرك الجدولة الذكي', 'الواجبات بالذكاء الاصطناعي'].includes(item.name)) return (authRole === 'admin' || authRole === 'management');
+    
+    // 🚀 إضافة الرابط الجديد هنا ليراه الإداري فقط
+    if (['ملف الإدارة', 'الفريق الإداري', 'استيراد البيانات', 'الإعدادات', 'مستكشف الطلاب 360', 'فريق الكنترول', 'كنترول اللجان', 'رادار الكنترول', 'مسار إنجاز الكنترول', 'جداول الاختبارات', 'نماذج الإجابات', 'تقرير غياب الاختبارات', 'وثائق التخرج', 'استوديو الهويات', 'العمليات المركزية', 'محرك الجدولة الذكي', 'الواجبات بالذكاء الاصطناعي', 'تقييم الطلاب للمُعلمين'].includes(item.name)) return (authRole === 'admin' || authRole === 'management');
+    
     if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher');
     if (['سجل البوابة', 'رادار البوابة'].includes(item.name)) return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
     if (item.name === 'رادار المراقب') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
@@ -190,14 +194,13 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     return { ...group, items: group.items.filter(isItemVisible) };
   }).filter(group => group.items.length > 0);
 
-  // 🚀 الفتح التلقائي الذكي - تم تعديله لمنع تحذيرات السيرفر (Cascading Renders Fix)
+  // 🚀 الفتح التلقائي الذكي
   useEffect(() => {
     if (isCollapsed) return;
 
     let targetGroup = '';
     let foundActive = false;
 
-    // البحث عن المجلد الذي يحتوي على الرابط المفتوح حالياً
     for (const group of filteredGroups) {
       const hasActiveItem = group.items.some(item => {
         let itemHref = item.href;
@@ -218,15 +221,13 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
       }
     }
 
-    // تعيين المجلد الأول افتراضياً إذا لم يتم العثور على التطابق
     if (!foundActive && filteredGroups.length > 0) {
       targetGroup = filteredGroups[0].title;
     }
 
-    // 🛡️ التحديث الآمن: تحديث الحالة فقط إذا لزم الأمر لتجنب حلقة لا نهائية توقف السيرفر
     if (targetGroup) {
       setOpenGroups(prev => {
-        if (prev[targetGroup]) return prev; // إذا كان مفتوحاً بالفعل، لا تفعل شيئاً (Bailout)
+        if (prev[targetGroup]) return prev; 
         return { ...prev, [targetGroup]: true };
       });
     }
