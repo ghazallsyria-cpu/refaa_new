@@ -1,11 +1,11 @@
 // @ts-nocheck
-/* eslint-disable */
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { 
   Activity, Users, ShieldCheck, CheckCircle2, XCircle, Loader2, 
-  Search, AlertTriangle, RefreshCw, LayoutGrid, Clock, Calendar, ShieldAlert, Siren, Image as ImageIcon, X, AlertCircle // 🚀 تم استيراد AlertCircle هنا
+  Search, AlertTriangle, RefreshCw, LayoutGrid, Clock, Calendar, ShieldAlert, Siren, Image as ImageIcon, X, AlertCircle, ListChecks
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,6 +34,10 @@ export default function ExamLiveDashboard() {
   const [cheatingReports, setCheatingReports] = useState<any[]>([]);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  // 🚀 حالات نوافذ القوائم السريعة (للمدير)
+  const [isListModalOpen, setIsListModalOpen] = useState(false);
+  const [listModalType, setListModalType] = useState<'absent' | 'cheating' | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -104,6 +108,7 @@ export default function ExamLiveDashboard() {
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
 
+      // فلترة الطلاب بناءً على صف المادة المحددة فقط
       const filteredAllocs = (allocs || []).filter((a: any) => {
          const classLvl = a.students?.sections?.classes?.level;
          return classLvl === selectedExam?.class_level;
@@ -173,13 +178,20 @@ export default function ExamLiveDashboard() {
 
   if (currentRole !== 'admin' && currentRole !== 'management') return null;
 
+  // 🚀 تصحيح الحسابات الرياضية لمنع مشكلة (-1)
   const totalExpected = allocations.length;
-  const totalAbsent = attendance.filter(a => a.status === 'absent').length;
+  // الغائب: مسجل غائب وليس له محضر غش
+  const totalAbsent = attendance.filter(a => a.status === 'absent' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
   const totalCheating = cheatingReports.length;
+  // الحاضر: مسجل حاضر وليس له محضر غش
   const totalPresent = attendance.filter(a => a.status === 'present' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
   const totalPending = totalExpected - totalPresent - totalAbsent - totalCheating;
   
   const attendancePercentage = totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
+
+  // استخراج قوائم الغياب والغش لعرضها للمدير
+  const absentStudentsList = allocations.filter(a => attendance.some(att => att.student_id === a.student_id && att.status === 'absent') && !cheatingReports.some(c => c.student_id === a.student_id));
+  const cheatingStudentsList = allocations.filter(a => cheatingReports.some(c => c.student_id === a.student_id));
 
   const searchResults = allocations.filter(a => {
     if (!searchTerm) return false;
@@ -275,14 +287,16 @@ export default function ExamLiveDashboard() {
                     <p className="text-[10px] sm:text-[11px] font-black text-emerald-400 mb-1 uppercase tracking-widest">حاضر الآن</p>
                     <p className="text-2xl sm:text-3xl font-black text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{totalPresent}</p>
                   </div>
-                  <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20 flex flex-col items-center justify-center">
-                    <p className="text-[10px] sm:text-[11px] font-black text-amber-400 mb-1 uppercase tracking-widest">غائب</p>
+                  
+                  {/* 🚀 أزرار تفاعلية للمدير لفتح قوائم الغياب والغش */}
+                  <button onClick={() => {setListModalType('absent'); setIsListModalOpen(true);}} disabled={totalAbsent === 0} className="bg-amber-500/10 hover:bg-amber-500/20 p-4 rounded-2xl border border-amber-500/20 flex flex-col items-center justify-center transition-colors disabled:opacity-50">
+                    <p className="text-[10px] sm:text-[11px] font-black text-amber-400 mb-1 uppercase tracking-widest flex items-center gap-1">غائب <ListChecks className="w-3 h-3"/></p>
                     <p className="text-2xl sm:text-3xl font-black text-amber-400">{totalAbsent}</p>
-                  </div>
-                  <div className={cn("p-4 rounded-2xl flex flex-col items-center justify-center border transition-colors", totalCheating > 0 ? "bg-rose-600/20 border-rose-500/50 shadow-[0_0_15px_rgba(225,29,72,0.3)] animate-pulse" : "bg-rose-500/5 border-rose-500/10")}>
-                    <p className="text-[10px] sm:text-[11px] font-black text-rose-400 mb-1 uppercase tracking-widest flex items-center gap-1">{totalCheating > 0 && <Siren className="w-3 h-3"/>} حالات الغش</p>
+                  </button>
+                  <button onClick={() => {setListModalType('cheating'); setIsListModalOpen(true);}} disabled={totalCheating === 0} className={cn("p-4 rounded-2xl flex flex-col items-center justify-center border transition-colors disabled:opacity-50", totalCheating > 0 ? "bg-rose-600/20 border-rose-500/50 shadow-[0_0_15px_rgba(225,29,72,0.3)] hover:bg-rose-600/30" : "bg-rose-500/5 border-rose-500/10")}>
+                    <p className="text-[10px] sm:text-[11px] font-black text-rose-400 mb-1 uppercase tracking-widest flex items-center gap-1">{totalCheating > 0 && <Siren className="w-3 h-3 animate-pulse"/>} حالات الغش</p>
                     <p className="text-2xl sm:text-3xl font-black text-rose-400">{totalCheating}</p>
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -363,8 +377,10 @@ export default function ExamLiveDashboard() {
                    const hasCheating = commCheatCount > 0;
 
                    const commAtts = attendance.filter(a => a.committee_id === committee.id);
+                   
+                   // 🚀 إصلاح الحسبة للجنة: الحاضر والغائب هم من ليس لهم محضر غش فقط
                    const commPresent = commAtts.filter(a => a.status === 'present' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
-                   const commAbsent = commAtts.filter(a => a.status === 'absent').length;
+                   const commAbsent = commAtts.filter(a => a.status === 'absent' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
                    const commPending = commCapacity - commPresent - commAbsent - commCheatCount;
 
                    const isCompleted = commPending === 0;
@@ -440,6 +456,43 @@ export default function ExamLiveDashboard() {
         )}
       </div>
 
+      {/* 🚀 نافذة القوائم السريعة (الغياب / الغش) */}
+      <AnimatePresence>
+        {isListModalOpen && listModalType && (
+          <Dialog.Root open={isListModalOpen} onOpenChange={setIsListModalOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200]" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#0f1423] border border-slate-700 rounded-[2rem] w-[95%] max-w-md shadow-2xl z-[200] overflow-hidden flex flex-col max-h-[85vh]" dir="rtl">
+                <div className={cn("p-5 sm:p-6 flex justify-between items-center shrink-0", listModalType === 'cheating' ? "bg-rose-950/80 border-b border-rose-500/30" : "bg-amber-950/80 border-b border-amber-500/30")}>
+                  <Dialog.Title className={cn("text-lg font-black flex items-center gap-2", listModalType === 'cheating' ? "text-rose-400" : "text-amber-400")}>
+                    {listModalType === 'cheating' ? <Siren className="w-5 h-5 animate-pulse"/> : <Users className="w-5 h-5"/>}
+                    {listModalType === 'cheating' ? 'قائمة حالات الغش والحرمان' : 'قائمة الطلاب الغائبين'}
+                  </Dialog.Title>
+                  <Dialog.Close className="text-slate-400 hover:text-white bg-black/20 p-2 rounded-full transition-colors"><X className="w-5 h-5"/></Dialog.Close>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3 bg-[#0a0d16]/50">
+                   {(listModalType === 'cheating' ? cheatingStudentsList : absentStudentsList).map(a => {
+                      const cName = committees.find(c => c.id === a.committee_id)?.name || 'لجنة غير محددة';
+                      return (
+                        <div key={a.student_id} className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700 flex justify-between items-center">
+                           <div>
+                             <p className="text-sm font-black text-white">{a.students?.users?.full_name}</p>
+                             <p className="text-[10px] font-bold text-slate-400 mt-1">الجلوس: <span className="text-amber-400">{a.seat_number}</span> | {cName}</p>
+                           </div>
+                           {listModalType === 'cheating' && (
+                             <button onClick={() => openEvidenceModal(a.student_id)} className="shrink-0 p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition-colors" title="عرض المحضر"><Eye className="w-4 h-4"/></button>
+                           )}
+                        </div>
+                      )
+                   })}
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </AnimatePresence>
+
+      {/* 🚀 نافذة قراءة محضر الغش */}
       <AnimatePresence>
         {isReportModalOpen && selectedReport && (
           <Dialog.Root open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
