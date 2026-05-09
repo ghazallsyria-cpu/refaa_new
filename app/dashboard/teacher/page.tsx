@@ -11,7 +11,7 @@ import {
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
   AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2, Sparkles,
-  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key
+  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key, FileSignature
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -23,6 +23,7 @@ import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
+import * as Dialog from '@radix-ui/react-dialog'; // 🚀 استيراد النوافذ المنبثقة للاعتذار
 
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
@@ -45,6 +46,12 @@ export default function TeacherDashboard() {
   const [headDuties, setHeadDuties] = useState<any[]>([]);
   const [controlTeamRole, setControlTeamRole] = useState<any>(null);
   
+  // 🚀 حالات الاعتذار عن المراقبة
+  const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
+  const [selectedDutyId, setSelectedDutyId] = useState('');
+  const [dutyExcuseText, setDutyExcuseText] = useState('');
+  const [isProcessingDuty, setIsProcessingDuty] = useState(false);
+
   const [finalExamsTimetable, setFinalExamsTimetable] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
@@ -132,7 +139,6 @@ export default function TeacherDashboard() {
         }
 
         if (data.teacher?.id) {
-            // نظام غياب الطلاب
             const { data: absences } = await supabase
               .from('attendance_records')
               .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -161,7 +167,6 @@ export default function TeacherDashboard() {
               setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
             }
 
-            // 🚀 جلب بيانات المنظومة الامتحانية والتشريفات (الكنترول، الرؤساء، المراقبين)
             try {
                const currentYear = '2025-2026';
                const currentSemester = 'الفصل الدراسي الثاني';
@@ -172,9 +177,9 @@ export default function TeacherDashboard() {
                if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
                mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); 
 
-               // 🚀 التحديث الجوهري: البحث عن الكنترول عبر user.id بدلاً من teacher.id
+               // 🚀 التحديث: جلب الأعمدة الجديدة للتوقيع والاعتذار
                const [invigRes, finalExamsRes, headRes, controlRes] = await Promise.all([
-                  supabase.from('committee_invigilators').select('id, exam_committees(name, location, capacity)').eq('teacher_id', data.teacher.id),
+                  supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_committees(name, location, capacity)').eq('teacher_id', data.teacher.id),
                   supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5),
                   supabase.from('exam_committee_heads').select('committees_range, exam_timetables(exam_date, subjects(name), class_level)').eq('head_teacher_id', data.teacher.id),
                   supabase.from('exam_control_team').select('role_name').eq('user_id', user.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle()
@@ -202,7 +207,6 @@ export default function TeacherDashboard() {
                console.error("Error fetching exam system data:", examErr);
             }
 
-            // نظام الإنذار الإداري
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
               const todayStr = format(now, 'yyyy-MM-dd');
@@ -274,6 +278,54 @@ export default function TeacherDashboard() {
     }
   }, [fetchData, isChecking, authRole]);
 
+  // 🚀 دوال العهد والتوثيق الرقمي للمراقبة
+  const signDuty = async (id: string) => {
+    if (!confirm('هل أنت متأكد من توقيعك إلكترونياً لاستلام مهام هذه اللجنة؟')) return;
+    setIsProcessingDuty(true);
+    try {
+      const { error } = await supabase
+        .from('committee_invigilators')
+        .update({ status: 'signed', signed_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      
+      // التحديث المحلي السريع لتجنب جلب البيانات بالكامل
+      setInvigilationDuties(prev => prev.map(d => d.id === id ? { ...d, status: 'signed', signed_at: new Date().toISOString() } : d));
+    } catch(e) {
+      alert('حدث خطأ أثناء التوقيع.');
+    } finally {
+      setIsProcessingDuty(false);
+    }
+  };
+
+  const openDutyExcuseModal = (id: string) => {
+    setSelectedDutyId(id);
+    setDutyExcuseText('');
+    setIsExcuseModalOpen(true);
+  };
+
+  const submitDutyExcuse = async () => {
+    if (!dutyExcuseText.trim()) { alert('يرجى كتابة سبب العذر للإدارة!'); return; }
+    setIsProcessingDuty(true);
+    try {
+       const { error } = await supabase
+        .from('committee_invigilators')
+        .update({ status: 'excused', excuse_reason: dutyExcuseText })
+        .eq('id', selectedDutyId);
+      if (error) throw error;
+      
+      alert('تم رفع العذر للإدارة بنجاح وفي سرية تامة.');
+      setIsExcuseModalOpen(false);
+      
+      // التحديث المحلي
+      setInvigilationDuties(prev => prev.map(d => d.id === selectedDutyId ? { ...d, status: 'excused', excuse_reason: dutyExcuseText } : d));
+    } catch(e) {
+       alert('حدث خطأ أثناء رفع العذر.');
+    } finally {
+       setIsProcessingDuty(false);
+    }
+  };
+
   const todaysSchedule = useMemo(() => {
     const today = new Date().getDay() + 1; 
     return schedule.filter(s => Number(s.day_of_week) === today);
@@ -317,7 +369,6 @@ export default function TeacherDashboard() {
   }
 
   const avatarUrl = teacherData?.users?.avatar_url;
-  // 🚀 إنشاء QR Code لهويات المعلم الأمنية
   const qrPayloadControl = `raf-control:${user.id}`;
   const qrCodeUrlControl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayloadControl)}&margin=0`;
 
@@ -332,7 +383,7 @@ export default function TeacherDashboard() {
     >
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
 
-        {/* 🚀 هرم القيادة: 1. بانر أعضاء الكنترول (القيادة العليا) */}
+        {/* 🚀 هرم القيادة: 1. بانر أعضاء الكنترول */}
         <AnimatePresence>
           {controlTeamRole && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.5, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-purple-900 via-[#131836] to-[#0f1423] p-8 md:p-10 shadow-[0_20px_50px_rgba(147,51,234,0.3)] border border-purple-500/40">
@@ -351,7 +402,6 @@ export default function TeacherDashboard() {
                      </p>
                   </div>
                   
-                  {/* 🪪 هوية الكنترول الذكية (VIP 3D Card) - تظهر فقط في الديسكتوب والآيباد */}
                   <div className="shrink-0 perspective-1000 hidden md:block">
                      <div className="w-[60mm] h-[95mm] border-[4px] border-slate-900 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
                         <div className="absolute top-0 left-0 w-full h-[35mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 border-b-[3px] border-rose-600 relative overflow-hidden">
@@ -370,7 +420,7 @@ export default function TeacherDashboard() {
                            <p className="text-[11px] font-black text-rose-600 mb-2 border-b-2 border-slate-200 pb-2 w-full truncate">{controlTeamRole.role_name}</p>
                            <div className="mt-auto mb-4 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
                               <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-xl border-[3px] border-slate-900 mb-1.5 shadow-lg"><img src={qrCodeUrlControl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
-                              <p className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1"><Fingerprint className="w-3 h-3"/> Secured</p>
+                              <p className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1"><Fingerprint className="w-3 h-3"/> Secured Access</p>
                            </div>
                         </div>
                         <div className="w-full h-3 bg-rose-600 shrink-0"></div>
@@ -379,7 +429,6 @@ export default function TeacherDashboard() {
 
                </div>
                
-               {/* زر الدخول للموبايل والديسكتوب */}
                <div className="relative z-10 mt-6 md:mt-8 flex justify-center md:justify-start">
                   <Link href="/admin/exam-pipeline" className="px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(147,51,234,0.6)] flex items-center gap-2 transition-all active:scale-95 border border-purple-400/50 w-full sm:w-auto text-center justify-center">
                      الدخول لغرفة الكنترول <ArrowUpRight className="w-5 h-5" />
@@ -389,7 +438,7 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 هرم القيادة: 2. بانر رؤساء اللجان (القيادة الميدانية) */}
+        {/* 🚀 هرم القيادة: 2. بانر رؤساء اللجان */}
         <AnimatePresence>
           {headDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-gradient-to-l from-amber-900 via-[#131836] to-[#0f1423] p-8 md:p-10 shadow-[0_20px_50px_rgba(245,158,11,0.2)] border-[3px] border-[#92400e] group">
@@ -424,60 +473,101 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 هرم القيادة: 3. بانر تكليف المراقبة التحفيزي الملكي (Duty of Honor Hero) */}
+        {/* 🚀 هرم القيادة: 3. بانر تكليف المراقبة (مع التوقيع والاعتذار) */}
         <AnimatePresence>
           {invigilationDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
-               <div className="absolute top-[-50%] left-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-indigo-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
-               <div className="absolute bottom-[-50%] right-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
+               <div className="absolute top-[-50%] left-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
                
                <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
                   
                   <div className="flex-1 text-center lg:text-right">
-                     <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs sm:text-sm font-black mb-6 shadow-inner backdrop-blur-xl">
-                       <Award className="w-4 h-4 text-indigo-400" /> تكليف رسمي بمهام المراقبة
+                     <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs sm:text-sm font-black mb-6 shadow-inner backdrop-blur-xl">
+                       <Award className="w-4 h-4 text-emerald-400" /> تكليف رسمي بمهام المراقبة
                      </div>
                      <h2 className="text-3xl sm:text-5xl font-black text-white mb-6 tracking-tight leading-tight drop-shadow-2xl">
                        أنتم <span className="text-transparent bg-clip-text bg-gradient-to-l from-emerald-400 to-teal-200">صمام الأمان</span> وعماد المنظومة!
                      </h2>
-                     <p className="text-slate-300 text-sm sm:text-lg font-bold leading-relaxed mb-8 max-w-2xl mx-auto lg:mx-0 opacity-90">
-                       أستاذي الفاضل، ثقةً منا في حرصكم وعدالتكم، تم اختياركم لضمان نزاهة سير الاختبارات. نُعول على حكمتكم في توفير بيئة هادئة ومطمئنة لأبنائنا الطلاب في اللجان المُسندة إليكم.
+                     <p className="text-slate-300 text-sm sm:text-lg font-bold leading-relaxed mb-6 max-w-2xl mx-auto lg:mx-0 opacity-90">
+                       أستاذي الفاضل، تم اختياركم لضمان نزاهة سير الاختبارات. يرجى التوقيع الإلكتروني بالاستلام أدناه، أو تقديم عذر رسمي للإدارة في حال وجود مانع ليتسنى لنا توفير البديل.
                      </p>
                      
-                     <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
+                     <div className="flex flex-col gap-4 mb-6 w-full lg:w-3/4">
                         {invigilationDuties.map((duty, idx) => (
-                          <div key={idx} className="bg-emerald-500/10 px-5 py-3 rounded-2xl border border-emerald-500/30 flex items-center gap-4 shadow-inner backdrop-blur-md hover:bg-emerald-500/20 transition-colors cursor-default">
-                             <div className="p-2 bg-emerald-500/20 rounded-xl"><ShieldCheck className="w-5 h-5 text-emerald-400" /></div>
-                             <div className="text-right">
-                               <p className="text-[10px] font-bold text-emerald-200/80 mb-0.5">مكلف بالمراقبة على:</p>
-                               <h3 className="text-sm sm:text-lg font-black text-white drop-shadow-md">{duty.exam_committees?.name}</h3>
+                          <div key={idx} className={`px-5 py-4 rounded-2xl border flex flex-col gap-4 shadow-inner backdrop-blur-md transition-all ${duty.status === 'excused' ? 'bg-rose-500/10 border-rose-500/30' : 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20'}`}>
+                             <div className="flex items-center gap-4">
+                                 <div className={`p-3 rounded-xl ${duty.status === 'excused' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                   <ShieldCheck className="w-6 h-6" />
+                                 </div>
+                                 <div className="text-right flex-1">
+                                   <p className={`text-[10px] font-bold mb-1 uppercase tracking-widest ${duty.status === 'excused' ? 'text-rose-200/80' : 'text-emerald-200/80'}`}>اللجنة المخصصة لك:</p>
+                                   <h3 className="text-lg sm:text-xl font-black text-white drop-shadow-md">{duty.exam_committees?.name}</h3>
+                                 </div>
+                             </div>
+                             
+                             <div className={`border-t pt-3 flex flex-wrap items-center gap-3 ${duty.status === 'excused' ? 'border-rose-500/20' : 'border-emerald-500/20'}`}>
+                                {(!duty.status || duty.status === 'pending') && (
+                                   <>
+                                     <button onClick={() => signDuty(duty.id)} disabled={isProcessingDuty} className="flex-1 sm:flex-none px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-xs sm:text-sm rounded-xl transition-all shadow-md flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
+                                       <FileSignature className="w-4 h-4" /> توقيع إلكتروني بالاستلام
+                                     </button>
+                                     <button onClick={() => openDutyExcuseModal(duty.id)} disabled={isProcessingDuty} className="px-5 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-black text-xs sm:text-sm rounded-xl transition-all border border-rose-500/30 flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
+                                       <X className="w-4 h-4" /> لدي مانع (اعتذار)
+                                     </button>
+                                   </>
+                                )}
+                                {duty.status === 'signed' && (
+                                   <div className="px-4 py-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-black text-xs sm:text-sm rounded-xl flex items-center gap-2 w-full shadow-inner">
+                                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                                     تم توقيع العهدة إلكترونياً (في {safeFormat(duty.signed_at, 'd MMM - h:mm a')})
+                                   </div>
+                                )}
+                                {duty.status === 'excused' && (
+                                   <div className="px-4 py-3 bg-rose-500/20 border border-rose-500/30 text-rose-300 font-black text-xs sm:text-sm rounded-xl flex items-center gap-2 w-full shadow-inner">
+                                     <AlertTriangle className="w-5 h-5 text-rose-400" />
+                                     تم رفع الاعتذار للإدارة (السبب: {duty.excuse_reason}) وهو قيد المراجعة.
+                                   </div>
+                                )}
                              </div>
                           </div>
                         ))}
                      </div>
-                  </div>
 
-                  {/* 🪪 هوية المراقب الذكية (3D ID Card) - تظهر فقط في الشاشات الكبيرة */}
-                  <div className="shrink-0 perspective-1000 hidden md:block">
-                     <div className="w-[60mm] h-[95mm] border-[4px] border-slate-800 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.6)] bg-[#0f1423] transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
-                        <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity pointer-events-none z-50"></div>
-                        <div className="absolute top-0 left-0 w-full h-[35mm] bg-[#02040a] shrink-0 flex flex-col items-center justify-start pt-4 border-b-2 border-indigo-500/50 relative overflow-hidden">
-                           <div className="absolute -right-10 -top-10 w-24 h-24 bg-indigo-500/20 blur-xl rounded-full"></div>
-                           <p className="text-white font-black text-[14px] mt-1 drop-shadow-md tracking-wide">مدرسة الرفعة النموذجية بنين</p>
-                           <p className="text-emerald-400 font-bold text-[10px] mt-1 bg-emerald-500/10 px-3 py-0.5 rounded-full border border-emerald-500/20 shadow-inner tracking-widest">هوية مراقب معتمد</p>
-                        </div>
-                        <div className="relative z-20 w-[26mm] h-[26mm] mt-[16mm] mb-3 rounded-[1rem] bg-[#02040a] border-4 border-indigo-500/50 shadow-[0_10px_20px_rgba(0,0,0,0.4)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
-                           {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> : <UserCheck className="w-10 h-10 text-indigo-400" />}
-                        </div>
-                        <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
-                           <h2 className="text-[16px] font-black text-white mb-1.5 leading-tight line-clamp-2 drop-shadow-md">{teacherData?.users?.full_name || '...'}</h2>
-                           <p className="text-[10px] font-bold text-indigo-300 mb-3 border-b border-indigo-500/20 pb-2 w-full">وزارة التربية - إدارة التعليم الخاص</p>
-                           <div className="mt-auto mb-4 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
-                              <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-xl border-2 border-indigo-500/50 mb-1.5 shadow-lg"><img src={qrCodeUrlInvig} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
-                              <p className="text-[9px] font-black text-slate-400 flex items-center gap-1"><Fingerprint className="w-3 h-3"/> هوية مشفرة</p>
+                     {/* 🚀 جدول المواد والتواريخ للمراقب */}
+                     {finalExamsTimetable.length > 0 && (
+                        <div className="w-full max-w-2xl bg-white/5 border border-white/10 rounded-2xl p-5 shadow-inner backdrop-blur-sm">
+                           <p className="text-sm font-bold text-emerald-300 mb-4 flex items-center justify-center lg:justify-start gap-2"><CalendarDays className="w-4 h-4"/> جدول الامتحانات (أيام المراقبة):</p>
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {finalExamsTimetable.map((ex, i) => (
+                                 <div key={i} className="flex justify-between items-center bg-[#02040a]/60 px-4 py-3 rounded-xl border border-white/5">
+                                    <span className="text-sm font-black text-white truncate max-w-[120px]" title={ex.subjects?.name}>{ex.subjects?.name}</span>
+                                    <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap bg-emerald-500/10 px-2 py-1 rounded-md">{safeFormat(ex.exam_date, 'd MMM yyyy')}</span>
+                                 </div>
+                              ))}
                            </div>
                         </div>
-                        <div className="w-full h-2.5 bg-gradient-to-r from-emerald-500 to-indigo-500 shrink-0"></div>
+                     )}
+                  </div>
+
+                  {/* 🪪 هوية المراقب الذكية */}
+                  <div className="shrink-0 perspective-1000 hidden md:block mt-8 lg:mt-0">
+                     <div className="w-[60mm] h-[95mm] border-[3px] border-slate-900 rounded-[1.5rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
+                        <div className="absolute top-0 left-0 w-full h-[28mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 relative overflow-hidden">
+                           <p className="text-white font-black text-[13px] mt-1 tracking-wide">مدرسة الرفعة النموذجية بنين</p>
+                           <p className="text-emerald-400 font-bold text-[10px] mt-1 bg-emerald-500/10 px-3 py-0.5 rounded-full border border-emerald-500/20 shadow-inner">هوية مراقب معتمد</p>
+                        </div>
+                        <div className="relative z-20 w-[24mm] h-[24mm] mt-[16mm] mb-2 rounded-xl bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
+                           {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> : <UserCheck className="w-10 h-10 text-slate-300" />}
+                        </div>
+                        <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
+                           <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{teacherData?.users?.full_name || '...'}</h2>
+                           <p className="text-[11px] font-bold text-slate-600 mb-2 border-b-2 border-slate-200 pb-2 w-full">إدارة التعليم الخاص</p>
+                           <div className="mt-auto mb-4 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
+                              <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-lg border-2 border-slate-800 mb-1 shadow-md"><img src={qrCodeUrlInvig} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
+                              <p className="text-[8px] font-black text-slate-400 mt-1">امسح الكود للتحقق</p>
+                           </div>
+                        </div>
+                        <div className="w-full h-2.5 bg-gradient-to-r from-emerald-500 to-teal-400 shrink-0"></div>
                      </div>
                   </div>
 
@@ -987,6 +1077,55 @@ export default function TeacherDashboard() {
           </div>
         </div>
       </div>
+
+      {/* 🚀 نافذة (Modal) تقديم اعتذار عن مهمة المراقبة */}
+      <AnimatePresence>
+        {isExcuseModalOpen && (
+          <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/90 backdrop-blur-md z-50" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-lg shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 p-6 sm:p-8" dir="rtl">
+                
+                <div className="flex justify-between items-center mb-6 border-b border-white/5 pb-6">
+                  <div>
+                    <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3">
+                      <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-rose-400" /> تقديم اعتذار رسمي
+                    </Dialog.Title>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-2">يرجى توضيح سبب الاعتذار عن لجنة المراقبة ليتم مراجعته من الإدارة.</p>
+                  </div>
+                  <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">سبب الاعتذار المباشر</label>
+                    <textarea 
+                      value={dutyExcuseText} onChange={(e) => setDutyExcuseText(e.target.value)}
+                      placeholder="أرجو إعفائي من المراقبة للأسباب التالية..." 
+                      className="w-full bg-[#090b14] border border-white/10 rounded-xl p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-rose-500/50 h-32 resize-none custom-scrollbar shadow-inner"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-white/5 flex gap-3">
+                  <button onClick={submitDutyExcuse} disabled={isProcessingDuty} className="flex-1 py-3.5 sm:py-4 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl transition-all shadow-[0_0_20px_rgba(225,29,72,0.3)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95">
+                    {isProcessingDuty ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : 'رفع الاعتذار'}
+                  </button>
+                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10 text-sm sm:text-base active:scale-95">إلغاء</button>
+                </div>
+
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </AnimatePresence>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+      `}</style>
     </motion.div>
   );
 }
