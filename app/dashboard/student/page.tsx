@@ -92,7 +92,6 @@ export default function StudentDashboard() {
   const [existingDocRequest, setExistingDocRequest] = useState<any>(null);
   const [isSubmittingDocs, setIsSubmittingDocs] = useState(false);
 
-  // حالات نظام التقييم الجامعي
   const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
   const [currentEvalIndex, setCurrentEvalIndex] = useState(0);
   const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
@@ -125,117 +124,125 @@ export default function StudentDashboard() {
     try {
       setLoading(true);
       
-      const data = await fetchStudentDashboardData(true); 
+      let dashboardData: any = {};
+      try {
+         // محاولة سحب البيانات من الهوك
+         dashboardData = await fetchStudentDashboardData(true) || {}; 
+      } catch (e) {
+         console.warn("Hook fetch failed, using fallback");
+      }
       
-      if (data) {
-        setStudentData(data.student);
-        setUpcomingExams(data.exams || []);
-        setUpcomingAssignments(data.assignments || []);
-        setTodaysSchedule(data.todaysSchedule || []);
-        setPeriods(data.periods || []);
-
-        const studentId = data.student?.id;
-        
-        if (studentId) {
-            const [ badgesRes, gradesRes, absentCountRes, totalCountRes, excusesRes, trackRes, docsRes, settingsRes ] = await Promise.all([
-              supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
-              supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
-              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
-              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
-              supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
-              supabase.from('students').select('next_year_track, track_selection_date, sections(id, name, classes(name, level))').eq('id', studentId).maybeSingle(),
-              supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', currentYear).maybeSingle(),
-              // 🚀 استخدام maybeSingle بأمان
-              supabase.from('platform_settings').select('is_evaluations_active').limit(1).maybeSingle()
-            ]);
+      let currentStudent = dashboardData.student;
+      
+      // 🚀 نظام الطوارئ (Fallback) - إذا فشل الهوك (خطأ 400)، نسحب بيانات الطالب يدوياً وبقوة
+      if (!currentStudent) {
+         const { data: manualStudent } = await supabase
+            .from('students')
+            .select('id, section_id, next_year_track, track_selection_date, sections(id, name, classes(name, level)), users(full_name, avatar_url)')
+            .eq('id', user.id)
+            .maybeSingle();
             
-            if (badgesRes.data) setMyBadges(badgesRes.data);
-            if (excusesRes.data) setExcuses(excusesRes.data);
-            if (docsRes.data) setExistingDocRequest(docsRes.data);
+         if (manualStudent) {
+            currentStudent = manualStudent;
+         }
+      }
 
-            let sectionIdForEvals = data.student?.section_id;
+      if (currentStudent) {
+        setStudentData(currentStudent);
+        setUpcomingExams(dashboardData.exams || []);
+        setUpcomingAssignments(dashboardData.assignments || []);
+        setTodaysSchedule(dashboardData.todaysSchedule || []);
+        setPeriods(dashboardData.periods || []);
 
-            if (trackRes.data) {
-                setStudentData((prev: any) => ({ ...prev, ...trackRes.data }));
-                if(trackRes.data.sections?.id) sectionIdForEvals = trackRes.data.sections.id;
-            }
+        const studentId = currentStudent.id;
+        // الاعتماد على section_id لتحديد المعلمين
+        let sectionIdForEvals = currentStudent.section_id || currentStudent.sections?.id;
+        
+        const [ badgesRes, gradesRes, absentCountRes, totalCountRes, excusesRes, docsRes, settingsRes ] = await Promise.all([
+          supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
+          supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
+          supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
+          supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
+          supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
+          supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', currentYear).maybeSingle(),
+          supabase.from('platform_settings').select('is_evaluations_active').limit(1).maybeSingle()
+        ]);
+        
+        if (badgesRes.data) setMyBadges(badgesRes.data);
+        if (excusesRes.data) setExcuses(excusesRes.data);
+        if (docsRes.data) setExistingDocRequest(docsRes.data);
 
-            if (gradesRes.data && gradesRes.data.length > 0) {
-                const formattedGrades = gradesRes.data.map((g: any) => ({ ...g, exam: { ...g.exams, subject: g.exams?.subjects } }));
-                setRecentGrades(formattedGrades);
-            } else { setRecentGrades(data.grades || []); }
+        if (gradesRes.data && gradesRes.data.length > 0) {
+            const formattedGrades = gradesRes.data.map((g: any) => ({ ...g, exam: { ...g.exams, subject: g.exams?.subjects } }));
+            setRecentGrades(formattedGrades);
+        } else { setRecentGrades(dashboardData.grades || []); }
 
-            if (!absentCountRes.error && absentCountRes.count !== null) {
-              setAbsentPeriods(absentCountRes.count);
-              setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
-              if (totalCountRes.count && totalCountRes.count > 0) {
-                setAttendanceStats({ rate: Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100) });
-              } else { setAttendanceStats({ rate: 100 }); }
-            }
-
-            // 🚀 التحديث الأقوى لنظام التقييم
-            const isEvalActive = settingsRes.data?.is_evaluations_active === true;
-
-            if (isEvalActive && sectionIdForEvals) {
-               // جلب المعلمين من الجدول (Schedule) ومن الإسناد (Teacher Assignments) لضمان عدم ضياع أي معلم
-               const [ { data: scheduleData }, { data: assignmentsData } ] = await Promise.all([
-                  supabase.from('schedule').select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)').eq('section_id', sectionIdForEvals),
-                  supabase.from('teacher_assignments').select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)').eq('section_id', sectionIdForEvals)
-               ]);
-
-               const allTeacherLinks = [...(scheduleData || []), ...(assignmentsData || [])];
-
-               if (allTeacherLinks.length > 0) {
-                  // تنظيف التكرارات
-                  const uniqueTeachersMap = new Map();
-                  allTeacherLinks.forEach((slot:any) => {
-                     if(slot.teacher_id && !uniqueTeachersMap.has(slot.teacher_id)) {
-                        const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
-                        uniqueTeachersMap.set(slot.teacher_id, {
-                           teacher_id: slot.teacher_id,
-                           full_name: u?.full_name || 'معلم',
-                           avatar_url: u?.avatar_url,
-                           subject_name: slot.subjects?.name || 'مادة دراسية'
-                        });
-                     }
-                  });
-                  const allMyTeachers = Array.from(uniqueTeachersMap.values());
-
-                  // جلب التقييمات السابقة
-                  const { data: myEvals } = await supabase
-                     .from('student_evaluations_of_teachers')
-                     .select('teacher_id')
-                     .eq('student_id', studentId)
-                     .eq('academic_year', currentYear)
-                     .eq('semester', currentSemester);
-
-                  const evaluatedTeacherIds = new Set((myEvals || []).map(e => e.teacher_id));
-
-                  // فلترة المعلمين المتبقين
-                  const pending = allMyTeachers.filter(t => !evaluatedTeacherIds.has(t.teacher_id));
-                  if(pending.length > 0) {
-                     setPendingEvaluations(pending);
-                     setIsEvalModalOpen(true); // فتح البوابة
-                  }
-               }
-            }
-
-            try {
-               const classLevelStr = String(trackRes.data?.sections?.classes?.name || data.student?.sections?.classes?.name || '');
-               const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
-               
-               if (cLevel) {
-                  const [allocRes, timeRes, keysRes] = await Promise.all([
-                    supabase.from('student_seat_allocations').select('seat_number, exam_committees(name, location)').eq('student_id', studentId).maybeSingle(),
-                    supabase.from('exam_timetables').select('*, subjects(name)').eq('class_level', cLevel).order('exam_date', { ascending: true }).order('start_time', { ascending: true }),
-                    supabase.from('exam_answer_keys').select('*, subjects(name)').eq('class_level', cLevel).eq('is_published', true).order('created_at', { ascending: false })
-                  ]);
-                  if (allocRes.data) setSeatAllocation(allocRes.data);
-                  if (timeRes.data) setExamTimetables(timeRes.data);
-                  if (keysRes.data) setAnswerKeys(keysRes.data);
-               }
-            } catch (examErr) { console.error(examErr); }
+        if (!absentCountRes.error && absentCountRes.count !== null) {
+          setAbsentPeriods(absentCountRes.count);
+          setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
+          if (totalCountRes.count && totalCountRes.count > 0) {
+            setAttendanceStats({ rate: Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100) });
+          } else { setAttendanceStats({ rate: 100 }); }
         }
+
+        // 🚀 نظام التقييم الإجباري للجامعة (The Gatekeeper) - تم إصلاح أخطاء 404
+        const isEvalActive = settingsRes.data?.is_evaluations_active === true;
+
+        if (isEvalActive && sectionIdForEvals) {
+           // نعتمد فقط على جدول `schedule` لتجنب خطأ 404 الخاص بـ teacher_assignments
+           const { data: myScheduleRaw } = await supabase
+             .from('schedule')
+             .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
+             .eq('section_id', sectionIdForEvals);
+
+           if (myScheduleRaw && myScheduleRaw.length > 0) {
+              const uniqueTeachersMap = new Map();
+              myScheduleRaw.forEach((slot:any) => {
+                 if(slot.teacher_id && !uniqueTeachersMap.has(slot.teacher_id)) {
+                    const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
+                    uniqueTeachersMap.set(slot.teacher_id, {
+                       teacher_id: slot.teacher_id,
+                       full_name: u?.full_name || 'معلم',
+                       avatar_url: u?.avatar_url,
+                       subject_name: slot.subjects?.name || 'مادة دراسية'
+                    });
+                 }
+              });
+              const allMyTeachers = Array.from(uniqueTeachersMap.values());
+
+              const { data: myEvals } = await supabase
+                 .from('student_evaluations_of_teachers')
+                 .select('teacher_id')
+                 .eq('student_id', studentId)
+                 .eq('academic_year', currentYear)
+                 .eq('semester', currentSemester);
+
+              const evaluatedTeacherIds = new Set((myEvals || []).map(e => e.teacher_id));
+
+              const pending = allMyTeachers.filter(t => !evaluatedTeacherIds.has(t.teacher_id));
+              if(pending.length > 0) {
+                 setPendingEvaluations(pending);
+                 setIsEvalModalOpen(true); 
+              }
+           }
+        }
+
+        // جلب بيانات المنظومة الامتحانية بشكل معزول
+        try {
+           const classLevelStr = String(currentStudent.next_year_track || currentStudent.sections?.classes?.name || currentStudent.sections?.classes?.level || currentStudent.class_name || '');
+           const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
+           
+           if (cLevel) {
+              const [allocRes, timeRes, keysRes] = await Promise.all([
+                supabase.from('student_seat_allocations').select('seat_number, exam_committees(name, location)').eq('student_id', studentId).maybeSingle(),
+                supabase.from('exam_timetables').select('*, subjects(name)').eq('class_level', cLevel).order('exam_date', { ascending: true }).order('start_time', { ascending: true }),
+                supabase.from('exam_answer_keys').select('*, subjects(name)').eq('class_level', cLevel).eq('is_published', true).order('created_at', { ascending: false })
+              ]);
+              if (allocRes.data) setSeatAllocation(allocRes.data);
+              if (timeRes.data) setExamTimetables(timeRes.data);
+              if (keysRes.data) setAnswerKeys(keysRes.data);
+           }
+        } catch (examErr) { console.error(examErr); }
       }
     } catch (error) { console.error(error); } 
     finally { setLoading(false); isFetchingRef.current = false; }
@@ -1008,6 +1015,7 @@ export default function StudentDashboard() {
 
           </div>
 
+          {/* 🌟 Column 2: Narrow Area */}
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
@@ -1152,7 +1160,7 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة التقييم الإجباري للجامعة (The Gatekeeper) */}
+      {/* 🚀 نافذة التقييم الإجباري (The Gatekeeper) */}
       <AnimatePresence>
         {isEvalModalOpen && pendingEvaluations.length > 0 && (
           <Dialog.Root open={isEvalModalOpen}>
