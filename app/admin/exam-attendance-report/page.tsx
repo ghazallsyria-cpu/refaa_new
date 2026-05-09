@@ -49,33 +49,48 @@ export default function ExamAttendanceReport() {
       const selected = timetables.find(t => t.id === selectedTimetableId);
       setExamData(selected);
 
-      // 🚀 جلب الطلاب الغائبين والمحرومين (بسبب الغش) في هذا الاختبار
-      const { data } = await supabase
-        .from('exam_attendance')
+      // 1. جلب التوزيع للطلاب في هذا الاختبار
+      const { data: allocs } = await supabase
+        .from('student_seat_allocations')
         .select(`
-          status,
-          student_id,
-          committee_id,
-          exam_committees(name),
-          users!exam_attendance_student_id_fkey(full_name, national_id),
-          student_seat_allocations!inner(seat_number)
+          seat_number, committee_id, student_id, exam_committees(name),
+          students ( id, users(full_name, national_id), sections(name, classes(name, level)) )
         `)
-        .eq('timetable_id', selectedTimetableId)
-        .in('status', ['absent', 'cheating']) // 🚀 جلب الحالتين
-        .eq('student_seat_allocations.timetable_id', selectedTimetableId); 
+        .eq('academic_year', currentYear)
+        .eq('semester', currentSemester);
 
-      // معالجة البيانات بسبب العلاقات المتشابكة
-      const formatted = (data || []).map((record: any) => ({
-         id: record.student_id,
-         name: record.users?.full_name || 'غير معروف',
-         nationalId: record.users?.national_id || '---',
-         committee: record.exam_committees?.name || 'غير محدد',
-         status: record.status, // إضافة الحالة للتمييز بين الغياب والغش
-         // نجلب رقم الجلوس من مصفوفة التوزيع لو وجدت
-         seat: Array.isArray(record.student_seat_allocations) ? record.student_seat_allocations[0]?.seat_number : record.student_seat_allocations?.seat_number || '---'
-      })).sort((a, b) => a.seat - b.seat);
+      const filteredAllocs = (allocs || []).filter((a: any) => {
+         const classLvl = a.students?.sections?.classes?.level;
+         return classLvl === selected?.class_level;
+      });
 
+      // 2. جلب الحضور والغش
+      const { data: attRecords } = await supabase.from('exam_attendance').select('*').eq('timetable_id', selectedTimetableId);
+      const { data: cheatRecords } = await supabase.from('exam_cheating_reports').select('*').eq('timetable_id', selectedTimetableId);
+
+      const formatted = [];
+
+      filteredAllocs.forEach((alloc: any) => {
+         const stdId = alloc.student_id;
+         const isCheater = cheatRecords?.some(c => c.student_id === stdId);
+         const attStatus = attRecords?.find(a => a.student_id === stdId)?.status;
+
+         // 🚀 الطالب يُضاف للتقرير إذا كان "غائب" ولم يعمل له محضر غش، أو إذا كان له محضر غش صريح
+         if (isCheater || attStatus === 'absent') {
+            formatted.push({
+               id: stdId,
+               name: alloc.students?.users?.full_name || 'غير معروف',
+               nationalId: alloc.students?.users?.national_id || '---',
+               committee: alloc.exam_committees?.name || 'غير محدد',
+               status: isCheater ? 'cheating' : 'absent',
+               seat: alloc.seat_number
+            });
+         }
+      });
+
+      formatted.sort((a, b) => a.seat - b.seat);
       setAbsentStudents(formatted);
+
     } catch (error) {
       console.error(error);
     } finally {
@@ -116,7 +131,6 @@ export default function ExamAttendanceReport() {
 
       <div className="max-w-6xl mx-auto space-y-6 relative z-10">
         
-        {/* الهيدر الأنيق */}
         <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/5 blur-[80px] pointer-events-none rounded-full"></div>
           
@@ -141,7 +155,6 @@ export default function ExamAttendanceReport() {
           </div>
         </div>
 
-        {/* عرض النتائج */}
         {isLoading ? (
            <div className="flex justify-center p-20"><Loader2 className="w-12 h-12 animate-spin text-rose-500" /></div>
         ) : selectedTimetableId && absentStudents.length === 0 ? (
