@@ -5,13 +5,37 @@
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart2, Users, Star, MessageSquare, Loader2, Search, 
-  TrendingUp, TrendingDown, Trophy, AlertTriangle, Eye, X, Power
+  TrendingUp, TrendingDown, Trophy, AlertTriangle, Eye, X, Power, CheckCircle2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 import * as Dialog from '@radix-ui/react-dialog';
+// 🚀 استيراد دالة التاريخ التي تسببت بانهيار الصفحة!
+import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
+
+// 🚀 نقل المكونات للخارج لضمان عدم إعادة البناء والانهيار
+const StarDisplay = ({ val }: { val: number }) => (
+  <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 px-2 py-1 rounded-lg font-black text-sm border border-amber-500/20 shadow-inner w-fit">
+    <Star className="w-3.5 h-3.5 fill-amber-500 drop-shadow-sm" /> {val}
+  </div>
+);
+
+const ProgressBar = ({ value, label, colorClass }: { value: number, label: string, colorClass: string }) => {
+  const percentage = (value / 5) * 100;
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between items-center mb-1 text-[10px] font-bold text-slate-500">
+        <span>{label}</span><span className="text-slate-800">{value} / 5</span>
+      </div>
+      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200 shadow-inner">
+        <motion.div initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 1 }} className={cn("h-full rounded-full", colorClass)}></motion.div>
+      </div>
+    </div>
+  );
+};
 
 export default function StudentEvaluationsDashboard() {
   const { authRole, userRole } = useAuth() as any;
@@ -22,11 +46,9 @@ export default function StudentEvaluationsDashboard() {
   const [teacherStats, setTeacherStats] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 🚀 حالة زر التحكم المركزي
   const [isEvalActive, setIsEvalActive] = useState(false);
   const [settingsId, setSettingsId] = useState<any>(null);
 
-  // حالات قراءة التعليقات
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
@@ -37,14 +59,13 @@ export default function StudentEvaluationsDashboard() {
     const fetchEvaluationsAndSettings = async () => {
       setIsLoading(true);
       try {
-        // 🚀 جلب حالة التفعيل من إعدادات المنصة
-        const { data: settingsData } = await supabase.from('platform_settings').select('id, is_evaluations_active').limit(1).single();
+        // 🚀 استخدام maybeSingle بدلاً من single لتجنب الانهيار إذا كان الجدول فارغاً
+        const { data: settingsData } = await supabase.from('platform_settings').select('id, is_evaluations_active').limit(1).maybeSingle();
         if (settingsData) {
            setSettingsId(settingsData.id);
            setIsEvalActive(settingsData.is_evaluations_active || false);
         }
 
-        // جلب التقييمات
         const { data, error } = await supabase
           .from('student_evaluations_of_teachers')
           .select(`*, teachers(users(full_name, avatar_url))`)
@@ -55,16 +76,22 @@ export default function StudentEvaluationsDashboard() {
 
         const groupedData = (data || []).reduce((acc: any, curr: any) => {
           const tId = curr.teacher_id;
+          // معالجة آمنة لاسم المعلم وصورته
+          const u = Array.isArray(curr.teachers?.users) ? curr.teachers.users[0] : curr.teachers?.users;
+          
           if (!acc[tId]) {
             acc[tId] = {
-              teacher_id: tId, name: curr.teachers?.users?.full_name || 'معلم غير معروف', avatar: curr.teachers?.users?.avatar_url,
-              subject: curr.subject_name, total_evals: 0, sci_sum: 0, mgt_sum: 0, hum_sum: 0, feedbacks: []
+              teacher_id: tId, 
+              name: u?.full_name || 'معلم غير معروف', 
+              avatar: u?.avatar_url,
+              subject: curr.subject_name || 'غير محدد', 
+              total_evals: 0, sci_sum: 0, mgt_sum: 0, hum_sum: 0, feedbacks: []
             };
           }
           acc[tId].total_evals += 1;
-          acc[tId].sci_sum += curr.scientific_rating;
-          acc[tId].mgt_sum += curr.management_rating;
-          acc[tId].hum_sum += curr.humanity_rating;
+          acc[tId].sci_sum += curr.scientific_rating || 0;
+          acc[tId].mgt_sum += curr.management_rating || 0;
+          acc[tId].hum_sum += curr.humanity_rating || 0;
           if (curr.feedback && curr.feedback.trim() !== '') acc[tId].feedbacks.push({ text: curr.feedback, date: curr.created_at });
           return acc;
         }, {});
@@ -89,7 +116,6 @@ export default function StudentEvaluationsDashboard() {
     if (['admin', 'management'].includes(currentRole)) fetchEvaluationsAndSettings();
   }, [currentRole]);
 
-  // 🚀 دالة تبديل حالة التقييم
   const toggleEvalSystem = async () => {
      if (!settingsId) return;
      const confirmMsg = isEvalActive 
@@ -115,27 +141,7 @@ export default function StudentEvaluationsDashboard() {
 
   const topTeachers = teacherStats.slice(0, 3);
   const bottomTeachers = teacherStats.filter(t => t.overall_avg < 3.5).slice(-3).reverse();
-  const filteredTeachers = teacherStats.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-  const StarDisplay = ({ val }: { val: number }) => (
-    <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 px-2 py-1 rounded-lg font-black text-sm border border-amber-500/20 shadow-inner w-fit">
-      <Star className="w-3.5 h-3.5 fill-amber-500 drop-shadow-sm" /> {val}
-    </div>
-  );
-
-  const ProgressBar = ({ value, label, colorClass }: { value: number, label: string, colorClass: string }) => {
-    const percentage = (value / 5) * 100;
-    return (
-      <div className="mb-3">
-        <div className="flex justify-between items-center mb-1 text-[10px] font-bold text-slate-500">
-          <span>{label}</span><span className="text-slate-800">{value} / 5</span>
-        </div>
-        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200 shadow-inner">
-          <motion.div initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 1 }} className={cn("h-full rounded-full", colorClass)}></motion.div>
-        </div>
-      </div>
-    );
-  };
+  const filteredTeachers = teacherStats.filter(t => String(t.name).toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8 font-cairo text-slate-800 pb-32" dir="rtl">
@@ -173,7 +179,7 @@ export default function StudentEvaluationsDashboard() {
               {/* 🚀 الزر المركزي السحري */}
               <button 
                 onClick={toggleEvalSystem}
-                disabled={isToggling}
+                disabled={isToggling || !settingsId}
                 className={cn("px-6 py-4 rounded-2xl border flex items-center justify-center gap-3 font-black transition-all shadow-md active:scale-95 disabled:opacity-50 flex-1 md:flex-none", isEvalActive ? "bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100" : "bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100")}
               >
                  {isToggling ? <Loader2 className="w-6 h-6 animate-spin" /> : <Power className="w-6 h-6" />}
@@ -305,7 +311,7 @@ export default function StudentEvaluationsDashboard() {
                     <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 relative">
                        <div className="absolute top-4 right-4 w-6 h-6 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-black text-slate-500">👤</div>
                        <p className="text-sm font-bold text-slate-700 leading-relaxed pr-8 whitespace-pre-wrap">"{fb.text}"</p>
-                       <p className="text-[9px] font-bold text-slate-400 mt-3 border-t border-slate-200 pt-2 text-left" dir="ltr">{format(new Date(fb.date), 'dd MMM yyyy - hh:mm a')}</p>
+                       <p className="text-[9px] font-bold text-slate-400 mt-3 border-t border-slate-200 pt-2 text-left" dir="ltr">{format(new Date(fb.date), 'dd MMM yyyy - hh:mm a', { locale: arSA })}</p>
                     </div>
                   ))}
                 </div>
