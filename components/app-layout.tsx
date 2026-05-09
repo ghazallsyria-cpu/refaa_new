@@ -5,10 +5,11 @@ import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { Footer } from './footer';
 import { useEffect, useState } from 'react';
-import { School, AlertTriangle } from 'lucide-react';
+import { School, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/auth-context';
 import { cn } from '../lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
+import { supabase } from '../lib/supabase'; // 🚀 استيراد قاعدة البيانات للتحقق السري
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   // ==========================================
@@ -35,14 +36,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); 
   
+  // 🚀 حالة نظام التعافي التلقائي
+  const [isVerifyingClosure, setIsVerifyingClosure] = useState(false);
+
   // ==========================================
   // 🌍 4. الصفحات العامة (التي لا تحتاج تسجيل دخول أو تحويل قسري)
-  // 🚀 التعديل: أضفنا المسار '/' لكي نعتبر الصفحة الرئيسية "عامة" ولا يتم طرد المستخدم منها
   // ==========================================
   const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
   const isLivePage = pathname === '/live'; 
-  const isRootPage = pathname === '/'; // الصفحة الرئيسية الجديدة (الحرم الرقمي)
+  const isRootPage = pathname === '/'; 
 
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage || isRootPage;
 
@@ -58,8 +61,34 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ==========================================
+  // 🛡️ 5. نظام التعافي التلقائي (Auto-Healing Cache)
+  // 🚀 يتحقق سرياً من قاعدة البيانات إذا ظهرت شاشة الإغلاق لحل مشكلة الكاش المسمم
+  // ==========================================
+  useEffect(() => {
+    if (platformClosed && !isPublicPage) {
+      let isMounted = true;
+      const verifyRealClosureStatus = async () => {
+        setIsVerifyingClosure(true);
+        try {
+          const { data } = await supabase.from('platform_settings').select('is_open').limit(1).maybeSingle();
+          if (data && (data.is_open === true || String(data.is_open).toLowerCase() === 'true')) {
+            // 🚨 اكتشاف خلل! المنصة مفتوحة ولكن الكاش يكذب. مسح الكاش والإنعاش التلقائي
+            localStorage.removeItem('school_settings');
+            if (isMounted) window.location.reload(); 
+          }
+        } catch (e) {
+          console.error("Verification failed", e);
+        } finally {
+          if (isMounted) setIsVerifyingClosure(false);
+        }
+      };
+      verifyRealClosureStatus();
+      return () => { isMounted = false; };
+    }
+  }, [platformClosed, isPublicPage]);
+
+  // ==========================================
   // 👮 6. جدار الحماية (Authorization Guard)
-  // 🚀 التعديل: حذفنا شرط 'isRoot' من عمليات المنع لكي يسمح النظام بدخولها
   // ==========================================
   const getAuthorization = () => {
     if (isChecking || isPublicPage || !user || !authRole) return true; 
@@ -82,31 +111,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAuthorized = getAuthorization();
 
-// ==========================================
+  // ==========================================
   // 🚀 7. التوجيه الإجباري (Auto-Redirect)
   // ==========================================
   useEffect(() => {
-    if (isChecking || isPublicPage || !user) return;
+    // 🚀 التعديل: لا تقم بأي توجيه إذا لم يتم تحميل الرتبة بعد لتجنب التضارب
+    if (isChecking || isPublicPage || !user || !authRole) return;
     
-    // إجباره على صفحة تغيير كلمة المرور
     if (mustResetPassword && !isResetPasswordPage) { router.push('/reset-password'); return; }
-    if (!authRole) return;
     
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
-    // 🌟 الخدعة الذكية: إجبار الجميع على رؤية "الحرم الرقمي" في أول دخول
     if (isDashboardRoute) {
       const hasSeenNewCampus = localStorage.getItem('seen_campus_v1');
       if (!hasSeenNewCampus) {
-        // نعطيه الختم لكي لا نزعجه في المرات القادمة
         localStorage.setItem('seen_campus_v1', 'true'); 
-        // ونرسله فوراً وبقوة إلى الصفحة الرئيسية الساحرة!
         router.push('/'); 
         return; 
       }
     }
 
-    // توجيه كل رتبة للوحة القيادة (Dashboard) الخاصة بها بعد التحقق
     if (authRole === 'student') { 
       if (isDashboardRoute && !pathname.startsWith('/dashboard/student')) router.push('/dashboard/student'); 
     }
@@ -122,9 +146,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, [pathname, authRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
 
   // ==========================================
-  // ⏳ 8. شاشة التحميل
+  // ⏳ 8. شاشة التحميل الحاجزة
+  // 🚀 التعديل الجذري: ننتظر حتى وصول الرتبة (authRole) ولا نستعجل أبداً
   // ==========================================
-  if (isChecking || (!isAuthorized && !isPublicPage)) {
+  const isRolePending = !!user && !authRole;
+
+  if (isChecking || isRolePending || (!isAuthorized && !isPublicPage)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#02040a]/90 backdrop-blur-xl z-50 fixed inset-0">
         <div className="relative flex flex-col items-center gap-4">
@@ -137,18 +164,40 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ==========================================
   // 🛑 9. شاشة إغلاق المنصة
+  // 🚀 حماية إضافية: الإدارة معفية تماماً من رؤية هذه الشاشة 
   // ==========================================
-  if (platformClosed && !isPublicPage) {
+  const isExemptFromClosure = ['admin', 'management'].includes(authRole);
+
+  if (platformClosed && !isPublicPage && !isExemptFromClosure) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-transparent p-4 text-center relative overflow-hidden" dir="rtl">
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-rose-600 to-red-900 shadow-[0_0_40px_rgba(225,29,72,0.5)] mb-8 border border-rose-500/30 relative z-10">
           <School className="h-12 w-12 text-white" />
         </motion.div>
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel p-10 rounded-[2.5rem] max-w-md w-full relative z-10">
-          <div className="flex justify-center mb-6"><div className="bg-amber-500/10 p-4 rounded-full border border-amber-500/20 animate-bounce"><AlertTriangle className="h-10 w-10 text-amber-500" /></div></div>
+          <div className="flex justify-center mb-6">
+            <div className="bg-amber-500/10 p-4 rounded-full border border-amber-500/20 animate-bounce">
+              <AlertTriangle className="h-10 w-10 text-amber-500" />
+            </div>
+          </div>
+          
           <h1 className="text-3xl font-black text-white mb-4 tracking-tight drop-shadow-md">المنصة مغلقة مؤقتاً</h1>
-          <p className="text-slate-300 mb-8 font-bold text-sm bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">{closeMessage}</p>
-          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-[0_0_20px_rgba(245,158,11,0.3)] text-sm font-black text-slate-950 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 transition-all active:scale-95 border border-amber-300/50">العودة لتسجيل الدخول</button>
+          
+          {/* 🚀 إظهار جاري التحقق أثناء التعافي التلقائي */}
+          {isVerifyingClosure ? (
+            <div className="flex flex-col items-center gap-2 mb-8 bg-black/40 p-4 rounded-2xl border border-white/5">
+               <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
+               <p className="text-sm font-bold text-amber-400">جاري التحقق اللحظي من حالة السيرفر...</p>
+            </div>
+          ) : (
+            <p className="text-slate-300 mb-8 font-bold text-sm bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
+              {closeMessage}
+            </p>
+          )}
+
+          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-[0_0_20px_rgba(245,158,11,0.3)] text-sm font-black text-slate-950 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 transition-all active:scale-95 border border-amber-300/50">
+            العودة لتسجيل الدخول
+          </button>
         </motion.div>
       </div>
     );
@@ -156,8 +205,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ==========================================
   // 🔓 10. تخطيط الصفحات العامة (الرئيسية، تسجيل الدخول)
-  // 🚀 التعديل: جعلنا الصفحة الرئيسية تظهر بدون شريط جانبي وبدون هيدر 
-  // لكي نترك مجالاً لعرض التصميم السينمائي الذي بنيناه في app/page.tsx
   // ==========================================
   if (isPublicPage) { 
     return (
