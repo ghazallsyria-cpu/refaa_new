@@ -6,7 +6,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
-  Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info
+  Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info,
+  AlertCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +16,7 @@ import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
+import * as Dialog from '@radix-ui/react-dialog'; // 🚀 استيراد النوافذ المنبثقة لقراءة الأعذار
 
 export default function ExamCommitteesControl() {
   const { authRole, userRole } = useAuth() as any;
@@ -33,7 +35,6 @@ export default function ExamCommitteesControl() {
   const [uniqueExamDates, setUniqueExamDates] = useState<string[]>([]);
   
   const [isLoading, setIsLoading] = useState(true);
-  // 🚀 فصل التبويبات إلى 3 للحصول على ترتيب مثالي
   const [activeTab, setActiveTab] = useState<'management' | 'invigilators_radar' | 'heads_radar'>('management');
   
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -42,6 +43,10 @@ export default function ExamCommitteesControl() {
   const [isHeadsModalOpen, setIsHeadsModalOpen] = useState(false);
   const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false);
   const [isClassPrintModalOpen, setIsClassPrintModalOpen] = useState(false);
+  
+  // 🚀 حالات قراءة العذر للمدير
+  const [isReadExcuseModalOpen, setIsReadExcuseModalOpen] = useState(false);
+  const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   
   const [selectedCommittee, setSelectedCommittee] = useState<any>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -94,7 +99,8 @@ export default function ExamCommitteesControl() {
       });
 
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
-      const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, users(full_name, avatar_url)');
+      // 🚀 جلب حالات التوقيع والأعذار (status, excuse_reason)
+      const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(sections(name, classes(level)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name), exam_timetables(exam_date, subjects(name))');
@@ -293,12 +299,21 @@ export default function ExamCommitteesControl() {
     const currentInvigs = invigilators.filter(i => i.committee_id === selectedCommittee.id);
     if (currentInvigs.length >= 2) { alert('أقصى حد مراقبين 2!'); return; }
     if (invigilators.some(i => i.teacher_id === selectedTeacherId && i.committee_id === selectedCommittee.id)) { alert('مكلف مسبقاً!'); return; }
-    try { await supabase.from('committee_invigilators').insert({ committee_id: selectedCommittee.id, teacher_id: selectedTeacherId }); setIsAssignModalOpen(false); setSelectedTeacherId(''); setTeacherSearchTerm(''); fetchData(); } catch (error) { alert('خطأ'); }
+    try { await supabase.from('committee_invigilators').insert({ committee_id: selectedCommittee.id, teacher_id: selectedTeacherId, status: 'pending' }); setIsAssignModalOpen(false); setSelectedTeacherId(''); setTeacherSearchTerm(''); fetchData(); } catch (error) { alert('خطأ'); }
   };
 
-  const handleRemoveInvigilator = async (id: string) => {
-    if (!confirm('إزالة المراقب؟')) return;
-    try { await supabase.from('committee_invigilators').delete().eq('id', id); fetchData(); } catch (error) { alert('خطأ'); }
+  const handleRemoveInvigilator = async (id: string, name: string) => {
+    if (!confirm(`هل أنت متأكد من إزالة المراقب (${name}) من اللجنة؟`)) return;
+    try { 
+      setIsReadExcuseModalOpen(false);
+      await supabase.from('committee_invigilators').delete().eq('id', id); 
+      fetchData(); 
+    } catch (error) { alert('خطأ في الإزالة'); }
+  };
+
+  const openReadExcuseModal = (invig: any) => {
+    setSelectedExcuseData(invig);
+    setIsReadExcuseModalOpen(true);
   };
 
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
@@ -413,7 +428,6 @@ export default function ExamCommitteesControl() {
               <p className="text-slate-500 font-bold text-sm mt-1">توزيع أبجدي مزدوج (سحّاب) وإدارة المهام</p>
             </div>
             
-            {/* 🚀 1. فصل التبويبات إلى 3 لتحقيق التنظيم والعدالة */}
             <div className="flex flex-wrap gap-2">
               <button onClick={() => setActiveTab('management')} className={`px-4 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab==='management' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>الإدارة واللجان</button>
               <button onClick={() => setActiveTab('invigilators_radar')} className={`px-4 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab==='invigilators_radar' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>رادار المراقبين</button>
@@ -421,14 +435,13 @@ export default function ExamCommitteesControl() {
             </div>
           </div>
 
-          {/* 🚀 2. تبويبة رادار المراقبين (فقط للمراقبين) */}
           {activeTab === 'invigilators_radar' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                   <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة (العدالة والتدوير)</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
                      {teachers.filter(t => getTeacherAssignments(t.id).length > 0).map(t => {
-                       const invigComms = getTeacherAssignments(t.id).map(a => committees.find(c => c.id === a.committee_id)?.name);
+                       const invigDuties = getTeacherAssignments(t.id);
                        return (
                          <div key={t.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col gap-4">
                            <div className="flex items-center gap-3">
@@ -437,13 +450,23 @@ export default function ExamCommitteesControl() {
                              </div>
                              <div>
                                <h4 className="font-black text-slate-800 text-sm">{t.full_name}</h4>
-                               <p className="text-[10px] font-bold text-slate-500 mt-1">إجمالي المراقبات: <span className="text-emerald-600 font-black text-sm">{invigComms.length}</span></p>
+                               <p className="text-[10px] font-bold text-slate-500 mt-1">إجمالي المراقبات: <span className="text-emerald-600 font-black text-sm">{invigDuties.length}</span></p>
                              </div>
                            </div>
                            <div className="bg-white p-3 rounded-xl border border-slate-100 flex-1">
                              <p className="text-[10px] font-bold text-slate-400 mb-2 flex items-center gap-1">اللجان المُكلف بها:</p>
-                             <div className="flex flex-wrap gap-1.5">
-                               {invigComms.map((cName, idx) => <span key={idx} className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md text-[10px] font-black border border-emerald-100">{cName}</span>)}
+                             <div className="flex flex-col gap-2">
+                               {invigDuties.map((duty, idx) => {
+                                  const cName = committees.find(c => c.id === duty.committee_id)?.name;
+                                  return (
+                                     <div key={idx} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
+                                        <span className="text-xs font-black text-slate-700">{cName}</span>
+                                        {duty.status === 'signed' ? <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> استلم</span> :
+                                         duty.status === 'excused' ? <button onClick={() => openReadExcuseModal(duty)} className="text-[9px] font-black text-rose-500 flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md hover:bg-rose-100 transition-colors"><AlertCircle className="w-3 h-3"/> عرض العذر</button> :
+                                         <span className="text-[9px] font-bold text-slate-400">بانتظار التوقيع</span>}
+                                     </div>
+                                  )
+                               })}
                              </div>
                            </div>
                          </div>
@@ -455,7 +478,6 @@ export default function ExamCommitteesControl() {
             </div>
           )}
 
-          {/* 🚀 3. تبويبة سجل رؤساء اللجان (منفصلة ومفصلة) */}
           {activeTab === 'heads_radar' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
@@ -484,7 +506,6 @@ export default function ExamCommitteesControl() {
             </div>
           )}
 
-          {/* ⚙️ تبويبة الإدارة واللجان الأساسية */}
           {activeTab === 'management' && (
             <div className="animate-in fade-in slide-in-from-bottom-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -499,7 +520,6 @@ export default function ExamCommitteesControl() {
                 ) : (
                   <>
                     <button onClick={handleDistribute} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Users className="w-5 h-5" /> توزيع السحّاب</button>
-                    {/* 🚀 زر طباعة الفصول البارز */}
                     <button onClick={() => setIsClassPrintModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md border border-emerald-600"><Layers className="w-5 h-5" /> طباعة بطاقات الفصول</button>
                     <button onClick={() => setIsHeadsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-amber-100 hover:bg-amber-200 text-amber-800 font-black rounded-xl flex justify-center items-center gap-2"><Crown className="w-5 h-5" /> تكليف الرؤساء</button>
                     <button onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة</button>
@@ -527,9 +547,9 @@ export default function ExamCommitteesControl() {
                             <p className="text-[10px] font-bold text-slate-400 mt-1">السعة: {committee.capacity} {committee.location && `| ${committee.location}`}</p>
                           </div>
                           <div className="flex gap-1">
-                             <button onClick={() => openViewModal(committee)} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"><Eye className="w-4 h-4"/></button>
-                             <button onClick={() => openCommitteeModal(committee)} className="p-1.5 bg-slate-50 text-slate-500 rounded-lg"><Edit3 className="w-4 h-4"/></button>
-                             <button onClick={() => handleDeleteCommittee(committee.id)} className="p-1.5 bg-rose-50 text-rose-500 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                             <button onClick={() => openViewModal(committee)} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"><Eye className="w-4 h-4"/></button>
+                             <button onClick={() => openCommitteeModal(committee)} className="p-1.5 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-200"><Edit3 className="w-4 h-4"/></button>
+                             <button onClick={() => handleDeleteCommittee(committee.id)} className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4"/></button>
                           </div>
                         </div>
 
@@ -539,14 +559,30 @@ export default function ExamCommitteesControl() {
                              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${isOverflow ? 'bg-rose-200 text-rose-800' : isFull ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{stdCount} طالب</span>
                           </div>
                           <div className="space-y-2">
-                            {commInvigs.map(inv => (
-                              <div key={inv.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                <span className="text-xs font-bold text-slate-700 truncate px-1">{getSafeName(inv.users)}</span>
-                                <button onClick={async () => { await supabase.from('committee_invigilators').delete().eq('id', inv.id); fetchData(); }} className="text-rose-400 hover:text-rose-600 p-1"><X className="w-3 h-3"/></button>
-                              </div>
-                            ))}
+                            {commInvigs.map(inv => {
+                              const tName = getSafeName(inv.users);
+                              return (
+                                <div key={inv.id} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 gap-1.5">
+                                  <div className="flex justify-between items-center">
+                                     <span className="text-xs font-bold text-slate-800 truncate pr-1">{tName}</span>
+                                     <button onClick={() => handleRemoveInvigilator(inv.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
+                                  </div>
+                                  
+                                  {/* 🚀 الرادار اللوني لحالة المراقب داخل اللجنة */}
+                                  <div className="flex items-center justify-between border-t border-slate-200/50 pt-1.5 mt-0.5">
+                                     {inv.status === 'signed' ? (
+                                        <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> وقع الاستلام</span>
+                                     ) : inv.status === 'excused' ? (
+                                        <button onClick={() => openReadExcuseModal(inv)} className="text-[9px] font-black text-rose-500 bg-rose-100 px-2 py-0.5 rounded flex items-center gap-1 hover:bg-rose-200 transition-colors"><AlertCircle className="w-3 h-3"/> عرض العذر</button>
+                                     ) : (
+                                        <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3"/> قيد الانتظار</span>
+                                     )}
+                                  </div>
+                                </div>
+                              )
+                            })}
                             {commInvigs.length < 2 && (
-                              <button onClick={() => { setSelectedCommittee(committee); setIsAssignModalOpen(true); }} className="w-full py-1.5 rounded-lg border border-dashed border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-50 transition-colors"><UserPlus className="w-3 h-3 inline mr-1" /> إضافة مراقب</button>
+                              <button onClick={() => { setSelectedCommittee(committee); setIsAssignModalOpen(true); }} className="w-full py-1.5 rounded-lg border border-dashed border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-50 transition-colors mt-2"><UserPlus className="w-3 h-3 inline mr-1" /> إضافة مراقب</button>
                             )}
                           </div>
                         </div>
@@ -805,13 +841,53 @@ export default function ExamCommitteesControl() {
 
               <div className="pt-4 shrink-0">
                 <button onClick={handleAddInvigilator} disabled={!selectedTeacherId} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 disabled:opacity-50 shadow-md flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-5 h-5" /> تأكيد التكليف
+                  <CheckCircle2 className="w-5 h-5" /> تأكيد التكليف للمراقبة
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* 🚀 نافذة (Modal) قراءة عذر المراقب */}
+      <AnimatePresence>
+        {isReadExcuseModalOpen && selectedExcuseData && (
+          <Dialog.Root open={isReadExcuseModalOpen} onOpenChange={setIsReadExcuseModalOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border border-slate-200 rounded-3xl w-[95%] max-w-md shadow-2xl z-50 p-6 sm:p-8" dir="rtl">
+                
+                <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                     <div className="p-3 bg-rose-50 rounded-xl text-rose-500"><AlertCircle className="w-6 h-6" /></div>
+                     <div>
+                       <Dialog.Title className="text-xl font-black text-slate-800">عذر مراقبة مقدّم</Dialog.Title>
+                       <p className="text-[10px] font-bold text-slate-400 mt-1">المعلم: {getSafeName(selectedExcuseData.users)}</p>
+                     </div>
+                  </div>
+                  <Dialog.Close className="text-slate-400 hover:text-rose-500 bg-slate-50 p-2 rounded-full transition-colors active:scale-90" onClick={() => setIsReadExcuseModalOpen(false)}>
+                    <X className="w-5 h-5" />
+                  </Dialog.Close>
+                </div>
+
+                <div className="space-y-4 mb-8">
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                     <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">نص الاعتذار المرفوع:</p>
+                     <p className="text-sm font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">{selectedExcuseData.excuse_reason || 'لا يوجد نص مرفق.'}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button onClick={() => handleRemoveInvigilator(selectedExcuseData.id, getSafeName(selectedExcuseData.users))} className="flex-1 py-3.5 sm:py-4 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-500 hover:text-white font-black rounded-xl transition-all flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95 shadow-sm">
+                    <Trash2 className="w-5 h-5" /> إعفاء المعلم من اللجنة
+                  </button>
+                </div>
+
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </AnimatePresence>
 
       {/* 👁️ نافذة استعراض اللجنة ونقل الطلاب */}
       {isViewModalOpen && selectedCommittee && (
