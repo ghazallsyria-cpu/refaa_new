@@ -18,7 +18,6 @@ export default function DigitalCover() {
   const [isAuthorizedHOD, setIsAuthorizedHOD] = useState(false);
   
   const [timetables, setTimetables] = useState<any[]>([]);
-  // 🚀 نحفظ جميع التخصصات لمعلمي المدرسة لفلترتها لاحقاً
   const [allTeacherSubjects, setAllTeacherSubjects] = useState<any[]>([]);
   
   const [selectedExamId, setSelectedExamId] = useState('');
@@ -34,28 +33,47 @@ export default function DigitalCover() {
       setIsLoading(true);
 
       try {
-        // 1. 🛡️ التحقق من الصلاحيات: هل هو مدير أم رئيس قسم؟
         let authorized = false;
+        let managedSubjectIds: string[] = []; // 🚀 مصفوفة لتخزين المواد التي يرأسها هذا المعلم
+
+        // 1. 🛡️ التحقق من الصلاحيات وتحديد نطاق الرؤية
         if (['admin', 'management'].includes(currentRole)) {
+          // الإدارة العليا ترى كل شيء
           authorized = true;
         } else if (currentRole === 'teacher') {
-          // فحص هل المعلم رئيس قسم (HOD)
-          const { data: hodData } = await supabase.from('department_heads').select('id').eq('teacher_id', user.id).maybeSingle();
-          if (hodData) authorized = true;
+          // 🚀 فحص دقيق: هل هو رئيس قسم؟ وما هي مواده؟
+          const { data: hodData } = await supabase
+            .from('department_heads')
+            .select('subject_id')
+            .eq('teacher_id', user.id);
+
+          if (hodData && hodData.length > 0) {
+            authorized = true;
+            // استخراج معرفات المواد التي يرأسها
+            managedSubjectIds = hodData.map(h => h.subject_id).filter(Boolean);
+          }
         }
 
         setIsAuthorizedHOD(authorized);
 
         if (authorized) {
-          // 2. جلب جداول الامتحانات
-          const { data: exams } = await supabase
+          // 2. 🚀 بناء استعلام الامتحانات بناءً على الصلاحية
+          let query = supabase
             .from('exam_timetables')
             .select('*, subjects(name)')
             .eq('academic_year', currentYear)
             .eq('semester', currentSemester)
             .order('exam_date');
-            
-          // 3. 🚀 جلب المعلمين مع موادهم للفلترة الذكية
+
+          // 🔒 إذا كان رئيس قسم (وليس إدارة عليا)، نُجبر النظام على إظهار مواده فقط
+          if (currentRole === 'teacher' && managedSubjectIds.length > 0) {
+            query = query.in('subject_id', managedSubjectIds);
+          }
+
+          const { data: exams, error: examsError } = await query;
+          if (examsError) console.error("Error fetching exams:", examsError);
+
+          // 3. جلب المعلمين مع موادهم لفلترة المصححين والمراجعين
           const { data: tSubj } = await supabase
             .from('teacher_subjects')
             .select('teacher_id, subject_id, teachers(users(full_name))');
@@ -69,22 +87,23 @@ export default function DigitalCover() {
         setIsLoading(false);
       }
     };
+    
     fetchInitialData();
   }, [user?.id, currentRole]);
 
-  // 🚀 استخراج المادة المحددة لجلب معلميها فقط
+  // 🚀 استخراج المادة المحددة من الاختبار المختار لجلب معلميها فقط
   const selectedSubjectId = useMemo(() => {
     if (!selectedExamId) return null;
     return timetables.find(t => t.id === selectedExamId)?.subject_id || null;
   }, [selectedExamId, timetables]);
 
-  // 🚀 فلترة المعلمين ليعرض فقط من يدرسون المادة المحددة في الاختبار
+  // 🚀 فلترة المعلمين: إظهار من يدرسون هذه المادة فقط
   const filteredTeachers = useMemo(() => {
     if (!selectedSubjectId) return [];
     
     const teachersOfSubject = allTeacherSubjects.filter(ts => ts.subject_id === selectedSubjectId);
     
-    // إزالة التكرار إن وجد
+    // إزالة التكرار
     const uniqueTeachers = new Map();
     teachersOfSubject.forEach(ts => {
       const name = ts.teachers?.users?.full_name || ts.teachers?.users?.[0]?.full_name;
@@ -97,7 +116,7 @@ export default function DigitalCover() {
   }, [selectedSubjectId, allTeacherSubjects]);
 
 
-  // تحديث عدد الأسئلة وجلب البيانات القديمة إن وجدت
+  // تحديث عدد الأسئلة وجلب البيانات القديمة (الغلاف المحفوظ سابقاً)
   useEffect(() => {
     if (!selectedExamId) {
       setRoles([]);
@@ -111,7 +130,7 @@ export default function DigitalCover() {
         setRoles(data);
         setNumQuestions(data.length);
       } else {
-        // تهيئة مصفوفة جديدة فارغة
+        // تهيئة جديدة
         const newRoles = Array.from({ length: numQuestions }, (_, i) => ({
           question_number: i + 1, grader_id: '', reviewer_id: ''
         }));
@@ -122,7 +141,6 @@ export default function DigitalCover() {
     fetchExisting();
   }, [selectedExamId]);
 
-  // تغيير عدد الأسئلة يدوياً
   const handleNumQuestionsChange = (newNum: number) => {
     const num = Math.min(20, Math.max(1, newNum));
     setNumQuestions(num);
@@ -130,12 +148,10 @@ export default function DigitalCover() {
     setRoles(prevRoles => {
       const newRoles = [...prevRoles];
       if (num > newRoles.length) {
-        // إضافة أسئلة جديدة
         for (let i = newRoles.length; i < num; i++) {
           newRoles.push({ question_number: i + 1, grader_id: '', reviewer_id: '' });
         }
       } else if (num < newRoles.length) {
-        // إزالة الأسئلة الزائدة
         newRoles.length = num;
       }
       return newRoles;
@@ -146,13 +162,13 @@ export default function DigitalCover() {
     const newRoles = [...roles];
     newRoles[index][field] = value;
     
-    // 🛡️ حماية منطقية: لا يمكن للمصحح أن يكون هو نفسه المراجع لنفس السؤال!
+    // 🛡️ حماية الجودة: لا يمكن للمصحح أن يراجع لنفسه
     if (field === 'grader_id' && newRoles[index].reviewer_id === value && value !== '') {
-      alert('تنبيه: لا يمكن تعيين نفس المعلم كمصحح ومراجع لنفس السؤال لضمان جودة التدقيق!');
+      alert('تنبيه أمني: لا يمكن تعيين نفس المعلم كمصحح ومراجع لنفس السؤال لضمان جودة التدقيق والنزاهة!');
       newRoles[index].reviewer_id = '';
     }
     if (field === 'reviewer_id' && newRoles[index].grader_id === value && value !== '') {
-      alert('تنبيه: لا يمكن تعيين نفس المعلم كمصحح ومراجع لنفس السؤال لضمان جودة التدقيق!');
+      alert('تنبيه أمني: لا يمكن تعيين نفس المعلم كمصحح ومراجع لنفس السؤال لضمان جودة التدقيق والنزاهة!');
       newRoles[index].grader_id = '';
     }
 
@@ -162,18 +178,16 @@ export default function DigitalCover() {
   const handleSave = async () => {
     if (!selectedExamId || !user?.id) return;
 
-    // التأكد من تعبئة جميع الحقول
     const isIncomplete = roles.some(r => !r.grader_id || !r.reviewer_id);
     if (isIncomplete) {
-      if(!confirm('هناك أسئلة لم يتم تعيين مصححين أو مراجعين لها. هل أنت متأكد من الحفظ بشكل جزئي؟')) return;
+      if(!confirm('تنبيه: هناك أسئلة لم يتم تعيين مصححين أو مراجعين لها. هل أنت متأكد من الحفظ بشكل جزئي؟')) return;
     }
 
     setIsSaving(true);
     try {
-      // حذف التوزيع القديم لهذا الاختبار لمنع التكرار والتضارب
+      // تنظيف التوزيع القديم
       await supabase.from('exam_grading_roles').delete().eq('timetable_id', selectedExamId);
 
-      // إدخال التوزيع الجديد
       const payload = roles.map(r => ({
         timetable_id: selectedExamId,
         question_number: r.question_number,
@@ -185,7 +199,7 @@ export default function DigitalCover() {
       const { error } = await supabase.from('exam_grading_roles').insert(payload);
       if (error) throw error;
       
-      alert('تم حفظ الغلاف الرقمي وتوثيقه بنجاح! الوثيقة الآن معتمدة للكنترول.');
+      alert('تم حفظ الغلاف الرقمي وتوثيقه بنجاح! الوثيقة الآن مشفرة ومعتمدة للكنترول.');
     } catch (error) {
       console.error(error);
       alert('حدث خطأ أثناء الحفظ.');
@@ -198,15 +212,22 @@ export default function DigitalCover() {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 animate-spin text-indigo-500" /></div>;
   }
 
-  // 🛑 صد أي شخص ليس مديراً أو رئيس قسم
+  // 🛑 صد المعلمين غير المصرح لهم
   if (!isAuthorizedHOD) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
-        <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center max-w-md w-full">
-          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6"><AlertTriangle className="w-12 h-12 text-rose-500" /></div>
-          <h1 className="text-2xl font-black text-slate-800 mb-2">منطقة محظورة! 🛑</h1>
-          <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">هذه الصفحة مخصصة لمدير النظام ورؤساء الأقسام (HOD) فقط لتوزيع مهام التصحيح.</p>
-          <button onClick={() => router.back()} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all shadow-md active:scale-95">العودة للخلف</button>
+        <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center max-w-md w-full relative overflow-hidden">
+          <div className="absolute -left-10 -top-10 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl"></div>
+          <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-rose-100 shadow-inner relative z-10">
+             <AlertTriangle className="w-12 h-12 text-rose-500" />
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 mb-2 relative z-10">صلاحية غير متوفرة! 🛑</h1>
+          <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed relative z-10">
+            هذه الشاشة محصنة ومخصصة <strong className="text-rose-600">لرؤساء الأقسام العلمية (HOD)</strong> وإدارة النظام فقط لضمان سرية توزيع المهام.
+          </p>
+          <button onClick={() => router.back()} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all shadow-[0_10px_20px_rgba(0,0,0,0.1)] active:scale-95 relative z-10">
+            العودة للخلف بأمان
+          </button>
         </div>
       </div>
     );
@@ -229,16 +250,20 @@ export default function DigitalCover() {
             </div>
           </div>
 
-          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-slate-50 p-5 rounded-3xl border border-slate-100">
+          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-slate-50 p-5 rounded-3xl border border-slate-100 shadow-inner">
             <div>
               <label className="block text-sm font-black text-slate-700 mb-2 flex items-center gap-2"><BookOpen className="w-4 h-4 text-indigo-500"/> 1. اختر المادة الامتحانية</label>
               <select value={selectedExamId} onChange={(e) => setSelectedExamId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
                 <option value="">-- اضغط لاختيار المادة --</option>
-                {timetables.map(t => <option key={t.id} value={t.id}>{t.subjects?.name} - الصف {t.class_level}</option>)}
+                {timetables.length === 0 ? (
+                   <option disabled>لا توجد اختبارات مسجلة لمادتك في الجدول</option>
+                ) : (
+                   timetables.map(t => <option key={t.id} value={t.id}>{t.subjects?.name} - الصف {t.class_level}</option>)
+                )}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-black text-slate-700 mb-2 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-indigo-500"/> 2. حدد عدد الأسئلة</label>
+              <label className="block text-sm font-black text-slate-700 mb-2 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-indigo-500"/> 2. حدد عدد الأسئلة الكلي</label>
               <input type="number" min="1" max="20" disabled={!selectedExamId} value={numQuestions} onChange={(e) => handleNumQuestionsChange(Number(e.target.value))} className="w-full bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-100" />
             </div>
           </div>
@@ -247,9 +272,9 @@ export default function DigitalCover() {
             <div className="relative z-10 space-y-4 animate-in fade-in slide-in-from-bottom-4">
               
               {filteredTeachers.length === 0 ? (
-                <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-700">
+                <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-700 shadow-inner">
                   <AlertTriangle className="w-6 h-6 shrink-0" />
-                  <p className="font-bold text-sm">تنبيه: لا يوجد معلمين مسجلين في النظام يدرسون هذه المادة! يرجى إضافة التخصصات للمعلمين أولاً من شاشة الكادر.</p>
+                  <p className="font-bold text-sm">تنبيه إداري: لا يوجد معلمين مسجلين في النظام لتدريس هذه المادة! يرجى التواصل مع الإدارة لربط التخصصات بالمعلمين أولاً.</p>
                 </div>
               ) : (
                 <>
@@ -264,21 +289,21 @@ export default function DigitalCover() {
                   ) : (
                     <div className="space-y-3">
                       {roles.map((role, idx) => (
-                        <div key={idx} className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-center p-3 sm:p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition-all hover:shadow-md">
-                          <div className="w-full sm:w-16 h-10 sm:h-14 bg-slate-100 text-slate-800 border border-slate-200 rounded-xl flex items-center justify-center font-black text-lg shrink-0">
+                        <div key={idx} className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-center p-3 sm:p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition-all hover:shadow-md group">
+                          <div className="w-full sm:w-16 h-10 sm:h-14 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl flex items-center justify-center font-black text-lg shrink-0 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-200 transition-colors">
                             {role.question_number}
                           </div>
                           
                           <div className="flex-1 w-full">
-                            <select value={role.grader_id} onChange={(e) => handleRoleChange(idx, 'grader_id', e.target.value)} className="w-full bg-emerald-50/30 border border-slate-200 rounded-xl p-3 sm:p-4 font-bold text-slate-800 outline-none focus:border-emerald-500 hover:border-emerald-300 transition-colors">
-                              <option value="" className="text-slate-400">- اختر المصحح -</option>
+                            <select value={role.grader_id} onChange={(e) => handleRoleChange(idx, 'grader_id', e.target.value)} className="w-full bg-emerald-50/30 border border-emerald-100 rounded-xl p-3 sm:p-4 font-bold text-slate-800 outline-none focus:border-emerald-500 hover:border-emerald-300 transition-colors cursor-pointer">
+                              <option value="" className="text-slate-400">- تعيين المصحح -</option>
                               {filteredTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                           </div>
 
                           <div className="flex-1 w-full">
-                            <select value={role.reviewer_id} onChange={(e) => handleRoleChange(idx, 'reviewer_id', e.target.value)} className="w-full bg-amber-50/30 border border-slate-200 rounded-xl p-3 sm:p-4 font-bold text-slate-800 outline-none focus:border-amber-500 hover:border-amber-300 transition-colors">
-                              <option value="" className="text-slate-400">- اختر المراجع -</option>
+                            <select value={role.reviewer_id} onChange={(e) => handleRoleChange(idx, 'reviewer_id', e.target.value)} className="w-full bg-amber-50/30 border border-amber-100 rounded-xl p-3 sm:p-4 font-bold text-slate-800 outline-none focus:border-amber-500 hover:border-amber-300 transition-colors cursor-pointer">
+                              <option value="" className="text-slate-400">- تعيين المراجع -</option>
                               {filteredTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                           </div>
@@ -287,9 +312,11 @@ export default function DigitalCover() {
                     </div>
                   )}
 
-                  <button onClick={handleSave} disabled={isSaving || isLoading} className="w-full mt-8 bg-slate-900 hover:bg-slate-800 text-white font-black py-4 sm:py-5 rounded-2xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:scale-100">
-                    {isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Save className="w-6 h-6 text-emerald-400" /> اعتماد وتوثيق الغلاف الرقمي</>}
-                  </button>
+                  <div className="pt-4 mt-8 border-t border-slate-100">
+                     <button onClick={handleSave} disabled={isSaving || isLoading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 sm:py-5 rounded-2xl shadow-[0_10px_20px_rgba(0,0,0,0.2)] flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:scale-100">
+                       {isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Save className="w-6 h-6 text-emerald-400" /> اعتماد وتوثيق الغلاف الرقمي</>}
+                     </button>
+                  </div>
                 </>
               )}
             </div>
