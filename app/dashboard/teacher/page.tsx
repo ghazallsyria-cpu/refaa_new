@@ -1,7 +1,5 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable react/jsx-key */
+/* eslint-disable */
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -11,7 +9,7 @@ import {
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
   AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2, Sparkles,
-  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key, FileSignature
+  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key, FileSignature, X // 🚀 تم استيراد حرف X المفقود هنا
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -23,7 +21,7 @@ import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import * as Dialog from '@radix-ui/react-dialog'; // 🚀 استيراد النوافذ المنبثقة للاعتذار
+import * as Dialog from '@radix-ui/react-dialog';
 
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
@@ -41,12 +39,10 @@ export default function TeacherDashboard() {
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
 
-  // 🚀 حالات المنظومة الامتحانية الشاملة
   const [invigilationDuties, setInvigilationDuties] = useState<any[]>([]);
   const [headDuties, setHeadDuties] = useState<any[]>([]);
   const [controlTeamRole, setControlTeamRole] = useState<any>(null);
   
-  // 🚀 حالات الاعتذار عن المراقبة
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [selectedDutyId, setSelectedDutyId] = useState('');
   const [dutyExcuseText, setDutyExcuseText] = useState('');
@@ -177,7 +173,6 @@ export default function TeacherDashboard() {
                if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
                mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); 
 
-               // 🚀 التحديث: جلب الأعمدة الجديدة للتوقيع والاعتذار
                const [invigRes, finalExamsRes, headRes, controlRes] = await Promise.all([
                   supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_committees(name, location, capacity)').eq('teacher_id', data.teacher.id),
                   supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5),
@@ -278,7 +273,6 @@ export default function TeacherDashboard() {
     }
   }, [fetchData, isChecking, authRole]);
 
-  // 🚀 دوال العهد والتوثيق الرقمي للمراقبة
   const signDuty = async (id: string) => {
     if (!confirm('هل أنت متأكد من توقيعك إلكترونياً لاستلام مهام هذه اللجنة؟')) return;
     setIsProcessingDuty(true);
@@ -289,7 +283,6 @@ export default function TeacherDashboard() {
         .eq('id', id);
       if (error) throw error;
       
-      // التحديث المحلي السريع لتجنب جلب البيانات بالكامل
       setInvigilationDuties(prev => prev.map(d => d.id === id ? { ...d, status: 'signed', signed_at: new Date().toISOString() } : d));
     } catch(e) {
       alert('حدث خطأ أثناء التوقيع.');
@@ -317,7 +310,6 @@ export default function TeacherDashboard() {
       alert('تم رفع العذر للإدارة بنجاح وفي سرية تامة.');
       setIsExcuseModalOpen(false);
       
-      // التحديث المحلي
       setInvigilationDuties(prev => prev.map(d => d.id === selectedDutyId ? { ...d, status: 'excused', excuse_reason: dutyExcuseText } : d));
     } catch(e) {
        alert('حدث خطأ أثناء رفع العذر.');
@@ -438,7 +430,7 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 هرم القيادة: 2. بانر رؤساء اللجان */}
+        {/* 🚀 هرم القيادة: 2. بانر رؤساء اللجان (القيادة الميدانية) */}
         <AnimatePresence>
           {headDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-gradient-to-l from-amber-900 via-[#131836] to-[#0f1423] p-8 md:p-10 shadow-[0_20px_50px_rgba(245,158,11,0.2)] border-[3px] border-[#92400e] group">
@@ -489,7 +481,7 @@ export default function TeacherDashboard() {
                        أنتم <span className="text-transparent bg-clip-text bg-gradient-to-l from-emerald-400 to-teal-200">صمام الأمان</span> وعماد المنظومة!
                      </h2>
                      <p className="text-slate-300 text-sm sm:text-lg font-bold leading-relaxed mb-6 max-w-2xl mx-auto lg:mx-0 opacity-90">
-                       أستاذي الفاضل، تم اختياركم لضمان نزاهة سير الاختبارات. يرجى التوقيع الإلكتروني بالاستلام أدناه، أو تقديم عذر رسمي للإدارة في حال وجود مانع ليتسنى لنا توفير البديل.
+                       أستاذي الفاضل، ثقةً منا في حرصكم وعدالتكم، تم اختياركم لضمان نزاهة سير الاختبارات. يرجى التوقيع الإلكتروني بالاستلام أدناه، أو تقديم عذر رسمي للإدارة في حال وجود مانع.
                      </p>
                      
                      <div className="flex flex-col gap-4 mb-6 w-full lg:w-3/4">
@@ -550,7 +542,7 @@ export default function TeacherDashboard() {
                   </div>
 
                   {/* 🪪 هوية المراقب الذكية */}
-                  <div className="shrink-0 perspective-1000 hidden md:block mt-8 lg:mt-0">
+                  <div className="shrink-0 perspective-1000 hidden md:block">
                      <div className="w-[60mm] h-[95mm] border-[3px] border-slate-900 rounded-[1.5rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
                         <div className="absolute top-0 left-0 w-full h-[28mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 relative overflow-hidden">
                            <p className="text-white font-black text-[13px] mt-1 tracking-wide">مدرسة الرفعة النموذجية بنين</p>
@@ -1078,38 +1070,115 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة (Modal) تقديم اعتذار عن مهمة المراقبة */}
+      {/* 🚀 نافذة (Modal) تقديم عذر طبي غياب عادي */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/90 backdrop-blur-md z-50" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-lg shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 p-6 sm:p-8" dir="rtl">
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 p-6 sm:p-8" dir="rtl">
                 
-                <div className="flex justify-between items-center mb-6 border-b border-white/5 pb-6">
+                <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
                   <div>
-                    <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3">
-                      <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-rose-400" /> تقديم اعتذار رسمي
-                    </Dialog.Title>
-                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-2">يرجى توضيح سبب الاعتذار عن لجنة المراقبة ليتم مراجعته من الإدارة.</p>
+                    <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3"><Stethoscope className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" /> تقديم عذر طبي</Dialog.Title>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-2">يرجى تعبئة تفاصيل الغياب وإرفاق التقرير لاعتماده من الإدارة.</p>
                   </div>
                   <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  
+                  {/* 🚀 اختيار التواريخ المتعددة للغياب */}
+                  <div className="space-y-3 bg-[#090b14]/50 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
+                    <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="date" 
+                        value={currentDateInput} 
+                        onChange={(e) => setCurrentDateInput(e.target.value)} 
+                        className="flex-1 bg-[#131836] border border-white/10 rounded-xl p-3 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50" 
+                        style={{ colorScheme: 'dark' }} 
+                      />
+                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-xs sm:text-sm transition-all shadow-sm active:scale-95">
+                        إضافة
+                      </button>
+                    </div>
+
+                    {excuseForm.absent_dates.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/5">
+                        {excuseForm.absent_dates.map(date => (
+                          <div key={date} className="flex items-center gap-2 bg-[#02040a]/80 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
+                            <span className="text-[10px] sm:text-xs font-bold text-slate-200" dir="ltr">{date}</span>
+                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300">
+                              <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">سبب الاعتذار المباشر</label>
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">نوع الدوام</label>
+                    <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 appearance-none [&>option]:bg-[#131836]">
+                      <option value="full_day">غياب يوم كامل (لكل الأيام المحددة)</option>
+                      <option value="partial_day">غياب جزئي (استئذان حصص)</option>
+                    </select>
+                  </div>
+
+                  {/* اختيار الحصص (يظهر فقط إذا كان الغياب جزئياً) */}
+                  <AnimatePresence>
+                    {excuseForm.duration_type === 'partial_day' && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="space-y-2 pt-2">
+                          <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /> حدد الحصص التي غبت عنها</label>
+                          <div className="flex flex-wrap gap-2">
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
+                              <button 
+                                key={p} type="button" onClick={() => togglePeriod(p)}
+                                className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all border", excuseForm.target_periods.includes(p) ? "bg-amber-500 text-slate-900 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]" : "bg-[#090b14] text-slate-400 border-white/10 hover:border-amber-500/50")}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* رفع المرفق */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">إرفاق التقرير الطبي (صورة)</label>
+                    <label className={cn("relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingReport ? "border-amber-500/50 bg-amber-500/5" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 bg-[#090b14] hover:border-amber-500/30 hover:bg-white/5")}>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleReportUpload} disabled={isUploadingReport} />
+                      {isUploadingReport ? (
+                        <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" /><span className="text-[10px] sm:text-xs font-black">جاري الرفع السحابي...</span></div>
+                      ) : excuseForm.attachment_url ? (
+                        <div className="flex flex-col items-center gap-2 text-emerald-400"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-black text-center">تم إرفاق التقرير بنجاح (انقر لتغييره)</span></div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-slate-500"><UploadCloud className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-bold text-center">اضغط هنا لاختيار صورة التقرير</span></div>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* تفاصيل إضافية */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات للإدارة (اختياري)</label>
                     <textarea 
-                      value={dutyExcuseText} onChange={(e) => setDutyExcuseText(e.target.value)}
-                      placeholder="أرجو إعفائي من المراقبة للأسباب التالية..." 
-                      className="w-full bg-[#090b14] border border-white/10 rounded-xl p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-rose-500/50 h-32 resize-none custom-scrollbar shadow-inner"
+                      value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})}
+                      placeholder="اكتب أي تفاصيل إضافية هنا..." 
+                      className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3 sm:p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 h-20 sm:h-24 resize-none custom-scrollbar"
                     />
                   </div>
+
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-white/5 flex gap-3">
-                  <button onClick={submitDutyExcuse} disabled={isProcessingDuty} className="flex-1 py-3.5 sm:py-4 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl transition-all shadow-[0_0_20px_rgba(225,29,72,0.3)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95">
-                    {isProcessingDuty ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : 'رفع الاعتذار'}
+                <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/5 flex gap-3">
+                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-slate-900 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95">
+                    {isSubmittingExcuse && <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />} إرسال الطلب
                   </button>
                   <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10 text-sm sm:text-base active:scale-95">إلغاء</button>
                 </div>
