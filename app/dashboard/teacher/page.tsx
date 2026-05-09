@@ -172,11 +172,12 @@ export default function TeacherDashboard() {
                if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
                mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); 
 
+               // 🚀 التحديث الجوهري: البحث عن الكنترول عبر user.id بدلاً من teacher.id
                const [invigRes, finalExamsRes, headRes, controlRes] = await Promise.all([
                   supabase.from('committee_invigilators').select('id, exam_committees(name, location, capacity)').eq('teacher_id', data.teacher.id),
                   supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5),
                   supabase.from('exam_committee_heads').select('committees_range, exam_timetables(exam_date, subjects(name), class_level)').eq('head_teacher_id', data.teacher.id),
-                  supabase.from('exam_control_team').select('role_name').eq('user_id', data.teacher.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle()
+                  supabase.from('exam_control_team').select('role_name').eq('user_id', user.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle()
                ]);
 
                if (invigRes.data) setInvigilationDuties(invigRes.data);
@@ -316,8 +317,12 @@ export default function TeacherDashboard() {
   }
 
   const avatarUrl = teacherData?.users?.avatar_url;
-  const qrPayload = `raf-id:${user.id}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
+  // 🚀 إنشاء QR Code لهويات المعلم الأمنية
+  const qrPayloadControl = `raf-control:${user.id}`;
+  const qrCodeUrlControl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayloadControl)}&margin=0`;
+
+  const qrPayloadInvig = `raf-id:${user.id}`;
+  const qrCodeUrlInvig = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayloadInvig)}&margin=0`;
 
   return (
     <motion.div 
@@ -345,11 +350,40 @@ export default function TeacherDashboard() {
                        أنتم العقل المدبر خلف الكواليس، حراس النزاهة وأمناء السر. لقد تم اعتماد صفتكم كـ <span className="font-black text-white bg-purple-500/20 px-2 py-1 rounded border border-purple-500/30">{controlTeamRole.role_name}</span>. مهامكم تتطلب دقة متناهية وإخلاصاً مطلقاً.
                      </p>
                   </div>
-                  <div className="shrink-0">
-                     <Link href="/admin/exam-pipeline" className="px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(147,51,234,0.6)] flex items-center gap-2 transition-all active:scale-95 border border-purple-400/50">
-                        الدخول لغرفة الكنترول <ArrowUpRight className="w-5 h-5" />
-                     </Link>
+                  
+                  {/* 🪪 هوية الكنترول الذكية (VIP 3D Card) - تظهر فقط في الديسكتوب والآيباد */}
+                  <div className="shrink-0 perspective-1000 hidden md:block">
+                     <div className="w-[60mm] h-[95mm] border-[4px] border-slate-900 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
+                        <div className="absolute top-0 left-0 w-full h-[35mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 border-b-[3px] border-rose-600 relative overflow-hidden">
+                           <div className="absolute -left-10 -top-10 w-24 h-24 bg-rose-500/20 blur-xl rounded-full"></div>
+                           <p className="text-white font-black text-[14px] mt-1 drop-shadow-md tracking-wide">مدرسة الرفعة النموذجية</p>
+                           <div className="mt-2 bg-rose-600 px-4 py-1.5 rounded-full shadow-inner flex items-center gap-1.5 border border-rose-500/50">
+                              <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                              <p className="text-white font-black text-[10px] tracking-widest">العمليات (VIP)</p>
+                           </div>
+                        </div>
+                        <div className="relative z-20 w-[26mm] h-[26mm] mt-[20mm] mb-3 rounded-full bg-white border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.3)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
+                           {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Staff" className="w-full h-full object-cover" /> : <Key className="w-10 h-10 text-slate-300" />}
+                        </div>
+                        <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
+                           <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2 drop-shadow-md">{teacherData?.users?.full_name || '...'}</h2>
+                           <p className="text-[11px] font-black text-rose-600 mb-2 border-b-2 border-slate-200 pb-2 w-full truncate">{controlTeamRole.role_name}</p>
+                           <div className="mt-auto mb-4 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
+                              <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-xl border-[3px] border-slate-900 mb-1.5 shadow-lg"><img src={qrCodeUrlControl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
+                              <p className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1"><Fingerprint className="w-3 h-3"/> Secured</p>
+                           </div>
+                        </div>
+                        <div className="w-full h-3 bg-rose-600 shrink-0"></div>
+                     </div>
                   </div>
+
+               </div>
+               
+               {/* زر الدخول للموبايل والديسكتوب */}
+               <div className="relative z-10 mt-6 md:mt-8 flex justify-center md:justify-start">
+                  <Link href="/admin/exam-pipeline" className="px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(147,51,234,0.6)] flex items-center gap-2 transition-all active:scale-95 border border-purple-400/50 w-full sm:w-auto text-center justify-center">
+                     الدخول لغرفة الكنترول <ArrowUpRight className="w-5 h-5" />
+                  </Link>
                </div>
             </motion.div>
           )}
@@ -358,30 +392,29 @@ export default function TeacherDashboard() {
         {/* 🚀 هرم القيادة: 2. بانر رؤساء اللجان (القيادة الميدانية) */}
         <AnimatePresence>
           {headDuties.length > 0 && (
-            <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-gradient-to-l from-amber-900 via-[#131836] to-[#0f1423] p-8 md:p-10 shadow-[0_20px_50px_rgba(245,158,11,0.2)] border border-amber-500/40">
-               <div className="absolute top-0 left-0 w-64 h-64 bg-amber-500/20 blur-[80px] pointer-events-none rounded-full"></div>
+            <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-gradient-to-l from-amber-900 via-[#131836] to-[#0f1423] p-8 md:p-10 shadow-[0_20px_50px_rgba(245,158,11,0.2)] border-[3px] border-[#92400e] group">
+               <div className="absolute top-0 left-0 w-[60vw] h-[60vw] bg-amber-500/10 blur-[100px] pointer-events-none rounded-full transition-transform duration-1000 group-hover:scale-110"></div>
                <div className="relative z-10 flex flex-col items-center text-center gap-6">
                   <div className="flex flex-col items-center gap-3">
-                     <div className="p-3 bg-amber-500/20 rounded-2xl border border-amber-400/50 shadow-inner">
-                        <Crown className="w-8 h-8 text-amber-400 drop-shadow-md" />
+                     <div className="p-4 bg-amber-500/20 rounded-3xl border border-amber-400/50 shadow-inner">
+                        <Crown className="w-10 h-10 text-amber-400 drop-shadow-md" />
                      </div>
-                     <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">القيادة الميدانية: <span className="text-amber-400">رئيس لجان الامتحانات</span></h2>
-                     <p className="text-amber-200/80 font-bold text-sm sm:text-base max-w-3xl leading-relaxed">
+                     <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight drop-shadow-md">القيادة الميدانية: <span className="text-amber-400">رئيس لجان الامتحانات</span></h2>
+                     <p className="text-slate-300 text-sm sm:text-lg font-bold leading-relaxed max-w-3xl opacity-90">
                        أستاذي الكريم، القيادة الميدانية تتطلب حكمة وحزماً، وقد تم تكليفكم بناءً على كفاءتكم للإشراف وإدارة سير الامتحانات في التواريخ والنطاقات التالية. نثق بقدرتكم على تذليل الصعاب.
                      </p>
                   </div>
                   
-                  {/* استعراض المهام الإشرافية */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full mt-4">
                      {headDuties.map((duty, idx) => (
-                        <div key={idx} className="bg-[#02040a]/60 p-5 rounded-2xl border border-amber-500/20 shadow-inner flex flex-col gap-3 text-right">
-                           <div className="flex justify-between items-start border-b border-white/5 pb-3">
-                              <span className="text-[10px] font-black bg-amber-500/10 text-amber-400 px-3 py-1.5 rounded-lg border border-amber-500/20"><CalendarDays className="w-3 h-3 inline mr-1" /> {safeFormat(duty.exam_timetables?.exam_date, 'd MMMM yyyy')}</span>
+                        <div key={idx} className="bg-[#02040a]/80 p-5 rounded-2xl border border-amber-500/30 shadow-inner flex flex-col gap-4 text-right backdrop-blur-md hover:border-amber-400/60 transition-colors">
+                           <div className="flex justify-between items-start border-b border-white/5 pb-4">
+                              <span className="text-[11px] font-black bg-amber-500/20 text-amber-300 px-3 py-1.5 rounded-lg border border-amber-500/30 shadow-inner"><CalendarDays className="w-3.5 h-3.5 inline mr-1" /> {safeFormat(duty.exam_timetables?.exam_date, 'd MMMM yyyy')}</span>
                               <span className="text-[10px] font-black bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg border border-white/10">الصف {duty.exam_timetables?.class_level}</span>
                            </div>
-                           <h3 className="text-lg font-black text-white drop-shadow-sm truncate">{duty.exam_timetables?.subjects?.name}</h3>
-                           <p className="text-xs font-bold text-amber-200/60 bg-amber-900/30 p-2 rounded-xl border border-amber-500/10 mt-auto leading-relaxed">
-                             📍 النطاق: <span className="text-amber-400">{duty.committees_range}</span>
+                           <h3 className="text-xl font-black text-white drop-shadow-sm truncate">{duty.exam_timetables?.subjects?.name}</h3>
+                           <p className="text-sm font-bold text-amber-200/80 bg-amber-900/40 p-3 rounded-xl border border-amber-500/20 mt-auto leading-relaxed">
+                             📍 إشراف على: <span className="text-amber-400 font-black">{duty.committees_range}</span>
                            </p>
                         </div>
                      ))}
@@ -395,13 +428,11 @@ export default function TeacherDashboard() {
         <AnimatePresence>
           {invigilationDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
-               {/* تأثيرات الضوء الكونية */}
                <div className="absolute top-[-50%] left-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-indigo-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
                <div className="absolute bottom-[-50%] right-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
                
                <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
                   
-                  {/* رسالة الإدارة التحفيزية */}
                   <div className="flex-1 text-center lg:text-right">
                      <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs sm:text-sm font-black mb-6 shadow-inner backdrop-blur-xl">
                        <Award className="w-4 h-4 text-indigo-400" /> تكليف رسمي بمهام المراقبة
@@ -426,24 +457,23 @@ export default function TeacherDashboard() {
                      </div>
                   </div>
 
-                  {/* 🪪 هوية المراقب الذكية (3D ID Card) */}
+                  {/* 🪪 هوية المراقب الذكية (3D ID Card) - تظهر فقط في الشاشات الكبيرة */}
                   <div className="shrink-0 perspective-1000 hidden md:block">
-                     <div className="w-[65mm] h-[100mm] border-[4px] border-slate-800 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.6)] bg-[#0f1423] transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
-                        {/* انعكاس زجاجي */}
+                     <div className="w-[60mm] h-[95mm] border-[4px] border-slate-800 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.6)] bg-[#0f1423] transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
                         <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity pointer-events-none z-50"></div>
                         <div className="absolute top-0 left-0 w-full h-[35mm] bg-[#02040a] shrink-0 flex flex-col items-center justify-start pt-4 border-b-2 border-indigo-500/50 relative overflow-hidden">
                            <div className="absolute -right-10 -top-10 w-24 h-24 bg-indigo-500/20 blur-xl rounded-full"></div>
-                           <p className="text-white font-black text-[15px] mt-1 drop-shadow-md tracking-wide">مدرسة الرفعة النموذجية بنين</p>
-                           <p className="text-emerald-400 font-bold text-[11px] mt-1 bg-emerald-500/10 px-3 py-0.5 rounded-full border border-emerald-500/20 shadow-inner tracking-widest">هوية مراقب معتمد</p>
+                           <p className="text-white font-black text-[14px] mt-1 drop-shadow-md tracking-wide">مدرسة الرفعة النموذجية بنين</p>
+                           <p className="text-emerald-400 font-bold text-[10px] mt-1 bg-emerald-500/10 px-3 py-0.5 rounded-full border border-emerald-500/20 shadow-inner tracking-widest">هوية مراقب معتمد</p>
                         </div>
-                        <div className="relative z-20 w-[28mm] h-[28mm] mt-[16mm] mb-3 rounded-[1rem] bg-[#02040a] border-4 border-indigo-500/50 shadow-[0_10px_20px_rgba(0,0,0,0.4)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
+                        <div className="relative z-20 w-[26mm] h-[26mm] mt-[16mm] mb-3 rounded-[1rem] bg-[#02040a] border-4 border-indigo-500/50 shadow-[0_10px_20px_rgba(0,0,0,0.4)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
                            {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Teacher" className="w-full h-full object-cover" /> : <UserCheck className="w-10 h-10 text-indigo-400" />}
                         </div>
                         <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
-                           <h2 className="text-[18px] font-black text-white mb-1.5 leading-tight line-clamp-2 drop-shadow-md">{teacherData?.users?.full_name || '...'}</h2>
+                           <h2 className="text-[16px] font-black text-white mb-1.5 leading-tight line-clamp-2 drop-shadow-md">{teacherData?.users?.full_name || '...'}</h2>
                            <p className="text-[10px] font-bold text-indigo-300 mb-3 border-b border-indigo-500/20 pb-2 w-full">وزارة التربية - إدارة التعليم الخاص</p>
                            <div className="mt-auto mb-4 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
-                              <div className="w-[22mm] h-[22mm] bg-white p-1 rounded-xl border-2 border-indigo-500/50 mb-1.5 shadow-lg"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
+                              <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-xl border-2 border-indigo-500/50 mb-1.5 shadow-lg"><img src={qrCodeUrlInvig} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
                               <p className="text-[9px] font-black text-slate-400 flex items-center gap-1"><Fingerprint className="w-3 h-3"/> هوية مشفرة</p>
                            </div>
                         </div>
@@ -804,72 +834,6 @@ export default function TeacherDashboard() {
                 ) : (
                   <div className="col-span-1 sm:col-span-2 p-12 sm:p-16 text-center text-slate-500 bg-[#02040a]/50 rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 shadow-inner font-bold text-sm sm:text-base">لا توجد فصول مسندة إليك حالياً</div>
                 )}
-              </div>
-            </motion.div>
-
-            {/* 📅 جدول الاختبارات النهائية للمعلم */}
-            {finalExamsTimetable.length > 0 && (
-                <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-                  <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                    <h2 className="text-xl sm:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm">
-                      <div className="p-2.5 bg-indigo-500/10 rounded-xl sm:rounded-2xl border border-indigo-500/20 shadow-inner"><CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400 drop-shadow-md" /></div> جدول الاختبارات النهائية
-                    </h2>
-                  </div>
-                  <div className="p-5 sm:p-6 lg:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 bg-transparent">
-                      {finalExamsTimetable.map((ex, idx) => {
-                          const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
-                          return (
-                          <div key={idx} className={`bg-[#0f1423]/60 border border-white/5 p-5 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
-                              <div>
-                                  <span className="text-[9px] font-black px-2 py-1 bg-indigo-500/10 text-indigo-300 rounded mb-2 inline-block">الصف {ex.class_level}</span>
-                                  <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2">
-                                      {ex.subjects?.name}
-                                      {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-                                  </p>
-                                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
-                              </div>
-                              <div className="bg-[#02040a] px-3 py-2 rounded-xl border border-white/5 shadow-inner flex flex-col items-center justify-center shrink-0">
-                                  <span className="text-[10px] text-slate-500 font-bold uppercase">الوقت</span>
-                                  <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
-                              </div>
-                          </div>
-                          );
-                      })}
-                  </div>
-                </motion.div>
-            )}
-
-            {/* Assignment Stats */}
-            <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-              <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                <h2 className="text-xl sm:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm">
-                  <div className="p-2.5 bg-emerald-500/10 rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner"><BarChart2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 drop-shadow-md" /></div> إحصائيات إنجاز الواجبات
-                </h2>
-              </div>
-              <div className="p-5 sm:p-6 lg:p-8 bg-transparent">
-                <div className="space-y-6 sm:space-y-8 bg-[#0f1423]/40 p-5 sm:p-6 lg:p-8 rounded-[1.5rem] sm:rounded-[2rem] lg:rounded-[2.5rem] border border-white/5 shadow-inner">
-                  {assignmentStats.length > 0 ? (
-                    assignmentStats.map((stat, i) => (
-                      <div key={i} className="space-y-2 sm:space-y-3 group">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 sm:gap-0">
-                          <div>
-                            <p className="text-sm sm:text-base font-black text-white mb-1 group-hover:text-emerald-400 transition-colors drop-shadow-sm truncate">{stat.title}</p>
-                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg border border-white/5 inline-block shadow-inner">{stat.className}</p>
-                          </div>
-                          <div className="text-left flex flex-row sm:flex-col items-center sm:items-end w-full sm:w-auto justify-between sm:justify-normal border-t sm:border-0 border-white/5 pt-2 sm:pt-0 mt-2 sm:mt-0">
-                            <span className={`text-lg sm:text-xl font-black drop-shadow-md ${stat.percentage > 80 ? 'text-emerald-400' : stat.percentage > 50 ? 'text-blue-400' : 'text-amber-400'}`}>{stat.percentage}%</span>
-                            <p className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mt-0.5">{stat.submissionCount} من {stat.totalStudents} تسليم</p>
-                          </div>
-                        </div>
-                        <div className="h-2.5 sm:h-3 w-full bg-[#02040a] rounded-full overflow-hidden shadow-inner border border-white/5">
-                          <motion.div initial={{ width: 0 }} animate={{ width: `${stat.percentage}%` }} transition={{ duration: 1.5, delay: i * 0.1, type: 'spring' }} className={`h-full rounded-full ${stat.percentage > 80 ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : stat.percentage > 50 ? 'bg-gradient-to-r from-blue-500 to-indigo-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]'}`} />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 sm:py-10 text-slate-500 font-bold border border-dashed border-white/10 rounded-[1.5rem] bg-[#02040a]/50 text-xs sm:text-sm shadow-inner">لا توجد واجبات نشطة حالياً لحساب نسبة الإنجاز</div>
-                  )}
-                </div>
               </div>
             </motion.div>
 
