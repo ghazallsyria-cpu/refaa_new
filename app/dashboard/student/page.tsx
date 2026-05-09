@@ -11,7 +11,7 @@ import {
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
   AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users,
   Siren, Info, MessageSquare, Sparkles, Stethoscope, UploadCloud, X, Plus, Trash2,
-  Ticket, Timer, FileKey, Download
+  Ticket, Timer, FileKey, Download, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -158,12 +158,11 @@ export default function StudentDashboard() {
               }
             }
 
-            // 🚀 جلب بيانات المنظومة الامتحانية بشكل معزول وآمن من أخطاء الـ Type
+            // 🚀 جلب بيانات المنظومة الامتحانية بشكل معزول وآمن
             try {
                const tData: any = trackRes.data;
                const sData: any = data.student;
                
-               // تجاوز حماية TypeScript باستخدام any والمصفوفات
                const classLevelStr = String(
                  tData?.sections?.classes?.name || 
                  tData?.sections?.[0]?.classes?.name || 
@@ -383,6 +382,10 @@ export default function StudentDashboard() {
   const avgScore = unlockedGrades.length > 0 ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length) : 0;
   const avatarUrl = studentData?.users?.avatar_url || studentData?.user?.avatar_url || studentData?.avatar_url;
 
+  // 🚀 الشفرة الخاصة بالطالب للهوية الامتحانية
+  const qrPayload = `raf-id:${studentData?.id}`; 
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
+
   let warningLevel = 0;
   let warningTitle = "";
   let warningMessage = "";
@@ -430,12 +433,13 @@ export default function StudentDashboard() {
       
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* 🚀 الهيدر الفخم الموحد للطلاب */}
+        {/* 🚀 الهيدر الفخم الموحد للطلاب مع رسائل التحفيز الامتحانية */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10">
           <div className="absolute inset-0 bg-blue-500/5 blur-[100px] pointer-events-none"></div>
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+          
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-10">
             
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-right w-full">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-right w-full flex-1">
               <Link href={`/students/${user.id}`} className="relative group shrink-0">
                 <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-4 border-white/10 shadow-[0_0_30px_rgba(59,130,246,0.2)] bg-[#0f1423] backdrop-blur-md flex items-center justify-center transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3 group-hover:border-blue-500/50">
                   {avatarUrl ? <img src={avatarUrl} alt={rawFullName} className="w-full h-full object-cover" /> : <span className="text-4xl sm:text-5xl font-black text-blue-400 drop-shadow-md">{rawFullName.charAt(0)}</span>}
@@ -449,58 +453,97 @@ export default function StudentDashboard() {
                   <Star className="w-3.5 h-3.5" />
                   <span>لوحة تحكم الطالب</span>
                 </div>
-                <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black mb-2 tracking-tight drop-shadow-lg leading-tight text-white">
-                  مرحباً بك، {displayFirstName} 👋
+                <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black mb-3 tracking-tight drop-shadow-lg leading-tight text-white">
+                  وفقك الله وسدد خطاك يا {displayFirstName} 🌟
                 </h1>
-                <p className="text-slate-300 text-sm sm:text-base font-bold flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-5">
-                  <GraduationCap className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 shrink-0" />
-                  <span>مسجل في <strong className="text-white mx-1 drop-shadow-sm">{classNameStr || 'صف غير محدد'}</strong> شعبة <strong className="text-white mx-1 drop-shadow-sm">{sectionNameStr}</strong></span>
+                <p className="text-slate-300 text-sm sm:text-base font-bold leading-relaxed max-w-xl mx-auto sm:mx-0 mb-4 opacity-90">
+                  ثق بقدراتك وتوكل على الله.. لقد اجتهدت طوال العام وهذه هي لحظة الحصاد. نحن فخورون بك ونتمنى لك التوفيق في اختباراتك القادمة.
                 </p>
                 
-                <Link href={`/students/${user.id}`} className="inline-flex items-center justify-center sm:justify-start gap-2 text-slate-300 hover:text-white font-bold text-sm bg-white/5 px-6 py-3 rounded-2xl border border-white/10 transition-all hover:bg-white/10 shadow-sm active:scale-95 w-full sm:w-auto">
-                  <UserCircle className="w-4 h-4 text-blue-400" /> استعراض ملفي الأكاديمي الشامل
-                </Link>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                   <span className="text-slate-300 font-bold text-xs sm:text-sm flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-sm"><GraduationCap className="h-4 w-4 text-blue-400" /> {classNameStr} - {sectionNameStr}</span>
+                   <Link href={`/students/${user.id}`} className="inline-flex items-center justify-center gap-1.5 text-blue-300 hover:text-white font-black text-xs sm:text-sm bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20 transition-all hover:bg-blue-500/30 shadow-sm active:scale-95">
+                     ملفي الأكاديمي <UserCircle className="w-4 h-4" />
+                   </Link>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-row flex-wrap gap-3 sm:gap-4 justify-center lg:shrink-0 w-full lg:w-auto">
-              <div className="rounded-2xl sm:rounded-[2rem] bg-[#02040a]/60 p-5 sm:p-6 backdrop-blur-md border border-white/5 flex flex-col items-center justify-center min-w-[130px] shadow-inner hover:border-emerald-500/30 transition-colors flex-1 sm:flex-none">
-                <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">نسبة الحضور</p>
-                <p className="text-3xl sm:text-4xl font-black text-emerald-400 drop-shadow-md">{attendanceStats?.rate || 0}%</p>
-              </div>
-              <div className="rounded-2xl sm:rounded-[2rem] bg-[#02040a]/60 p-5 sm:p-6 backdrop-blur-md border border-white/5 flex flex-col items-center justify-center min-w-[130px] shadow-inner hover:border-amber-500/30 transition-colors flex-1 sm:flex-none">
-                <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">المتوسط العام</p>
-                <p className="text-3xl sm:text-4xl font-black text-amber-400 drop-shadow-md">{avgScore}%</p>
-              </div>
+            {/* 🪪 الهوية الامتحانية الحية (Live Exam ID) - تظهر فقط في فترة الامتحانات */}
+            {seatAllocation && (
+               <div className="shrink-0 perspective-1000 hidden md:block">
+                  <div className="w-[65mm] h-[100mm] border-[4px] border-slate-900 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
+                     <div className="absolute top-0 left-0 w-full h-[28mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 border-b-[3px] border-slate-700 relative overflow-hidden">
+                        <p className="text-white font-black text-[14px] mt-1 tracking-wide">مدرسة الرفعة النموذجية بنين</p>
+                        <div className="mt-2 bg-slate-100 px-4 py-1.5 rounded-full shadow-inner flex items-center gap-1.5 border border-slate-300">
+                           <p className="text-slate-900 font-black text-[10px] tracking-widest uppercase">{seatAllocation.exam_committees?.name}</p>
+                        </div>
+                     </div>
+                     <div className="relative z-20 w-[24mm] h-[24mm] mt-[16mm] mb-2 rounded-2xl bg-white border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.3)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
+                        {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> : <UserCircle className="w-10 h-10 text-slate-300" />}
+                     </div>
+                     <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
+                        <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{rawFullName}</h2>
+                        <p className="text-[10px] font-bold text-slate-500 mb-2 border-b-2 border-slate-200 pb-2 w-full">{classNameStr}</p>
+                        <div className="mt-1 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
+                           <p className="text-[9px] font-black text-slate-500 uppercase">رقم الجلوس</p>
+                           <p className="text-3xl font-black text-rose-600 tracking-widest">{seatAllocation.seat_number}</p>
+                        </div>
+                        <div className="mt-auto mb-3 flex flex-col items-center">
+                           <div className="w-[18mm] h-[18mm] bg-white p-0.5 rounded-lg border-2 border-slate-800"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
+                        </div>
+                     </div>
+                     <div className="w-full h-2.5 bg-slate-900 shrink-0"></div>
+                  </div>
+               </div>
+            )}
+            
+            {/* عرض الهوية الامتحانية للموبايل (شكل مبسط) */}
+            {seatAllocation && (
+               <div className="w-full md:hidden bg-slate-900 border-2 border-slate-700 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex items-center gap-4">
+                  <div className="absolute -right-4 -top-4 w-20 h-20 bg-slate-700/50 rounded-full blur-xl pointer-events-none"></div>
+                  <div className="w-16 h-16 bg-white p-1 rounded-xl border border-slate-500 shrink-0 shadow-inner">
+                     <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="flex-1 text-right">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
+                     <h3 className="text-lg font-black text-white">{seatAllocation.exam_committees?.name}</h3>
+                  </div>
+                  <div className="shrink-0 text-center border-r border-slate-700 pr-4">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">رقم الجلوس</p>
+                     <p className="text-2xl font-black text-rose-500 tracking-widest">{seatAllocation.seat_number}</p>
+                  </div>
+               </div>
+            )}
+
+          </div>
+        </div>
+
+        {/* 🚀 قسم الأوسمة (لوحة الشرف) */}
+        {myBadges.length > 0 && (
+          <div className="relative z-10 pt-2 w-full">
+            <h3 className="text-sm sm:text-base font-bold text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm">
+              <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
+            </h3>
+            <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
+              {myBadges.map((badgeEntry, index) => (
+                <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:bg-[#0f1423] transition-all duration-300 hover:border-amber-500/30 group cursor-default shadow-inner hover:shadow-[0_0_20px_rgba(245,158,11,0.1)]">
+                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/30 transition-colors"></div>
+                    {badgeEntry.badge?.image_url ? (
+                      <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-2xl relative z-10" />
+                    ) : <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-lg p-2" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود'}</p>
+                    <p className="text-[9px] text-slate-500 mt-2 bg-[#02040a]/80 w-fit px-2 py-1 rounded-lg border border-white/5">بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* 🚀 قسم الأوسمة (لوحة الشرف) */}
-          {myBadges.length > 0 && (
-            <div className="relative z-10 mt-10 pt-6 border-t border-white/10 w-full">
-              <h3 className="text-sm sm:text-base font-bold text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm">
-                <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
-              </h3>
-              <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                {myBadges.map((badgeEntry, index) => (
-                  <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:bg-[#0f1423] transition-all duration-300 hover:border-amber-500/30 group cursor-default shadow-inner hover:shadow-[0_0_20px_rgba(245,158,11,0.1)]">
-                    <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
-                      <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/30 transition-colors"></div>
-                      {badgeEntry.badge?.image_url ? (
-                        <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-2xl relative z-10" />
-                      ) : <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-lg p-2" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
-                      <p className="text-[10px] sm:text-xs font-bold text-slate-400 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود'}</p>
-                      <p className="text-[9px] text-slate-500 mt-2 bg-[#02040a]/80 w-fit px-2 py-1 rounded-lg border border-white/5">بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* 🚀 البانر السينمائي (مجلس الصف - للطالب) */}
         {studentData?.section_id && (
@@ -552,7 +595,6 @@ export default function StudentDashboard() {
                     <p className="text-sm sm:text-base font-bold opacity-90 leading-relaxed max-w-2xl text-white/80">
                       {warningMessage}
                     </p>
-                    {/* 🚀 زر الإنقاذ السريع لتقديم العذر */}
                     <button onClick={() => setIsExcuseModalOpen(true)} className="mt-4 px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-sm transition-all border border-white/20 flex items-center gap-2 shadow-inner active:scale-95">
                       <Stethoscope className="w-4 h-4" /> تقديم عذر طبي لتبرير الغياب
                     </button>
@@ -579,55 +621,26 @@ export default function StudentDashboard() {
                 </div>
 
               </div>
-
               <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none"></div>
-              {warningLevel >= 3 && (
-                <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-rose-500/20 blur-3xl animate-pulse pointer-events-none"></div>
-              )}
+              {warningLevel >= 3 && <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-rose-500/20 blur-3xl animate-pulse pointer-events-none"></div>}
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* 🚀 بطاقة الهوية الامتحانية والعداد */}
-        {(seatAllocation || nextOfficialExam) && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-br from-[#131836] via-[#0f1423] to-[#02040a] p-6 sm:p-8 border border-indigo-500/30 shadow-[0_0_40px_rgba(99,102,241,0.15)] flex flex-col md:flex-row gap-6 items-center justify-between">
+        {/* ⏳ العداد التنازلي للاختبارات */}
+        {(nextOfficialExam) && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-br from-[#131836] via-[#0f1423] to-[#02040a] p-6 sm:p-8 border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)] flex flex-col md:flex-row gap-6 items-center justify-between text-center md:text-right">
               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
-
-              {/* 💳 الهوية */}
-              {seatAllocation && (
-                  <div className="flex items-center gap-4 relative z-10 w-full md:w-auto bg-[#02040a]/60 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                      <div className="p-3 bg-indigo-500/20 rounded-2xl border border-indigo-500/30"><Ticket className="w-8 h-8 text-indigo-400" /></div>
-                      <div>
-                          <p className="text-[10px] sm:text-xs text-indigo-300 font-black uppercase tracking-widest mb-1">هويتك الامتحانية</p>
-                          <div className="flex items-end gap-3">
-                              <p className="text-3xl sm:text-4xl font-black text-white drop-shadow-md tracking-widest">{seatAllocation.seat_number}</p>
-                              <div className="mb-1">
-                                  <p className="text-xs font-bold text-slate-300 bg-white/5 px-2 py-1 rounded-md border border-white/5">{seatAllocation.exam_committees?.name}</p>
-                              </div>
-                          </div>
-                      </div>
+              
+              <div className="relative z-10 w-full flex flex-col items-center justify-center text-center">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs sm:text-sm font-black mb-4">
+                      <Timer className="w-5 h-5 animate-pulse" /> الاختبار القادم: {nextOfficialExam.subjects?.name}
                   </div>
-              )}
-
-              {/* ⏳ العداد */}
-              {nextOfficialExam ? (
-                  <div className="flex flex-col items-center md:items-end text-center md:text-right relative z-10 w-full md:w-auto">
-                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] sm:text-xs font-black mb-3">
-                          <Timer className="w-4 h-4 animate-pulse" /> الاختبار القادم: {nextOfficialExam.subjects?.name}
-                      </div>
-                      <div className="text-2xl sm:text-3xl font-black text-white drop-shadow-md" dir="rtl">
-                          {countdownStr}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-2 font-bold">في {safeFormat(nextOfficialExam.exam_date, 'EEEE d MMM')} الساعة {nextOfficialExam.start_time.substring(0,5)}</p>
+                  <div className="text-4xl sm:text-5xl font-black text-white drop-shadow-md tracking-widest" dir="rtl">
+                      {countdownStr}
                   </div>
-              ) : examTimetables.length > 0 ? (
-                  <div className="flex flex-col items-center md:items-end text-center md:text-right relative z-10 w-full md:w-auto">
-                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] sm:text-xs font-black mb-3">
-                          <CheckCircle2 className="w-4 h-4" /> اكتملت الاختبارات
-                      </div>
-                      <p className="text-sm font-bold text-slate-400">لقد أنهيت جميع اختباراتك المجدولة بنجاح.</p>
-                  </div>
-              ) : null}
+                  <p className="text-sm sm:text-base text-slate-400 mt-3 font-bold bg-[#02040a]/80 px-6 py-2 rounded-full border border-white/5">في {safeFormat(nextOfficialExam.exam_date, 'EEEE d MMMM')} الساعة {nextOfficialExam.start_time.substring(0,5)} صباحاً</p>
+              </div>
             </motion.div>
         )}
 
@@ -684,6 +697,37 @@ export default function StudentDashboard() {
           
           <div className="lg:col-span-2 space-y-6 lg:space-y-8 w-full">
             
+            {/* 🚀 📅 جدول الاختبارات البانورامي (الميزة الجديدة) */}
+            {examTimetables.length > 0 && (
+                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+                      <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
+                    </h2>
+                  </div>
+                  <div className="p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      {examTimetables.map((ex, idx) => {
+                          const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
+                          return (
+                          <div key={idx} className={`bg-[#0f1423]/60 border border-white/5 p-4 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
+                              <div>
+                                  <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2">
+                                      {ex.subjects?.name}
+                                      {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                                  </p>
+                                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
+                              </div>
+                              <div className="bg-[#02040a] px-3 py-2 rounded-xl border border-white/5 shadow-inner flex flex-col items-center justify-center shrink-0">
+                                  <span className="text-[10px] text-slate-500 font-bold uppercase">الوقت</span>
+                                  <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
+                              </div>
+                          </div>
+                          );
+                      })}
+                  </div>
+                </div>
+            )}
+
             {/* 🚀 Today's Schedule Timeline (Live Pulse) */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
@@ -698,7 +742,6 @@ export default function StudentDashboard() {
                 {todaysSchedule.length > 0 ? (
                   <div className="space-y-5 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 sm:before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-blue-500/30 before:via-white/10 before:to-transparent">
                     {todaysSchedule.map((item, i) => {
-                      // 🚀 [هندسة النبض الذكي محلياً]
                       let current = false;
                       let next = false;
                       let isPast = false;
@@ -737,7 +780,6 @@ export default function StudentDashboard() {
                             next ? "bg-blue-500/5 border-blue-500/20 shadow-sm" : "bg-[#02040a]/60 border-white/5 shadow-inner hover:border-white/10"
                           )}>
                             
-                            {/* 🔥 تأثير النبض في زاوية البطاقة للحصة الفعالة */}
                             {current && (
                               <span className="absolute top-4 right-4 flex h-3.5 w-3.5">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
@@ -815,37 +857,6 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* 📅 جدول الاختبارات البانورامي (الميزة الجديدة) */}
-            {examTimetables.length > 0 && (
-                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden mt-6 lg:mt-8">
-                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
-                      <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
-                    </h2>
-                  </div>
-                  <div className="p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      {examTimetables.map((ex, idx) => {
-                          const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
-                          return (
-                          <div key={idx} className={`bg-[#0f1423]/60 border border-white/5 p-4 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
-                              <div>
-                                  <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2">
-                                      {ex.subjects?.name}
-                                      {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-                                  </p>
-                                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
-                              </div>
-                              <div className="bg-[#02040a] px-3 py-2 rounded-xl border border-white/5 shadow-inner flex flex-col items-center justify-center shrink-0">
-                                  <span className="text-[10px] text-slate-500 font-bold uppercase">الوقت</span>
-                                  <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
-                              </div>
-                          </div>
-                          );
-                      })}
-                  </div>
-                </div>
-            )}
-
           </div>
 
           {/* 🌟 Column 2: Narrow Area */}
@@ -896,6 +907,32 @@ export default function StudentDashboard() {
                 )}
               </div>
             </div>
+
+            {/* 📚 نماذج الإجابات الرسمية (الميزة الجديدة) */}
+            {answerKeys.length > 0 && (
+                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden mt-6 lg:mt-8">
+                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+                      <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" /></div> نماذج الإجابات الرسمية
+                    </h2>
+                  </div>
+                  <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
+                      {answerKeys.map(keyObj => (
+                          <a href={keyObj.file_url} target="_blank" rel="noreferrer" key={keyObj.id} className="flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-emerald-500/30 hover:bg-[#0f1423] transition-all mb-2 group shadow-inner">
+                              <div className="flex items-center gap-3 min-w-0">
+                                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-colors shrink-0">
+                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                      <p className="font-black text-white text-xs sm:text-sm truncate drop-shadow-sm">{keyObj.title}</p>
+                                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1 bg-[#02040a] px-2 py-0.5 rounded border border-white/5 inline-block">{keyObj.subjects?.name}</p>
+                                  </div>
+                              </div>
+                          </a>
+                      ))}
+                  </div>
+                </div>
+            )}
 
             {/* Recent Grades */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
@@ -959,68 +996,6 @@ export default function StudentDashboard() {
                   ))
                 ) : (
                   <div className="text-center py-8 text-slate-500 font-bold bg-[#02040a]/50 rounded-[1rem] border border-dashed border-white/10 text-xs sm:text-sm m-2 shadow-inner">لا توجد واجبات مطلوبة حالياً</div>
-                )}
-              </div>
-            </div>
-
-            {/* 📚 نماذج الإجابات الرسمية (الميزة الجديدة) */}
-            {answerKeys.length > 0 && (
-                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden mt-6 lg:mt-8">
-                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
-                      <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" /></div> نماذج الإجابات الرسمية
-                    </h2>
-                  </div>
-                  <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
-                      {answerKeys.map(keyObj => (
-                          <a href={keyObj.file_url} target="_blank" rel="noreferrer" key={keyObj.id} className="flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-emerald-500/30 hover:bg-[#0f1423] transition-all mb-2 group shadow-inner">
-                              <div className="flex items-center gap-3 min-w-0">
-                                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-colors shrink-0">
-                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                                  </div>
-                                  <div className="min-w-0">
-                                      <p className="font-black text-white text-xs sm:text-sm truncate drop-shadow-sm">{keyObj.title}</p>
-                                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1 bg-[#02040a] px-2 py-0.5 rounded border border-white/5 inline-block">{keyObj.subjects?.name}</p>
-                                  </div>
-                              </div>
-                          </a>
-                      ))}
-                  </div>
-                </div>
-            )}
-
-            {/* Upcoming Exams (القديمة للاختبارات الدورية) */}
-            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-              <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2 bg-rose-500/10 rounded-xl border border-rose-500/20 shadow-inner"><Bell className="h-4 w-4 sm:h-5 sm:w-5 text-rose-400 drop-shadow-md" /></div> اختبارات دورية قادمة
-                </h2>
-              </div>
-              <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
-                {upcomingExams.length > 0 ? (
-                  upcomingExams.map((exam) => (
-                    <Link href={`/exams/take/${exam.id}`} key={exam.id} className="block group mb-2">
-                      <div className="p-4 sm:p-5 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-rose-500/30 hover:bg-[#0f1423] transition-all bg-[#0f1423]/60 flex flex-col justify-between h-full shadow-inner">
-                        <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
-                          <p className="font-black text-white text-xs sm:text-sm leading-tight group-hover:text-rose-400 transition-colors line-clamp-2 drop-shadow-sm">{exam.title}</p>
-                          <div className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0 group-hover:bg-rose-500 group-hover:text-white transition-colors shadow-inner"><Play className="h-3 w-3 sm:h-4 sm:w-4" /></div>
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg inline-block w-fit border border-white/5 mb-3 sm:mb-4 shadow-inner">{exam.subject?.name}</p>
-                        <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] font-black text-rose-400 bg-[#02040a] border border-rose-500/20 p-2 sm:p-3 rounded-lg sm:rounded-xl uppercase tracking-widest shadow-inner">
-                          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
-                          <span className="truncate">
-                            {(() => {
-                              if (!exam.exam_date) return '...';
-                              const fullDateStr = (exam.start_time || '00:00').includes('T') ? exam.start_time : `${exam.exam_date}T${exam.start_time || '00:00'}`;
-                              return safeFormat(fullDateStr, 'EEEE، d MMM - h:mm a');
-                            })()}
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-slate-500 font-bold bg-[#02040a]/50 rounded-[1rem] border border-dashed border-white/10 text-xs sm:text-sm m-2 shadow-inner">لا توجد اختبارات مجدولة حالياً</div>
                 )}
               </div>
             </div>
