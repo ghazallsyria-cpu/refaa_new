@@ -17,7 +17,7 @@ import {
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
   ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch,
-  CreditCard, ClipboardList, Globe 
+  CreditCard, ClipboardList, Globe, ScrollText // 🚀 تم استيراد ScrollText هنا
 } from 'lucide-react';
 
 const navigation = [
@@ -91,6 +91,8 @@ const navigation = [
   { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature },
   { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
   { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
+  // 🚀 الزر الجديد الخاص بوثائق خريجي الثاني عشر
+  { name: 'وثائق التخرج', href: '/admin/graduation-docs', icon: ScrollText },
 
   // ==========================================
   // 🚀 الرادارات وعمليات التتبع الذكية (Smart Campus)
@@ -187,6 +189,9 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'جداول الاختبارات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'نماذج الإجابات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'تقرير غياب الاختبارات') return (authRole === 'admin' || authRole === 'management');
+    
+    // 🚀 حماية زر وثائق التخرج
+    if (item.name === 'وثائق التخرج') return (authRole === 'admin' || authRole === 'management');
 
     if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher');
 
