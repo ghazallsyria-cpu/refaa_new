@@ -1,11 +1,11 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable */
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { 
   Activity, Users, ShieldCheck, CheckCircle2, XCircle, Loader2, 
-  Search, AlertTriangle, RefreshCw, LayoutGrid, Clock, Calendar, ShieldAlert, Siren, Image as ImageIcon, X
+  Search, AlertTriangle, RefreshCw, LayoutGrid, Clock, Calendar, ShieldAlert, Siren, Image as ImageIcon, X, AlertCircle // 🚀 تم استيراد AlertCircle هنا
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,7 +63,6 @@ export default function ExamLiveDashboard() {
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
 
-      // 🚀 الخوارزمية الذكية للفرز الرقمي للجان (1, 2, ..., 10, 11)
       const sortedComms = (comms || []).sort((a, b) => {
         const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
@@ -71,7 +70,7 @@ export default function ExamLiveDashboard() {
       });
 
       setTimetables(todayExams || []);
-      setCommittees(sortedComms); // 🚀 تمرير اللجان مرتبة رقمياً
+      setCommittees(sortedComms); 
       
       if (todayExams && todayExams.length > 0) {
         setSelectedTimetableId(todayExams[0].id);
@@ -94,7 +93,6 @@ export default function ExamLiveDashboard() {
     if (showRefreshAnimation) setIsRefreshing(true);
     
     try {
-      // جلب التوزيع وتصفية الطلاب ليكونوا من نفس الصف الدراسي للاختبار المحدد
       const selectedExam = timetables.find(t => t.id === selectedTimetableId);
       
       const { data: allocs } = await supabase
@@ -106,7 +104,6 @@ export default function ExamLiveDashboard() {
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
 
-      // 🚀 تصفية السحّاب (عرض طلاب العاشر فقط في فيزياء عاشر، وتجاهل طلاب حادي عشر)
       const filteredAllocs = (allocs || []).filter((a: any) => {
          const classLvl = a.students?.sections?.classes?.level;
          return classLvl === selectedExam?.class_level;
@@ -340,7 +337,7 @@ export default function ExamLiveDashboard() {
                            ) : (
                               <div className="grid grid-cols-2 gap-2">
                                 <button onClick={() => { handleManualAttendance(stdId, commId, 'present'); setSearchTerm(''); }} className="py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-black transition-all">حاضر (يدوي)</button>
-                                <button onClick={() => { handleManualAttendance(stdId, commId, 'absent'); setSearchTerm(''); }} className="py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-xs font-black transition-all">غائب (يدوي)</button>
+                                <button onClick={() => { handleManualAttendance(stdId, commId, 'absent'); setSearchTerm(''); }} className="py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-xs font-black transition-all">غائب (يدوي)</button>
                               </div>
                            )}
                          </div>
@@ -360,7 +357,6 @@ export default function ExamLiveDashboard() {
                 {committees.map(committee => {
                    const commAllocs = allocations.filter(a => a.committee_id === committee.id);
                    const commCapacity = commAllocs.length;
-                   // 🚀 إخفاء اللجان التي لا يوجد بها طلاب لهذه المادة بالتحديد
                    if (commCapacity === 0) return null; 
 
                    const commCheatCount = cheatingReports.filter(c => c.committee_id === committee.id).length;
