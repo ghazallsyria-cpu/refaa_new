@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart2, Users, Star, MessageSquare, Loader2, Search, 
-  TrendingUp, TrendingDown, Trophy, AlertTriangle, Eye, X
+  TrendingUp, TrendingDown, Trophy, AlertTriangle, Eye, X, Power
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -18,9 +18,14 @@ export default function StudentEvaluationsDashboard() {
   const currentRole = authRole || userRole;
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isToggling, setIsToggling] = useState(false);
   const [teacherStats, setTeacherStats] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // 🚀 حالة زر التحكم المركزي
+  const [isEvalActive, setIsEvalActive] = useState(false);
+  const [settingsId, setSettingsId] = useState<any>(null);
+
   // حالات قراءة التعليقات
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
@@ -29,69 +34,50 @@ export default function StudentEvaluationsDashboard() {
   const currentSemester = 'الفصل الدراسي الثاني';
 
   useEffect(() => {
-    const fetchEvaluations = async () => {
+    const fetchEvaluationsAndSettings = async () => {
       setIsLoading(true);
       try {
-        // 1. جلب التقييمات من الجدول الجديد
+        // 🚀 جلب حالة التفعيل من إعدادات المنصة
+        const { data: settingsData } = await supabase.from('platform_settings').select('id, is_evaluations_active').limit(1).single();
+        if (settingsData) {
+           setSettingsId(settingsData.id);
+           setIsEvalActive(settingsData.is_evaluations_active || false);
+        }
+
+        // جلب التقييمات
         const { data, error } = await supabase
           .from('student_evaluations_of_teachers')
-          .select(`
-            *,
-            teachers(users(full_name, avatar_url))
-          `)
+          .select(`*, teachers(users(full_name, avatar_url))`)
           .eq('academic_year', currentYear)
           .eq('semester', currentSemester);
 
         if (error) throw error;
 
-        // 2. معالجة البيانات وتجميعها لكل معلم (Aggregation)
         const groupedData = (data || []).reduce((acc: any, curr: any) => {
           const tId = curr.teacher_id;
           if (!acc[tId]) {
             acc[tId] = {
-              teacher_id: tId,
-              name: curr.teachers?.users?.full_name || 'معلم غير معروف',
-              avatar: curr.teachers?.users?.avatar_url,
-              subject: curr.subject_name,
-              total_evals: 0,
-              sci_sum: 0,
-              mgt_sum: 0,
-              hum_sum: 0,
-              feedbacks: []
+              teacher_id: tId, name: curr.teachers?.users?.full_name || 'معلم غير معروف', avatar: curr.teachers?.users?.avatar_url,
+              subject: curr.subject_name, total_evals: 0, sci_sum: 0, mgt_sum: 0, hum_sum: 0, feedbacks: []
             };
           }
-          
           acc[tId].total_evals += 1;
           acc[tId].sci_sum += curr.scientific_rating;
           acc[tId].mgt_sum += curr.management_rating;
           acc[tId].hum_sum += curr.humanity_rating;
-          
-          if (curr.feedback && curr.feedback.trim() !== '') {
-            acc[tId].feedbacks.push({ text: curr.feedback, date: curr.created_at });
-          }
-          
+          if (curr.feedback && curr.feedback.trim() !== '') acc[tId].feedbacks.push({ text: curr.feedback, date: curr.created_at });
           return acc;
         }, {});
 
-        // 3. حساب المتوسطات الحسابية (Averages)
         const finalStats = Object.values(groupedData).map((t: any) => {
           const sci_avg = t.sci_sum / t.total_evals;
           const mgt_avg = t.mgt_sum / t.total_evals;
           const hum_avg = t.hum_sum / t.total_evals;
           const overall = (sci_avg + mgt_avg + hum_avg) / 3;
-
-          return {
-            ...t,
-            sci_avg: Number(sci_avg.toFixed(1)),
-            mgt_avg: Number(mgt_avg.toFixed(1)),
-            hum_avg: Number(hum_avg.toFixed(1)),
-            overall_avg: Number(overall.toFixed(1))
-          };
+          return { ...t, sci_avg: Number(sci_avg.toFixed(1)), mgt_avg: Number(mgt_avg.toFixed(1)), hum_avg: Number(hum_avg.toFixed(1)), overall_avg: Number(overall.toFixed(1)) };
         });
 
-        // ترتيب المعلمين من الأعلى تقييماً إلى الأقل
         finalStats.sort((a: any, b: any) => b.overall_avg - a.overall_avg);
-        
         setTeacherStats(finalStats);
       } catch (err) {
         console.error('Error fetching evaluations:', err);
@@ -100,16 +86,35 @@ export default function StudentEvaluationsDashboard() {
       }
     };
 
-    if (['admin', 'management'].includes(currentRole)) {
-      fetchEvaluations();
-    }
+    if (['admin', 'management'].includes(currentRole)) fetchEvaluationsAndSettings();
   }, [currentRole]);
+
+  // 🚀 دالة تبديل حالة التقييم
+  const toggleEvalSystem = async () => {
+     if (!settingsId) return;
+     const confirmMsg = isEvalActive 
+       ? 'هل أنت متأكد من إغلاق بوابة التقييمات للطلاب؟ (لن يتمكنوا من التقييم بعد الآن)' 
+       : 'هل أنت متأكد من تفعيل بوابة التقييمات؟ (ستظهر البوابة الإجبارية لجميع الطلاب فوراً)';
+     
+     if (!confirm(confirmMsg)) return;
+
+     setIsToggling(true);
+     try {
+        const newVal = !isEvalActive;
+        const { error } = await supabase.from('platform_settings').update({ is_evaluations_active: newVal }).eq('id', settingsId);
+        if (error) throw error;
+        setIsEvalActive(newVal);
+     } catch (e) {
+        alert('حدث خطأ أثناء التبديل!');
+     } finally {
+        setIsToggling(false);
+     }
+  };
 
   if (!['admin', 'management'].includes(currentRole)) return null;
 
   const topTeachers = teacherStats.slice(0, 3);
-  const bottomTeachers = teacherStats.filter(t => t.overall_avg < 3.5).slice(-3).reverse(); // المعلمين اللي تقييمهم أقل من 3.5
-  
+  const bottomTeachers = teacherStats.filter(t => t.overall_avg < 3.5).slice(-3).reverse();
   const filteredTeachers = teacherStats.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const StarDisplay = ({ val }: { val: number }) => (
@@ -123,8 +128,7 @@ export default function StudentEvaluationsDashboard() {
     return (
       <div className="mb-3">
         <div className="flex justify-between items-center mb-1 text-[10px] font-bold text-slate-500">
-          <span>{label}</span>
-          <span className="text-slate-800">{value} / 5</span>
+          <span>{label}</span><span className="text-slate-800">{value} / 5</span>
         </div>
         <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200 shadow-inner">
           <motion.div initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 1 }} className={cn("h-full rounded-full", colorClass)}></motion.div>
@@ -147,9 +151,10 @@ export default function StudentEvaluationsDashboard() {
 
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 relative">
         
-        {/* 📋 الهيدر الإداري */}
+        {/* 📋 الهيدر الإداري مع زر التحكم المركزي */}
         <div className="bg-white rounded-[2rem] p-6 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-[80px] pointer-events-none rounded-full"></div>
+          
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100 pb-6 mb-6">
             <div>
               <h1 className="text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
@@ -158,16 +163,31 @@ export default function StudentEvaluationsDashboard() {
               </h1>
               <p className="text-slate-500 font-bold text-sm">قياس جودة الشرح وإدارة الفصول بناءً على تصويت الطلاب السري.</p>
             </div>
-            <div className="bg-slate-50 px-6 py-4 rounded-2xl border border-slate-200 text-center shadow-inner min-w-[150px]">
-              <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">إجمالي التقييمات المسجلة</p>
-              <p className="text-3xl font-black text-indigo-600">{teacherStats.reduce((acc, curr) => acc + curr.total_evals, 0)}</p>
+            
+            <div className="flex items-center gap-4 w-full md:w-auto">
+              <div className="bg-slate-50 px-6 py-4 rounded-2xl border border-slate-200 text-center shadow-inner flex-1 md:flex-none">
+                <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">إجمالي التقييمات</p>
+                <p className="text-3xl font-black text-indigo-600">{teacherStats.reduce((acc, curr) => acc + curr.total_evals, 0)}</p>
+              </div>
+
+              {/* 🚀 الزر المركزي السحري */}
+              <button 
+                onClick={toggleEvalSystem}
+                disabled={isToggling}
+                className={cn("px-6 py-4 rounded-2xl border flex items-center justify-center gap-3 font-black transition-all shadow-md active:scale-95 disabled:opacity-50 flex-1 md:flex-none", isEvalActive ? "bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100" : "bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100")}
+              >
+                 {isToggling ? <Loader2 className="w-6 h-6 animate-spin" /> : <Power className="w-6 h-6" />}
+                 <div className="text-right">
+                    <p className="text-[10px] uppercase tracking-widest mb-0.5 text-slate-500">حالة بوابة التقييم</p>
+                    <p className="text-sm">{isEvalActive ? 'البوابة مفتوحة (إيقاف)' : 'البوابة مغلقة (تفعيل)'}</p>
+                 </div>
+              </button>
             </div>
           </div>
         </div>
 
         {/* 🏆 لوحة الشرف ومؤشرات الخطر */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* لوحة الشرف */}
           <div className="bg-gradient-to-br from-indigo-900 to-blue-900 rounded-[2rem] p-6 sm:p-8 shadow-xl relative overflow-hidden border border-indigo-700">
             <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/20 blur-2xl rounded-full"></div>
             <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2 relative z-10"><Trophy className="w-6 h-6 text-amber-400"/> أفضل 3 معلمين (حسب تقييم الطلاب)</h2>
@@ -192,7 +212,6 @@ export default function StudentEvaluationsDashboard() {
             </div>
           </div>
 
-          {/* مؤشرات التدخل */}
           <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
             <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><TrendingDown className="w-6 h-6 text-rose-500"/> مؤشرات تحتاج لتدخل (تقييم أقل من 3.5)</h2>
             <div className="space-y-4">
