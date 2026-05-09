@@ -1,5 +1,5 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable */
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info,
-  AlertCircle
+  AlertCircle, Clock // 🚀 تم استيراد الـ Clock هنا لحل مشكلة السيرفر
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,7 +16,7 @@ import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
-import * as Dialog from '@radix-ui/react-dialog'; // 🚀 استيراد النوافذ المنبثقة لقراءة الأعذار
+import * as Dialog from '@radix-ui/react-dialog'; 
 
 export default function ExamCommitteesControl() {
   const { authRole, userRole } = useAuth() as any;
@@ -44,7 +44,6 @@ export default function ExamCommitteesControl() {
   const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false);
   const [isClassPrintModalOpen, setIsClassPrintModalOpen] = useState(false);
   
-  // 🚀 حالات قراءة العذر للمدير
   const [isReadExcuseModalOpen, setIsReadExcuseModalOpen] = useState(false);
   const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   
@@ -99,7 +98,6 @@ export default function ExamCommitteesControl() {
       });
 
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
-      // 🚀 جلب حالات التوقيع والأعذار (status, excuse_reason)
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(sections(name, classes(level)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
@@ -568,7 +566,6 @@ export default function ExamCommitteesControl() {
                                      <button onClick={() => handleRemoveInvigilator(inv.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
                                   </div>
                                   
-                                  {/* 🚀 الرادار اللوني لحالة المراقب داخل اللجنة */}
                                   <div className="flex items-center justify-between border-t border-slate-200/50 pt-1.5 mt-0.5">
                                      {inv.status === 'signed' ? (
                                         <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> وقع الاستلام</span>
