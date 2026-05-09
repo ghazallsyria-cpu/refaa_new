@@ -1,10 +1,12 @@
 // @ts-nocheck
 /* eslint-disable react/no-unescaped-entities */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Users, UserCheck, ShieldCheck, Loader2, Search, CheckCircle2, XCircle, ScanLine, AlertTriangle, AlertCircle, Camera, CalendarClock
+  Users, UserCheck, ShieldCheck, Loader2, Search, CheckCircle2, XCircle, ScanLine, 
+  AlertTriangle, AlertCircle, Camera, CalendarClock, Siren, UploadCloud, FileSignature, X
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,6 +15,7 @@ import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { QrReader } from 'react-qr-reader'; 
+import * as Dialog from '@radix-ui/react-dialog'; // 🚀 استيراد النوافذ المنبثقة
 
 export default function InvigilatorRadar() {
   const router = useRouter();
@@ -28,12 +31,19 @@ export default function InvigilatorRadar() {
   const [searchTerm, setSearchTerm] = useState('');
   
   // 🚀 حالات التحكم بالمسح
-const [isScanMode, setIsScanMode] = useState(false);
-const [isCameraActive, setIsCameraActive] = useState(false);
-const [isScannerActive, setIsScannerActive] = useState(false);
+  const [isScanMode, setIsScanMode] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isScannerActive, setIsScannerActive] = useState(false);
 
-const scanInputRef = useRef<HTMLInputElement>(null);
-const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 🚀 حالات "محضر الغش" (Cheating Report)
+  const [isCheatingModalOpen, setIsCheatingModalOpen] = useState(false);
+  const [selectedCheatingStudent, setSelectedCheatingStudent] = useState<any>(null);
+  const [cheatingNotes, setCheatingNotes] = useState('');
+  const [cheatingEvidenceUrl, setCheatingEvidenceUrl] = useState('');
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
+
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
@@ -54,8 +64,7 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
         .limit(1);
 
       if (!exams || exams.length === 0) {
-        setIsLoading(false);
-        return; 
+        setIsLoading(false); return; 
       }
       const activeExam = exams[0];
       setTodayExam(activeExam);
@@ -67,8 +76,7 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
         .single();
 
       if (!myAssignment) {
-        setIsLoading(false);
-        return; 
+        setIsLoading(false); return; 
       }
       setMyCommittee(myAssignment.exam_committees);
 
@@ -85,11 +93,7 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     try {
       const { data: allocations } = await supabase
         .from('student_seat_allocations')
-        .select(`
-          seat_number, 
-          student_id,
-          students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )
-        `)
+        .select(`seat_number, student_id, students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )`)
         .eq('committee_id', committeeId)
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester)
@@ -97,6 +101,13 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
       const { data: attendanceRecords } = await supabase
         .from('exam_attendance')
+        .select('*')
+        .eq('timetable_id', timetableId)
+        .eq('committee_id', committeeId);
+
+      // 🚀 جلب سجلات الغش لتلوين البطاقات
+      const { data: cheatingRecords } = await supabase
+        .from('exam_cheating_reports')
         .select('*')
         .eq('timetable_id', timetableId)
         .eq('committee_id', committeeId);
@@ -110,6 +121,11 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
         const clsName = classInfo?.name || 'صف غير محدد';
         const secName = sectionInfo?.name ? ` - ${sectionInfo.name}` : '';
         const attendanceRecord = attendanceRecords?.find(r => r.student_id === alloc.student_id);
+        const cheatRecord = cheatingRecords?.find(r => r.student_id === alloc.student_id);
+
+        let finalStatus = 'pending';
+        if (cheatRecord) finalStatus = 'cheating'; // 🚀 الأولوية لحالة الغش
+        else if (attendanceRecord) finalStatus = attendanceRecord.status;
 
         return {
           student_id: alloc.student_id,
@@ -117,7 +133,7 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
           full_name: userInfo?.full_name || 'طالب مجهول',
           avatar_url: userInfo?.avatar_url,
           class_name: `${clsName}${secName}`,
-          status: attendanceRecord ? attendanceRecord.status : 'pending',
+          status: finalStatus,
           record_id: attendanceRecord?.id || null
         };
       });
@@ -132,7 +148,7 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     if (user?.id) fetchMyMission();
   }, [user?.id]);
 
-  const markAttendance = async (studentId: string, newStatus: 'present' | 'absent' | 'excused') => {
+  const markAttendance = async (studentId: string, newStatus: 'present' | 'absent' | 'excused' | 'cheating') => {
     if (!todayExam?.id || !myCommittee?.id || !user?.id) return;
     setIsProcessing(true);
 
@@ -145,7 +161,7 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
           student_id: studentId,
           timetable_id: todayExam.id,
           committee_id: myCommittee.id,
-          status: newStatus,
+          status: newStatus === 'cheating' ? 'present' : newStatus, // نعتبره حاضراً في جدول الغياب الأساسي
           recorded_by: user.id
         }, { onConflict: 'student_id, timetable_id' })
         .select()
@@ -155,11 +171,9 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
       setStudents(prev => prev.map(s => s.student_id === studentId ? { ...s, record_id: data.id } : s));
 
     } catch (error: any) {
-  console.error('Attendance Error Full:', error);
-  alert(JSON.stringify(error, null, 2));
-
-  fetchStudents(todayExam.id, myCommittee.id);
-} finally {
+      alert('حدث خطأ أثناء تسجيل الحالة!');
+      fetchStudents(todayExam.id, myCommittee.id);
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -183,7 +197,10 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     }
 
     if (targetStudent) {
-      if (targetStudent.status !== 'present') {
+      if (targetStudent.status === 'cheating') {
+        playErrorBeep();
+        alert('تنبيه: هذا الطالب موقوف بسبب محضر غش سابق!');
+      } else if (targetStudent.status !== 'present') {
         playSuccessBeep();
         markAttendance(targetStudent.student_id, 'present');
       } else {
@@ -195,7 +212,6 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     }
   };
 
-  // معالج مسدس الباركود أو إدخال الكيبورد
   const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const scannedCode = e.currentTarget.value.trim();
@@ -204,34 +220,94 @@ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     }
   };
 
-  // 🚀 معالج الكاميرا (QrReader)
   const handleCameraScan = (result: any, error: any) => {
     if (!!result && result?.text) {
       const rawText = result.text.trim();
       setIsCameraActive(false); 
       processScannedCode(rawText);
-timeoutRef.current = setTimeout(() => {
-  setIsCameraActive(true);
-}, 2500);    }
-  };
-
-useEffect(() => {
-  if (isScanMode && !isCameraActive && scanInputRef.current) {
-    scanInputRef.current.focus();
-  }
-}, [isScanMode, isCameraActive]);
-
-useEffect(() => {
-  return () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        setIsCameraActive(true);
+      }, 2500);    
     }
   };
-}, []);
 
-  const playSuccessBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); };
-  const playAlreadyEnteredBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(600, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.2); };
-  const playErrorBeep = () => { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4); };
+  useEffect(() => {
+    if (isScanMode && !isCameraActive && scanInputRef.current) {
+      scanInputRef.current.focus();
+    }
+  }, [isScanMode, isCameraActive]);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  // 🚀 دوال محضر الغش (Cheating Report Methods)
+  const openCheatingModal = (student: any) => {
+    setSelectedCheatingStudent(student);
+    setCheatingNotes('');
+    setCheatingEvidenceUrl('');
+    setIsCheatingModalOpen(true);
+  };
+
+  const handleEvidenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingEvidence(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'rafaa_preset');
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dzmyqnj01';
+      
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if (data.secure_url) {
+        setCheatingEvidenceUrl(data.secure_url);
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (err) {
+      alert('فشل رفع الصورة المرفقة. تأكد من جودة الاتصال.');
+    } finally {
+      setIsUploadingEvidence(false);
+    }
+  };
+
+  const submitCheatingReport = async () => {
+    if (!cheatingNotes.trim()) { alert('يرجى كتابة تفاصيل واقعة الغش!'); return; }
+    if (!confirm('تنبيه: سيتم رفع المحضر للجنة الكنترول المركزية ولن يمكنك التراجع. هل أنت متأكد من حالة الغش؟')) return;
+    
+    setIsProcessing(true);
+    try {
+      const payload = {
+        student_id: selectedCheatingStudent.student_id,
+        timetable_id: todayExam.id,
+        committee_id: myCommittee.id,
+        reporter_id: user.id,
+        notes: cheatingNotes,
+        evidence_url: cheatingEvidenceUrl,
+        status: 'pending_review'
+      };
+
+      const { error } = await supabase.from('exam_cheating_reports').insert([payload]);
+      if (error) throw error;
+
+      await markAttendance(selectedCheatingStudent.student_id, 'cheating');
+      alert('تم رفع المحضر بنجاح. الطالب الآن في حالة حرمان بانتظار قرار الكنترول.');
+      setIsCheatingModalOpen(false);
+    } catch (e) {
+      alert('حدث خطأ أثناء رفع المحضر.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const playSuccessBeep = () => { try{ const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); }catch(e){} };
+  const playAlreadyEnteredBeep = () => { try{ const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(600, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.2); }catch(e){} };
+  const playErrorBeep = () => { try{ const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4); }catch(e){} };
 
   if (!['teacher', 'admin', 'management'].includes(currentRole)) {
     return (
@@ -254,6 +330,7 @@ useEffect(() => {
 
   const presentCount = students.filter(s => s.status === 'present').length;
   const absentCount = students.filter(s => s.status === 'absent').length;
+  const cheatingCount = students.filter(s => s.status === 'cheating').length;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-10 font-cairo pb-24" dir="rtl">
@@ -291,9 +368,13 @@ useEffect(() => {
                       <p className="text-xs text-emerald-300 font-black mb-1">حاضر</p>
                       <p className="text-2xl font-black">{presentCount}</p>
                    </div>
-                   <div className="text-center px-4">
-                      <p className="text-xs text-rose-300 font-black mb-1">غائب</p>
+                   <div className="text-center px-4 border-l border-white/20">
+                      <p className="text-xs text-amber-300 font-black mb-1">غائب</p>
                       <p className="text-2xl font-black">{absentCount}</p>
+                   </div>
+                   <div className="text-center px-4">
+                      <p className="text-xs text-rose-400 font-black mb-1">حرمان/غش</p>
+                      <p className="text-2xl font-black text-rose-400">{cheatingCount}</p>
                    </div>
                 </div>
               </div>
@@ -321,7 +402,7 @@ useEffect(() => {
                        }}
                        className="bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 px-8 rounded-2xl shadow-lg shadow-emerald-500/30 flex items-center gap-3 transition-all active:scale-95"
                     >
-                       <Camera className="w-6 h-6" /> تشغيل الكاميرا والمسح السريع
+                       <Camera className="w-6 h-6" /> تشغيل الكاميرا للتحضير السريع
                     </button>
                  ) : (
                     <button 
@@ -330,7 +411,7 @@ useEffect(() => {
                          setIsScannerActive(false);
                          setIsCameraActive(false);
                        }}
-                       className="bg-rose-100 hover:bg-rose-200 text-rose-600 font-black py-3 px-6 rounded-2xl shadow-sm flex items-center gap-3 transition-all"
+                       className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-black py-3 px-6 rounded-2xl shadow-sm flex items-center gap-3 transition-all"
                     >
                        <XCircle className="w-5 h-5" /> إيقاف الكاميرا
                     </button>
@@ -409,55 +490,72 @@ useEffect(() => {
                   {filteredStudents.map((student, idx) => {
                      const isPresent = student.status === 'present';
                      const isAbsent = student.status === 'absent';
+                     const isCheating = student.status === 'cheating';
                      const stdInitial = String(student.full_name || 'ط').charAt(0);
 
                      return (
                         <div key={student.student_id} className={cn(
-                           "p-4 rounded-2xl border-2 transition-all flex items-center justify-between gap-4 relative overflow-hidden",
+                           "p-4 rounded-2xl border-2 transition-all flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden group",
+                           isCheating ? "bg-slate-900 border-slate-800" :
                            isPresent ? "bg-emerald-50 border-emerald-200" : 
-                           isAbsent ? "bg-rose-50 border-rose-200" : 
+                           isAbsent ? "bg-amber-50 border-amber-200" : 
                            "bg-white border-slate-100 hover:border-slate-300"
                         )}>
-                           <div className="flex items-center gap-3">
+                           <div className="flex items-center gap-3 w-full sm:w-auto">
                               <div className={cn(
                                  "w-12 h-12 rounded-xl flex items-center justify-center font-black shrink-0 shadow-inner",
+                                 isCheating ? "bg-rose-500/20 text-rose-400" :
                                  isPresent ? "bg-emerald-200 text-emerald-700" :
-                                 isAbsent ? "bg-rose-200 text-rose-700" : "bg-slate-100 text-slate-500"
+                                 isAbsent ? "bg-amber-200 text-amber-700" : "bg-slate-100 text-slate-500"
                               )}>
-                                 {student.avatar_url ? (
+                                 {isCheating ? <Siren className="w-6 h-6 animate-pulse" /> : student.avatar_url ? (
                                     <img src={student.avatar_url} className="w-full h-full rounded-xl object-cover" alt="avatar" />
                                  ) : stdInitial}
                               </div>
                               <div className="flex-1 min-w-0 pr-1">
-                                 <p className="font-black text-sm text-slate-800 line-clamp-1">{student.full_name}</p>
-                                 <p className="text-[10px] font-bold text-slate-500 mt-0.5">{student.class_name}</p>
+                                 <p className={cn("font-black text-sm line-clamp-1", isCheating ? "text-rose-400" : "text-slate-800")}>{student.full_name}</p>
+                                 <p className={cn("text-[10px] font-bold mt-0.5", isCheating ? "text-slate-500" : "text-slate-500")}>{student.class_name}</p>
                                  <div className="mt-1.5 inline-flex items-center gap-1.5 bg-slate-800 text-white px-2 py-0.5 rounded text-[10px] font-black tracking-widest">
-                                    <span className="text-amber-400">{student.seat_number}</span>
+                                    <span className={isCheating ? "text-rose-400" : "text-amber-400"}>{student.seat_number}</span>
                                  </div>
                               </div>
                            </div>
 
-                           <div className="flex flex-col gap-2 shrink-0">
-                              <button 
-                                 onClick={() => markAttendance(student.student_id, 'present')}
-                                 disabled={isProcessing}
-                                 className={cn(
-                                    "p-2 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50",
-                                    isPresent ? "bg-emerald-500 text-white shadow-md" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                                 )} title="تسجيل كحاضر"
-                              >
-                                 <CheckCircle2 className="w-5 h-5"/>
-                              </button>
-                              <button 
-                                 onClick={() => markAttendance(student.student_id, 'absent')}
-                                 disabled={isProcessing}
-                                 className={cn(
-                                    "p-2 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50",
-                                    isAbsent ? "bg-rose-500 text-white shadow-md" : "bg-rose-50 text-rose-600 hover:bg-rose-100"
-                                 )} title="تسجيل كغائب"
-                              >
-                                 <XCircle className="w-5 h-5"/>
-                              </button>
+                           <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                              {isCheating ? (
+                                 <div className="px-4 py-2 bg-rose-500/20 border border-rose-500/40 text-rose-400 rounded-lg text-xs font-black w-full text-center">حالة غش وحرمان 🛑</div>
+                              ) : (
+                                 <>
+                                    <button 
+                                       onClick={() => markAttendance(student.student_id, 'present')}
+                                       disabled={isProcessing}
+                                       className={cn(
+                                          "flex-1 sm:flex-none p-2 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50",
+                                          isPresent ? "bg-emerald-500 text-white shadow-md" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                       )} title="تسجيل كحاضر"
+                                    >
+                                       <CheckCircle2 className="w-5 h-5"/>
+                                    </button>
+                                    <button 
+                                       onClick={() => markAttendance(student.student_id, 'absent')}
+                                       disabled={isProcessing}
+                                       className={cn(
+                                          "flex-1 sm:flex-none p-2 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50",
+                                          isAbsent ? "bg-amber-500 text-white shadow-md" : "bg-amber-50 text-amber-600 hover:bg-amber-100"
+                                       )} title="تسجيل كغائب"
+                                    >
+                                       <XCircle className="w-5 h-5"/>
+                                    </button>
+                                    {/* 🚀 الزر النووي: محضر الغش */}
+                                    <button 
+                                       onClick={() => openCheatingModal(student)}
+                                       disabled={isProcessing}
+                                       className="flex-1 sm:flex-none p-2 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition-all active:scale-95 border border-rose-100 disabled:opacity-50" title="تحرير محضر غش"
+                                    >
+                                       <Siren className="w-5 h-5"/>
+                                    </button>
+                                 </>
+                              )}
                            </div>
                         </div>
                      )
@@ -468,29 +566,80 @@ useEffect(() => {
           </>
         )}
       </div>
+
+      {/* 🚀 نافذة (Modal) محضر الغش */}
+      <AnimatePresence>
+        {isCheatingModalOpen && selectedCheatingStudent && (
+          <Dialog.Root open={isCheatingModalOpen} onOpenChange={setIsCheatingModalOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-rose-950/80 backdrop-blur-md z-50" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#0a0f1d] border-2 border-rose-500/50 rounded-[2.5rem] w-[95%] max-w-lg shadow-[0_0_80px_rgba(225,29,72,0.4)] z-50 p-6 sm:p-8" dir="rtl">
+                
+                <div className="absolute top-0 right-0 w-48 h-48 bg-rose-600/20 blur-3xl rounded-full pointer-events-none"></div>
+
+                <div className="flex justify-between items-center mb-6 border-b border-rose-500/20 pb-6 relative z-10">
+                  <div>
+                    <Dialog.Title className="text-xl sm:text-2xl font-black text-rose-400 flex items-center gap-3">
+                      <Siren className="w-6 h-6 sm:w-8 sm:h-8 animate-pulse" /> تحرير محضر غش!
+                    </Dialog.Title>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-2">توثيق حالة طارئة للطالب: <span className="text-white">{selectedCheatingStudent.full_name}</span></p>
+                  </div>
+                  <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90"><X className="w-5 h-5" /></Dialog.Close>
+                </div>
+
+                <div className="space-y-5 relative z-10">
+                  <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                    <p className="text-xs font-bold text-rose-200 leading-relaxed">
+                      هذا الإجراء رسمي ولا رجعة فيه. سيتم تحويل الطالب إلى حالة (حرمان)، وسيرفع المحضر فوراً لغرفة العمليات المركزية والكنترول لاتخاذ القرار النهائي.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-rose-300 uppercase tracking-widest">تفاصيل الواقعة بدقة</label>
+                    <textarea 
+                      value={cheatingNotes} onChange={(e) => setCheatingNotes(e.target.value)}
+                      placeholder="كيف تمت محاولة الغش؟ أين وجدت الأداة؟..." 
+                      className="w-full bg-black/40 border border-rose-500/30 rounded-xl p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-rose-400 h-28 resize-none custom-scrollbar shadow-inner placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-rose-300 uppercase tracking-widest">تصوير الأداة المضبوطة (إلزامي للتوثيق)</label>
+                    <label className={cn("relative flex flex-col items-center justify-center p-5 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingEvidence ? "border-rose-500/50 bg-rose-500/10" : cheatingEvidenceUrl ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/30 bg-black/40 hover:border-rose-400 hover:bg-rose-500/5")}>
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleEvidenceUpload} disabled={isUploadingEvidence} />
+                      {isUploadingEvidence ? (
+                        <div className="flex flex-col items-center gap-2 text-rose-400"><Loader2 className="w-6 h-6 animate-spin" /><span className="text-[10px] font-black">جاري رفع الدليل...</span></div>
+                      ) : cheatingEvidenceUrl ? (
+                        <div className="flex flex-col items-center gap-2 text-emerald-400"><CheckCircle2 className="w-6 h-6" /><span className="text-[10px] font-black text-center">تم إرفاق الدليل بنجاح (انقر لتغييره)</span></div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-rose-300/60"><Camera className="w-6 h-6" /><span className="text-[10px] font-bold text-center">افتح الكاميرا لالتقاط صورة للبراشيم أو الهاتف</span></div>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-rose-500/20 flex gap-3 relative z-10">
+                  <button onClick={submitCheatingReport} disabled={isProcessing || isUploadingEvidence} className="flex-1 py-4 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl transition-all shadow-[0_0_20px_rgba(225,29,72,0.5)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95">
+                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><FileSignature className="w-5 h-5"/> اعتماد المحضر الرسمي</>}
+                  </button>
+                </div>
+
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </AnimatePresence>
+
       {/* 🚀 CSS مخصص لإجبار الكاميرا على ملء الشاشة */}
       <style dangerouslySetInnerHTML={{__html:`
         @keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } } 
         .animate-scan { animation: scan 2s linear infinite; }
-        
-        /* الاستهداف الشامل للحاوية الداخلية للمكتبة */
-        .qr-force-wrapper > div, .qr-force-wrapper section { 
-            padding-top: 0 !important; 
-            height: 100% !important; 
-            position: absolute !important;
-            top: 0; left: 0; right: 0; bottom: 0;
-        }
-        .qr-force-wrapper video { 
-            object-fit: cover !important; 
-            width: 100% !important; 
-            height: 100% !important; 
-            position: absolute !important;
-            top: 0 !important; 
-            left: 0 !important; 
-        }
+        .qr-force-wrapper > div, .qr-force-wrapper section { padding-top: 0 !important; height: 100% !important; position: absolute !important; top: 0; left: 0; right: 0; bottom: 0; }
+        .qr-force-wrapper video { object-fit: cover !important; width: 100% !important; height: 100% !important; position: absolute !important; top: 0 !important; left: 0 !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
       `}}/>
-
       
-    </div>
+    </motion.div>
   );
 }
