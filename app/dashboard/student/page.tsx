@@ -166,12 +166,11 @@ export default function StudentDashboard() {
               }
             }
 
-            // 🚀 جلب بيانات المنظومة الامتحانية بشكل معزول وآمن من أخطاء الـ Type
+            // 🚀 جلب بيانات المنظومة الامتحانية بشكل معزول وآمن
             try {
                const tData: any = trackRes.data;
                const sData: any = data.student;
                
-               // تجاوز حماية TypeScript باستخدام any والمصفوفات
                const classLevelStr = String(
                  tData?.sections?.classes?.name || 
                  tData?.sections?.[0]?.classes?.name || 
@@ -238,7 +237,7 @@ export default function StudentDashboard() {
       if (error) throw error;
 
       alert('تم تقديم طلب الوثائق بنجاح! يرجى التوجه لمسؤول المدرسة لدفع المبلغ واعتماد الطلب للمندوب.');
-      fetchData(); // لتحديث الشاشة وعرض حالة الطلب
+      fetchData(); 
     } catch (e) { alert('حدث خطأ أثناء التقديم.'); console.error(e); } finally { setIsSubmittingDocs(false); }
   };
 
@@ -355,9 +354,7 @@ export default function StudentDashboard() {
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
-    try {
-      return format(new Date(dateStr), formatStr, { locale: arSA });
-    } catch (e) { return fallback; }
+    try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
   };
 
   // 🚀 هندسة العداد التنازلي للاختبار
@@ -425,7 +422,6 @@ export default function StudentDashboard() {
   
   // 🚀 اكتشاف خريجي الثاني عشر
   const isTwelfthGrade = classNameStr.includes('الثاني عشر') || classNameStr.includes('ثاني عشر') || classNameStr.includes('12');
-
   const hasSelectedTrack = !!studentData?.next_year_track;
   
   const unlockedGrades = recentGrades.filter(g => !checkIsLocked(g.exam));
@@ -517,199 +513,244 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* 🪪 الهوية الامتحانية الحية (Live Exam ID) - تظهر فقط في فترة الامتحانات */}
-            {seatAllocation && (
-               <div className="shrink-0 perspective-1000 hidden md:block">
-                  <div className="w-[65mm] h-[100mm] border-[4px] border-slate-900 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
-                     <div className="absolute top-0 left-0 w-full h-[28mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 border-b-[3px] border-slate-700 relative overflow-hidden">
-                        <p className="text-white font-black text-[14px] mt-1 tracking-wide">مدرسة الرفعة النموذجية بنين</p>
-                        <div className="mt-2 bg-slate-100 px-4 py-1.5 rounded-full shadow-inner flex items-center gap-1.5 border border-slate-300">
-                           <p className="text-slate-900 font-black text-[10px] tracking-widest uppercase">{seatAllocation.exam_committees?.name}</p>
-                        </div>
-                     </div>
-                     <div className="relative z-20 w-[24mm] h-[24mm] mt-[16mm] mb-2 rounded-2xl bg-white border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.3)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
-                        {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> : <UserCircle className="w-10 h-10 text-slate-300" />}
-                     </div>
-                     <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
-                        <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{rawFullName}</h2>
-                        <p className="text-[10px] font-bold text-slate-500 mb-2 border-b-2 border-slate-200 pb-2 w-full">{classNameStr}</p>
-                        <div className="mt-1 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
-                           <p className="text-[9px] font-black text-slate-500 uppercase">رقم الجلوس</p>
-                           <p className="text-3xl font-black text-rose-600 tracking-widest">{seatAllocation.seat_number}</p>
-                        </div>
-                        <div className="mt-auto mb-3 flex flex-col items-center">
-                           <div className="w-[18mm] h-[18mm] bg-white p-0.5 rounded-lg border-2 border-slate-800"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
-                        </div>
-                     </div>
-                     <div className="w-full h-2.5 bg-slate-900 shrink-0"></div>
-                  </div>
-               </div>
-            )}
-            
-            {/* عرض الهوية الامتحانية للموبايل (شكل مبسط) */}
-            {seatAllocation && (
-               <div className="w-full md:hidden bg-slate-900 border-2 border-slate-700 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex items-center gap-4 mt-6">
-                  <div className="absolute -right-4 -top-4 w-20 h-20 bg-slate-700/50 rounded-full blur-xl pointer-events-none"></div>
-                  <div className="w-16 h-16 bg-white p-1 rounded-xl border border-slate-500 shrink-0 shadow-inner">
-                     <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
-                  </div>
-                  <div className="flex-1 text-right">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
-                     <h3 className="text-lg font-black text-white">{seatAllocation.exam_committees?.name}</h3>
-                  </div>
-                  <div className="shrink-0 text-center border-r border-slate-700 pr-4">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">رقم الجلوس</p>
-                     <p className="text-2xl font-black text-rose-500 tracking-widest">{seatAllocation.seat_number}</p>
-                  </div>
-               </div>
-            )}
-
+            <div className="flex flex-row flex-wrap gap-3 sm:gap-4 justify-center lg:shrink-0 w-full lg:w-auto">
+              <div className="rounded-2xl sm:rounded-[2rem] bg-[#02040a]/60 p-5 sm:p-6 backdrop-blur-md border border-white/5 flex flex-col items-center justify-center min-w-[130px] shadow-inner hover:border-emerald-500/30 transition-colors flex-1 sm:flex-none">
+                <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">نسبة الحضور</p>
+                <p className="text-3xl sm:text-4xl font-black text-emerald-400 drop-shadow-md">{attendanceStats?.rate || 0}%</p>
+              </div>
+              <div className="rounded-2xl sm:rounded-[2rem] bg-[#02040a]/60 p-5 sm:p-6 backdrop-blur-md border border-white/5 flex flex-col items-center justify-center min-w-[130px] shadow-inner hover:border-amber-500/30 transition-colors flex-1 sm:flex-none">
+                <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">المتوسط العام</p>
+                <p className="text-3xl sm:text-4xl font-black text-amber-400 drop-shadow-md">{avgScore}%</p>
+              </div>
+            </div>
           </div>
         </div>
 
+        {/* 🚀 الهوية الامتحانية الحية (بانر منفصل) - يظهر فقط إذا كان هناك رقم جلوس */}
+        <AnimatePresence>
+          {seatAllocation && (
+             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
+                <div className="absolute top-[-50%] left-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-rose-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
+                <div className="absolute bottom-[-50%] right-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-indigo-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
+                
+                <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
+                   
+                   <div className="flex-1 text-center lg:text-right">
+                      <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs sm:text-sm font-black mb-6 shadow-inner backdrop-blur-xl">
+                        <Ticket className="w-4 h-4 text-rose-400" /> وثيقة رسمية - رقم الجلوس
+                      </div>
+                      <h2 className="text-3xl sm:text-5xl font-black text-white mb-6 tracking-tight leading-tight drop-shadow-2xl">
+                        بوابتك إلى <span className="text-transparent bg-clip-text bg-gradient-to-l from-rose-400 to-indigo-300">النجاح والتفوق</span>!
+                      </h2>
+                      <p className="text-slate-300 text-sm sm:text-lg font-bold leading-relaxed mb-8 max-w-2xl mx-auto lg:mx-0 opacity-90">
+                        تم إصدار هويتك الامتحانية واعتماد رقم الجلوس الخاص بك. يرجى الاحتفاظ بهذه البطاقة وإبرازها عند دخول قاعة الاختبار.
+                      </p>
+                      
+                      <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
+                         <div className="bg-rose-500/10 px-6 py-4 rounded-2xl border border-rose-500/30 flex items-center gap-4 shadow-inner backdrop-blur-md cursor-default">
+                             <div className="p-3 bg-rose-500/20 rounded-xl"><ShieldCheck className="w-6 h-6 text-rose-400" /></div>
+                             <div className="text-right">
+                               <p className="text-[10px] font-bold text-rose-200/80 mb-1 uppercase tracking-widest">اللجنة المخصصة لك:</p>
+                               <h3 className="text-xl font-black text-white drop-shadow-md">{seatAllocation.exam_committees?.name}</h3>
+                             </div>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* 🪪 هوية الطالب الذكية (3D ID Card) - ديسكتوب */}
+                   <div className="shrink-0 perspective-1000 hidden md:block">
+                      <div className="w-[65mm] h-[100mm] border-[4px] border-slate-900 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
+                         <div className="absolute top-0 left-0 w-full h-[28mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 border-b-[3px] border-slate-700 relative overflow-hidden">
+                            <p className="text-white font-black text-[14px] mt-1 tracking-wide drop-shadow-md">مدرسة الرفعة النموذجية بنين</p>
+                            <div className="mt-2 bg-slate-100 px-4 py-1.5 rounded-full shadow-inner flex items-center gap-1.5 border border-slate-300">
+                               <p className="text-slate-900 font-black text-[10px] tracking-widest uppercase">{seatAllocation.exam_committees?.name}</p>
+                            </div>
+                         </div>
+                         <div className="relative z-20 w-[24mm] h-[24mm] mt-[16mm] mb-2 rounded-2xl bg-white border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.3)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
+                            {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> : <UserCircle className="w-10 h-10 text-slate-300" />}
+                         </div>
+                         <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
+                            <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{rawFullName}</h2>
+                            <p className="text-[10px] font-bold text-slate-500 mb-2 border-b-2 border-slate-200 pb-2 w-full">{classNameStr}</p>
+                            <div className="mt-1 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
+                               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">رقم الجلوس</p>
+                               <p className="text-3xl font-black text-rose-600 tracking-widest drop-shadow-sm">{seatAllocation.seat_number}</p>
+                            </div>
+                            <div className="mt-auto mb-3 flex flex-col items-center">
+                               <div className="w-[18mm] h-[18mm] bg-white p-0.5 rounded-lg border-2 border-slate-800 shadow-md"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
+                            </div>
+                         </div>
+                         <div className="w-full h-2.5 bg-slate-900 shrink-0"></div>
+                      </div>
+                   </div>
+
+                   {/* عرض الهوية الامتحانية للموبايل */}
+                   <div className="w-full md:hidden bg-white border-[3px] border-slate-800 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex items-center gap-4">
+                      <div className="w-16 h-16 bg-white p-1 rounded-xl border-2 border-slate-800 shrink-0 shadow-sm">
+                         <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" />
+                      </div>
+                      <div className="flex-1 text-right">
+                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
+                         <h3 className="text-lg font-black text-slate-900">{seatAllocation.exam_committees?.name}</h3>
+                      </div>
+                      <div className="shrink-0 text-center border-r-2 border-slate-200 pr-4">
+                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">رقم الجلوس</p>
+                         <p className="text-2xl font-black text-rose-600 tracking-widest">{seatAllocation.seat_number}</p>
+                      </div>
+                   </div>
+
+                </div>
+             </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* 🚀 قسم الوثائق لخريجي الثاني عشر (Graduation Docs Area) */}
-        {isTwelfthGrade && (
-          <div className="relative z-10 pt-2 w-full">
-            {existingDocRequest ? (
-              <div className="bg-gradient-to-l from-emerald-900/40 to-[#0f1423] border border-emerald-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(16,185,129,0.15)] backdrop-blur-xl">
-                 <div className="flex items-center gap-5 text-center md:text-right w-full md:w-auto flex-col md:flex-row">
-                    <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-400/50 shadow-inner shrink-0">
-                       <ScrollText className="w-8 h-8 text-emerald-400" />
-                    </div>
-                    <div>
-                       <h3 className="text-xl sm:text-2xl font-black text-white mb-2">تم استلام طلب الوثائق والتصديقات بنجاح! 🎉</h3>
-                       <p className="text-sm font-bold text-emerald-200/80 leading-relaxed max-w-xl">
-                         طلبك الآن قيد المعالجة (الإجمالي: <strong className="text-white">{existingDocRequest.total_amount} د.ك</strong>). 
-                         {existingDocRequest.payment_status === 'pending' ? ' يرجى التوجه لمكتب شؤون الطلبة لدفع الرسوم واعتماد الطلب.' : ' تم الدفع والمندوب يقوم بتصديق أوراقك من الوزارة.'}
-                       </p>
-                    </div>
-                 </div>
-                 <div className="shrink-0 w-full md:w-auto flex justify-center">
-                    <div className={`px-6 py-3 rounded-xl border font-black text-sm shadow-inner ${existingDocRequest.payment_status === 'pending' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'}`}>
-                       الحالة: {existingDocRequest.payment_status === 'pending' ? 'بانتظار الدفع بالمدرسة ⏳' : 'مدفوع وجاري التصديق ✅'}
-                    </div>
-                 </div>
-              </div>
-            ) : (
-              <div className="bg-gradient-to-br from-[#1e1b4b] to-[#0f1423] border border-fuchsia-500/30 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_40px_rgba(192,38,211,0.15)] relative overflow-hidden">
-                 <div className="absolute top-0 left-0 w-64 h-64 bg-fuchsia-600/20 blur-[100px] pointer-events-none rounded-full"></div>
-                 
-                 <div className="flex flex-col md:flex-row items-center gap-6 mb-8 relative z-10 text-center md:text-right border-b border-white/5 pb-8">
-                    <div className="p-4 bg-fuchsia-500/20 rounded-3xl border border-fuchsia-400/50 shadow-inner">
-                       <ScrollText className="w-10 h-10 text-fuchsia-400" />
-                    </div>
-                    <div className="flex-1">
-                       <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-fuchsia-500/20 text-fuchsia-300 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-fuchsia-500/30">خاص بخريجي الثاني عشر 🎓</div>
-                       <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 drop-shadow-md">بوابة طلب الوثائق والتصديقات الرسمية</h2>
-                       <p className="text-sm font-bold text-fuchsia-200/80 leading-relaxed max-w-3xl">
-                         مبارك تخرجك! لراحتك وسرعة تقديمك للجامعات، وفرنا لك خدمة استخراج الوثائق وتصديقها من الوزارة عن طريق مندوب المدرسة. 
-                       </p>
-                    </div>
-                 </div>
+        <AnimatePresence>
+          {isTwelfthGrade && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative z-10 w-full">
+              {existingDocRequest ? (
+                // تم التقديم مسبقاً
+                <div className="bg-gradient-to-l from-emerald-900/40 to-[#0f1423] border border-emerald-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(16,185,129,0.15)] backdrop-blur-xl">
+                   <div className="flex items-center gap-5 text-center md:text-right w-full md:w-auto flex-col md:flex-row">
+                      <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-400/50 shadow-inner shrink-0">
+                         <ScrollText className="w-8 h-8 text-emerald-400" />
+                      </div>
+                      <div>
+                         <h3 className="text-xl sm:text-2xl font-black text-white mb-2">تم استلام طلب الوثائق والتصديقات بنجاح! 🎉</h3>
+                         <p className="text-sm font-bold text-emerald-200/80 leading-relaxed max-w-xl">
+                           طلبك الآن قيد المعالجة (الإجمالي: <strong className="text-white">{existingDocRequest.total_amount} د.ك</strong>). 
+                           {existingDocRequest.payment_status === 'pending' ? ' يرجى التوجه لمكتب شؤون الطلبة لدفع الرسوم واعتماد الطلب.' : ' تم الدفع والمندوب يقوم بتصديق أوراقك من الوزارة.'}
+                         </p>
+                      </div>
+                   </div>
+                   <div className="shrink-0 w-full md:w-auto flex justify-center">
+                      <div className={`px-6 py-3 rounded-xl border font-black text-sm shadow-inner ${existingDocRequest.payment_status === 'pending' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'}`}>
+                         الحالة: {existingDocRequest.payment_status === 'pending' ? 'بانتظار الدفع بالمدرسة ⏳' : 'مدفوع وجاري التصديق ✅'}
+                      </div>
+                   </div>
+                </div>
+              ) : (
+                // نموذج طلب الوثائق
+                <div className="bg-gradient-to-br from-[#1e1b4b] to-[#0f1423] border border-fuchsia-500/30 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_40px_rgba(192,38,211,0.15)] relative overflow-hidden">
+                   <div className="absolute top-0 left-0 w-64 h-64 bg-fuchsia-600/20 blur-[100px] pointer-events-none rounded-full"></div>
+                   
+                   <div className="flex flex-col md:flex-row items-center gap-6 mb-8 relative z-10 text-center md:text-right border-b border-white/5 pb-8">
+                      <div className="p-4 bg-fuchsia-500/20 rounded-3xl border border-fuchsia-400/50 shadow-inner">
+                         <ScrollText className="w-10 h-10 text-fuchsia-400" />
+                      </div>
+                      <div className="flex-1">
+                         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-fuchsia-500/20 text-fuchsia-300 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-fuchsia-500/30 shadow-inner">خاص بخريجي الثاني عشر 🎓</div>
+                         <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 drop-shadow-md">بوابة طلب الوثائق والتصديقات الرسمية</h2>
+                         <p className="text-sm font-bold text-fuchsia-200/80 leading-relaxed max-w-3xl">
+                           مبارك تخرجك! لراحتك وسرعة تقديمك للجامعات، وفرنا لك خدمة استخراج الوثائق وتصديقها من الوزارة عن طريق مندوب المدرسة. 
+                         </p>
+                      </div>
+                   </div>
 
-                 <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 sm:p-5 mb-8 relative z-10 flex items-start sm:items-center gap-4 text-rose-200">
-                    <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 text-rose-400" />
-                    <p className="text-xs sm:text-sm font-bold leading-relaxed">
-                      <strong className="text-rose-400 font-black block sm:inline">تنبيه هام للسرعة:</strong> الوزارة تحصل رسوماً مقدارها <strong className="bg-rose-500/30 px-2 py-0.5 rounded text-white border border-rose-500/50">1 دينار كويتي</strong> لكل طابع تصديق (نسخة واحدة). يرجى تعبئة طلبك هنا ثم التوجه فوراً لدفع المبلغ في المدرسة ليتسنى للمندوب الانطلاق وتجهيز أوراقك قبل إغلاق باب التسجيل في الجامعات!
-                    </p>
-                 </div>
+                   <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 sm:p-5 mb-8 relative z-10 flex items-start sm:items-center gap-4 text-rose-200 shadow-inner">
+                      <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 text-rose-400 animate-pulse" />
+                      <p className="text-xs sm:text-sm font-bold leading-relaxed">
+                        <strong className="text-rose-400 font-black block sm:inline">تنبيه هام للسرعة:</strong> الوزارة تحصل رسوماً مقدارها <strong className="bg-rose-500/30 px-2 py-0.5 rounded text-white border border-rose-500/50">1 دينار كويتي</strong> لكل طابع تصديق (نسخة واحدة). يرجى تعبئة طلبك هنا ثم التوجه فوراً لدفع المبلغ في المدرسة ليتسنى للمندوب الانطلاق وتجهيز أوراقك قبل إغلاق باب التسجيل في الجامعات!
+                      </p>
+                   </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 relative z-10 mb-8">
-                    {/* شهادة الثانوية */}
-                    <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
-                       <div>
-                         <h4 className="font-black text-white text-base">شهادة الثانوية العامة</h4>
-                         <p className="text-[10px] text-slate-400 font-bold mt-1">الشهادة الأساسية بالدرجات</p>
-                       </div>
-                       <div className="space-y-3 mt-auto">
-                          <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
-                             <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
-                             <div className="flex items-center gap-3">
-                               <button onClick={() => handleDocChange('cert_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700">-</button>
-                               <span className="font-black text-white w-4 text-center">{docRequest.cert_ar}</span>
-                               <button onClick={() => handleDocChange('cert_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500">+</button>
-                             </div>
-                          </div>
-                          <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
-                             <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
-                             <div className="flex items-center gap-3">
-                               <button onClick={() => handleDocChange('cert_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700">-</button>
-                               <span className="font-black text-white w-4 text-center">{docRequest.cert_en}</span>
-                               <button onClick={() => handleDocChange('cert_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500">+</button>
-                             </div>
-                          </div>
-                       </div>
-                    </div>
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-5 relative z-10 mb-8">
+                      {/* شهادة الثانوية */}
+                      <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
+                         <div>
+                           <h4 className="font-black text-white text-base">شهادة الثانوية العامة</h4>
+                           <p className="text-[10px] text-slate-400 font-bold mt-1">الشهادة الأساسية بالدرجات</p>
+                         </div>
+                         <div className="space-y-3 mt-auto">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                               <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
+                               <div className="flex items-center gap-3">
+                                 <button onClick={() => handleDocChange('cert_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
+                                 <span className="font-black text-white w-4 text-center">{docRequest.cert_ar}</span>
+                                 <button onClick={() => handleDocChange('cert_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                               </div>
+                            </div>
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                               <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
+                               <div className="flex items-center gap-3">
+                                 <button onClick={() => handleDocChange('cert_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
+                                 <span className="font-black text-white w-4 text-center">{docRequest.cert_en}</span>
+                                 <button onClick={() => handleDocChange('cert_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                               </div>
+                            </div>
+                         </div>
+                      </div>
 
-                    {/* لمن يهمه الأمر */}
-                    <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
-                       <div>
-                         <h4 className="font-black text-white text-base">شهادة لمن يهمه الأمر</h4>
-                         <p className="text-[10px] text-slate-400 font-bold mt-1">إثبات دراسة وتخرج</p>
-                       </div>
-                       <div className="space-y-3 mt-auto">
-                          <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
-                             <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
-                             <div className="flex items-center gap-3">
-                               <button onClick={() => handleDocChange('twimc_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700">-</button>
-                               <span className="font-black text-white w-4 text-center">{docRequest.twimc_ar}</span>
-                               <button onClick={() => handleDocChange('twimc_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500">+</button>
-                             </div>
-                          </div>
-                          <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
-                             <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
-                             <div className="flex items-center gap-3">
-                               <button onClick={() => handleDocChange('twimc_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700">-</button>
-                               <span className="font-black text-white w-4 text-center">{docRequest.twimc_en}</span>
-                               <button onClick={() => handleDocChange('twimc_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500">+</button>
-                             </div>
-                          </div>
-                       </div>
-                    </div>
+                      {/* لمن يهمه الأمر */}
+                      <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
+                         <div>
+                           <h4 className="font-black text-white text-base">شهادة لمن يهمه الأمر</h4>
+                           <p className="text-[10px] text-slate-400 font-bold mt-1">إثبات دراسة وتخرج</p>
+                         </div>
+                         <div className="space-y-3 mt-auto">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                               <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
+                               <div className="flex items-center gap-3">
+                                 <button onClick={() => handleDocChange('twimc_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
+                                 <span className="font-black text-white w-4 text-center">{docRequest.twimc_ar}</span>
+                                 <button onClick={() => handleDocChange('twimc_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                               </div>
+                            </div>
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                               <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
+                               <div className="flex items-center gap-3">
+                                 <button onClick={() => handleDocChange('twimc_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
+                                 <span className="font-black text-white w-4 text-center">{docRequest.twimc_en}</span>
+                                 <button onClick={() => handleDocChange('twimc_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                               </div>
+                            </div>
+                         </div>
+                      </div>
 
-                    {/* حسن سيرة وسلوك */}
-                    <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
-                       <div>
-                         <h4 className="font-black text-white text-base">شهادة حسن سيرة وسلوك</h4>
-                         <p className="text-[10px] text-slate-400 font-bold mt-1">مطلوبة للجامعات والبعثات</p>
-                       </div>
-                       <div className="space-y-3 mt-auto">
-                          <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
-                             <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
-                             <div className="flex items-center gap-3">
-                               <button onClick={() => handleDocChange('conduct_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700">-</button>
-                               <span className="font-black text-white w-4 text-center">{docRequest.conduct_ar}</span>
-                               <button onClick={() => handleDocChange('conduct_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500">+</button>
-                             </div>
-                          </div>
-                          <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
-                             <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
-                             <div className="flex items-center gap-3">
-                               <button onClick={() => handleDocChange('conduct_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700">-</button>
-                               <span className="font-black text-white w-4 text-center">{docRequest.conduct_en}</span>
-                               <button onClick={() => handleDocChange('conduct_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500">+</button>
-                             </div>
-                          </div>
-                       </div>
-                    </div>
-                 </div>
+                      {/* حسن سيرة وسلوك */}
+                      <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
+                         <div>
+                           <h4 className="font-black text-white text-base">شهادة حسن سيرة وسلوك</h4>
+                           <p className="text-[10px] text-slate-400 font-bold mt-1">مطلوبة للجامعات والبعثات</p>
+                         </div>
+                         <div className="space-y-3 mt-auto">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                               <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
+                               <div className="flex items-center gap-3">
+                                 <button onClick={() => handleDocChange('conduct_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
+                                 <span className="font-black text-white w-4 text-center">{docRequest.conduct_ar}</span>
+                                 <button onClick={() => handleDocChange('conduct_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                               </div>
+                            </div>
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                               <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
+                               <div className="flex items-center gap-3">
+                                 <button onClick={() => handleDocChange('conduct_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
+                                 <span className="font-black text-white w-4 text-center">{docRequest.conduct_en}</span>
+                                 <button onClick={() => handleDocChange('conduct_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                               </div>
+                            </div>
+                         </div>
+                      </div>
+                   </div>
 
-                 <div className="relative z-10 bg-black/40 border border-white/5 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-center gap-6 shadow-inner">
-                    <div className="flex items-center gap-4 text-center sm:text-right">
-                       <div className="p-3 bg-fuchsia-500/20 rounded-xl border border-fuchsia-500/30"><Coins className="w-8 h-8 text-fuchsia-400" /></div>
-                       <div>
-                         <p className="text-sm font-bold text-slate-400 mb-1">إجمالي رسوم التصديق والطوابع</p>
-                         <p className="text-3xl font-black text-white"><span className="text-fuchsia-400">{totalDocsCost}</span> د.ك</p>
-                       </div>
-                    </div>
-                    <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.5)] transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2">
-                       {isSubmittingDocs ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle2 className="w-5 h-5" /> اعتماد وتقديم الطلب</>}
-                    </button>
-                 </div>
-              </div>
-            )}
-          </div>
-        )}
+                   <div className="relative z-10 bg-black/40 border border-white/5 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-center gap-6 shadow-inner">
+                      <div className="flex items-center gap-4 text-center sm:text-right">
+                         <div className="p-3 bg-fuchsia-500/20 rounded-xl border border-fuchsia-500/30"><Coins className="w-8 h-8 text-fuchsia-400" /></div>
+                         <div>
+                           <p className="text-sm font-bold text-slate-400 mb-1">إجمالي رسوم التصديق والطوابع</p>
+                           <p className="text-3xl font-black text-white"><span className="text-fuchsia-400">{totalDocsCost}</span> د.ك</p>
+                         </div>
+                      </div>
+                      <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.5)] transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2">
+                         {isSubmittingDocs ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle2 className="w-5 h-5" /> اعتماد وتقديم الطلب</>}
+                      </button>
+                   </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* 🚀 قسم الأوسمة (لوحة الشرف) */}
         {myBadges.length > 0 && (
@@ -889,7 +930,7 @@ export default function StudentDashboard() {
           
           <div className="lg:col-span-2 space-y-6 lg:space-y-8 w-full">
             
-            {/* 🚀 📅 جدول الاختبارات البانورامي (الميزة الجديدة) */}
+            {/* 🚀 📅 جدول الاختبارات البانورامي */}
             {examTimetables.length > 0 && (
                 <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
                   <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
@@ -1100,7 +1141,7 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* 📚 نماذج الإجابات الرسمية (الميزة الجديدة) */}
+            {/* 📚 نماذج الإجابات الرسمية */}
             {answerKeys.length > 0 && (
                 <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden mt-6 lg:mt-8">
                   <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
