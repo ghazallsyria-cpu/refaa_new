@@ -50,6 +50,7 @@ export default function ExamLiveDashboard() {
   }, []);
 
   // 1️⃣ جلب اختبارات اليوم واللجان
+// 1️⃣ جلب اختبارات اليوم واللجان
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
@@ -65,11 +66,18 @@ export default function ExamLiveDashboard() {
         .from('exam_committees')
         .select('*')
         .eq('academic_year', currentYear)
-        .eq('semester', currentSemester)
-        .order('name');
+        .eq('semester', currentSemester);
+        // تم إزالة .order('name') من هنا لأننا سنرتبها برمجياً
+
+      // 🚀 الخوارزمية الذكية للفرز الرقمي (Natural Numeric Sort)
+      const sortedComms = (comms || []).sort((a, b) => {
+        const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
 
       setTimetables(todayExams || []);
-      setCommittees(comms || []);
+      setCommittees(sortedComms); // 🚀 تمرير المصفوفة المرتبة بدلاً من العشوائية
       
       if (todayExams && todayExams.length > 0) {
         setSelectedTimetableId(todayExams[0].id);
