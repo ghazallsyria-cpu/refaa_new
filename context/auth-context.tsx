@@ -9,7 +9,7 @@ import { UserRole } from '@/types';
 import { Settings, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// 🚀 أعدنا Timeout معقول (15 ثانية) للمهام الفرعية
+// 🚀 إبقاء الـ Timeout لحماية النظام من تعليق السيرفر
 const withTimeout = <T,>(promise: any, ms: number = 15000, timeoutMessage: string = "السيرفر يستغرق وقتاً أطول من المعتاد"): Promise<T> => {
   return Promise.race([
     Promise.resolve(promise),
@@ -39,19 +39,22 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // 🚀 حارس الإصدار الإجباري: يجب أن يتطابق مع package.json
-  const APP_VERSION = '1.0.0';
+  // 🚀 حارس الإصدار لتنظيف مخلفات التحديثات القديمة
+  const APP_VERSION = '1.1.0';
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [authRole, setAuthRole] = useState<UserRole | null>(null);
   const [userName, setUserName] = useState<string>('');
   const [mustResetPassword, setMustResetPassword] = useState(false);
+  
+  // 🚀 isChecking هو الحارس المطلق: لن يتم عرض أي شيء حتى يصبح false
   const [isChecking, setIsChecking] = useState(true);
+  
   const [isAdminByEmail, setIsAdminByEmail] = useState(false);
   const [platformClosed, setPlatformClosed] = useState(false);
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
-  
+  const [isControlTeamMember, setIsControlTeamMember] = useState(false);
   const [showEmergencyBtn, setShowEmergencyBtn] = useState(false);
   
   const fetchedUserId = useRef<string | null>(null);
@@ -60,12 +63,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
-const isLoginPage = pathname === '/login';
+  const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
-  const isHomePage = pathname === '/'; // 🚀 1. تعريف الصفحة الرئيسية
-  
-  // 🚀 2. إضافة الصفحة الرئيسية لقائمة الصفحات العامة المسموحة
+  const isHomePage = pathname === '/'; 
   const isPublicPage = isLoginPage || isResetPasswordPage || isHomePage;
+  
+  // ظهور زر الطوارئ إذا تأخر السيرفر
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isChecking && !authRole) {
@@ -83,6 +86,7 @@ const isLoginPage = pathname === '/login';
   };
 
   const signIn = async (civilId: string, password: string) => {
+    setIsChecking(true);
     let authResult = null;
     let lastError = null;
 
@@ -91,7 +95,6 @@ const isLoginPage = pathname === '/login';
       authResult = data;
       lastError = error;
     } else {
-      // السماح بوقوت أطول لجلب بيانات المستخدم هنا
       const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
       const possibleEmails = [userData?.email, `${civilId}@alrefaa.edu`, `${civilId}@alrifaa.edu`].filter(Boolean);
       const uniqueEmails = [...new Set(possibleEmails)];
@@ -109,39 +112,45 @@ const isLoginPage = pathname === '/login';
     }
 
     if (lastError || !authResult?.user) {
+      setIsChecking(false);
       throw lastError || new Error("بيانات الدخول غير صحيحة.");
     }
     
-    // التحقق المباشر من دون Timeout لمنع الانهيار إن كان السيرفر بطيئاً
-    const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, must_reset_password, full_name')
-        .eq('id', authResult.user.id)
-        .maybeSingle() as any;
+    // جلب الصلاحيات الكاملة مع تسجيل الدخول
+    const [userRes, controlRes] = await Promise.all([
+      supabase.from('users').select('role, must_reset_password, full_name').eq('id', authResult.user.id).maybeSingle(),
+      supabase.from('exam_control_team').select('id').eq('user_id', authResult.user.id).eq('academic_year', '2025-2026').maybeSingle()
+    ]);
 
-    if (userError || !userData) throw userError || new Error("لم نجد بياناتك.");
+    if (userRes.error || !userRes.data) {
+      setIsChecking(false);
+      throw userRes.error || new Error("لم نجد بياناتك.");
+    }
 
-    const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
+    if (controlRes.data) setIsControlTeamMember(true);
+
+    const name = userRes.data.full_name || authResult.user.email?.split('@')[0] || '';
     setUser(authResult.user);
-    setAuthRole(userData.role as UserRole);
+    setAuthRole(userRes.data.role as UserRole);
     setUserName(name);
     
-    localStorage.setItem('cached_role', userData.role);
+    localStorage.setItem('cached_role', userRes.data.role);
     localStorage.setItem('cached_name', name);
     setIsChecking(false);
     
-    if (userData.must_reset_password) {
+    if (userRes.data.must_reset_password) {
       setMustResetPassword(true);
       router.push('/reset-password');
     } else {
-      const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/', student: '/', staff: '/' };
-      router.push(paths[userData.role] || '/');
+      const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', staff: '/dashboard/staff' };
+      router.push(paths[userRes.data.role] || '/');
     }
   }; 
 
   const signOut = async () => {
     setUser(null);
     setAuthRole(null);
+    setIsControlTeamMember(false);
     localStorage.clear();
     sessionStorage.clear();
     await supabase.auth.signOut();
@@ -156,73 +165,59 @@ const isLoginPage = pathname === '/login';
       isFetchingRef.current = true;
 
       try {
-        // 🚀 1. حارس الكاش الإجباري (Force Cache Clearing on Version Change)
         const storedVersion = localStorage.getItem('app_version');
         if (storedVersion !== APP_VERSION) {
-          console.warn(`Version changed from ${storedVersion} to ${APP_VERSION}. Clearing old cache...`);
-          
-          // مسح الكاشات المحددة التي قد تسبب مشاكل أو بيانات عالقة
+          console.warn(`Version updated. Clearing old caches...`);
           localStorage.removeItem('cached_role');
           localStorage.removeItem('cached_name');
-          localStorage.removeItem('school_settings');
+          localStorage.removeItem('school_settings'); // 🚀 تنظيف كاش الإعدادات القديم المسبب للمشكلة
           
-          // مسح כל ملفات الحفظ التلقائي المحلية لضمان تجربة تدريب نظيفة
           for (let i = 0; i < localStorage.length; i++) {
              const key = localStorage.key(i);
-             if (key?.startsWith('arena_save_')) {
-                localStorage.removeItem(key);
-             }
+             if (key?.startsWith('arena_save_')) localStorage.removeItem(key);
           }
-
-          // تسجيل الإصدار الجديد
           localStorage.setItem('app_version', APP_VERSION);
         }
 
         const cachedRole = localStorage.getItem('cached_role');
         const cachedName = localStorage.getItem('cached_name');
-        const cachedSettings = localStorage.getItem('school_settings');
 
-        if (cachedRole && mounted) {
-            setAuthRole(cachedRole as UserRole);
-            if (cachedName) setUserName(cachedName);
-            if (cachedSettings) setRawSettings(JSON.parse(cachedSettings));
-            setIsChecking(false);
-        }
-
-        // 🚀 إزالة Timeout عن GetSession ليأخذ وقته الطبيعي من Supabase
+        // جلب الـ Session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (sessionError) {
-          console.error("Session Error:", sessionError);
-        }
-
         if (!session?.user) {
+          // 🚀 جلب إعدادات المنصة حتى للزوار لمعرفة حالة الإغلاق
+          const { data: guestSettings } = await supabase.from('platform_settings').select('*').limit(1).maybeSingle();
+          if (guestSettings && mounted) setRawSettings(guestSettings);
+
           if (mounted) {
             setUser(null);
             setAuthRole(null);
+            setIsControlTeamMember(false);
             localStorage.removeItem('cached_role');
             localStorage.removeItem('cached_name');
             
             if (!isPublicPage) window.location.replace('/login');
-            setIsChecking(false);
+            setIsChecking(false); // تم الانتهاء من التحقق
           }
           return;
         }
 
         if (mounted) setUser(session.user);
 
+        // جلب التفاصيل من السيرفر مباشرة وتجاهل الكاش الخاص بإعدادات المنصة
         if (fetchedUserId.current !== session.user.id) {
            fetchedUserId.current = session.user.id;
-           
-           const shouldFetchSettings = !isPublicPage && !rawSettings;
 
-           // جلب تفاصيل المستخدم والإعدادات معاً بأمان
-           const [userRes, settingsRes] = await Promise.all([
+           const [userRes, settingsRes, controlRes] = await Promise.all([
              supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
-             shouldFetchSettings ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
+             supabase.from('platform_settings').select('*').limit(1).maybeSingle(), // 🚀 دائماً نجلب الإعدادات من السيرفر لمنع تسمم الكاش
+             supabase.from('exam_control_team').select('id').eq('user_id', session.user.id).eq('academic_year', '2025-2026').maybeSingle()
            ]);
 
            if (mounted) {
+             if (controlRes?.data) setIsControlTeamMember(true);
+
              if (userRes?.data) {
                 setAuthRole(userRes.data.role);
                 setUserName(userRes.data.full_name || '');
@@ -232,10 +227,11 @@ const isLoginPage = pathname === '/login';
              }
              if (settingsRes?.data) {
                setRawSettings(settingsRes.data);
-               localStorage.setItem('school_settings', JSON.stringify(settingsRes.data));
              }
-             setIsChecking(false); // ننهي عملية التحقق هنا بثقة
+             setIsChecking(false); // 🚀 إغلاق الحارس الأمني والسماح ببدء العمل
            }
+        } else {
+           if (mounted) setIsChecking(false);
         }
       } catch (err) {
         console.error("Auth init exception:", err);
@@ -252,6 +248,7 @@ const isLoginPage = pathname === '/login';
         if (mounted) { 
           setUser(null); 
           setAuthRole(null); 
+          setIsControlTeamMember(false);
           localStorage.removeItem('cached_role');
           localStorage.removeItem('cached_name');
           if (!isPublicPage) window.location.replace('/login'); 
@@ -270,18 +267,27 @@ const isLoginPage = pathname === '/login';
     };
   }, [isPublicPage]); 
 
+  // 🚀 منطق إغلاق المنصة الصارم والمحمي من التضارب (Race Conditions)
   useEffect(() => {
-    if (!rawSettings) return;
-    let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
-    if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
+    // 🛑 الأهم: لا تتخذ قرار إغلاق أو فتح المنصة أبداً إذا كان النظام لا يزال في حالة (التحقق isChecking)
+    if (isChecking) return;
+
+    let isOpen = true; // الافتراضي
+    if (rawSettings && typeof rawSettings.is_open !== 'undefined') {
+      isOpen = rawSettings.is_open === true || String(rawSettings.is_open).toLowerCase() === 'true';
+    }
+    
+    // الإدارة العليا والكنترول مستثنون دائماً
+    if (!isOpen && authRole !== 'admin' && authRole !== 'management' && !isControlTeamMember) {
       setPlatformClosed(true);
-      setCloseMessage(rawSettings.message || '<div class="text-center text-white">المنصة مغلقة للصيانة</div>');
+      setCloseMessage(rawSettings?.message || '<div class="text-center text-white">المنصة مغلقة للصيانة</div>');
     } else {
       setPlatformClosed(false);
     }
-  }, [rawSettings, authRole]);
+  }, [rawSettings, authRole, isControlTeamMember, isChecking]);
 
-  if (isChecking && !authRole) {
+  // 🚀 شاشة التحميل تُعرض أولاً دائماً لمنع أي وميض أو تضارب
+  if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#02040a] font-cairo">
         <div className="flex flex-col items-center gap-5">
@@ -289,7 +295,7 @@ const isLoginPage = pathname === '/login';
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
              <ShieldAlert className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
           </div>
-          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تأمين الاتصال...</p>
+          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تأمين الاتصال والتحقق من الصلاحيات...</p>
 
           <AnimatePresence>
             {showEmergencyBtn && (
@@ -306,7 +312,8 @@ const isLoginPage = pathname === '/login';
     );
   }
 
-  if (platformClosed) {
+  // 🚀 شاشة الصيانة تظهر فقط إذا كانت المنصة مغلقة والصفحة الحالية ليست صفحة تسجيل الدخول (ليتمكن المدير من الدخول)
+  if (platformClosed && pathname !== '/login') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden font-cairo" dir="rtl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"></div>
@@ -322,8 +329,11 @@ const isLoginPage = pathname === '/login';
               </div>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black text-white mb-8 leading-tight">المنصة في وضع الصيانة</h1>
-            <div className="w-full relative z-10 text-center bg-[#02040a]/60 p-6 rounded-3xl border border-white/5 shadow-inner" dangerouslySetInnerHTML={{ __html: closeMessage }} />
-            <button onClick={signOut} className="block w-full mt-10 text-sm font-bold text-slate-400 hover:text-white underline transition-colors">تسجيل الخروج</button>
+            <div className="w-full relative z-10 text-center bg-[#02040a]/60 p-6 rounded-3xl border border-white/5 shadow-inner leading-relaxed font-bold" dangerouslySetInnerHTML={{ __html: closeMessage }} />
+            
+            {user && (
+              <button onClick={signOut} className="block w-full mt-10 text-sm font-bold text-slate-400 hover:text-white underline transition-colors">تسجيل الخروج من الحساب الحالي</button>
+            )}
           </div>
         </motion.div>
       </div>
