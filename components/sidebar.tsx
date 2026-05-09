@@ -1,5 +1,5 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable */
 'use client';
 
 import Link from 'next/link';
@@ -20,7 +20,7 @@ import {
   CreditCard, ClipboardList, Globe, ScrollText, ChevronDown
 } from 'lucide-react';
 
-// 🚀 1. الهيكلة الجديدة: تجميع القوائم في مجلدات (Smart Workspaces)
+// 🚀 الهيكلة الجديدة: تجميع القوائم في مجلدات ذكية (Smart Workspaces)
 const navigationGroups = [
   {
     title: 'اللوحات الرئيسية',
@@ -138,7 +138,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const [schoolData, setSchoolData] = useState({ name: 'المركز العلمي السوري', logo_url: '' });
   const [staffPermissions, setStaffPermissions] = useState<any>({});
   
-  // 🚀 2. حالة تخزين المجلدات المفتوحة
+  // حالة تخزين المجلدات المفتوحة
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -163,7 +163,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
 
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
 
-  // 🚀 فلترة الروابط كالسابق تماماً للحفاظ على الحماية
+  // 🚀 فلترة الروابط كالسابق تماماً للحفاظ على حماية الصلاحيات
   const isItemVisible = (item: any) => {
     if (item.name === 'الرئيسية (الحرم الرقمي)') return true;
     if (item.name === 'إدارة الحرم الرقمي') return (authRole === 'admin' || authRole === 'management');
@@ -185,19 +185,20 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     return false;
   };
 
-  // 🚀 تصفية المجلدات وإزالة المجلدات الفارغة
+  // تصفية المجلدات وإزالة المجلدات الفارغة
   const filteredGroups = navigationGroups.map(group => {
     return { ...group, items: group.items.filter(isItemVisible) };
   }).filter(group => group.items.length > 0);
 
-  // 🚀 3. الفتح الذكي للمجلدات (Auto-Focus)
+  // 🚀 الفتح التلقائي الذكي - تم تعديله لمنع تحذيرات السيرفر (Cascading Renders Fix)
   useEffect(() => {
     if (isCollapsed) return;
-    
-    const newOpenGroups = { ...openGroups };
+
+    let targetGroup = '';
     let foundActive = false;
 
-    filteredGroups.forEach(group => {
+    // البحث عن المجلد الذي يحتوي على الرابط المفتوح حالياً
+    for (const group of filteredGroups) {
       const hasActiveItem = group.items.some(item => {
         let itemHref = item.href;
         if (item.name === 'لوحة التحكم') {
@@ -211,18 +212,25 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
       });
 
       if (hasActiveItem) {
-        newOpenGroups[group.title] = true;
+        targetGroup = group.title;
         foundActive = true;
+        break;
       }
-    });
-
-    // فتح أول مجلد افتراضياً إذا لم يتم العثور على واحد نشط
-    if (!foundActive && filteredGroups.length > 0) {
-      newOpenGroups[filteredGroups[0].title] = true;
     }
 
-    setOpenGroups(newOpenGroups);
-  }, [pathname, isCollapsed]);
+    // تعيين المجلد الأول افتراضياً إذا لم يتم العثور على التطابق
+    if (!foundActive && filteredGroups.length > 0) {
+      targetGroup = filteredGroups[0].title;
+    }
+
+    // 🛡️ التحديث الآمن: تحديث الحالة فقط إذا لزم الأمر لتجنب حلقة لا نهائية توقف السيرفر
+    if (targetGroup) {
+      setOpenGroups(prev => {
+        if (prev[targetGroup]) return prev; // إذا كان مفتوحاً بالفعل، لا تفعل شيئاً (Bailout)
+        return { ...prev, [targetGroup]: true };
+      });
+    }
+  }, [pathname, isCollapsed, authRole, userRole]);
 
   const toggleGroup = (title: string) => {
     setOpenGroups(prev => ({ ...prev, [title]: !prev[title] }));
@@ -278,7 +286,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
             return (
               <div key={group.title} className="mb-2">
                 
-                {/* 🚀 Group Header (Accordion Toggle) */}
+                {/* Group Header (Accordion Toggle) */}
                 {!isCollapsed ? (
                   <button 
                     onClick={() => toggleGroup(group.title)}
@@ -291,11 +299,10 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
                     <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-300", isOpen ? "rotate-180 text-amber-500" : "")} />
                   </button>
                 ) : (
-                  // خط زجاجي فاصل صغير إذا كان مصغراً
                   groupIdx > 0 && <div className="w-8 mx-auto h-[1px] bg-white/10 my-3 rounded-full" />
                 )}
 
-                {/* 🚀 Group Items */}
+                {/* Group Items */}
                 <AnimatePresence initial={false}>
                   {(isOpen || isCollapsed) && (
                     <motion.div 
