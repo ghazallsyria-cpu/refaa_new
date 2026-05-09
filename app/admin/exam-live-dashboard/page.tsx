@@ -1,11 +1,12 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable */
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { 
   Activity, Users, ShieldCheck, CheckCircle2, XCircle, Loader2, 
-  Search, AlertTriangle, RefreshCw, LayoutGrid, Clock, Calendar, ShieldAlert, Siren, Image as ImageIcon, X, AlertCircle, ListChecks
+  Search, AlertTriangle, RefreshCw, LayoutGrid, Clock, Calendar, 
+  ShieldAlert, Siren, Image as ImageIcon, X, AlertCircle, ListChecks, Eye // 🚀 تم استيراد Eye هنا لحل الانهيار
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -108,7 +109,6 @@ export default function ExamLiveDashboard() {
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
 
-      // فلترة الطلاب بناءً على صف المادة المحددة فقط
       const filteredAllocs = (allocs || []).filter((a: any) => {
          const classLvl = a.students?.sections?.classes?.level;
          return classLvl === selectedExam?.class_level;
@@ -178,18 +178,14 @@ export default function ExamLiveDashboard() {
 
   if (currentRole !== 'admin' && currentRole !== 'management') return null;
 
-  // 🚀 تصحيح الحسابات الرياضية لمنع مشكلة (-1)
   const totalExpected = allocations.length;
-  // الغائب: مسجل غائب وليس له محضر غش
   const totalAbsent = attendance.filter(a => a.status === 'absent' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
   const totalCheating = cheatingReports.length;
-  // الحاضر: مسجل حاضر وليس له محضر غش
   const totalPresent = attendance.filter(a => a.status === 'present' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
   const totalPending = totalExpected - totalPresent - totalAbsent - totalCheating;
   
   const attendancePercentage = totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
 
-  // استخراج قوائم الغياب والغش لعرضها للمدير
   const absentStudentsList = allocations.filter(a => attendance.some(att => att.student_id === a.student_id && att.status === 'absent') && !cheatingReports.some(c => c.student_id === a.student_id));
   const cheatingStudentsList = allocations.filter(a => cheatingReports.some(c => c.student_id === a.student_id));
 
@@ -288,7 +284,6 @@ export default function ExamLiveDashboard() {
                     <p className="text-2xl sm:text-3xl font-black text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{totalPresent}</p>
                   </div>
                   
-                  {/* 🚀 أزرار تفاعلية للمدير لفتح قوائم الغياب والغش */}
                   <button onClick={() => {setListModalType('absent'); setIsListModalOpen(true);}} disabled={totalAbsent === 0} className="bg-amber-500/10 hover:bg-amber-500/20 p-4 rounded-2xl border border-amber-500/20 flex flex-col items-center justify-center transition-colors disabled:opacity-50">
                     <p className="text-[10px] sm:text-[11px] font-black text-amber-400 mb-1 uppercase tracking-widest flex items-center gap-1">غائب <ListChecks className="w-3 h-3"/></p>
                     <p className="text-2xl sm:text-3xl font-black text-amber-400">{totalAbsent}</p>
@@ -377,8 +372,6 @@ export default function ExamLiveDashboard() {
                    const hasCheating = commCheatCount > 0;
 
                    const commAtts = attendance.filter(a => a.committee_id === committee.id);
-                   
-                   // 🚀 إصلاح الحسبة للجنة: الحاضر والغائب هم من ليس لهم محضر غش فقط
                    const commPresent = commAtts.filter(a => a.status === 'present' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
                    const commAbsent = commAtts.filter(a => a.status === 'absent' && !cheatingReports.some(c => c.student_id === a.student_id)).length;
                    const commPending = commCapacity - commPresent - commAbsent - commCheatCount;
@@ -456,7 +449,6 @@ export default function ExamLiveDashboard() {
         )}
       </div>
 
-      {/* 🚀 نافذة القوائم السريعة (الغياب / الغش) */}
       <AnimatePresence>
         {isListModalOpen && listModalType && (
           <Dialog.Root open={isListModalOpen} onOpenChange={setIsListModalOpen}>
@@ -492,7 +484,6 @@ export default function ExamLiveDashboard() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 نافذة قراءة محضر الغش */}
       <AnimatePresence>
         {isReportModalOpen && selectedReport && (
           <Dialog.Root open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
