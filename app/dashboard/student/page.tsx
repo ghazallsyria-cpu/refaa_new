@@ -92,6 +92,7 @@ export default function StudentDashboard() {
   const [existingDocRequest, setExistingDocRequest] = useState<any>(null);
   const [isSubmittingDocs, setIsSubmittingDocs] = useState(false);
 
+  // حالات نظام التقييم الجامعي
   const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
   const [currentEvalIndex, setCurrentEvalIndex] = useState(0);
   const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
@@ -144,7 +145,8 @@ export default function StudentDashboard() {
               supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
               supabase.from('students').select('next_year_track, track_selection_date, sections(id, name, classes(name, level))').eq('id', studentId).maybeSingle(),
               supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', currentYear).maybeSingle(),
-              supabase.from('platform_settings').select('is_evaluations_active').limit(1).single() // 🚀 جلب حالة البوابة
+              // 🚀 استخدام maybeSingle بأمان
+              supabase.from('platform_settings').select('is_evaluations_active').limit(1).maybeSingle()
             ]);
             
             if (badgesRes.data) setMyBadges(badgesRes.data);
@@ -171,18 +173,22 @@ export default function StudentDashboard() {
               } else { setAttendanceStats({ rate: 100 }); }
             }
 
-            // 🚀 نظام التقييم الإجباري لا يفتح إلا إذا كانت البوابة مفعلة من المدير
+            // 🚀 التحديث الأقوى لنظام التقييم
             const isEvalActive = settingsRes.data?.is_evaluations_active === true;
 
             if (isEvalActive && sectionIdForEvals) {
-               const { data: myScheduleRaw } = await supabase
-                 .from('schedule')
-                 .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
-                 .eq('section_id', sectionIdForEvals);
+               // جلب المعلمين من الجدول (Schedule) ومن الإسناد (Teacher Assignments) لضمان عدم ضياع أي معلم
+               const [ { data: scheduleData }, { data: assignmentsData } ] = await Promise.all([
+                  supabase.from('schedule').select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)').eq('section_id', sectionIdForEvals),
+                  supabase.from('teacher_assignments').select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)').eq('section_id', sectionIdForEvals)
+               ]);
 
-               if (myScheduleRaw && myScheduleRaw.length > 0) {
+               const allTeacherLinks = [...(scheduleData || []), ...(assignmentsData || [])];
+
+               if (allTeacherLinks.length > 0) {
+                  // تنظيف التكرارات
                   const uniqueTeachersMap = new Map();
-                  myScheduleRaw.forEach((slot:any) => {
+                  allTeacherLinks.forEach((slot:any) => {
                      if(slot.teacher_id && !uniqueTeachersMap.has(slot.teacher_id)) {
                         const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
                         uniqueTeachersMap.set(slot.teacher_id, {
@@ -195,6 +201,7 @@ export default function StudentDashboard() {
                   });
                   const allMyTeachers = Array.from(uniqueTeachersMap.values());
 
+                  // جلب التقييمات السابقة
                   const { data: myEvals } = await supabase
                      .from('student_evaluations_of_teachers')
                      .select('teacher_id')
@@ -204,10 +211,11 @@ export default function StudentDashboard() {
 
                   const evaluatedTeacherIds = new Set((myEvals || []).map(e => e.teacher_id));
 
+                  // فلترة المعلمين المتبقين
                   const pending = allMyTeachers.filter(t => !evaluatedTeacherIds.has(t.teacher_id));
                   if(pending.length > 0) {
                      setPendingEvaluations(pending);
-                     setIsEvalModalOpen(true); 
+                     setIsEvalModalOpen(true); // فتح البوابة
                   }
                }
             }
@@ -929,7 +937,10 @@ export default function StudentDashboard() {
                               </span>
                             )}
                             <div className={`absolute top-0 left-0 w-1 h-full ${
-                              current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : isPast ? 'bg-slate-800' : next ? 'bg-blue-400' : 'bg-white/10'
+                              current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' 
+                              : isPast ? 'bg-slate-800' 
+                              : next ? 'bg-blue-400' 
+                              : 'bg-white/10'
                             }`}></div>
 
                             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 pr-2">
@@ -997,7 +1008,6 @@ export default function StudentDashboard() {
 
           </div>
 
-          {/* 🌟 Column 2: Narrow Area */}
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
