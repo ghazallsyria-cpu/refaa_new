@@ -56,17 +56,6 @@ const getDayName = (day: number) => {
   return days[day - 1] || day;
 };
 
-const formatClassName = (rawName?: string) => {
-  if (!rawName) return '';
-  return rawName.replace('الصف ', '').trim();
-};
-
-const normalizeUrl = (url?: string) => {
-  if (!url) return '';
-  const clean = url.trim();
-  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
-};
-
 const safeGenerateId = () => {
   try {
     return crypto.randomUUID();
@@ -133,8 +122,6 @@ export default function AutoScheduleGenerator() {
   const [isPrintCenterOpen, setIsPrintCenterOpen] = useState(false);
   const [batchPrintIds, setBatchPrintIds] = useState<string[]>([]);
   const [batchPrintType, setBatchPrintType] = useState<'section' | 'teacher'>('section');
-  const [printMode, setPrintMode] = useState<'single' | 'custom-batch'>('single');
-  const [entitiesToPrint, setEntitiesToPrint] = useState<any[]>([]);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   useEffect(() => {
@@ -209,17 +196,23 @@ export default function AutoScheduleGenerator() {
       const { data: periodsData } = await supabase.from('auto_class_periods').select('*').order('period_number');
       setPeriods(periodsData || []);
 
+      // 🚀 التحديث الأهم: استخدام جدول teacher_assignments (أو teacher_sections كـ Fallback)
       let tsData = [];
-      const { data: tsDataWithZoom, error: zoomError } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)');
-      if (zoomError) {
-         const { data: safeData } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name)), subjects(name)');
-         tsData = safeData || [];
+      const { data: assignmentsData, error: assignErr } = await supabase
+         .from('teacher_assignments')
+         .select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name, zoom_link), zoom_link), subjects(name)');
+         
+      if (!assignErr && assignmentsData && assignmentsData.length > 0) {
+         tsData = assignmentsData;
       } else {
-         tsData = tsDataWithZoom || [];
+         const { data: legacyData } = await supabase
+            .from('teacher_sections')
+            .select('teacher_id, section_id, subject_id, teachers(department_id, users(full_name)), subjects(name)');
+         tsData = legacyData || [];
       }
 
       const uniqueAssignmentsMap = new Map();
-      tsData.forEach(ts => {
+      tsData.forEach((ts: any) => {
          const uniqueKey = `${ts.teacher_id}_${ts.section_id}_${ts.subject_id}`;
          if (!uniqueAssignmentsMap.has(uniqueKey)) {
             uniqueAssignmentsMap.set(uniqueKey, ts);
@@ -361,6 +354,26 @@ export default function AutoScheduleGenerator() {
     });
     return Object.values(loads).sort((a, b) => b.total - a.total);
   }, [rawTeacherAssignments, subjectQuotas, sections]);
+
+  // 🚀 حل مشكلة الانهيار: تجهيز المجموعات لشبكة الميزانية
+  const groupedSubjectsByClass = useMemo(() => {
+     const groups: Record<string, typeof uniqueSubjectClasses> = {};
+     uniqueSubjectClasses.forEach(item => {
+        if (!groups[item.class_name]) groups[item.class_name] = [];
+        groups[item.class_name].push(item);
+     });
+     return groups;
+  }, [uniqueSubjectClasses]);
+
+  const sortedClassNames = useMemo(() => Object.keys(groupedSubjectsByClass).sort(), [groupedSubjectsByClass]);
+
+  const uniqueTeachersInSchedule = useMemo(() => {
+    const tMap = new Map();
+    generatedSchedules.forEach(s => {
+      if(!tMap.has(s.teacher_id)) tMap.set(s.teacher_id, { id: s.teacher_id, name: s.teacher_name });
+    });
+    return Array.from(tMap.values()).sort((a,b) => a.name.localeCompare(b.name));
+  }, [generatedSchedules]);
 
   // ==========================================
   // 🧠 THE CORE ALGORITHM (Learning Engine + Zero Drop Constraints)
@@ -624,7 +637,6 @@ export default function AutoScheduleGenerator() {
                 for (const period of dayPeriods) {
                   if (isPlaced) break; 
                   
-                  // 🚀 الدرع يعمل هنا أيضاً لمنع إزاحة المعلم لمكان غير صحيح
                   const teachSlotIdx = finalSchedule.findIndex(s => String(s.teacher_id) === String(assignment.teacher_id) && String(s.day) === String(day) && (String(s.period_number) === String(period.period_number) || (s.start_time && period.start_time && isTimeIntersecting(s.start_time, s.end_time, period.start_time, period.end_time))));
                   const secSlotIdx = finalSchedule.findIndex(s => String(s.section_id) === String(section.id) && String(s.day) === String(day) && String(s.period_number) === String(period.period_number));
                   
@@ -661,7 +673,6 @@ export default function AutoScheduleGenerator() {
                             const secFreeAtAlt = !finalSchedule.some((s, idx) => idx !== secSlotIdx && String(s.section_id) === String(section.id) && String(s.day) === String(altDay) && String(s.period_number) === String(altPeriod.period_number));
                             if (!secFreeAtAlt) continue;
                             
-                            // 🚀 حماية حصص المعلم المُزاح من الاختفاء
                             if (checkTeacherCollision(finalSchedule, blockingSlot.teacher_id, altDay, altPeriod, blockingSlot.id)) continue;
 
                             const zSubjectSlots = finalSchedule.filter((s, idx) => idx !== secSlotIdx && String(s.section_id) === String(section.id) && String(s.subject_id) === String(blockingSlot.subject_id));
@@ -726,7 +737,6 @@ export default function AutoScheduleGenerator() {
                                  const secWFreeAtAlt = !finalSchedule.some((s, idx) => idx !== teachSlotIdx && String(s.section_id) === String(teacherBlockingSlot.section_id) && String(s.day) === String(altDay) && String(s.period_number) === String(altPeriod.period_number));
                                  if (!secWFreeAtAlt) continue;
                                  
-                                 // 🚀 حماية حصص المعلم المُزاح من الاختفاء
                                  if (checkTeacherCollision(finalSchedule, teacherBlockingSlot.teacher_id, altDay, altPeriod, teacherBlockingSlot.id)) continue;
 
                                  const wSubjectSlots = finalSchedule.filter((s, idx) => idx !== teachSlotIdx && String(s.section_id) === String(teacherBlockingSlot.section_id) && String(s.subject_id) === String(teacherBlockingSlot.subject_id));
@@ -862,7 +872,6 @@ export default function AutoScheduleGenerator() {
               setDraggedItem(null); return;
           }
 
-          // 🚀 الفحص الآمن بدالة checkTeacherCollision
           if (checkTeacherCollision(generatedSchedules, sourceSlot.teacher_id, targetDay, pDataTarget, sourceSlot.id, targetSlot ? targetSlot.id : null)) {
               alert(`❌ المعلم (${sourceSlot.teacher_name}) لديه حصة في فصل آخر في هذا الوقت!`);
               setDraggedItem(null); return;
@@ -917,7 +926,6 @@ export default function AutoScheduleGenerator() {
              setDraggedItem(null); return;
           }
 
-          // 🚀 الفحص الآمن
           if (checkTeacherCollision(generatedSchedules, lesson.teacher_id, targetDay, pDataTarget)) {
             alert(`ممنوع ❌: المعلم مشغول بتدريس فصل آخر في هذا الوقت!`);
             setDraggedItem(null); return;
@@ -963,9 +971,7 @@ export default function AutoScheduleGenerator() {
       setDraggedItem(null);
   };
 
-  // 🚀 الدالة السحرية الخاصة بالتبديل المباشر بالضغط (Click-to-Swap)
   const executeClickSwap = (source: any, targetDay: number, targetPeriod: number, targetSlot: any) => {
-      // إذا نقر على نفس الخانة مرتين، نلغي التحديد
       if (String(targetDay) === String(source.day) && String(targetPeriod) === String(source.period_number)) {
           setSwapSource(null); return; 
       }
@@ -999,7 +1005,6 @@ export default function AutoScheduleGenerator() {
           setSwapSource(null); return;
       }
 
-      // الدرع الآمن!
       if (checkTeacherCollision(generatedSchedules, sourceSlot.teacher_id, targetDay, pDataTarget, sourceSlot.id, targetSlot ? targetSlot.id : null)) {
           alert(`❌ المعلم (${sourceSlot.teacher_name}) لديه حصة في فصل آخر في هذا الوقت!`);
           setSwapSource(null); return;
@@ -1078,7 +1083,6 @@ export default function AutoScheduleGenerator() {
     setIsAuditModalOpen(true);
   };
 
-  // 🚀 التسكين اليدوي بالنقر المباشر (Click-to-Assign)
   const openManualAssignModal = (lesson: any) => {
     setLessonToAssign(lesson);
     setManualAssignModalOpen(true);
@@ -1218,6 +1222,39 @@ export default function AutoScheduleGenerator() {
     }
   };
 
+  const toggleBatchPrintId = (id: string) => {
+     setBatchPrintIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const selectAllBatchIds = () => {
+     if (batchPrintType === 'section') {
+        const allSecIds = sections.filter(s => generatedSchedules.some(gs => String(gs.section_id) === String(s.id))).map(s => String(s.id));
+        setBatchPrintIds(allSecIds);
+     } else {
+        const allTeachIds = uniqueTeachersInSchedule.map(t => String(t.id));
+        setBatchPrintIds(allTeachIds);
+     }
+  };
+
+  const handlePrintCommand = (mode: 'single' | 'custom-batch') => {
+     if (mode === 'single') {
+        if (!gridFilterId) return alert('الرجاء تحديد فصل أو معلم للطباعة');
+        setPrintMode('single');
+        setEntitiesToPrint([{ type: gridFilterType, id: gridFilterId }]);
+     } else {
+        if (batchPrintIds.length === 0) return alert('الرجاء تحديد عنصر واحد على الأقل للطباعة المجمعة');
+        setPrintMode('custom-batch');
+        setEntitiesToPrint(batchPrintIds.map(id => ({ type: batchPrintType, id })));
+     }
+     
+     setIsGeneratingPDF(true);
+     setIsPrintCenterOpen(false);
+
+     setTimeout(() => {
+        window.print();
+        setIsGeneratingPDF(false);
+     }, 1500);
+  };
+
   if (!mounted || loadingData || isChecking) {
      return (
        <div className="flex h-screen items-center justify-center bg-slate-50 font-cairo">
@@ -1236,7 +1273,11 @@ export default function AutoScheduleGenerator() {
       
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-           body { display: none !important; }
+           body * { visibility: hidden; }
+           #print-batch-container, #print-batch-container * { visibility: visible; }
+           #print-batch-container { position: absolute; left: 0; top: 0; width: 100%; }
+           .page-break { page-break-after: always; margin-bottom: 2rem; }
+           .print-hide { display: none !important; }
         }
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
