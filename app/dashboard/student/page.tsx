@@ -11,7 +11,7 @@ import {
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
   AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users,
   Siren, Info, MessageSquare, Sparkles, Stethoscope, UploadCloud, X, Plus, Trash2,
-  Ticket, Timer, FileKey, Download, ShieldCheck, ScrollText, Coins
+  Ticket, Timer, FileKey, Download, ShieldCheck, ScrollText, Coins, Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -24,7 +24,6 @@ import { arSA } from 'date-fns/locale';
 import Image from 'next/image';
 import * as Dialog from '@radix-ui/react-dialog';
 
-// 🚀 مسارات نسبية
 import AnnouncementsWidget from '../../../components/AnnouncementsWidget';
 import { useDashboardSystem } from '../../../hooks/useDashboardSystem';
 import { supabase } from '../../../lib/supabase';
@@ -44,6 +43,24 @@ const checkIsLocked = (examData: any) => {
   }
 };
 
+const StarRating = ({ rating, setRating, label }: { rating: number, setRating: (r: number) => void, label: string }) => (
+  <div className="flex flex-col gap-2">
+    <label className="text-xs font-black text-slate-300 uppercase tracking-widest">{label}</label>
+    <div className="flex gap-2" dir="ltr">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Star 
+          key={star} 
+          onClick={() => setRating(star)} 
+          className={cn(
+            "w-8 h-8 cursor-pointer transition-all hover:scale-110 active:scale-95", 
+            star <= rating ? "fill-amber-400 text-amber-400 drop-shadow-[0_0_10px_rgba(245,158,11,0.6)]" : "fill-slate-800 text-slate-700 hover:text-amber-400/50"
+          )} 
+        />
+      ))}
+    </div>
+  </div>
+);
+
 export default function StudentDashboard() {
   const { user, authRole, isChecking } = useAuth() as any; 
   
@@ -62,33 +79,35 @@ export default function StudentDashboard() {
   const [absentPeriods, setAbsentPeriods] = useState<number>(0);
   const [fullDaysAbsent, setFullDaysAbsent] = useState<number>(0);
 
-  // 🚀 حالات نظام الأعذار الطبية للطالب
   const [excuses, setExcuses] = useState<any[]>([]);
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
   
-  // 🚀 حالات منظومة الاختبارات التفاعلية
   const [seatAllocation, setSeatAllocation] = useState<any>(null);
   const [examTimetables, setExamTimetables] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
-  // 🚀 حالات وثائق التخرج (للثاني عشر فقط)
   const [docRequest, setDocRequest] = useState({ cert_ar: 0, cert_en: 0, twimc_ar: 0, twimc_en: 0, conduct_ar: 0, conduct_en: 0 });
   const [existingDocRequest, setExistingDocRequest] = useState<any>(null);
   const [isSubmittingDocs, setIsSubmittingDocs] = useState(false);
+
+  // 🚀 حالات نظام التقييم الجامعي
+  const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
+  const [currentEvalIndex, setCurrentEvalIndex] = useState(0);
+  const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
+  const [isSubmittingEval, setIsSubmittingEval] = useState(false);
+  const [evalForm, setEvalForm] = useState({ scientific: 0, management: 0, humanity: 0, feedback: '' });
 
   const isFetchingRef = useRef(false);
 
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [excuseForm, setExcuseForm] = useState({
-    absent_dates: [format(new Date(), 'yyyy-MM-dd')],
-    duration_type: 'full_day',
-    target_periods: [] as number[],
-    reason: '',
-    attachment_url: '',
-    cloudinary_public_id: ''
+    absent_dates: [format(new Date(), 'yyyy-MM-dd')], duration_type: 'full_day', target_periods: [] as number[], reason: '', attachment_url: '', cloudinary_public_id: ''
   });
+
+  const currentYear = '2025-2026';
+  const currentSemester = 'الفصل الدراسي الثاني';
 
   useEffect(() => {
     setMounted(true);
@@ -114,71 +133,97 @@ export default function StudentDashboard() {
         setUpcomingAssignments(data.assignments || []);
         setTodaysSchedule(data.todaysSchedule || []);
         setPeriods(data.periods || []);
+        setAttendanceStats({ rate: data.attendanceRate || 100 });
 
         const studentId = data.student?.id;
         
         if (studentId) {
-            const [
-              badgesRes,
-              gradesRes,
-              absentCountRes,
-              totalCountRes,
-              excusesRes,
-              trackRes,
-              docsRes // 🚀 جلب طلبات التخرج
-            ] = await Promise.all([
+            const [ badgesRes, gradesRes, absentCountRes, excusesRes, trackRes, docsRes ] = await Promise.all([
               supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
               supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
               supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
-              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
               supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
-              supabase.from('students').select('next_year_track, track_selection_date, sections(name, classes(name, level))').eq('id', studentId).maybeSingle(),
-              supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', '2025-2026').maybeSingle()
+              supabase.from('students').select('section_id, next_year_track, track_selection_date, sections(id, name, classes(name, level))').eq('id', studentId).maybeSingle(),
+              supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', currentYear).maybeSingle()
             ]);
             
             if (badgesRes.data) setMyBadges(badgesRes.data);
             if (excusesRes.data) setExcuses(excusesRes.data);
             if (docsRes.data) setExistingDocRequest(docsRes.data);
 
+            let sectionIdForEvals = data.student?.section_id;
+
             if (trackRes.data) {
                 setStudentData((prev: any) => ({ ...prev, ...trackRes.data }));
+                if(trackRes.data.section_id) sectionIdForEvals = trackRes.data.section_id;
+                else if(trackRes.data.sections?.id) sectionIdForEvals = trackRes.data.sections.id;
             }
 
             if (gradesRes.data && gradesRes.data.length > 0) {
-                const formattedGrades = gradesRes.data.map((g: any) => ({
-                    ...g,
-                    exam: { ...g.exams, subject: g.exams?.subjects }
-                }));
+                const formattedGrades = gradesRes.data.map((g: any) => ({ ...g, exam: { ...g.exams, subject: g.exams?.subjects } }));
                 setRecentGrades(formattedGrades);
-            } else {
-                setRecentGrades(data.grades || []);
-            }
+            } else { setRecentGrades(data.grades || []); }
 
             if (!absentCountRes.error && absentCountRes.count !== null) {
               setAbsentPeriods(absentCountRes.count);
               setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
-              
-              if (totalCountRes.count && totalCountRes.count > 0) {
-                const calculatedRate = Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100);
-                setAttendanceStats({ rate: calculatedRate });
-              } else {
-                setAttendanceStats({ rate: 100 });
-              }
             }
 
-            // 🚀 جلب بيانات المنظومة الامتحانية بشكل معزول وآمن
+            // 🚀 نظام التقييم الإجباري للجامعة (معزول تماماً ومستقل)
+            if (sectionIdForEvals) {
+               try {
+                   // التحقق من تفعيل التقييم من الإعدادات
+                   const { data: settings } = await supabase.from('platform_settings').select('is_evaluations_active').limit(1).maybeSingle();
+                   
+                   if (settings?.is_evaluations_active) {
+                       // جلب جدول الحصص (لجلب المعلمين الذين يدرسون هذا الفصل)
+                       const { data: fullSchedule } = await supabase
+                         .from('schedules')
+                         .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
+                         .eq('section_id', sectionIdForEvals);
+
+                       if (fullSchedule && fullSchedule.length > 0) {
+                          // استخراج المعلمين بدون تكرار
+                          const uniqueTeachersMap = new Map();
+                          fullSchedule.forEach((slot:any) => {
+                             if(slot.teacher_id && !uniqueTeachersMap.has(slot.teacher_id)) {
+                                const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
+                                uniqueTeachersMap.set(slot.teacher_id, {
+                                   teacher_id: slot.teacher_id,
+                                   full_name: u?.full_name || 'معلم',
+                                   avatar_url: u?.avatar_url,
+                                   subject_name: slot.subjects?.name || 'مادة دراسية'
+                                });
+                             }
+                          });
+                          const allMyTeachers = Array.from(uniqueTeachersMap.values());
+
+                          // التحقق ممن تم تقييمهم سابقاً
+                          const { data: myEvals } = await supabase
+                             .from('student_evaluations_of_teachers')
+                             .select('teacher_id')
+                             .eq('student_id', studentId)
+                             .eq('academic_year', currentYear)
+                             .eq('semester', currentSemester);
+
+                          const evaluatedTeacherIds = new Set((myEvals || []).map(e => e.teacher_id));
+
+                          // المعلمون المتبقون للتقييم
+                          const pending = allMyTeachers.filter(t => !evaluatedTeacherIds.has(t.teacher_id));
+                          if(pending.length > 0) {
+                             setPendingEvaluations(pending);
+                             setIsEvalModalOpen(true); // 🚀 فتح البوابة
+                          }
+                       }
+                   }
+               } catch(evalErr) {
+                   console.error("Evaluation Gate Error:", evalErr);
+               }
+            }
+
+            // جلب بيانات المنظومة الامتحانية بشكل معزول
             try {
-               const tData: any = trackRes.data;
-               const sData: any = data.student;
-               
-               const classLevelStr = String(
-                 tData?.sections?.classes?.name || 
-                 tData?.sections?.[0]?.classes?.name || 
-                 sData?.sections?.classes?.name || 
-                 sData?.sections?.[0]?.classes?.name || 
-                 sData?.class_name || ''
-               );
-               
+               const classLevelStr = String(trackRes.data?.sections?.classes?.name || data.student?.sections?.classes?.name || '');
                const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
                
                if (cLevel) {
@@ -191,178 +236,110 @@ export default function StudentDashboard() {
                   if (timeRes.data) setExamTimetables(timeRes.data);
                   if (keysRes.data) setAnswerKeys(keysRes.data);
                }
-            } catch (examErr) {
-               console.error('Error fetching exam system data:', examErr);
-            }
+            } catch (examErr) { console.error(examErr); }
         }
       }
-    } catch (error) {
-      console.error('Error fetching student dashboard data:', error);
-    } finally {
-      setLoading(false);
-      isFetchingRef.current = false;
-    }
+    } catch (error) { console.error(error); } 
+    finally { setLoading(false); isFetchingRef.current = false; }
   }, [fetchStudentDashboardData, user?.id, authRole]);
 
-  // 🚀 دوال وثائق التخرج
-  const handleDocChange = (field: string, delta: number) => {
-    setDocRequest(prev => {
-      const newVal = Math.max(0, prev[field as keyof typeof prev] + delta);
-      return { ...prev, [field]: newVal };
-    });
+  // دالة إرسال التقييم
+  const handleEvalSubmit = async () => {
+     if(evalForm.scientific === 0 || evalForm.management === 0 || evalForm.humanity === 0) {
+        alert('يرجى تقييم جميع المحاور للمتابعة!'); return;
+     }
+
+     setIsSubmittingEval(true);
+     try {
+        const currentTeacher = pendingEvaluations[currentEvalIndex];
+        const payload = {
+           student_id: studentData.id,
+           teacher_id: currentTeacher.teacher_id,
+           subject_name: currentTeacher.subject_name,
+           academic_year: currentYear,
+           semester: currentSemester,
+           scientific_rating: evalForm.scientific,
+           management_rating: evalForm.management,
+           humanity_rating: evalForm.humanity,
+           feedback: evalForm.feedback || ''
+        };
+
+        const { error } = await supabase.from('student_evaluations_of_teachers').insert([payload]);
+        if(error && !error.message.includes('duplicate key')) throw error; 
+
+        setEvalForm({ scientific: 0, management: 0, humanity: 0, feedback: '' });
+        
+        if (currentEvalIndex + 1 < pendingEvaluations.length) {
+           setCurrentEvalIndex(prev => prev + 1);
+        } else {
+           setIsEvalModalOpen(false);
+           alert('شكراً لك! مساهمتك ستساعدنا في تطوير العملية التعليمية. تم فتح لوحة التحكم لك الآن.');
+        }
+     } catch (error:any) {
+        alert('حدث خطأ أثناء الإرسال. يرجى المحاولة مرة أخرى.');
+     } finally {
+        setIsSubmittingEval(false);
+     }
   };
 
+  const handleDocChange = (field: string, delta: number) => {
+    setDocRequest(prev => { const newVal = Math.max(0, prev[field as keyof typeof prev] + delta); return { ...prev, [field]: newVal }; });
+  };
   const totalDocsCost = Object.values(docRequest).reduce((a, b) => a + b, 0);
-
   const submitDocRequest = async () => {
     if (totalDocsCost === 0) { alert('يرجى تحديد نسخة واحدة على الأقل'); return; }
     if (!confirm(`إجمالي المبلغ المطلوب هو ${totalDocsCost} دينار كويتي. هل أنت متأكد من تقديم الطلب؟`)) return;
-    
     setIsSubmittingDocs(true);
     try {
-      const payload = {
-        student_id: studentData.id,
-        academic_year: '2025-2026',
-        cert_ar: docRequest.cert_ar,
-        cert_en: docRequest.cert_en,
-        twimc_ar: docRequest.twimc_ar,
-        twimc_en: docRequest.twimc_en,
-        conduct_ar: docRequest.conduct_ar,
-        conduct_en: docRequest.conduct_en,
-        total_amount: totalDocsCost,
-        payment_status: 'pending'
-      };
-
+      const payload = { student_id: studentData.id, academic_year: currentYear, cert_ar: docRequest.cert_ar, cert_en: docRequest.cert_en, twimc_ar: docRequest.twimc_ar, twimc_en: docRequest.twimc_en, conduct_ar: docRequest.conduct_ar, conduct_en: docRequest.conduct_en, total_amount: totalDocsCost, payment_status: 'pending' };
       const { error } = await supabase.from('graduation_documents').insert([payload]);
       if (error) throw error;
-
-      alert('تم تقديم طلب الوثائق بنجاح! يرجى التوجه لمسؤول المدرسة لدفع المبلغ واعتماد الطلب للمندوب.');
-      fetchData(); 
-    } catch (e) { alert('حدث خطأ أثناء التقديم.'); console.error(e); } finally { setIsSubmittingDocs(false); }
+      alert('تم تقديم طلب الوثائق بنجاح!'); fetchData(); 
+    } catch (e) { alert('حدث خطأ أثناء التقديم.'); } finally { setIsSubmittingDocs(false); }
   };
 
   const handleAddDate = () => {
     if (!currentDateInput) return;
-    if (excuseForm.absent_dates.includes(currentDateInput)) {
-      alert('هذا التاريخ مضاف مسبقاً.');
-      return;
-    }
-    setExcuseForm(prev => ({
-      ...prev,
-      absent_dates: [...prev.absent_dates, currentDateInput].sort()
-    }));
+    if (excuseForm.absent_dates.includes(currentDateInput)) { alert('هذا التاريخ مضاف مسبقاً.'); return; }
+    setExcuseForm(prev => ({ ...prev, absent_dates: [...prev.absent_dates, currentDateInput].sort() }));
   };
-
-  const handleRemoveDate = (dateToRemove: string) => {
-    setExcuseForm(prev => ({
-      ...prev,
-      absent_dates: prev.absent_dates.filter(d => d !== dateToRemove)
-    }));
-  };
-
+  const handleRemoveDate = (dateToRemove: string) => { setExcuseForm(prev => ({ ...prev, absent_dates: prev.absent_dates.filter(d => d !== dateToRemove) })); };
   const handleReportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     setIsUploadingReport(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
-      
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
-        method: 'POST',
-        body: formData
-      });
+      const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
       const data = await res.json();
-      
-      if (data.secure_url) {
-        setExcuseForm(prev => ({ ...prev, attachment_url: data.secure_url, cloudinary_public_id: data.public_id }));
-      } else {
-        throw new Error('Upload failed');
-      }
-    } catch (err) {
-      alert('فشل رفع الملف. تأكد من جودة اتصالك أو حاول مجدداً.');
-    } finally {
-      setIsUploadingReport(false);
-    }
+      if (data.secure_url) setExcuseForm(prev => ({ ...prev, attachment_url: data.secure_url, cloudinary_public_id: data.public_id }));
+      else throw new Error('Upload failed');
+    } catch (err) { alert('فشل رفع الملف.'); } finally { setIsUploadingReport(false); }
   };
-
   const handleSubmitExcuse = async () => {
-    if (excuseForm.absent_dates.length === 0) {
-      alert('يرجى تحديد يوم غياب واحد على الأقل.'); return;
-    }
-    if (!excuseForm.attachment_url) {
-      alert('يرجى إرفاق التقرير الطبي أو الإثبات أولاً.'); return;
-    }
-    if (excuseForm.duration_type === 'partial_day' && excuseForm.target_periods.length === 0) {
-      alert('يرجى تحديد الحصص التي غبت عنها.'); return;
-    }
+    if (excuseForm.absent_dates.length === 0) { alert('يرجى تحديد يوم غياب واحد على الأقل.'); return; }
+    if (!excuseForm.attachment_url) { alert('يرجى إرفاق التقرير الطبي أو الإثبات أولاً.'); return; }
+    if (excuseForm.duration_type === 'partial_day' && excuseForm.target_periods.length === 0) { alert('يرجى تحديد الحصص التي غبت عنها.'); return; }
 
     setIsSubmittingExcuse(true);
     try {
-      const payload = {
-        student_id: studentData.id,
-        submitted_by: user.id,
-        submitter_role: 'student',
-        excuse_date: excuseForm.absent_dates[0],
-        absent_dates: excuseForm.absent_dates,
-        duration_type: excuseForm.duration_type,
-        target_periods: excuseForm.duration_type === 'partial_day' ? excuseForm.target_periods : [],
-        reason: excuseForm.reason,
-        attachment_url: excuseForm.attachment_url,
-        cloudinary_public_id: excuseForm.cloudinary_public_id,
-        status: 'pending'
-      };
-
+      const payload = { student_id: studentData.id, submitted_by: user.id, submitter_role: 'student', excuse_date: excuseForm.absent_dates[0], absent_dates: excuseForm.absent_dates, duration_type: excuseForm.duration_type, target_periods: excuseForm.duration_type === 'partial_day' ? excuseForm.target_periods : [], reason: excuseForm.reason, attachment_url: excuseForm.attachment_url, cloudinary_public_id: excuseForm.cloudinary_public_id, status: 'pending' };
       const { error } = await supabase.from('absence_excuses').insert([payload]);
       if (error) throw error;
-
-      alert('تم تقديم العذر بنجاح! نتمى لك دوام الصحة والعافية. طلبك الآن قيد المراجعة.');
-      setIsExcuseModalOpen(false);
-      setExcuseForm({ 
-        absent_dates: [format(new Date(), 'yyyy-MM-dd')], 
-        duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' 
-      });
-      fetchData();
-    } catch (error: any) {
-      alert('حدث خطأ أثناء التقديم: ' + error.message);
-    } finally {
-      setIsSubmittingExcuse(false);
-    }
+      alert('تم تقديم العذر بنجاح!'); setIsExcuseModalOpen(false);
+      setExcuseForm({ absent_dates: [format(new Date(), 'yyyy-MM-dd')], duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' }); fetchData();
+    } catch (error: any) { alert('حدث خطأ أثناء التقديم: ' + error.message); } finally { setIsSubmittingExcuse(false); }
   };
+  const togglePeriod = (periodNum: number) => { setExcuseForm(prev => { const exists = prev.target_periods.includes(periodNum); if (exists) return { ...prev, target_periods: prev.target_periods.filter(p => p !== periodNum) }; return { ...prev, target_periods: [...prev.target_periods, periodNum].sort((a,b) => a - b) }; }); };
+  const handleTrackSelection = async (track: 'scientific' | 'literary') => { try { await updateStudentTrack(track); fetchData(); } catch (error) { console.error(error); } };
 
-  const togglePeriod = (periodNum: number) => {
-    setExcuseForm(prev => {
-      const exists = prev.target_periods.includes(periodNum);
-      if (exists) return { ...prev, target_periods: prev.target_periods.filter(p => p !== periodNum) };
-      return { ...prev, target_periods: [...prev.target_periods, periodNum].sort((a,b) => a - b) };
-    });
-  };
-
-  const handleTrackSelection = async (track: 'scientific' | 'literary') => {
-    try {
-      await updateStudentTrack(track);
-      fetchData();
-    } catch (error) {
-      console.error('Error selecting track:', error);
-    }
-  };
-
-  useEffect(() => {
-    if (!isChecking && user) fetchData();
-  }, [fetchData, isChecking, user]);
+  useEffect(() => { if (!isChecking && user) fetchData(); }, [fetchData, isChecking, user]);
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
   };
 
-  // 🚀 هندسة العداد التنازلي للاختبار
-  const nextOfficialExam = examTimetables.find(ex => {
-      const exDate = new Date(`${ex.exam_date}T${ex.start_time}`);
-      return currentTime && exDate > currentTime;
-  });
-
+  const nextOfficialExam = examTimetables.find(ex => { const exDate = new Date(`${ex.exam_date}T${ex.start_time}`); return currentTime && exDate > currentTime; });
   let countdownStr = '';
   if (nextOfficialExam && currentTime) {
       const exDate = new Date(`${nextOfficialExam.exam_date}T${nextOfficialExam.start_time}`);
@@ -415,63 +392,23 @@ export default function StudentDashboard() {
   const rawFullName = studentData?.users?.full_name || studentData?.user?.full_name || studentData?.full_name || user?.user_metadata?.full_name || 'بطلنا';
   const nameParts = rawFullName.split(' ');
   const displayFirstName = nameParts.length > 1 && nameParts[0].length <= 2 ? `${nameParts[0]} ${nameParts[1]}` : nameParts[0];
-  
   const classNameStr = String(studentData?.sections?.classes?.name || studentData?.section?.classes?.name || studentData?.class_name || '');
   const sectionNameStr = String(studentData?.sections?.name || studentData?.section?.name || studentData?.section_name || 'غير محدد');
   const isTenthGrade = classNameStr.includes('العاشر') || classNameStr.includes('عاشر') || classNameStr.includes('10');
-  
-  // 🚀 اكتشاف خريجي الثاني عشر
   const isTwelfthGrade = classNameStr.includes('الثاني عشر') || classNameStr.includes('ثاني عشر') || classNameStr.includes('12');
   const hasSelectedTrack = !!studentData?.next_year_track;
-  
   const unlockedGrades = recentGrades.filter(g => !checkIsLocked(g.exam));
   const avgScore = unlockedGrades.length > 0 ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length) : 0;
   const avatarUrl = studentData?.users?.avatar_url || studentData?.user?.avatar_url || studentData?.avatar_url;
 
-  // 🚀 الشفرة الخاصة بالطالب للهوية الامتحانية
   const qrPayload = `raf-id:${studentData?.id}`; 
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
-  let warningLevel = 0;
-  let warningTitle = "";
-  let warningMessage = "";
-  let warningColors = "";
-  let warningIconColor = "";
-  let WarningIcon = Info;
-  let warningPulse = false;
-
-  if (absentPeriods >= 100) {
-    warningLevel = 4;
-    warningTitle = "إشعار فصل نهائي";
-    warningMessage = "لقد تجاوزت 100 حصة غياب. تم رفع ملفك للإدارة لاتخاذ إجراءات الفصل.";
-    warningColors = "from-slate-900 via-rose-950 to-slate-900 border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]";
-    warningIconColor = "text-rose-500";
-    WarningIcon = Siren;
-    warningPulse = true;
-  } else if (absentPeriods >= 75) {
-    warningLevel = 3;
-    warningTitle = "إنذار ثالث (خطر الفصل)";
-    warningMessage = "غيابك وصل لمرحلة حرجة جداً. أي غياب إضافي سيعرضك للفصل النهائي من المدرسة.";
-    warningColors = "from-rose-500/20 to-red-600/20 border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]";
-    warningIconColor = "text-rose-500";
-    WarningIcon = ShieldAlert;
-    warningPulse = true;
-  } else if (absentPeriods >= 50) {
-    warningLevel = 2;
-    warningTitle = "إنذار ثاني للغياب";
-    warningMessage = "استمرارك في الغياب يعرض مستقبلك الدراسي للخطر. يرجى تبرير غيابك فوراً.";
-    warningColors = "from-orange-500/20 to-amber-600/20 border-orange-500/50 text-orange-500";
-    warningIconColor = "text-orange-500";
-    WarningIcon = AlertTriangle;
-  } else if (absentPeriods >= 25) {
-    warningLevel = 1;
-    warningTitle = "إنذار أول للغياب";
-    warningMessage = "لقد تجاوزت الحد المسموح للغياب. نأمل منك الالتزام بالحضور أو تقديم عذر طبي.";
-    warningColors = "from-amber-500/20 to-yellow-600/20 border-amber-500/50 text-amber-500";
-    warningIconColor = "text-amber-500";
-    WarningIcon = AlertTriangle;
-  }
-
+  let warningLevel = 0; let warningTitle = ""; let warningMessage = ""; let warningColors = ""; let warningIconColor = ""; let WarningIcon = Info; let warningPulse = false;
+  if (absentPeriods >= 100) { warningLevel = 4; warningTitle = "إشعار فصل نهائي"; warningMessage = "لقد تجاوزت 100 حصة غياب. تم رفع ملفك للإدارة لاتخاذ إجراءات الفصل."; warningColors = "from-slate-900 via-rose-950 to-slate-900 border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]"; warningIconColor = "text-rose-500"; WarningIcon = Siren; warningPulse = true; } 
+  else if (absentPeriods >= 75) { warningLevel = 3; warningTitle = "إنذار ثالث (خطر الفصل)"; warningMessage = "غيابك وصل لمرحلة حرجة جداً. أي غياب إضافي سيعرضك للفصل النهائي من المدرسة."; warningColors = "from-rose-500/20 to-red-600/20 border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]"; warningIconColor = "text-rose-500"; WarningIcon = ShieldAlert; warningPulse = true; } 
+  else if (absentPeriods >= 50) { warningLevel = 2; warningTitle = "إنذار ثاني للغياب"; warningMessage = "استمرارك في الغياب يعرض مستقبلك الدراسي للخطر. يرجى تبرير غيابك فوراً."; warningColors = "from-orange-500/20 to-amber-600/20 border-orange-500/50 text-orange-500"; warningIconColor = "text-orange-500"; WarningIcon = AlertTriangle; } 
+  else if (absentPeriods >= 25) { warningLevel = 1; warningTitle = "إنذار أول للغياب"; warningMessage = "لقد تجاوزت الحد المسموح للغياب. نأمل منك الالتزام بالحضور أو تقديم عذر طبي."; warningColors = "from-amber-500/20 to-yellow-600/20 border-amber-500/50 text-amber-500"; warningIconColor = "text-amber-500"; WarningIcon = AlertTriangle; }
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
   return (
@@ -526,7 +463,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* 🚀 الهوية الامتحانية الحية (بانر منفصل) - يظهر فقط إذا كان هناك رقم جلوس */}
+        {/* 🚀 الهوية الامتحانية الحية (بانر منفصل) */}
         <AnimatePresence>
           {seatAllocation && (
              <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
@@ -557,7 +494,7 @@ export default function StudentDashboard() {
                       </div>
                    </div>
 
-                   {/* 🪪 هوية الطالب الذكية (3D ID Card) - ديسكتوب */}
+                   {/* 🪪 هوية الطالب الذكية */}
                    <div className="shrink-0 perspective-1000 hidden md:block">
                       <div className="w-[65mm] h-[100mm] border-[4px] border-slate-900 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
                          <div className="absolute top-0 left-0 w-full h-[28mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 border-b-[3px] border-slate-700 relative overflow-hidden">
@@ -604,12 +541,11 @@ export default function StudentDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 قسم الوثائق لخريجي الثاني عشر (Graduation Docs Area) */}
+        {/* 🚀 قسم الوثائق لخريجي الثاني عشر */}
         <AnimatePresence>
           {isTwelfthGrade && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative z-10 w-full">
               {existingDocRequest ? (
-                // تم التقديم مسبقاً
                 <div className="bg-gradient-to-l from-emerald-900/40 to-[#0f1423] border border-emerald-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(16,185,129,0.15)] backdrop-blur-xl">
                    <div className="flex items-center gap-5 text-center md:text-right w-full md:w-auto flex-col md:flex-row">
                       <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-400/50 shadow-inner shrink-0">
@@ -630,7 +566,6 @@ export default function StudentDashboard() {
                    </div>
                 </div>
               ) : (
-                // نموذج طلب الوثائق
                 <div className="bg-gradient-to-br from-[#1e1b4b] to-[#0f1423] border border-fuchsia-500/30 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_40px_rgba(192,38,211,0.15)] relative overflow-hidden">
                    <div className="absolute top-0 left-0 w-64 h-64 bg-fuchsia-600/20 blur-[100px] pointer-events-none rounded-full"></div>
                    
@@ -778,7 +713,7 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* 🚀 البانر السينمائي (مجلس الصف - للطالب) */}
+        {/* 🚀 البانر السينمائي (مجلس الصف) */}
         {studentData?.section_id && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(99,102,241,0.15)] border border-indigo-500/30 backdrop-blur-xl bg-[#0f1423]">
             <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-600/20 to-transparent pointer-events-none z-0"></div>
@@ -806,17 +741,14 @@ export default function StudentDashboard() {
           </motion.div>
         )}
 
-        {/* 🚀 بطاقة إنذار الغياب الذكية (Smart Warning Banner) */}
+        {/* 🚀 بطاقة إنذار الغياب الذكية */}
         <AnimatePresence>
           {warningLevel > 0 && (
             <motion.div 
-              initial={{ opacity: 0, y: -20, height: 0 }} 
-              animate={{ opacity: 1, y: 0, height: 'auto' }} 
-              exit={{ opacity: 0, height: 0 }}
+              initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
               className={`relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] border-2 backdrop-blur-xl p-6 sm:p-8 shadow-lg bg-gradient-to-r ${warningColors}`}
             >
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                
                 <div className="flex items-start gap-4 sm:gap-6 w-full md:w-auto flex-1">
                   <div className={`p-4 rounded-2xl bg-white/10 shrink-0 border border-white/10 shadow-inner ${warningPulse ? 'animate-pulse' : ''}`}>
                     <WarningIcon className={`w-8 h-8 sm:w-10 sm:h-10 ${warningIconColor}`} />
@@ -841,9 +773,7 @@ export default function StudentDashboard() {
                   </div>
                   <div className="h-2.5 w-full bg-[#02040a] rounded-full overflow-hidden border border-white/5 shadow-inner">
                     <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${dangerPercentage}%` }}
-                      transition={{ duration: 1.5, ease: "easeOut" }}
+                      initial={{ width: 0 }} animate={{ width: `${dangerPercentage}%` }} transition={{ duration: 1.5, ease: "easeOut" }}
                       className={`h-full rounded-full shadow-[0_0_10px_currentColor] ${warningLevel >= 3 ? 'bg-rose-500 text-rose-500' : warningLevel === 2 ? 'bg-orange-500 text-orange-500' : 'bg-amber-500 text-amber-500'}`}
                     />
                   </div>
@@ -888,8 +818,8 @@ export default function StudentDashboard() {
                 <p className="text-slate-300 font-bold text-xs sm:text-sm leading-relaxed">يرجى اختيار المسار الأكاديمي (علمي أو أدبي) الذي ترغب في دراسته في الصف الحادي عشر.</p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full md:w-auto shrink-0">
-                <button onClick={() => handleTrackSelection('scientific')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-blue-600 text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-blue-400/50">المسار العلمي</button>
-                <button onClick={() => handleTrackSelection('literary')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-emerald-400/50">المسار الأدبي</button>
+                <button onClick={() => handleTrackSelection('scientific')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-blue-600 text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:bg-blue-50 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-blue-400/50">المسار العلمي</button>
+                <button onClick={() => handleTrackSelection('literary')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-50 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-emerald-400/50">المسار الأدبي</button>
               </div>
             </div>
           </motion.div>
@@ -975,28 +905,18 @@ export default function StudentDashboard() {
                 {todaysSchedule.length > 0 ? (
                   <div className="space-y-5 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 sm:before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-blue-500/30 before:via-white/10 before:to-transparent">
                     {todaysSchedule.map((item, i) => {
-                      let current = false;
-                      let next = false;
-                      let isPast = false;
-
+                      let current = false; let next = false; let isPast = false;
                       if (item.start_time && item.end_time && currentTime) {
                           const [startH, startM] = item.start_time.split(':').map(Number);
                           const [endH, endM] = item.end_time.split(':').map(Number);
-                          
                           const now = currentTime;
                           const start = new Date(now); start.setHours(startH, startM, 0);
                           const end = new Date(now); end.setHours(endH, endM, 0);
-                          
-                          if (now >= start && now <= end) {
-                              current = true;
-                          } else if (now > end) {
-                              isPast = true;
-                          } else {
+                          if (now >= start && now <= end) { current = true; } else if (now > end) { isPast = true; } else {
                               const diff = (start.getTime() - now.getTime()) / (1000 * 60);
                               if (diff > 0 && diff <= 60) next = true;
                           }
                       }
-
                       return (
                         <div key={i} className={cn("relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group", current ? "is-active z-20" : "z-10")}>
                           <div className={cn("flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500", 
@@ -1019,7 +939,6 @@ export default function StudentDashboard() {
                                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)]"></span>
                               </span>
                             )}
-
                             <div className={`absolute top-0 left-0 w-1 h-full ${
                               current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' 
                               : isPast ? 'bg-slate-800' 
@@ -1092,7 +1011,6 @@ export default function StudentDashboard() {
 
           </div>
 
-          {/* 🌟 Column 2: Narrow Area */}
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
@@ -1237,7 +1155,72 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة (Modal) تقديم العذر الطبي */}
+      {/* 🚀 نافذة التقييم الإجباري للجامعة (The Gatekeeper) */}
+      <AnimatePresence>
+        {isEvalModalOpen && pendingEvaluations.length > 0 && (
+          <Dialog.Root open={isEvalModalOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/98 backdrop-blur-xl z-[9999] transition-all" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-2xl z-[9999] outline-none" dir="rtl">
+                 <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', damping: 20 }} className="bg-[#131836] border border-amber-500/50 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_80px_rgba(245,158,11,0.2)] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 blur-[80px] pointer-events-none rounded-full"></div>
+                    
+                    <div className="flex flex-col items-center text-center mb-8 relative z-10">
+                       <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-4 border border-amber-500/30 shadow-inner">
+                         <Star className="w-8 h-8 text-amber-400" />
+                       </div>
+                       <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">تقييم الأداء الأكاديمي</h2>
+                       <p className="text-sm font-bold text-amber-200/80 max-w-md">يرجى تقييم أداء معلميك لضمان جودة التعليم. <br/><span className="text-rose-400 font-black">هذا التقييم إجباري وسري تماماً ولن يعرف المعلم هويتك.</span></p>
+                    </div>
+
+                    <div className="bg-[#0a0d1a]/50 p-6 rounded-3xl border border-white/5 relative z-10">
+                       <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/5">
+                          <div className="flex items-center gap-4">
+                             <div className="w-14 h-14 bg-slate-800 rounded-full border-2 border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+                                {pendingEvaluations[currentEvalIndex]?.avatar_url ? (
+                                   <img src={pendingEvaluations[currentEvalIndex].avatar_url} alt="t" className="w-full h-full object-cover" />
+                                ) : <UserCircle className="w-8 h-8 text-slate-500"/>}
+                             </div>
+                             <div className="text-right">
+                                <p className="text-lg font-black text-white">{pendingEvaluations[currentEvalIndex]?.full_name}</p>
+                                <p className="text-xs font-bold text-amber-400 mt-1">مادة: {pendingEvaluations[currentEvalIndex]?.subject_name}</p>
+                             </div>
+                          </div>
+                          <div className="bg-slate-900 px-4 py-2 rounded-xl border border-white/5">
+                             <span className="text-xs font-black text-slate-400">معلم {currentEvalIndex + 1} من {pendingEvaluations.length}</span>
+                          </div>
+                       </div>
+
+                       <div className="space-y-6">
+                          <StarRating rating={evalForm.scientific} setRating={(r) => setEvalForm({...evalForm, scientific: r})} label="المحور العلمي (الشرح وتوصيل المعلومة)" />
+                          <StarRating rating={evalForm.management} setRating={(r) => setEvalForm({...evalForm, management: r})} label="المحور الإداري (إدارة الفصل والوقت)" />
+                          <StarRating rating={evalForm.humanity} setRating={(r) => setEvalForm({...evalForm, humanity: r})} label="المحور الإنساني (التعامل والتحفيز)" />
+                          
+                          <div className="space-y-2 pt-4">
+                             <label className="text-xs font-black text-slate-300 uppercase tracking-widest">رسالة أو ملاحظة للإدارة (اختياري)</label>
+                             <textarea 
+                                value={evalForm.feedback} onChange={(e) => setEvalForm({...evalForm, feedback: e.target.value})}
+                                placeholder="اكتب رأيك بصدق هنا..."
+                                className="w-full bg-[#02040a] border border-white/10 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-amber-500/50 h-24 resize-none custom-scrollbar"
+                             />
+                          </div>
+                       </div>
+
+                       <button 
+                          onClick={handleEvalSubmit} disabled={isSubmittingEval || evalForm.scientific === 0 || evalForm.management === 0 || evalForm.humanity === 0}
+                          className="w-full mt-8 py-4 bg-amber-500 hover:bg-amber-400 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50 disabled:scale-100"
+                       >
+                          {isSubmittingEval ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-5 h-5" /> إرسال التقييم السري والانتقال</>}
+                       </button>
+                    </div>
+                 </motion.div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </AnimatePresence>
+
+      {/* 🚀 نافذة العذر الطبي العادي */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
@@ -1254,48 +1237,30 @@ export default function StudentDashboard() {
                 </div>
 
                 <div className="space-y-6">
-                  
-                  {/* 🚀 اختيار التواريخ المتعددة للغياب */}
                   <div className="space-y-3 bg-[#090b14]/50 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
-                    <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها
-                    </label>
+                    <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها</label>
                     <div className="flex items-center gap-2">
-                      <input 
-                        type="date" 
-                        value={currentDateInput} 
-                        onChange={(e) => setCurrentDateInput(e.target.value)} 
-                        className="flex-1 bg-[#131836] border border-white/10 rounded-xl p-3 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50" 
-                        style={{ colorScheme: 'dark' }} 
-                      />
-                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-xs sm:text-sm transition-all shadow-sm active:scale-95">
-                        إضافة
-                      </button>
+                      <input type="date" value={currentDateInput} onChange={(e) => setCurrentDateInput(e.target.value)} className="flex-1 bg-[#131836] border border-white/10 rounded-xl p-3 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50" style={{ colorScheme: 'dark' }} />
+                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-xs sm:text-sm transition-all shadow-sm active:scale-95">إضافة</button>
                     </div>
-
                     {excuseForm.absent_dates.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/5">
                         {excuseForm.absent_dates.map(date => (
                           <div key={date} className="flex items-center gap-2 bg-[#02040a]/80 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
                             <span className="text-[10px] sm:text-xs font-bold text-slate-200" dir="ltr">{date}</span>
-                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300">
-                              <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                            </button>
+                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300"><Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-
                   <div className="space-y-2">
                     <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">نوع الدوام</label>
                     <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 appearance-none [&>option]:bg-[#131836]">
-                      <option value="full_day">غياب يوم كامل (لكل الأيام المحددة)</option>
+                      <option value="full_day">غياب يوم كامل</option>
                       <option value="partial_day">غياب جزئي (استئذان حصص)</option>
                     </select>
                   </div>
-
-                  {/* اختيار الحصص (يظهر فقط إذا كان الغياب جزئياً) */}
                   <AnimatePresence>
                     {excuseForm.duration_type === 'partial_day' && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -1303,53 +1268,29 @@ export default function StudentDashboard() {
                           <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /> حدد الحصص التي غبت عنها</label>
                           <div className="flex flex-wrap gap-2">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
-                              <button 
-                                key={p} type="button" onClick={() => togglePeriod(p)}
-                                className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all border", excuseForm.target_periods.includes(p) ? "bg-amber-500 text-slate-900 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]" : "bg-[#090b14] text-slate-400 border-white/10 hover:border-amber-500/50")}
-                              >
-                                {p}
-                              </button>
+                              <button key={p} type="button" onClick={() => togglePeriod(p)} className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all border", excuseForm.target_periods.includes(p) ? "bg-amber-500 text-slate-900 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]" : "bg-[#090b14] text-slate-400 border-white/10 hover:border-amber-500/50")}>{p}</button>
                             ))}
                           </div>
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
-
-                  {/* رفع المرفق */}
                   <div className="space-y-2">
                     <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">إرفاق التقرير الطبي (صورة)</label>
                     <label className={cn("relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingReport ? "border-amber-500/50 bg-amber-500/5" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 bg-[#090b14] hover:border-amber-500/30 hover:bg-white/5")}>
                       <input type="file" accept="image/*" className="hidden" onChange={handleReportUpload} disabled={isUploadingReport} />
-                      {isUploadingReport ? (
-                        <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" /><span className="text-[10px] sm:text-xs font-black">جاري الرفع السحابي...</span></div>
-                      ) : excuseForm.attachment_url ? (
-                        <div className="flex flex-col items-center gap-2 text-emerald-400"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-black text-center">تم إرفاق التقرير بنجاح (انقر لتغييره)</span></div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-slate-500"><UploadCloud className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-bold text-center">اضغط هنا لاختيار صورة التقرير</span></div>
-                      )}
+                      {isUploadingReport ? <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" /><span className="text-[10px] sm:text-xs font-black">جاري الرفع السحابي...</span></div> : excuseForm.attachment_url ? <div className="flex flex-col items-center gap-2 text-emerald-400"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-black text-center">تم الإرفاق بنجاح</span></div> : <div className="flex flex-col items-center gap-2 text-slate-500"><UploadCloud className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-bold text-center">اضغط لاختيار صورة</span></div>}
                     </label>
                   </div>
-
-                  {/* تفاصيل إضافية */}
                   <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات للإدارة (اختياري)</label>
-                    <textarea 
-                      value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})}
-                      placeholder="اكتب أي تفاصيل إضافية هنا..." 
-                      className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3 sm:p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 h-20 sm:h-24 resize-none custom-scrollbar"
-                    />
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات (اختياري)</label>
+                    <textarea value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3 sm:p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 h-20 sm:h-24 resize-none custom-scrollbar" />
                   </div>
-
                 </div>
-
                 <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/5 flex gap-3">
-                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-slate-900 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95">
-                    {isSubmittingExcuse && <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />} إرسال الطلب
-                  </button>
-                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10 text-sm sm:text-base active:scale-95">إلغاء</button>
+                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-slate-900 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2"><Loader2 className={cn("w-5 h-5", isSubmittingExcuse ? "animate-spin" : "hidden")} /> إرسال الطلب</button>
+                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10">إلغاء</button>
                 </div>
-
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
