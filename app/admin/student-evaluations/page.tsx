@@ -9,9 +9,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale';
 
 const StarDisplay = ({ val }: { val: number }) => (
   <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 px-2 py-1 rounded-lg font-black text-sm border border-amber-500/20 shadow-inner w-fit">
@@ -27,7 +24,7 @@ export default function StudentEvaluationsDashboard() {
   const [isFetchingData, setIsFetchingData] = useState(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'details'>('stats');
   
-  // 🚀 الفلترة السحابية والفصول
+  // الفلترة السحابية والفصول
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
   
@@ -37,6 +34,7 @@ export default function StudentEvaluationsDashboard() {
   
   // فلاتر الواجهة
   const [searchTeacher, setSearchTeacher] = useState('');
+  const [searchClass, setSearchClass] = useState('');
 
   // إعدادات المنصة (التحكم بالبوابة)
   const [settingsId, setSettingsId] = useState<any>(null);
@@ -48,6 +46,7 @@ export default function StudentEvaluationsDashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [newCriterion, setNewCriterion] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
@@ -96,7 +95,6 @@ export default function StudentEvaluationsDashboard() {
   const fetchEvaluations = async () => {
     setIsFetchingData(true);
     try {
-      // 🚀 استعلام ذكي: إذا اختار فصل، نجلب طلاب هذا الفصل فقط!
       let query = supabase
         .from('student_evaluations_of_teachers')
         .select(`
@@ -107,18 +105,15 @@ export default function StudentEvaluationsDashboard() {
         .eq('academic_year', currentYear)
         .eq('semester', currentSemester);
 
-      // حماية السيرفر من الانفجار: تطبيق الفلتر السحابي
       if (selectedSectionId !== 'all') {
           query = query.eq('students.section_id', selectedSectionId);
       } else {
-          // إذا اختار "الكل"، نجلب أحدث 500 تقييم فقط لمنع تجمد المتصفح
           query = query.limit(500); 
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
 
-      // تصفية وتجهيز البيانات للواجهة
       const formattedRaw = (data || []).map((ev: any) => {
          const tUser = Array.isArray(ev.teachers?.users) ? ev.teachers.users[0] : ev.teachers?.users;
          const sUser = Array.isArray(ev.students?.users) ? ev.students.users[0] : ev.students?.users;
@@ -150,7 +145,6 @@ export default function StudentEvaluationsDashboard() {
       });
       setAllRawEvaluations(formattedRaw);
 
-      // التجميع الإحصائي (أفضل وأسوأ المعلمين بناءً على الفلتر)
       const groupedData = formattedRaw.reduce((acc: any, curr: any) => {
         const tId = curr.teacher_id;
         if (!acc[tId]) {
@@ -176,12 +170,11 @@ export default function StudentEvaluationsDashboard() {
     finally { setIsFetchingData(false); }
   };
 
-  // 3. إعادة الجلب كلما تغير الفصل المحدد
   useEffect(() => {
      if (['admin', 'management'].includes(currentRole)) fetchEvaluations();
   }, [selectedSectionId, currentRole]);
 
-  // 🚀 حفظ الإعدادات في قاعدة البيانات
+  // حفظ الإعدادات في قاعدة البيانات
   const saveSettings = async () => {
      if (!settingsId) return;
      if (criteria.length === 0) { alert('يجب إضافة بند تقييم واحد على الأقل.'); return; }
@@ -213,7 +206,7 @@ export default function StudentEvaluationsDashboard() {
           const { error } = await supabase.from('student_evaluations_of_teachers').delete().eq('id', id);
           if (error) throw error;
           setAllRawEvaluations(prev => prev.filter(ev => ev.id !== id));
-          fetchEvaluations(); // تحديث الإحصائيات
+          fetchEvaluations(); 
       } catch(e) { alert('فشل الحذف!'); }
   };
 
@@ -222,22 +215,26 @@ export default function StudentEvaluationsDashboard() {
   const topTeachers = teacherStats.slice(0, 3);
   const bottomTeachers = teacherStats.filter(t => t.overall_avg < 3.5).slice(-3).reverse();
   const filteredTeacherStats = teacherStats.filter(t => t.name.toLowerCase().includes(searchTeacher.toLowerCase()));
-  const filteredRaw = allRawEvaluations.filter(ev => ev.teacher_name.toLowerCase().includes(searchTeacher.toLowerCase()));
+  
+  const filteredRaw = allRawEvaluations.filter(ev => 
+      ev.teacher_name.toLowerCase().includes(searchTeacher.toLowerCase()) &&
+      ev.class_name.toLowerCase().includes(searchClass.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8 font-cairo text-slate-800 pb-32" dir="rtl">
       
       {isLoading && (
-        <div className="fixed inset-0 bg-white/80 z-[100] flex items-center justify-center backdrop-blur-sm">
+        <div className="fixed inset-0 bg-white/80 z-[100] flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-indigo-600"><Loader2 className="w-12 h-12 animate-spin" /><span className="font-black text-lg">تحميل النظام...</span></div>
         </div>
       )}
 
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 relative">
         
-        {/* 📋 الهيدر الإداري */}
+        {/* الهيدر الإداري */}
         <div className="bg-white rounded-[2rem] p-6 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-[80px] pointer-events-none rounded-full"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 rounded-full pointer-events-none"></div>
           
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
@@ -259,7 +256,7 @@ export default function StudentEvaluationsDashboard() {
           </div>
         </div>
 
-        {/* 🚀 الفلتر السحابي الذكي (لحماية السيرفر) */}
+        {/* الفلتر السحابي */}
         <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
            <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="p-2 bg-indigo-500 text-white rounded-xl shadow-inner"><Filter className="w-5 h-5"/></div>
@@ -283,22 +280,22 @@ export default function StudentEvaluationsDashboard() {
            </div>
         </div>
 
-        {/* التبويبات (Tabs) */}
+        {/* التبويبات */}
         <div className="flex bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-fit mx-auto sm:mx-0">
-           <button onClick={() => setActiveTab('stats')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'stats' ? 'bg-indigo-50 text-indigo-600 shadow-inner border border-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}><TrendingUp className="w-4 h-4"/> إحصائيات النطاق المحدد</button>
-           <button onClick={() => setActiveTab('details')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-indigo-50 text-indigo-600 shadow-inner border border-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4"/> سجل الرقابة والمتابعة</button>
+           <button onClick={() => setActiveTab('stats')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'stats' ? 'bg-indigo-50 text-indigo-600 shadow-inner border border-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}><TrendingUp className="w-4 h-4"/> إحصائيات النطاق</button>
+           <button onClick={() => setActiveTab('details')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-indigo-50 text-indigo-600 shadow-inner border border-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4"/> سجل الرقابة</button>
         </div>
 
+        {/* تبويب الإحصائيات */}
         {activeTab === 'stats' && (
           <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-gradient-to-br from-indigo-900 to-blue-900 rounded-[2rem] p-6 sm:p-8 shadow-xl relative overflow-hidden border border-indigo-700">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/20 blur-2xl rounded-full"></div>
                   <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2 relative z-10"><Trophy className="w-6 h-6 text-amber-400"/> أفضل 3 معلمين (في هذا النطاق)</h2>
                   <div className="space-y-4 relative z-10">
                     {topTeachers.map((t, idx) => (
-                      <div key={t.teacher_id} className="flex items-center gap-4 bg-white/10 p-3 rounded-2xl border border-white/10 backdrop-blur-md">
-                        <div className="w-12 h-12 rounded-xl bg-amber-400 flex items-center justify-center font-black text-indigo-900 text-xl shadow-inner shrink-0 relative">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</div>
+                      <div key={t.teacher_id} className="flex items-center gap-4 bg-white/10 p-3 rounded-2xl border border-white/10">
+                        <div className="w-12 h-12 rounded-xl bg-amber-400 flex items-center justify-center font-black text-indigo-900 text-xl shadow-inner shrink-0">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</div>
                         <div className="flex-1 min-w-0"><p className="text-white font-black truncate">{t.name}</p><p className="text-indigo-200 text-[10px] font-bold">{t.subject}</p></div>
                         <div className="text-center shrink-0"><div className="flex items-center gap-1 bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded-xl font-black border border-amber-500/30"><Star className="w-4 h-4 fill-amber-400"/> {t.overall_avg.toFixed(1)}</div></div>
                       </div>
@@ -348,13 +345,14 @@ export default function StudentEvaluationsDashboard() {
           </div>
         )}
 
-        {/* 🚀 قسم السجل التفصيلي */}
+        {/* تبويب السجل التفصيلي */}
         {activeTab === 'details' && (
           <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
              <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col lg:flex-row items-center justify-between gap-4">
                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Eye className="w-5 h-5 text-indigo-500" /> السجل الشامل (تتبع الطلاب)</h3>
                  <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-                    <div className="relative flex-1 lg:w-64"><div className="absolute inset-y-0 right-0 pr-4 flex items-center"><Search className="h-4 w-4 text-slate-400" /></div><input type="text" className="w-full border border-slate-200 rounded-xl py-2.5 pr-11 pl-4 text-sm font-bold bg-white outline-none focus:border-indigo-500" placeholder="ابحث عن معلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} /></div>
+                    <div className="relative flex-1 lg:w-64"><div className="absolute inset-y-0 right-0 pr-4 flex items-center"><Search className="h-4 w-4 text-slate-400" /></div><input type="text" className="w-full border border-slate-200 rounded-xl py-2.5 pr-11 pl-4 text-sm font-bold bg-white outline-none focus:border-indigo-500" placeholder="اسم المعلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} /></div>
+                    <div className="relative flex-1 lg:w-64"><div className="absolute inset-y-0 right-0 pr-4 flex items-center"><Layers className="h-4 w-4 text-slate-400" /></div><input type="text" className="w-full border border-slate-200 rounded-xl py-2.5 pr-11 pl-4 text-sm font-bold bg-white outline-none focus:border-indigo-500" placeholder="الفصل (مثال: 12 علمي)..." value={searchClass} onChange={(e) => setSearchClass(e.target.value)} /></div>
                  </div>
              </div>
              
@@ -415,58 +413,60 @@ export default function StudentEvaluationsDashboard() {
         )}
       </div>
 
-      {/* 🚀 نافذة الإعدادات النقية المضادة للانهيار */}
+      {/* 🚀 نافذة الإعدادات النقية والمحمية من الانهيار (Pure Modal) */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-0">
-           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)} />
-           <div className="bg-white border border-slate-200 rounded-[2rem] w-full max-w-xl shadow-2xl relative z-10 flex flex-col max-h-[90vh]" dir="rtl">
-               <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+           {/* Overlay بدون تأثير Blur لحماية الـ GPU من الانهيار على الجداول الكبيرة */}
+           <div className="absolute inset-0 bg-slate-900/90" onClick={() => setIsSettingsOpen(false)}></div>
+           
+           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden relative z-10" dir="rtl">
+               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                   <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-white shadow-inner"><Settings className="w-5 h-5"/></div>
+                     <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-white"><Settings className="w-5 h-5"/></div>
                      <div>
-                       <h2 className="text-lg font-black text-slate-800 leading-tight">إعدادات بوابة التقييم</h2>
-                       <p className="text-[10px] font-bold text-slate-500 mt-1">التحكم بالمراحل الدراسية وبنود الاستبيان</p>
+                       <h2 className="text-lg font-black text-slate-800">إعدادات بوابة التقييم</h2>
+                       <p className="text-[10px] font-bold text-slate-500">التحكم بالمراحل الدراسية وبنود الاستبيان</p>
                      </div>
                   </div>
-                  <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-rose-500 bg-slate-50 p-2 rounded-full transition-colors active:scale-90 border border-slate-200 shadow-sm"><X className="w-5 h-5"/></button>
+                  <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-rose-500 bg-white border border-slate-200 p-2 rounded-full transition-colors active:scale-90"><X className="w-5 h-5"/></button>
                </div>
 
-               <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4 shadow-inner">
-                     <h4 className="text-sm font-black text-slate-800 flex items-center gap-2"><Power className="w-4 h-4 text-indigo-500"/> تشغيل البوابة الإلزامية للطلاب</h4>
+               <div className="p-6 space-y-6 overflow-y-auto max-h-[60vh] custom-scrollbar flex-1 bg-white">
+                  <div className="space-y-3">
+                     <h4 className="text-sm font-black text-slate-800 flex items-center gap-2"><Power className="w-4 h-4 text-indigo-500"/> تشغيل البوابة الإلزامية</h4>
                      <div className="flex gap-4">
-                        <button onClick={() => setIsMiddleActive(!isMiddleActive)} className={cn("flex-1 py-3.5 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 shadow-sm active:scale-95", isMiddleActive ? "bg-emerald-50 border-emerald-400 text-emerald-700" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-100")}>
+                        <button onClick={() => setIsMiddleActive(!isMiddleActive)} className={cn("flex-1 py-4 rounded-2xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isMiddleActive ? "bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm" : "bg-slate-50 border-slate-200 text-slate-400")}>
                            <span>المرحلة المتوسطة</span>
-                           <span className="text-[10px]">{isMiddleActive ? 'مُشغلة' : 'موقفة'}</span>
+                           <span className="text-[10px]">{isMiddleActive ? 'تعمل الآن' : 'موقفة'}</span>
                         </button>
-                        <button onClick={() => setIsHighActive(!isHighActive)} className={cn("flex-1 py-3.5 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 shadow-sm active:scale-95", isHighActive ? "bg-emerald-50 border-emerald-400 text-emerald-700" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-100")}>
+                        <button onClick={() => setIsHighActive(!isHighActive)} className={cn("flex-1 py-4 rounded-2xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isHighActive ? "bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm" : "bg-slate-50 border-slate-200 text-slate-400")}>
                            <span>المرحلة الثانوية</span>
-                           <span className="text-[10px]">{isHighActive ? 'مُشغلة' : 'موقفة'}</span>
+                           <span className="text-[10px]">{isHighActive ? 'تعمل الآن' : 'موقفة'}</span>
                         </button>
                      </div>
                   </div>
 
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
+                  <div className="pt-4 border-t border-slate-100">
                      <h4 className="text-sm font-black text-slate-800 mb-3 flex items-center gap-2"><List className="w-4 h-4 text-indigo-500"/> بنود الاستبيان (المحاور)</h4>
                      <div className="flex gap-2 mb-4">
-                        <input type="text" value={newCriterion} onChange={e=>setNewCriterion(e.target.value)} placeholder="أضف بند تقييم جديد..." className="flex-1 bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 shadow-sm" />
-                        <button onClick={addCriterion} className="bg-slate-800 text-white px-5 rounded-xl font-black hover:bg-slate-900 transition-colors shadow-sm active:scale-95"><Plus className="w-5 h-5"/></button>
+                        <input type="text" value={newCriterion} onChange={e=>setNewCriterion(e.target.value)} placeholder="أضف بند تقييم جديد..." className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-colors" />
+                        <button onClick={addCriterion} className="bg-slate-800 text-white px-5 rounded-xl font-black hover:bg-slate-900 transition-colors active:scale-95"><Plus className="w-5 h-5"/></button>
                      </div>
-                     <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                     <div className="space-y-2">
                         {criteria.map((c, i) => (
-                           <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                           <div key={c} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
                               <span className="text-xs font-black text-slate-700">{c}</span>
-                              <button onClick={() => removeCriterion(c)} className="text-rose-400 hover:text-rose-600 bg-rose-50 p-2 rounded-lg transition-colors border border-rose-100 active:scale-90"><Trash2 className="w-4 h-4"/></button>
+                              <button onClick={() => removeCriterion(c)} className="text-rose-400 hover:text-rose-600 bg-rose-50 p-2 rounded-lg transition-colors border border-rose-100"><Trash2 className="w-4 h-4"/></button>
                            </div>
                         ))}
-                        {criteria.length === 0 && <p className="text-center text-xs font-bold text-rose-500 py-3 bg-rose-50 rounded-xl border border-rose-200 border-dashed">لا توجد بنود! لن يظهر الاستبيان للطلاب.</p>}
+                        {criteria.length === 0 && <p className="text-center text-xs font-bold text-rose-500 py-3 bg-rose-50 rounded-xl border border-rose-200 border-dashed">لا توجد بنود مضافة!</p>}
                      </div>
                   </div>
                </div>
 
-               <div className="p-6 border-t border-slate-100 shrink-0">
+               <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0">
                   <button onClick={saveSettings} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white font-black rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
-                     {isSavingSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> حفظ جميع الإعدادات</>}
+                     {isSavingSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> حفظ إعدادات البوابة</>}
                   </button>
                </div>
            </div>
@@ -475,17 +475,17 @@ export default function StudentEvaluationsDashboard() {
 
       {/* نافذة التعليقات النقية */}
       {isFeedbackModalOpen && selectedTeacher && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-0">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-0">
            <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setIsFeedbackModalOpen(false)} />
            <div className="bg-white border border-slate-200 rounded-[2rem] w-full max-w-xl shadow-2xl relative z-10 flex flex-col max-h-[90vh]" dir="rtl">
-              <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0">
+              <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0 bg-slate-50">
                 <div className="flex items-center gap-3">
                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-500 border border-indigo-100 shadow-inner"><MessageSquare className="w-5 h-5"/></div>
                    <div><h2 className="text-lg font-black text-slate-800 leading-tight">صندوق الأسرار</h2><p className="text-[10px] font-bold text-slate-500 mt-1">الخاصة بالمعلم: <span className="text-indigo-600">{selectedTeacher.name}</span></p></div>
                 </div>
-                <button onClick={() => setIsFeedbackModalOpen(false)} className="text-slate-400 hover:text-rose-500 bg-slate-50 p-2 rounded-full transition-colors active:scale-90 border border-slate-200 shadow-sm"><X className="w-5 h-5"/></button>
+                <button onClick={() => setIsFeedbackModalOpen(false)} className="text-slate-400 hover:text-rose-500 bg-white border border-slate-200 p-2 rounded-full transition-colors active:scale-90 shadow-sm"><X className="w-5 h-5"/></button>
               </div>
-              <div className="p-6 space-y-3 overflow-y-auto custom-scrollbar flex-1">
+              <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 bg-white">
                 {selectedTeacher.feedbacks.map((fb: any, i: number) => (
                   <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 relative shadow-sm">
                      <p className="text-sm font-bold text-slate-700 leading-relaxed pr-2 whitespace-pre-wrap">"{fb.text}"</p>
