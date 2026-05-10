@@ -139,7 +139,6 @@ export default function StudentDashboard() {
         setUpcomingAssignments(data.assignments || []);
         setTodaysSchedule(data.todaysSchedule || []);
         setPeriods(data.periods || []);
-        setAttendanceStats({ rate: data.attendanceRate || 100 });
 
         const studentId = data.student.id;
         
@@ -148,14 +147,18 @@ export default function StudentDashboard() {
               badgesRes,
               gradesRes,
               absentCountRes,
+              totalCountRes,
               excusesRes,
+              trackRes,
               docsRes,
-              settingsRes // 🚀 جلب حالة زر التقييم المركزي
+              settingsRes // 🚀 جلب حالة البوابة مباشرة
             ] = await Promise.all([
               supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
               supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
               supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
+              supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
               supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
+              supabase.from('students').select('next_year_track, track_selection_date, sections(id, name, classes(name, level))').eq('id', studentId).maybeSingle(),
               supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', '2025-2026').maybeSingle(),
               supabase.from('platform_settings').select('is_evaluations_active').limit(1).maybeSingle()
             ]);
@@ -164,6 +167,26 @@ export default function StudentDashboard() {
             if (excusesRes.data) setExcuses(excusesRes.data);
             if (docsRes.data) setExistingDocRequest(docsRes.data);
 
+            if (trackRes.data) {
+                setStudentData((prev: any) => ({ ...prev, ...trackRes.data }));
+            }
+
+            // إصلاح الغياب
+            if (!absentCountRes.error && absentCountRes.count !== null) {
+              setAbsentPeriods(absentCountRes.count);
+              setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
+              
+              if (totalCountRes.count && totalCountRes.count > 0) {
+                const calculatedRate = Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100);
+                setAttendanceStats({ rate: calculatedRate });
+              } else {
+                setAttendanceStats({ rate: 100 });
+              }
+            } else {
+               setAttendanceStats({ rate: data.attendanceRate || 100 });
+            }
+
+            // إصلاح التقييمات
             if (gradesRes.data && gradesRes.data.length > 0) {
                 const formattedGrades = gradesRes.data.map((g: any) => ({
                     ...g,
@@ -174,59 +197,55 @@ export default function StudentDashboard() {
                 setRecentGrades(data.grades || []);
             }
 
-            if (!absentCountRes.error && absentCountRes.count !== null) {
-              setAbsentPeriods(absentCountRes.count);
-              setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
-            }
-
-            // 🚀 نظام التقييم الإجباري للجامعة (معزول وآمن يعتمد على الـ schedule فقط)
-            const sectionIdForEvals = data.student.section_id || data.student.sections?.id;
+            // 🚀 تشغيل بوابة التقييم الإجبارية المستقلة!
             const isEvalActive = settingsRes.data?.is_evaluations_active === true;
-            
+            const sectionIdForEvals = trackRes.data?.sections?.id || data.student.section_id;
+
             if (isEvalActive && sectionIdForEvals) {
-               try {
-                   // جلب جميع المعلمين الذين يدرسون هذا الفصل في كامل الجدول
-                   const { data: fullSchedule } = await supabase
-                     .from('schedules')
-                     .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
-                     .eq('section_id', sectionIdForEvals);
+                try {
+                    // سحب كامل جدول الفصل بأمان!
+                    const { data: fullSchedule } = await supabase
+                        .from('schedules')
+                        .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
+                        .eq('section_id', sectionIdForEvals);
+                    
+                    if (fullSchedule && fullSchedule.length > 0) {
+                        const uniqueMap = new Map();
+                        fullSchedule.forEach((slot: any) => {
+                            if(slot.teacher_id && !uniqueMap.has(slot.teacher_id)) {
+                                const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
+                                uniqueMap.set(slot.teacher_id, {
+                                    teacher_id: slot.teacher_id,
+                                    full_name: u?.full_name || 'معلم',
+                                    avatar_url: u?.avatar_url,
+                                    subject_name: Array.isArray(slot.subjects) ? slot.subjects[0]?.name : slot.subjects?.name || 'مادة'
+                                });
+                            }
+                        });
+                        const allMyTeachers = Array.from(uniqueMap.values());
 
-                   if (fullSchedule && fullSchedule.length > 0) {
-                      const uniqueTeachersMap = new Map();
-                      fullSchedule.forEach((slot:any) => {
-                         if(slot.teacher_id && !uniqueTeachersMap.has(slot.teacher_id)) {
-                            const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
-                            uniqueTeachersMap.set(slot.teacher_id, {
-                               teacher_id: slot.teacher_id,
-                               full_name: u?.full_name || 'معلم',
-                               avatar_url: u?.avatar_url,
-                               subject_name: Array.isArray(slot.subjects) ? slot.subjects[0]?.name : slot.subjects?.name || 'مادة'
-                            });
-                         }
-                      });
-                      const allMyTeachers = Array.from(uniqueTeachersMap.values());
+                        const { data: myEvals } = await supabase
+                            .from('student_evaluations_of_teachers')
+                            .select('teacher_id')
+                            .eq('student_id', studentId)
+                            .eq('academic_year', '2025-2026')
+                            .eq('semester', 'الفصل الدراسي الثاني');
 
-                      const { data: myEvals } = await supabase
-                         .from('student_evaluations_of_teachers')
-                         .select('teacher_id')
-                         .eq('student_id', studentId)
-                         .eq('academic_year', currentYear)
-                         .eq('semester', currentSemester);
-
-                      const evaluatedTeacherIds = new Set((myEvals || []).map(e => e.teacher_id));
-                      const pending = allMyTeachers.filter(t => !evaluatedTeacherIds.has(t.teacher_id));
-                      
-                      if(pending.length > 0) {
-                         setPendingEvaluations(pending);
-                         setIsEvalModalOpen(true); 
-                      }
-                   }
-               } catch (evalErr) { console.error("Eval Error:", evalErr); }
+                        const evalIds = new Set((myEvals || []).map(e => e.teacher_id));
+                        const pending = allMyTeachers.filter(t => !evalIds.has(t.teacher_id));
+                        
+                        if(pending.length > 0) {
+                            setPendingEvaluations(pending);
+                            setIsEvalModalOpen(true); 
+                        }
+                    }
+                } catch (evalErr) { console.error("Gatekeeper Error:", evalErr); }
             }
 
-            // 🚀 جلب بيانات المنظومة الامتحانية
+            // 🚀 جلب بيانات المنظومة الامتحانية بشكل معزول وآمن
             try {
                const classLevelStr = String(
+                 trackRes.data?.sections?.classes?.name || 
                  data.student?.sections?.classes?.name || 
                  data.student?.class_name || ''
                );
@@ -243,7 +262,9 @@ export default function StudentDashboard() {
                   if (timeRes.data) setExamTimetables(timeRes.data);
                   if (keysRes.data) setAnswerKeys(keysRes.data);
                }
-            } catch (examErr) {}
+            } catch (examErr) {
+               console.error('Error fetching exam system data:', examErr);
+            }
         }
       }
     } catch (error) {
@@ -258,7 +279,7 @@ export default function StudentDashboard() {
     if (!isChecking && user) fetchData();
   }, [fetchData, isChecking, user]);
 
-  // 🚀 إرسال التقييم
+  // 🚀 إرسال التقييم بأمان
   const handleEvalSubmit = async () => {
      if(evalForm.scientific === 0 || evalForm.management === 0 || evalForm.humanity === 0) {
         alert('يرجى تقييم جميع المحاور للمتابعة!'); return;
@@ -271,8 +292,8 @@ export default function StudentDashboard() {
            student_id: studentData.id,
            teacher_id: currentTeacher.teacher_id,
            subject_name: currentTeacher.subject_name,
-           academic_year: currentYear,
-           semester: currentSemester,
+           academic_year: '2025-2026',
+           semester: 'الفصل الدراسي الثاني',
            scientific_rating: evalForm.scientific,
            management_rating: evalForm.management,
            humanity_rating: evalForm.humanity,
@@ -297,7 +318,7 @@ export default function StudentDashboard() {
      }
   };
 
-  // 🚀 دوال وثائق التخرج
+  // دوال وثائق التخرج والأعذار تبقى كما هي
   const handleDocChange = (field: string, delta: number) => {
     setDocRequest(prev => {
       const newVal = Math.max(0, prev[field as keyof typeof prev] + delta);
@@ -329,7 +350,7 @@ export default function StudentDashboard() {
       const { error } = await supabase.from('graduation_documents').insert([payload]);
       if (error) throw error;
 
-      alert('تم تقديم طلب الوثائق بنجاح!');
+      alert('تم تقديم طلب الوثائق بنجاح! يرجى التوجه لمسؤول المدرسة لدفع المبلغ واعتماد الطلب للمندوب.');
       fetchData(); 
     } catch (e) { alert('حدث خطأ أثناء التقديم.'); console.error(e); } finally { setIsSubmittingDocs(false); }
   };
@@ -337,8 +358,7 @@ export default function StudentDashboard() {
   const handleAddDate = () => {
     if (!currentDateInput) return;
     if (excuseForm.absent_dates.includes(currentDateInput)) {
-      alert('هذا التاريخ مضاف مسبقاً.');
-      return;
+      alert('هذا التاريخ مضاف مسبقاً.'); return;
     }
     setExcuseForm(prev => ({
       ...prev,
@@ -374,22 +394,16 @@ export default function StudentDashboard() {
         throw new Error('Upload failed');
       }
     } catch (err) {
-      alert('فشل رفع الملف.');
+      alert('فشل رفع الملف. تأكد من جودة اتصالك أو حاول مجدداً.');
     } finally {
       setIsUploadingReport(false);
     }
   };
 
   const handleSubmitExcuse = async () => {
-    if (excuseForm.absent_dates.length === 0) {
-      alert('يرجى تحديد يوم غياب واحد على الأقل.'); return;
-    }
-    if (!excuseForm.attachment_url) {
-      alert('يرجى إرفاق التقرير الطبي أو الإثبات أولاً.'); return;
-    }
-    if (excuseForm.duration_type === 'partial_day' && excuseForm.target_periods.length === 0) {
-      alert('يرجى تحديد الحصص التي غبت عنها.'); return;
-    }
+    if (excuseForm.absent_dates.length === 0) { alert('يرجى تحديد يوم غياب واحد على الأقل.'); return; }
+    if (!excuseForm.attachment_url) { alert('يرجى إرفاق التقرير الطبي أو الإثبات أولاً.'); return; }
+    if (excuseForm.duration_type === 'partial_day' && excuseForm.target_periods.length === 0) { alert('يرجى تحديد الحصص التي غبت عنها.'); return; }
 
     setIsSubmittingExcuse(true);
     try {
@@ -410,7 +424,7 @@ export default function StudentDashboard() {
       const { error } = await supabase.from('absence_excuses').insert([payload]);
       if (error) throw error;
 
-      alert('تم تقديم العذر بنجاح!');
+      alert('تم تقديم العذر بنجاح! نتمى لك دوام الصحة والعافية. طلبك الآن قيد المراجعة.');
       setIsExcuseModalOpen(false);
       setExcuseForm({ 
         absent_dates: [format(new Date(), 'yyyy-MM-dd')], 
@@ -436,9 +450,7 @@ export default function StudentDashboard() {
     try {
       await updateStudentTrack(track);
       fetchData();
-    } catch (error) {
-      console.error('Error selecting track:', error);
-    }
+    } catch (error) { console.error('Error selecting track:', error); }
   };
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
@@ -565,7 +577,7 @@ export default function StudentDashboard() {
       
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* 🚀 الهيدر الفخم המوحد للطلاب */}
+        {/* 🚀 الهيدر الفخم الموحد للطلاب */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10">
           <div className="absolute inset-0 bg-blue-500/5 blur-[100px] pointer-events-none"></div>
           
@@ -612,7 +624,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* 🚀 الهوية الامتحانية الحية */}
+        {/* 🚀 الهوية الامتحانية الحية (بانر منفصل) */}
         <AnimatePresence>
           {seatAllocation && (
              <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
@@ -739,6 +751,7 @@ export default function StudentDashboard() {
                    </div>
 
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 relative z-10 mb-8">
+                      {/* شهادة الثانوية */}
                       <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
                          <div>
                            <h4 className="font-black text-white text-base">شهادة الثانوية العامة</h4>
@@ -764,6 +777,7 @@ export default function StudentDashboard() {
                          </div>
                       </div>
 
+                      {/* لمن يهمه الأمر */}
                       <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
                          <div>
                            <h4 className="font-black text-white text-base">شهادة لمن يهمه الأمر</h4>
@@ -789,6 +803,7 @@ export default function StudentDashboard() {
                          </div>
                       </div>
 
+                      {/* حسن سيرة وسلوك */}
                       <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
                          <div>
                            <h4 className="font-black text-white text-base">شهادة حسن سيرة وسلوك</h4>
@@ -823,7 +838,7 @@ export default function StudentDashboard() {
                            <p className="text-3xl font-black text-white"><span className="text-fuchsia-400">{totalDocsCost}</span> د.ك</p>
                          </div>
                       </div>
-                      <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.5)] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+                      <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.5)] transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2">
                          {isSubmittingDocs ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle2 className="w-5 h-5" /> اعتماد وتقديم الطلب</>}
                       </button>
                    </div>
@@ -841,7 +856,7 @@ export default function StudentDashboard() {
             </h3>
             <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
               {myBadges.map((badgeEntry, index) => (
-                <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:bg-[#0f1423] transition-all duration-300 hover:border-amber-500/30 group cursor-default shadow-inner">
+                <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:bg-[#0f1423] transition-all duration-300 hover:border-amber-500/30 group cursor-default shadow-inner hover:shadow-[0_0_20px_rgba(245,158,11,0.1)]">
                   <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
                     <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/30 transition-colors"></div>
                     {badgeEntry.badge?.image_url ? (
@@ -887,7 +902,7 @@ export default function StudentDashboard() {
           </motion.div>
         )}
 
-        {/* 🚀 بطاقة إنذار الغياب الذكية */}
+        {/* 🚀 بطاقة إنذار الغياب الذكية (Smart Warning Banner) */}
         <AnimatePresence>
           {warningLevel > 0 && (
             <motion.div 
@@ -1086,7 +1101,10 @@ export default function StudentDashboard() {
                               </span>
                             )}
                             <div className={`absolute top-0 left-0 w-1 h-full ${
-                              current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : isPast ? 'bg-slate-800' : next ? 'bg-blue-400' : 'bg-white/10'
+                              current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' 
+                              : isPast ? 'bg-slate-800' 
+                              : next ? 'bg-blue-400' 
+                              : 'bg-white/10'
                             }`}></div>
 
                             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 pr-2">
