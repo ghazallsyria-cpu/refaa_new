@@ -23,9 +23,10 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Image from 'next/image';
 import * as Dialog from '@radix-ui/react-dialog';
+
+// 🚀 استدعاء رادار التقييم المخفي
 import StudentEvaluationGate from '@/components/StudentEvaluationGate';
 
-// 🚀 مسارات نسبية
 import AnnouncementsWidget from '../../../components/AnnouncementsWidget';
 import { useDashboardSystem } from '../../../hooks/useDashboardSystem';
 import { supabase } from '../../../lib/supabase';
@@ -45,24 +46,6 @@ const checkIsLocked = (examData: any) => {
   }
 };
 
-const StarRating = ({ rating, setRating, label }: { rating: number, setRating: (r: number) => void, label: string }) => (
-  <div className="flex flex-col gap-2">
-    <label className="text-xs font-black text-slate-300 uppercase tracking-widest">{label}</label>
-    <div className="flex gap-2" dir="ltr">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star 
-          key={star} 
-          onClick={() => setRating(star)} 
-          className={cn(
-            "w-8 h-8 cursor-pointer transition-all hover:scale-110 active:scale-95", 
-            star <= rating ? "fill-amber-400 text-amber-400 drop-shadow-[0_0_10px_rgba(245,158,11,0.6)]" : "fill-slate-800 text-slate-700 hover:text-amber-400/50"
-          )} 
-        />
-      ))}
-    </div>
-  </div>
-);
-
 export default function StudentDashboard() {
   const { user, authRole, isChecking } = useAuth() as any; 
   
@@ -79,41 +62,28 @@ export default function StudentDashboard() {
   const [myBadges, setMyBadges] = useState<any[]>([]);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [absentPeriods, setAbsentPeriods] = useState<number>(0);
-  const [fullDaysAbsent, setFullDaysAbsent] = useState<number>(0);
 
-  // 🚀 حالات نظام الأعذار الطبية للطالب
+  // حالات الأعذار الطبية
   const [excuses, setExcuses] = useState<any[]>([]);
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
   
-  // 🚀 حالات منظومة الاختبارات التفاعلية
   const [seatAllocation, setSeatAllocation] = useState<any>(null);
   const [examTimetables, setExamTimetables] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
-  // 🚀 حالات وثائق التخرج (للثاني عشر فقط)
+  // وثائق التخرج
   const [docRequest, setDocRequest] = useState({ cert_ar: 0, cert_en: 0, twimc_ar: 0, twimc_en: 0, conduct_ar: 0, conduct_en: 0 });
   const [existingDocRequest, setExistingDocRequest] = useState<any>(null);
   const [isSubmittingDocs, setIsSubmittingDocs] = useState(false);
-
-  // 🚀 بوابة التقييم الإجبارية (The Gatekeeper)
-  const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
-  const [currentEvalIndex, setCurrentEvalIndex] = useState(0);
-  const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
-  const [isSubmittingEval, setIsSubmittingEval] = useState(false);
-  const [evalForm, setEvalForm] = useState({ scientific: 0, management: 0, humanity: 0, feedback: '' });
 
   const isFetchingRef = useRef(false);
 
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [excuseForm, setExcuseForm] = useState({
     absent_dates: [format(new Date(), 'yyyy-MM-dd')],
-    duration_type: 'full_day',
-    target_periods: [] as number[],
-    reason: '',
-    attachment_url: '',
-    cloudinary_public_id: ''
+    duration_type: 'full_day', target_periods: [] as number[], reason: '', attachment_url: '', cloudinary_public_id: ''
   });
 
   useEffect(() => {
@@ -140,28 +110,18 @@ export default function StudentDashboard() {
         setUpcomingAssignments(data.assignments || []);
         setTodaysSchedule(data.todaysSchedule || []);
         setPeriods(data.periods || []);
-
+        
         const studentId = data.student.id;
         
         if (studentId) {
-            const [
-              badgesRes,
-              gradesRes,
-              absentCountRes,
-              totalCountRes,
-              excusesRes,
-              trackRes,
-              docsRes,
-              settingsRes // 🚀 جلب حالة البوابة مباشرة
-            ] = await Promise.all([
+            const [ badgesRes, gradesRes, absentCountRes, totalCountRes, excusesRes, trackRes, docsRes ] = await Promise.all([
               supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
               supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
               supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
               supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
               supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
               supabase.from('students').select('next_year_track, track_selection_date, sections(id, name, classes(name, level))').eq('id', studentId).maybeSingle(),
-              supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', '2025-2026').maybeSingle(),
-              supabase.from('platform_settings').select('is_evaluations_active').limit(1).maybeSingle()
+              supabase.from('graduation_documents').select('*').eq('student_id', studentId).eq('academic_year', '2025-2026').maybeSingle()
             ]);
             
             if (badgesRes.data) setMyBadges(badgesRes.data);
@@ -175,8 +135,6 @@ export default function StudentDashboard() {
             // إصلاح الغياب
             if (!absentCountRes.error && absentCountRes.count !== null) {
               setAbsentPeriods(absentCountRes.count);
-              setFullDaysAbsent(Math.floor(absentCountRes.count / 5)); 
-              
               if (totalCountRes.count && totalCountRes.count > 0) {
                 const calculatedRate = Math.round(((totalCountRes.count - absentCountRes.count) / totalCountRes.count) * 100);
                 setAttendanceStats({ rate: calculatedRate });
@@ -187,7 +145,7 @@ export default function StudentDashboard() {
                setAttendanceStats({ rate: data.attendanceRate || 100 });
             }
 
-            // إصلاح التقييمات
+            // إصلاح التقييمات للرسم البياني
             if (gradesRes.data && gradesRes.data.length > 0) {
                 const formattedGrades = gradesRes.data.map((g: any) => ({
                     ...g,
@@ -198,59 +156,13 @@ export default function StudentDashboard() {
                 setRecentGrades(data.grades || []);
             }
 
-            // 🚀 تشغيل بوابة التقييم الإجبارية المستقلة!
-            const isEvalActive = settingsRes.data?.is_evaluations_active === true;
-            const sectionIdForEvals = trackRes.data?.sections?.id || data.student.section_id;
-
-            if (isEvalActive && sectionIdForEvals) {
-                try {
-                    // سحب كامل جدول الفصل بأمان!
-                    const { data: fullSchedule } = await supabase
-                        .from('schedules')
-                        .select('teacher_id, teachers(users(full_name, avatar_url)), subjects(name)')
-                        .eq('section_id', sectionIdForEvals);
-                    
-                    if (fullSchedule && fullSchedule.length > 0) {
-                        const uniqueMap = new Map();
-                        fullSchedule.forEach((slot: any) => {
-                            if(slot.teacher_id && !uniqueMap.has(slot.teacher_id)) {
-                                const u = Array.isArray(slot.teachers?.users) ? slot.teachers.users[0] : slot.teachers?.users;
-                                uniqueMap.set(slot.teacher_id, {
-                                    teacher_id: slot.teacher_id,
-                                    full_name: u?.full_name || 'معلم',
-                                    avatar_url: u?.avatar_url,
-                                    subject_name: Array.isArray(slot.subjects) ? slot.subjects[0]?.name : slot.subjects?.name || 'مادة'
-                                });
-                            }
-                        });
-                        const allMyTeachers = Array.from(uniqueMap.values());
-
-                        const { data: myEvals } = await supabase
-                            .from('student_evaluations_of_teachers')
-                            .select('teacher_id')
-                            .eq('student_id', studentId)
-                            .eq('academic_year', '2025-2026')
-                            .eq('semester', 'الفصل الدراسي الثاني');
-
-                        const evalIds = new Set((myEvals || []).map(e => e.teacher_id));
-                        const pending = allMyTeachers.filter(t => !evalIds.has(t.teacher_id));
-                        
-                        if(pending.length > 0) {
-                            setPendingEvaluations(pending);
-                            setIsEvalModalOpen(true); 
-                        }
-                    }
-                } catch (evalErr) { console.error("Gatekeeper Error:", evalErr); }
-            }
-
-            // 🚀 جلب بيانات المنظومة الامتحانية بشكل معزول وآمن
+            // جلب المنظومة الامتحانية
             try {
                const classLevelStr = String(
                  trackRes.data?.sections?.classes?.name || 
                  data.student?.sections?.classes?.name || 
                  data.student?.class_name || ''
                );
-               
                const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
                
                if (cLevel) {
@@ -263,447 +175,182 @@ export default function StudentDashboard() {
                   if (timeRes.data) setExamTimetables(timeRes.data);
                   if (keysRes.data) setAnswerKeys(keysRes.data);
                }
-            } catch (examErr) {
-               console.error('Error fetching exam system data:', examErr);
-            }
+            } catch (examErr) {}
         }
       }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-      isFetchingRef.current = false;
-    }
+    } catch (error) { console.error('Error fetching dashboard data:', error); } 
+    finally { setLoading(false); isFetchingRef.current = false; }
   }, [fetchStudentDashboardData, user?.id, authRole]);
 
-  useEffect(() => {
-    if (!isChecking && user) fetchData();
-  }, [fetchData, isChecking, user]);
+  useEffect(() => { if (!isChecking && user) fetchData(); }, [fetchData, isChecking, user]);
 
-  // 🚀 إرسال التقييم بأمان
-  const handleEvalSubmit = async () => {
-     if(evalForm.scientific === 0 || evalForm.management === 0 || evalForm.humanity === 0) {
-        alert('يرجى تقييم جميع المحاور للمتابعة!'); return;
-     }
-
-     setIsSubmittingEval(true);
-     try {
-        const currentTeacher = pendingEvaluations[currentEvalIndex];
-        const payload = {
-           student_id: studentData.id,
-           teacher_id: currentTeacher.teacher_id,
-           subject_name: currentTeacher.subject_name,
-           academic_year: '2025-2026',
-           semester: 'الفصل الدراسي الثاني',
-           scientific_rating: evalForm.scientific,
-           management_rating: evalForm.management,
-           humanity_rating: evalForm.humanity,
-           feedback: evalForm.feedback || ''
-        };
-
-        const { error } = await supabase.from('student_evaluations_of_teachers').insert([payload]);
-        if(error && !error.message.includes('duplicate key')) throw error; 
-
-        setEvalForm({ scientific: 0, management: 0, humanity: 0, feedback: '' });
-        
-        if (currentEvalIndex + 1 < pendingEvaluations.length) {
-           setCurrentEvalIndex(prev => prev + 1);
-        } else {
-           setIsEvalModalOpen(false);
-           alert('شكراً لك! مساهمتك ستساعدنا في تطوير العملية التعليمية. تم فتح لوحة التحكم لك الآن.');
-        }
-     } catch (error:any) {
-        alert('حدث خطأ أثناء الإرسال. يرجى المحاولة مرة أخرى.');
-     } finally {
-        setIsSubmittingEval(false);
-     }
-  };
-
-  // دوال وثائق التخرج والأعذار تبقى كما هي
-  const handleDocChange = (field: string, delta: number) => {
-    setDocRequest(prev => {
-      const newVal = Math.max(0, prev[field as keyof typeof prev] + delta);
-      return { ...prev, [field]: newVal };
-    });
-  };
-
+  const handleDocChange = (field: string, delta: number) => { setDocRequest(prev => { const newVal = Math.max(0, prev[field as keyof typeof prev] + delta); return { ...prev, [field]: newVal }; }); };
   const totalDocsCost = Object.values(docRequest).reduce((a, b) => a + b, 0);
-
   const submitDocRequest = async () => {
     if (totalDocsCost === 0) { alert('يرجى تحديد نسخة واحدة على الأقل'); return; }
     if (!confirm(`إجمالي المبلغ المطلوب هو ${totalDocsCost} دينار كويتي. هل أنت متأكد من تقديم الطلب؟`)) return;
-    
     setIsSubmittingDocs(true);
     try {
-      const payload = {
-        student_id: studentData.id,
-        academic_year: '2025-2026',
-        cert_ar: docRequest.cert_ar,
-        cert_en: docRequest.cert_en,
-        twimc_ar: docRequest.twimc_ar,
-        twimc_en: docRequest.twimc_en,
-        conduct_ar: docRequest.conduct_ar,
-        conduct_en: docRequest.conduct_en,
-        total_amount: totalDocsCost,
-        payment_status: 'pending'
-      };
-
+      const payload = { student_id: studentData.id, academic_year: '2025-2026', cert_ar: docRequest.cert_ar, cert_en: docRequest.cert_en, twimc_ar: docRequest.twimc_ar, twimc_en: docRequest.twimc_en, conduct_ar: docRequest.conduct_ar, conduct_en: docRequest.conduct_en, total_amount: totalDocsCost, payment_status: 'pending' };
       const { error } = await supabase.from('graduation_documents').insert([payload]);
       if (error) throw error;
-
-      alert('تم تقديم طلب الوثائق بنجاح! يرجى التوجه لمسؤول المدرسة لدفع المبلغ واعتماد الطلب للمندوب.');
-      fetchData(); 
-    } catch (e) { alert('حدث خطأ أثناء التقديم.'); console.error(e); } finally { setIsSubmittingDocs(false); }
+      alert('تم تقديم طلب الوثائق بنجاح! يرجى التوجه لمسؤول المدرسة لدفع المبلغ واعتماد الطلب للمندوب.'); fetchData(); 
+    } catch (e) { alert('حدث خطأ أثناء التقديم.'); } finally { setIsSubmittingDocs(false); }
   };
 
-  const handleAddDate = () => {
-    if (!currentDateInput) return;
-    if (excuseForm.absent_dates.includes(currentDateInput)) {
-      alert('هذا التاريخ مضاف مسبقاً.'); return;
-    }
-    setExcuseForm(prev => ({
-      ...prev,
-      absent_dates: [...prev.absent_dates, currentDateInput].sort()
-    }));
-  };
-
-  const handleRemoveDate = (dateToRemove: string) => {
-    setExcuseForm(prev => ({
-      ...prev,
-      absent_dates: prev.absent_dates.filter(d => d !== dateToRemove)
-    }));
-  };
-
+  const handleAddDate = () => { if (!currentDateInput) return; if (excuseForm.absent_dates.includes(currentDateInput)) return; setExcuseForm(prev => ({ ...prev, absent_dates: [...prev.absent_dates, currentDateInput].sort() })); };
+  const handleRemoveDate = (dateToRemove: string) => { setExcuseForm(prev => ({ ...prev, absent_dates: prev.absent_dates.filter(d => d !== dateToRemove) })); };
   const handleReportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingReport(true);
+    const file = e.target.files?.[0]; if (!file) return; setIsUploadingReport(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
-      
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
-        method: 'POST',
-        body: formData
-      });
+      const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
       const data = await res.json();
-      
-      if (data.secure_url) {
-        setExcuseForm(prev => ({ ...prev, attachment_url: data.secure_url, cloudinary_public_id: data.public_id }));
-      } else {
-        throw new Error('Upload failed');
-      }
-    } catch (err) {
-      alert('فشل رفع الملف. تأكد من جودة اتصالك أو حاول مجدداً.');
-    } finally {
-      setIsUploadingReport(false);
-    }
+      if (data.secure_url) { setExcuseForm(prev => ({ ...prev, attachment_url: data.secure_url, cloudinary_public_id: data.public_id })); } else { throw new Error('Upload failed'); }
+    } catch (err) { alert('فشل رفع الملف.'); } finally { setIsUploadingReport(false); }
   };
-
   const handleSubmitExcuse = async () => {
-    if (excuseForm.absent_dates.length === 0) { alert('يرجى تحديد يوم غياب واحد على الأقل.'); return; }
-    if (!excuseForm.attachment_url) { alert('يرجى إرفاق التقرير الطبي أو الإثبات أولاً.'); return; }
-    if (excuseForm.duration_type === 'partial_day' && excuseForm.target_periods.length === 0) { alert('يرجى تحديد الحصص التي غبت عنها.'); return; }
-
+    if (excuseForm.absent_dates.length === 0 || !excuseForm.attachment_url) return;
     setIsSubmittingExcuse(true);
     try {
-      const payload = {
-        student_id: studentData.id,
-        submitted_by: user.id,
-        submitter_role: 'student',
-        excuse_date: excuseForm.absent_dates[0],
-        absent_dates: excuseForm.absent_dates,
-        duration_type: excuseForm.duration_type,
-        target_periods: excuseForm.duration_type === 'partial_day' ? excuseForm.target_periods : [],
-        reason: excuseForm.reason,
-        attachment_url: excuseForm.attachment_url,
-        cloudinary_public_id: excuseForm.cloudinary_public_id,
-        status: 'pending'
-      };
-
+      const payload = { student_id: studentData.id, submitted_by: user.id, submitter_role: 'student', excuse_date: excuseForm.absent_dates[0], absent_dates: excuseForm.absent_dates, duration_type: excuseForm.duration_type, target_periods: excuseForm.duration_type === 'partial_day' ? excuseForm.target_periods : [], reason: excuseForm.reason, attachment_url: excuseForm.attachment_url, cloudinary_public_id: excuseForm.cloudinary_public_id, status: 'pending' };
       const { error } = await supabase.from('absence_excuses').insert([payload]);
       if (error) throw error;
-
-      alert('تم تقديم العذر بنجاح! نتمى لك دوام الصحة والعافية. طلبك الآن قيد المراجعة.');
-      setIsExcuseModalOpen(false);
-      setExcuseForm({ 
-        absent_dates: [format(new Date(), 'yyyy-MM-dd')], 
-        duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' 
-      });
-      fetchData();
-    } catch (error: any) {
-      alert('حدث خطأ أثناء التقديم: ' + error.message);
-    } finally {
-      setIsSubmittingExcuse(false);
-    }
+      alert('تم تقديم العذر بنجاح!'); setIsExcuseModalOpen(false); setExcuseForm({ absent_dates: [format(new Date(), 'yyyy-MM-dd')], duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' }); fetchData();
+    } catch (error: any) { alert('خطأ'); } finally { setIsSubmittingExcuse(false); }
   };
-
-  const togglePeriod = (periodNum: number) => {
-    setExcuseForm(prev => {
-      const exists = prev.target_periods.includes(periodNum);
-      if (exists) return { ...prev, target_periods: prev.target_periods.filter(p => p !== periodNum) };
-      return { ...prev, target_periods: [...prev.target_periods, periodNum].sort((a,b) => a - b) };
-    });
-  };
-
-  const handleTrackSelection = async (track: 'scientific' | 'literary') => {
-    try {
-      await updateStudentTrack(track);
-      fetchData();
-    } catch (error) { console.error('Error selecting track:', error); }
-  };
+  const handleTrackSelection = async (track: 'scientific' | 'literary') => { try { await updateStudentTrack(track); fetchData(); } catch (error) {} };
+  const togglePeriod = (periodNum: number) => { setExcuseForm(prev => { const exists = prev.target_periods.includes(periodNum); if (exists) return { ...prev, target_periods: prev.target_periods.filter(p => p !== periodNum) }; return { ...prev, target_periods: [...prev.target_periods, periodNum].sort((a,b) => a - b) }; }); };
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
   };
 
-  const nextOfficialExam = examTimetables.find(ex => {
-      const exDate = new Date(`${ex.exam_date}T${ex.start_time}`);
-      return currentTime && exDate > currentTime;
-  });
-
+  const nextOfficialExam = examTimetables.find(ex => { const exDate = new Date(`${ex.exam_date}T${ex.start_time}`); return currentTime && exDate > currentTime; });
   let countdownStr = '';
   if (nextOfficialExam && currentTime) {
       const exDate = new Date(`${nextOfficialExam.exam_date}T${nextOfficialExam.start_time}`);
       const diff = exDate.getTime() - currentTime.getTime();
       if (diff > 0) {
-          const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-          const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
-          const m = Math.floor((diff / 1000 / 60) % 60);
+          const d = Math.floor(diff / (1000 * 60 * 60 * 24)); const h = Math.floor((diff / (1000 * 60 * 60)) % 24); const m = Math.floor((diff / 1000 / 60) % 60);
           countdownStr = `${d > 0 ? d + ' يوم و ' : ''}${h} ساعة و ${m} دقيقة`;
       }
   }
 
-  if (isChecking) {
-    return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo">
-        <div className="flex flex-col items-center gap-5">
-          <div className="relative flex items-center justify-center">
-             <div className="h-20 w-20 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.4)]"></div>
-             <ShieldAlert className="absolute h-8 w-8 text-amber-400 animate-pulse" />
-          </div>
-          <p className="text-amber-500 font-black animate-pulse tracking-widest drop-shadow-md">جاري التحقق من الهوية...</p>
-        </div>
-      </div>
-    );
-  }
+  if (isChecking || loading || !mounted) return <div className="flex h-screen items-center justify-center bg-[#090b14]"><Loader2 className="w-12 h-12 animate-spin text-blue-500" /></div>;
+  if (authRole !== 'student') return <div className="flex h-screen items-center justify-center bg-[#090b14] text-white">وصول مقيد. للطلاب فقط.</div>;
 
-  if (authRole !== 'student') {
-    return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo p-4">
-        <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
-           <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
-           <h2 className="text-2xl font-black text-white mb-2">وصول مقيد</h2>
-           <p className="text-slate-400 font-bold">هذه الصفحة مخصصة للطلاب فقط.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading || !mounted) {
-    return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo relative z-10">
-        <div className="flex flex-col items-center gap-5">
-          <div className="h-16 w-16 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]"></div>
-          <p className="text-slate-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري إعداد لوحتك الدراسية...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const rawFullName = studentData?.users?.full_name || studentData?.user?.full_name || studentData?.full_name || user?.user_metadata?.full_name || 'بطلنا';
-  const nameParts = rawFullName.split(' ');
-  const displayFirstName = nameParts.length > 1 && nameParts[0].length <= 2 ? `${nameParts[0]} ${nameParts[1]}` : nameParts[0];
-  
-  const classNameStr = String(studentData?.sections?.classes?.name || studentData?.section?.classes?.name || studentData?.class_name || '');
-  const sectionNameStr = String(studentData?.sections?.name || studentData?.section?.name || studentData?.section_name || 'غير محدد');
-  const isTenthGrade = classNameStr.includes('العاشر') || classNameStr.includes('عاشر') || classNameStr.includes('10');
-  
-  const isTwelfthGrade = classNameStr.includes('الثاني عشر') || classNameStr.includes('ثاني عشر') || classNameStr.includes('12');
+  const rawFullName = studentData?.users?.full_name || studentData?.full_name || user?.user_metadata?.full_name || 'بطلنا';
+  const displayFirstName = rawFullName.split(' ')[0];
+  const classNameStr = String(studentData?.sections?.classes?.name || studentData?.class_name || '');
+  const sectionNameStr = String(studentData?.sections?.name || studentData?.section_name || 'غير محدد');
+  const isTenthGrade = classNameStr.includes('10') || classNameStr.includes('عاشر');
+  const isTwelfthGrade = classNameStr.includes('12') || classNameStr.includes('ثاني عشر');
   const hasSelectedTrack = !!studentData?.next_year_track;
   
   const unlockedGrades = recentGrades.filter(g => !checkIsLocked(g.exam));
   const avgScore = unlockedGrades.length > 0 ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length) : 0;
-  const avatarUrl = studentData?.users?.avatar_url || studentData?.user?.avatar_url || studentData?.avatar_url;
-
+  const avatarUrl = studentData?.users?.avatar_url || studentData?.avatar_url;
+  
+  // 🚀 تحسين شفرة הـ QR
   const qrPayload = `raf-id:${studentData?.id}`; 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=1`;
 
-  let warningLevel = 0;
-  let warningTitle = "";
-  let warningMessage = "";
-  let warningColors = "";
-  let warningIconColor = "";
-  let WarningIcon = Info;
-  let warningPulse = false;
-
-  if (absentPeriods >= 100) {
-    warningLevel = 4;
-    warningTitle = "إشعار فصل نهائي";
-    warningMessage = "لقد تجاوزت 100 حصة غياب. تم رفع ملفك للإدارة لاتخاذ إجراءات الفصل.";
-    warningColors = "from-slate-900 via-rose-950 to-slate-900 border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]";
-    warningIconColor = "text-rose-500";
-    WarningIcon = Siren;
-    warningPulse = true;
-  } else if (absentPeriods >= 75) {
-    warningLevel = 3;
-    warningTitle = "إنذار ثالث (خطر الفصل)";
-    warningMessage = "غيابك وصل لمرحلة حرجة جداً. أي غياب إضافي سيعرضك للفصل النهائي من المدرسة.";
-    warningColors = "from-rose-500/20 to-red-600/20 border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]";
-    warningIconColor = "text-rose-500";
-    WarningIcon = ShieldAlert;
-    warningPulse = true;
-  } else if (absentPeriods >= 50) {
-    warningLevel = 2;
-    warningTitle = "إنذار ثاني للغياب";
-    warningMessage = "استمرارك في الغياب يعرض مستقبلك الدراسي للخطر. يرجى تبرير غيابك فوراً.";
-    warningColors = "from-orange-500/20 to-amber-600/20 border-orange-500/50 text-orange-500";
-    warningIconColor = "text-orange-500";
-    WarningIcon = AlertTriangle;
-  } else if (absentPeriods >= 25) {
-    warningLevel = 1;
-    warningTitle = "إنذار أول للغياب";
-    warningMessage = "لقد تجاوزت الحد المسموح للغياب. نأمل منك الالتزام بالحضور أو تقديم عذر طبي.";
-    warningColors = "from-amber-500/20 to-yellow-600/20 border-amber-500/50 text-amber-500";
-    warningIconColor = "text-amber-500";
-    WarningIcon = AlertTriangle;
-  }
-
+  let warningLevel = 0; let warningTitle = ""; let warningMessage = ""; let warningColors = ""; let warningIconColor = ""; let WarningIcon = Info; let warningPulse = false;
+  if (absentPeriods >= 100) { warningLevel = 4; warningTitle = "إشعار فصل نهائي"; warningMessage = "تجاوزت 100 حصة غياب."; warningColors = "from-slate-900 via-rose-950 to-slate-900 border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]"; warningIconColor = "text-rose-500"; WarningIcon = Siren; warningPulse = true; } 
+  else if (absentPeriods >= 75) { warningLevel = 3; warningTitle = "إنذار ثالث"; warningMessage = "غيابك بمرحلة حرجة."; warningColors = "from-rose-500/20 to-red-600/20 border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]"; warningIconColor = "text-rose-500"; WarningIcon = ShieldAlert; warningPulse = true; } 
+  else if (absentPeriods >= 50) { warningLevel = 2; warningTitle = "إنذار ثاني"; warningMessage = "برر غيابك فوراً."; warningColors = "from-orange-500/20 to-amber-600/20 border-orange-500/50 text-orange-500"; warningIconColor = "text-orange-500"; WarningIcon = AlertTriangle; } 
+  else if (absentPeriods >= 25) { warningLevel = 1; warningTitle = "إنذار أول"; warningMessage = "الالتزام بالحضور مطلوب."; warningColors = "from-amber-500/20 to-yellow-600/20 border-amber-500/50 text-amber-500"; warningIconColor = "text-amber-500"; WarningIcon = AlertTriangle; }
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
-      
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 font-cairo pt-6" dir="rtl">
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* 🚀 الهيدر الفخم الموحد للطلاب */}
-        <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10">
-          <div className="absolute inset-0 bg-blue-500/5 blur-[100px] pointer-events-none"></div>
-          
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-10">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-right w-full flex-1">
-              <Link href={`/students/${user.id}`} className="relative group shrink-0">
-                <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-4 border-white/10 shadow-[0_0_30px_rgba(59,130,246,0.2)] bg-[#0f1423] backdrop-blur-md flex items-center justify-center transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3 group-hover:border-blue-500/50">
-                  {avatarUrl ? <img src={avatarUrl} alt={rawFullName} className="w-full h-full object-cover" /> : <span className="text-4xl sm:text-5xl font-black text-blue-400 drop-shadow-md">{rawFullName.charAt(0)}</span>}
-                </div>
-                <div className="absolute inset-0 bg-blue-500/20 rounded-[2.5rem] blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
-                <div className="absolute bottom-2 left-2 w-5 h-5 sm:w-6 sm:h-6 bg-emerald-400 border-4 border-[#02040a] rounded-full z-20 shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse"></div>
-              </Link>
-
-              <div className="pt-2 w-full">
-                <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-3 shadow-[0_0_15px_rgba(59,130,246,0.2)] text-blue-400">
-                  <Star className="w-3.5 h-3.5" />
-                  <span>لوحة تحكم الطالب</span>
-                </div>
-                <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black mb-3 tracking-tight drop-shadow-lg leading-tight text-white">
-                  وفقك الله وسدد خطاك يا {displayFirstName} 🌟
-                </h1>
-                <p className="text-slate-300 text-sm sm:text-base font-bold leading-relaxed max-w-xl mx-auto sm:mx-0 mb-4 opacity-90">
-                  ثق بقدراتك وتوكل على الله.. لقد اجتهدت طوال العام وهذه هي لحظة الحصاد. نحن فخورون بك ونتمنى لك التوفيق في اختباراتك القادمة.
-                </p>
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
-                   <span className="text-slate-300 font-bold text-xs sm:text-sm flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-sm"><GraduationCap className="h-4 w-4 text-blue-400" /> {classNameStr} - {sectionNameStr}</span>
-                   <Link href={`/students/${user.id}`} className="inline-flex items-center justify-center gap-1.5 text-blue-300 hover:text-white font-black text-xs sm:text-sm bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20 transition-all hover:bg-blue-500/30 shadow-sm active:scale-95">
-                     ملفي الأكاديمي <UserCircle className="w-4 h-4" />
-                   </Link>
-                </div>
+        {/* 🚀 الهيدر الرئيسي */}
+        <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 text-white shadow-2xl border border-white/10">
+          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+            <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-right">
+              <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-4 border-white/10 bg-[#0f1423] flex items-center justify-center relative">
+                {avatarUrl ? <img src={avatarUrl} alt="av" className="w-full h-full object-cover" /> : <span className="text-4xl font-black text-blue-400">{rawFullName.charAt(0)}</span>}
+                <div className="absolute bottom-2 left-2 w-5 h-5 bg-emerald-400 border-4 border-[#02040a] rounded-full animate-pulse"></div>
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-4xl font-black mb-2 leading-tight">وفقك الله يا {displayFirstName} 🌟</h1>
+                <p className="text-slate-300 font-bold text-sm sm:text-base">{classNameStr} - {sectionNameStr}</p>
               </div>
             </div>
-
-            <div className="flex flex-row flex-wrap gap-3 sm:gap-4 justify-center lg:shrink-0 w-full lg:w-auto">
-              <div className="rounded-2xl sm:rounded-[2rem] bg-[#02040a]/60 p-5 sm:p-6 backdrop-blur-md border border-white/5 flex flex-col items-center justify-center min-w-[130px] shadow-inner hover:border-emerald-500/30 transition-colors flex-1 sm:flex-none">
-                <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">نسبة الحضور</p>
-                <p className="text-3xl sm:text-4xl font-black text-emerald-400 drop-shadow-md">{attendanceStats?.rate || 0}%</p>
+            <div className="flex gap-4">
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center min-w-[100px]">
+                <p className="text-[10px] text-slate-400 uppercase font-bold">الحضور</p>
+                <p className="text-2xl font-black text-emerald-400">{attendanceStats.rate}%</p>
               </div>
-              <div className="rounded-2xl sm:rounded-[2rem] bg-[#02040a]/60 p-5 sm:p-6 backdrop-blur-md border border-white/5 flex flex-col items-center justify-center min-w-[130px] shadow-inner hover:border-amber-500/30 transition-colors flex-1 sm:flex-none">
-                <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">المتوسط العام</p>
-                <p className="text-3xl sm:text-4xl font-black text-amber-400 drop-shadow-md">{avgScore}%</p>
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center min-w-[100px]">
+                <p className="text-[10px] text-slate-400 uppercase font-bold">المتوسط</p>
+                <p className="text-2xl font-black text-amber-400">{avgScore}%</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 🚀 الهوية الامتحانية الحية (بانر منفصل) */}
+        {/* 🚀 الهوية الامتحانية - مع إصلاح الـ QR */}
         <AnimatePresence>
           {seatAllocation && (
-             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
-                <div className="absolute top-[-50%] left-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-rose-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
-                <div className="absolute bottom-[-50%] right-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-indigo-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
+             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative overflow-hidden rounded-[2.5rem] bg-[#02040a] p-6 sm:p-10 border-[3px] border-[#0f1423] shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-8 group">
+                <div className="absolute inset-0 bg-rose-600/5 blur-[100px] pointer-events-none"></div>
+                <div className="flex-1 text-center lg:text-right relative z-10">
+                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black mb-4">
+                     <Ticket className="w-4 h-4" /> بطاقة دخول الاختبار
+                   </div>
+                   <h2 className="text-2xl sm:text-4xl font-black text-white mb-4">رقم جلوسك המعتمد: <span className="text-rose-500">{seatAllocation.seat_number}</span></h2>
+                   <p className="text-slate-300 font-bold text-sm sm:text-lg">لجنتك: <span className="text-white bg-rose-500/20 px-3 py-1 rounded-xl">{seatAllocation.exam_committees?.name}</span></p>
+                   <p className="text-[10px] text-slate-500 mt-4">📍 الموقع: {seatAllocation.exam_committees?.location || 'المبنى الرئيسي'}</p>
+                </div>
                 
-                <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
-                   
-                   <div className="flex-1 text-center lg:text-right">
-                      <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs sm:text-sm font-black mb-6 shadow-inner backdrop-blur-xl">
-                        <Ticket className="w-4 h-4 text-rose-400" /> وثيقة رسمية - رقم الجلوس
+                <div className="shrink-0 perspective-1000 hidden md:block">
+                   <div className="w-[65mm] min-h-[100mm] pb-4 border-[4px] border-slate-900 rounded-[2rem] relative flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white group-hover:scale-105 transition-transform duration-500">
+                      <div className="w-full h-[25mm] bg-slate-900 pt-3 border-b-[3px] border-slate-700 shrink-0">
+                         <p className="text-white font-black text-[13px] tracking-wide">مدرسة الرفعة النموذجية بنين</p>
+                         <div className="mt-1.5 bg-slate-100 px-3 py-1 rounded-full inline-flex"><p className="text-slate-900 font-black text-[9px]">{seatAllocation.exam_committees?.name}</p></div>
                       </div>
-                      <h2 className="text-3xl sm:text-5xl font-black text-white mb-6 tracking-tight leading-tight drop-shadow-2xl">
-                        بوابتك إلى <span className="text-transparent bg-clip-text bg-gradient-to-l from-rose-400 to-indigo-300">النجاح والتفوق</span>!
-                      </h2>
-                      <p className="text-slate-300 text-sm sm:text-lg font-bold leading-relaxed mb-8 max-w-2xl mx-auto lg:mx-0 opacity-90">
-                        تم إصدار هويتك الامتحانية واعتماد رقم الجلوس الخاص بك. يرجى الاحتفاظ بهذه البطاقة وإبرازها عند دخول قاعة الاختبار.
-                      </p>
-                      
-                      <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
-                         <div className="bg-rose-500/10 px-6 py-4 rounded-2xl border border-rose-500/30 flex items-center gap-4 shadow-inner backdrop-blur-md cursor-default">
-                             <div className="p-3 bg-rose-500/20 rounded-xl"><ShieldCheck className="w-6 h-6 text-rose-400" /></div>
-                             <div className="text-right">
-                               <p className="text-[10px] font-bold text-rose-200/80 mb-1 uppercase tracking-widest">اللجنة المخصصة لك:</p>
-                               <h3 className="text-xl font-black text-white drop-shadow-md">{seatAllocation.exam_committees?.name}</h3>
-                             </div>
+                      <div className="w-[22mm] h-[22mm] -mt-[11mm] rounded-2xl bg-white border-4 border-white shadow-xl overflow-hidden z-10 shrink-0">
+                         {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-slate-300" />}
+                      </div>
+                      <div className="w-full px-4 flex-1 flex flex-col items-center justify-between mt-3">
+                         <div>
+                            <h2 className="text-[15px] font-black text-slate-900 line-clamp-2 leading-tight">{rawFullName}</h2>
+                            <p className="text-[10px] font-bold text-slate-500 mb-2 border-b-2 border-slate-200 pb-1 w-full">{classNameStr}</p>
+                         </div>
+                         <div className="flex flex-col items-center mt-1">
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">رقم الجلوس</p>
+                            <p className="text-3xl font-black text-rose-600 tracking-widest drop-shadow-sm">{seatAllocation.seat_number}</p>
+                         </div>
+                         <div className="mt-3 w-[20mm] h-[20mm] bg-white p-1 rounded-lg border-2 border-slate-800 shrink-0">
+                            <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
                          </div>
                       </div>
                    </div>
+                </div>
 
-                   {/* 🪪 هوية الطالب الذكية */}
-                   <div className="shrink-0 perspective-1000 hidden md:block">
-                      <div className="w-[65mm] h-[100mm] border-[4px] border-slate-900 rounded-[2rem] relative overflow-hidden flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white transform transition-all duration-700 hover:rotate-y-12 hover:scale-105 group/card">
-                         <div className="absolute top-0 left-0 w-full h-[28mm] bg-slate-900 shrink-0 flex flex-col items-center justify-start pt-4 border-b-[3px] border-slate-700 relative overflow-hidden">
-                            <p className="text-white font-black text-[14px] mt-1 tracking-wide drop-shadow-md">مدرسة الرفعة النموذجية بنين</p>
-                            <div className="mt-2 bg-slate-100 px-4 py-1.5 rounded-full shadow-inner flex items-center gap-1.5 border border-slate-300">
-                               <p className="text-slate-900 font-black text-[10px] tracking-widest uppercase">{seatAllocation.exam_committees?.name}</p>
-                            </div>
-                         </div>
-                         <div className="relative z-20 w-[24mm] h-[24mm] mt-[16mm] mb-2 rounded-2xl bg-white border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.3)] overflow-hidden shrink-0 flex items-center justify-center transform group-hover/card:scale-110 transition-transform duration-500">
-                            {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> : <UserCircle className="w-10 h-10 text-slate-300" />}
-                         </div>
-                         <div className="relative z-10 w-full px-4 flex-1 flex flex-col items-center">
-                            <h2 className="text-[16px] font-black text-slate-900 mb-1 leading-tight line-clamp-2">{rawFullName}</h2>
-                            <p className="text-[10px] font-bold text-slate-500 mb-2 border-b-2 border-slate-200 pb-2 w-full">{classNameStr}</p>
-                            <div className="mt-1 flex flex-col items-center group-hover/card:-translate-y-1 transition-transform">
-                               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">رقم الجلوس</p>
-                               <p className="text-3xl font-black text-rose-600 tracking-widest drop-shadow-sm">{seatAllocation.seat_number}</p>
-                            </div>
-                            <div className="mt-auto mb-3 flex flex-col items-center">
-                               <div className="w-[18mm] h-[18mm] bg-white p-0.5 rounded-lg border-2 border-slate-800 shadow-md"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" /></div>
-                            </div>
-                         </div>
-                         <div className="w-full h-2.5 bg-slate-900 shrink-0"></div>
-                      </div>
+                <div className="w-full md:hidden bg-white border-[3px] border-slate-800 rounded-3xl p-5 shadow-2xl flex items-center gap-4 relative z-10">
+                   <div className="w-20 h-20 bg-white p-1 rounded-xl border-2 border-slate-800 shrink-0">
+                      <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
                    </div>
-
-                   {/* عرض الهوية الامتحانية للموبايل */}
-                   <div className="w-full md:hidden bg-white border-[3px] border-slate-800 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex items-center gap-4">
-                      <div className="w-16 h-16 bg-white p-1 rounded-xl border-2 border-slate-800 shrink-0 shadow-sm">
-                         <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-multiply" />
-                      </div>
-                      <div className="flex-1 text-right">
-                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
-                         <h3 className="text-lg font-black text-slate-900">{seatAllocation.exam_committees?.name}</h3>
-                      </div>
-                      <div className="shrink-0 text-center border-r-2 border-slate-200 pr-4">
-                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">رقم الجلوس</p>
-                         <p className="text-2xl font-black text-rose-600 tracking-widest">{seatAllocation.seat_number}</p>
-                      </div>
+                   <div className="flex-1 text-right">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
+                      <h3 className="text-lg font-black text-slate-900 leading-tight">{seatAllocation.exam_committees?.name}</h3>
                    </div>
-
+                   <div className="shrink-0 text-center border-r-2 border-slate-200 pr-4">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">الجلوس</p>
+                      <p className="text-2xl font-black text-rose-600 tracking-widest">{seatAllocation.seat_number}</p>
+                   </div>
                 </div>
              </motion.div>
           )}
         </AnimatePresence>
 
-        {/* 🚀 قسم الوثائق لخريجي الثاني عشر */}
+        {/* 🚀 وثائق التخرج */}
         <AnimatePresence>
           {isTwelfthGrade && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative z-10 w-full">
@@ -752,7 +399,6 @@ export default function StudentDashboard() {
                    </div>
 
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 relative z-10 mb-8">
-                      {/* شهادة الثانوية */}
                       <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
                          <div>
                            <h4 className="font-black text-white text-base">شهادة الثانوية العامة</h4>
@@ -778,7 +424,6 @@ export default function StudentDashboard() {
                          </div>
                       </div>
 
-                      {/* لمن يهمه الأمر */}
                       <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
                          <div>
                            <h4 className="font-black text-white text-base">شهادة لمن يهمه الأمر</h4>
@@ -804,7 +449,6 @@ export default function StudentDashboard() {
                          </div>
                       </div>
 
-                      {/* حسن سيرة وسلوك */}
                       <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
                          <div>
                            <h4 className="font-black text-white text-base">شهادة حسن سيرة وسلوك</h4>
@@ -839,7 +483,7 @@ export default function StudentDashboard() {
                            <p className="text-3xl font-black text-white"><span className="text-fuchsia-400">{totalDocsCost}</span> د.ك</p>
                          </div>
                       </div>
-                      <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.5)] transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2">
+                      <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.5)] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
                          {isSubmittingDocs ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle2 className="w-5 h-5" /> اعتماد وتقديم الطلب</>}
                       </button>
                    </div>
@@ -857,7 +501,7 @@ export default function StudentDashboard() {
             </h3>
             <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
               {myBadges.map((badgeEntry, index) => (
-                <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:bg-[#0f1423] transition-all duration-300 hover:border-amber-500/30 group cursor-default shadow-inner hover:shadow-[0_0_20px_rgba(245,158,11,0.1)]">
+                <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:bg-[#0f1423] transition-all duration-300 hover:border-amber-500/30 group cursor-default shadow-inner">
                   <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
                     <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/30 transition-colors"></div>
                     {badgeEntry.badge?.image_url ? (
@@ -903,7 +547,7 @@ export default function StudentDashboard() {
           </motion.div>
         )}
 
-        {/* 🚀 بطاقة إنذار الغياب الذكية (Smart Warning Banner) */}
+        {/* 🚀 بطاقة إنذار الغياب الذكية */}
         <AnimatePresence>
           {warningLevel > 0 && (
             <motion.div 
@@ -1053,7 +697,7 @@ export default function StudentDashboard() {
                 </div>
             )}
 
-            {/* 🚀 Today's Schedule Timeline (Live Pulse) */}
+            {/* 🚀 Today's Schedule Timeline */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
               <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 relative z-10 gap-4 text-center sm:text-right">
@@ -1102,10 +746,7 @@ export default function StudentDashboard() {
                               </span>
                             )}
                             <div className={`absolute top-0 left-0 w-1 h-full ${
-                              current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' 
-                              : isPast ? 'bg-slate-800' 
-                              : next ? 'bg-blue-400' 
-                              : 'bg-white/10'
+                              current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : isPast ? 'bg-slate-800' : next ? 'bg-blue-400' : 'bg-white/10'
                             }`}></div>
 
                             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 pr-2">
@@ -1139,7 +780,7 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* Performance Chart */}
+            {/* Performance Chart - تم الإصلاح لاعتماد درجات الهوك */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none"></div>
               <div className="mb-6 sm:mb-8 flex items-center justify-between relative z-10 text-center sm:text-right">
@@ -1149,9 +790,9 @@ export default function StudentDashboard() {
                 </h2>
               </div>
               <div className="h-[250px] sm:h-[300px] lg:h-[350px] w-full relative z-10 ml-[-15px] sm:ml-0">
-                {unlockedGrades.length > 0 ? (
+                {recentGrades.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={unlockedGrades.map(g => ({ ...g, displayTitle: g.exam?.title || 'اختبار', displayScore: g.score || 0 })).reverse()}>
+                    <AreaChart data={recentGrades.map(g => ({ displayTitle: g.exam?.title || 'اختبار', displayScore: g.score || 0 })).reverse()}>
                       <defs>
                         <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#34d399" stopOpacity={0.5}/><stop offset="95%" stopColor="#34d399" stopOpacity={0}/></linearGradient>
                       </defs>
@@ -1317,70 +958,13 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة التقييم الإجباري للجامعة (The Gatekeeper) */}
-      <AnimatePresence>
-        {isEvalModalOpen && pendingEvaluations.length > 0 && (
-          <Dialog.Root open={isEvalModalOpen}>
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/98 backdrop-blur-xl z-[9999] transition-all" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-2xl z-[9999] outline-none" dir="rtl">
-                 <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', damping: 20 }} className="bg-[#131836] border border-amber-500/50 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_80px_rgba(245,158,11,0.2)] relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 blur-[80px] pointer-events-none rounded-full"></div>
-                    
-                    <div className="flex flex-col items-center text-center mb-8 relative z-10">
-                       <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-4 border border-amber-500/30 shadow-inner">
-                         <Star className="w-8 h-8 text-amber-400" />
-                       </div>
-                       <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">تقييم الأداء الأكاديمي</h2>
-                       <p className="text-sm font-bold text-amber-200/80 max-w-md">يرجى تقييم أداء معلميك لضمان جودة التعليم. <br/><span className="text-rose-400 font-black">هذا التقييم إجباري وسري تماماً ولن يعرف المعلم هويتك.</span></p>
-                    </div>
-
-                    <div className="bg-[#0a0d1a]/50 p-6 rounded-3xl border border-white/5 relative z-10">
-                       <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/5">
-                          <div className="flex items-center gap-4">
-                             <div className="w-14 h-14 bg-slate-800 rounded-full border-2 border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                                {pendingEvaluations[currentEvalIndex]?.avatar_url ? (
-                                   <img src={pendingEvaluations[currentEvalIndex].avatar_url} alt="t" className="w-full h-full object-cover" />
-                                ) : <UserCircle className="w-8 h-8 text-slate-500"/>}
-                             </div>
-                             <div className="text-right">
-                                <p className="text-lg font-black text-white">{pendingEvaluations[currentEvalIndex]?.full_name}</p>
-                                <p className="text-xs font-bold text-amber-400 mt-1">مادة: {pendingEvaluations[currentEvalIndex]?.subject_name}</p>
-                             </div>
-                          </div>
-                          <div className="bg-slate-900 px-4 py-2 rounded-xl border border-white/5">
-                             <span className="text-xs font-black text-slate-400">معلم {currentEvalIndex + 1} من {pendingEvaluations.length}</span>
-                          </div>
-                       </div>
-
-                       <div className="space-y-6">
-                          <StarRating rating={evalForm.scientific} setRating={(r) => setEvalForm({...evalForm, scientific: r})} label="المحور العلمي (الشرح وتوصيل المعلومة)" />
-                          <StarRating rating={evalForm.management} setRating={(r) => setEvalForm({...evalForm, management: r})} label="المحور الإداري (إدارة الفصل والوقت)" />
-                          <StarRating rating={evalForm.humanity} setRating={(r) => setEvalForm({...evalForm, humanity: r})} label="المحور الإنساني (التعامل والتحفيز)" />
-                          
-                          <div className="space-y-2 pt-4">
-                             <label className="text-xs font-black text-slate-300 uppercase tracking-widest">رسالة أو ملاحظة للإدارة (اختياري)</label>
-                             <textarea 
-                                value={evalForm.feedback} onChange={(e) => setEvalForm({...evalForm, feedback: e.target.value})}
-                                placeholder="اكتب رأيك بصدق هنا..."
-                                className="w-full bg-[#02040a] border border-white/10 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-amber-500/50 h-24 resize-none custom-scrollbar"
-                             />
-                          </div>
-                       </div>
-
-                       <button 
-                          onClick={handleEvalSubmit} disabled={isSubmittingEval || evalForm.scientific === 0 || evalForm.management === 0 || evalForm.humanity === 0}
-                          className="w-full mt-8 py-4 bg-amber-500 hover:bg-amber-400 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50 disabled:scale-100"
-                       >
-                          {isSubmittingEval ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-5 h-5" /> إرسال التقييم السري والانتقال</>}
-                       </button>
-                    </div>
-                 </motion.div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-        )}
-      </AnimatePresence>
+      {/* 🚀 بوابة التقييم الإجبارية (تعمل بشكل منفصل وبصمت في الخلفية حتى تنقض!) */}
+      {studentData?.id && (
+         <StudentEvaluationGate 
+            studentId={studentData.id} 
+            sectionId={studentData.section_id || studentData.sections?.id} 
+         />
+      )}
 
       {/* 🚀 نافذة العذر الطبي العادي */}
       <AnimatePresence>
@@ -1465,14 +1049,6 @@ export default function StudentDashboard() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
       `}</style>
-
-      {/* 🚀 بوابة التقييم الإجبارية (تعمل كحارس مخفي في الخلفية) */}
-      {studentData?.id && (
-         <StudentEvaluationGate 
-            studentId={studentData.id} 
-            sectionId={studentData.section_id || studentData.sections?.id} 
-         />
-      )}
     </motion.div>
   );
 }
