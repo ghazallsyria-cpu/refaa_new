@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Image from 'next/image';
 import * as Dialog from '@radix-ui/react-dialog';
+import StudentEvaluationGate from '@/components/StudentEvaluationGate';
 
 // 🚀 مسارات نسبية
 import AnnouncementsWidget from '../../../components/AnnouncementsWidget';
@@ -1464,6 +1465,14 @@ export default function StudentDashboard() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
       `}</style>
+
+      {/* 🚀 بوابة التقييم الإجبارية (تعمل كحارس مخفي في الخلفية) */}
+      {studentData?.id && (
+         <StudentEvaluationGate 
+            studentId={studentData.id} 
+            sectionId={studentData.section_id || studentData.sections?.id} 
+         />
+      )}
     </motion.div>
   );
 }
