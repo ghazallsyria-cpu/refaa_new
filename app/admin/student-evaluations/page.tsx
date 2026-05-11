@@ -5,31 +5,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   BarChart2, Users, Star, MessageSquare, Loader2, Search, 
-  TrendingUp, TrendingDown, Trophy, AlertTriangle, X, Power, Trash2, Settings, Plus, Layers, UserCircle, CheckCircle2, List, Eye, Filter, Save, PrinterIcon, DownloadCloud
+  TrendingUp, TrendingDown, Trophy, AlertTriangle, X, Power, Trash2, Settings, Plus, Layers, UserCircle, CheckCircle2, List, Eye, Filter, Save, PrinterIcon, DownloadCloud, Activity
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-// 🚀 استيراد مكتبات الرسوم البيانية والـ PDF
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+// 🚀 استيراد مكتبات الرسوم البيانية الحديثة
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 
+// --- مكونات صغيرة مساعدة ---
 const StarDisplay = ({ val }: { val: number }) => (
   <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 px-2 py-1 rounded-lg font-black text-sm border border-amber-500/20 shadow-inner w-fit">
     <Star className="w-3.5 h-3.5 fill-amber-500 drop-shadow-sm" /> {(val || 0).toFixed(1)}
   </div>
 );
 
-// 🚀 مخصص التلميحات للرسم البياني
+// 🚀 مخصص التلميحات للرسم البياني الشريطي
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl">
-        <p className="font-black text-white text-sm mb-1">{label}</p>
-        <p className="text-amber-400 font-bold text-xs">متوسط التقييم: {payload[0].value.toFixed(2)} / 5</p>
+      <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-4 rounded-2xl shadow-2xl">
+        <p className="font-black text-white text-base mb-1">{label}</p>
+        <p className="text-emerald-400 font-bold text-sm">متوسط التقييم: <span className="font-black text-white">{payload[0].value.toFixed(2)}</span> / 5</p>
       </div>
     );
   }
@@ -45,25 +46,20 @@ export default function StudentEvaluationsDashboard() {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'details'>('stats');
   
-  // الفلترة السحابية والفصول
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
   
-  // بيانات التقييمات
   const [teacherStats, setTeacherStats] = useState<any[]>([]);
   const [allRawEvaluations, setAllRawEvaluations] = useState<any[]>([]);
   
-  // فلاتر الواجهة
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchClass, setSearchClass] = useState('');
 
-  // إعدادات المنصة
   const [settingsId, setSettingsId] = useState<any>(null);
   const [isMiddleActive, setIsMiddleActive] = useState(false);
   const [isHighActive, setIsHighActive] = useState(false);
   const [criteria, setCriteria] = useState<string[]>([]);
   
-  // النوافذ (Modals)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [newCriterion, setNewCriterion] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -118,7 +114,7 @@ export default function StudentEvaluationsDashboard() {
       if (selectedSectionId !== 'all') {
           query = query.eq('students.section_id', selectedSectionId);
       } else {
-          query = query.limit(500); 
+          query = query.limit(1000); 
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -130,12 +126,23 @@ export default function StudentEvaluationsDashboard() {
          const sClass = Array.isArray(ev.students?.sections?.classes) ? ev.students.sections.classes[0]?.name : ev.students?.sections?.classes?.name;
          
          let avg = 0;
+         let sci = 0, mgt = 0, hum = 0;
+
          try {
              if (ev.dynamic_ratings && typeof ev.dynamic_ratings === 'object' && Object.keys(ev.dynamic_ratings).length > 0) {
+                const keys = Object.keys(ev.dynamic_ratings);
+                // محاولة استنتاج المحاور من الأسماء الديناميكية للرادار
+                sci = Number(ev.dynamic_ratings[keys[0]] || 0);
+                mgt = Number(ev.dynamic_ratings[keys[1]] || sci);
+                hum = Number(ev.dynamic_ratings[keys[2]] || sci);
+
                 const vals = Object.values(ev.dynamic_ratings).map(Number).filter(n => !isNaN(n));
                 if (vals.length > 0) avg = vals.reduce((a, b) => a + b, 0) / vals.length;
              } else {
-                avg = ((Number(ev.scientific_rating)||0) + (Number(ev.management_rating)||0) + (Number(ev.humanity_rating)||0)) / 3;
+                sci = Number(ev.scientific_rating)||0;
+                mgt = Number(ev.management_rating)||0;
+                hum = Number(ev.humanity_rating)||0;
+                avg = (sci + mgt + hum) / 3;
              }
          } catch(e) { avg = 0; }
 
@@ -150,6 +157,9 @@ export default function StudentEvaluationsDashboard() {
             feedback: ev.feedback,
             date: ev.created_at,
             avg_score: isNaN(avg) ? 0 : avg,
+            sci_score: isNaN(sci) ? 0 : sci,
+            mgt_score: isNaN(mgt) ? 0 : mgt,
+            hum_score: isNaN(hum) ? 0 : hum,
             dynamic_ratings: ev.dynamic_ratings
          };
       });
@@ -160,11 +170,15 @@ export default function StudentEvaluationsDashboard() {
         if (!acc[tId]) {
           acc[tId] = {
             teacher_id: tId, name: curr.teacher_name, avatar: curr.teacher_avatar, subject: curr.subject,
-            total_evals: 0, sum_score: 0, feedbacks: []
+            total_evals: 0, sum_score: 0, sum_sci: 0, sum_mgt: 0, sum_hum: 0, feedbacks: []
           };
         }
         acc[tId].total_evals += 1;
         acc[tId].sum_score += curr.avg_score;
+        acc[tId].sum_sci += curr.sci_score;
+        acc[tId].sum_mgt += curr.mgt_score;
+        acc[tId].sum_hum += curr.hum_score;
+
         if (curr.feedback && curr.feedback.trim() !== '') {
             acc[tId].feedbacks.push({ text: curr.feedback, date: curr.date, student: curr.student_name, class: curr.class_name });
         }
@@ -172,7 +186,11 @@ export default function StudentEvaluationsDashboard() {
       }, {});
 
       const finalStats = Object.values(groupedData).map((t: any) => ({
-        ...t, overall_avg: t.total_evals > 0 ? (t.sum_score / t.total_evals) : 0
+        ...t, 
+        overall_avg: t.total_evals > 0 ? (t.sum_score / t.total_evals) : 0,
+        sci_avg: t.total_evals > 0 ? (t.sum_sci / t.total_evals) : 0,
+        mgt_avg: t.total_evals > 0 ? (t.sum_mgt / t.total_evals) : 0,
+        hum_avg: t.total_evals > 0 ? (t.sum_hum / t.total_evals) : 0,
       })).sort((a: any, b: any) => b.overall_avg - a.overall_avg);
 
       setTeacherStats(finalStats);
@@ -212,7 +230,6 @@ export default function StudentEvaluationsDashboard() {
       } catch(e) { alert('فشل الحذف'); }
   };
 
-  // 🚀 دالة تصدير تقرير PDF
   const exportToPDF = async () => {
     if (!pdfRef.current) return;
     setIsExportingPDF(true);
@@ -224,7 +241,7 @@ export default function StudentEvaluationsDashboard() {
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`تقرير_تقييم_المعلمين_${new Date().toLocaleDateString()}.pdf`);
+      pdf.save(`تقرير_جودة_التدريس_${new Date().toLocaleDateString()}.pdf`);
     } catch (e) {
       alert('حدث خطأ أثناء تصدير التقرير.');
     } finally {
@@ -234,207 +251,281 @@ export default function StudentEvaluationsDashboard() {
 
   if (!['admin', 'management'].includes(currentRole)) return null;
 
-  const topTeachers = teacherStats.slice(0, 3);
-  const bottomTeachers = teacherStats.filter(t => t.overall_avg < 3.5).slice(-3).reverse();
+  const topTeachers = teacherStats.slice(0, 5);
+  const bottomTeacher = teacherStats.filter(t => t.overall_avg < 3.5).reverse()[0];
   const filteredTeacherStats = teacherStats.filter(t => t.name.toLowerCase().includes(searchTeacher.toLowerCase()));
   const filteredRaw = allRawEvaluations.filter(ev => ev.teacher_name.toLowerCase().includes(searchTeacher.toLowerCase()) && ev.class_name.toLowerCase().includes(searchClass.toLowerCase()));
 
-  // 🚀 بيانات الرسم البياني
-  const chartData = teacherStats.map(t => ({
-     name: t.name,
+  // 🚀 تحليلات الرسوم البيانية (BI)
+  const chartData = topTeachers.map(t => ({
+     name: t.name.split(' ')[0] + ' ' + (t.name.split(' ')[1] || ''), // اسم مختصر
      score: Number(t.overall_avg.toFixed(2))
-  })).slice(0, 10); // عرض أفضل 10 معلمين في الرسم البياني لمنع الازدحام
+  }));
+
+  const globalAverages = {
+      sci: teacherStats.reduce((acc, t) => acc + t.sci_avg, 0) / (teacherStats.length || 1),
+      mgt: teacherStats.reduce((acc, t) => acc + t.mgt_avg, 0) / (teacherStats.length || 1),
+      hum: teacherStats.reduce((acc, t) => acc + t.hum_avg, 0) / (teacherStats.length || 1),
+      overall: teacherStats.reduce((acc, t) => acc + t.overall_avg, 0) / (teacherStats.length || 1)
+  };
+
+  const radarData = [
+    { subject: criteria[0] || 'الجانب العلمي', A: Number(globalAverages.sci.toFixed(2)), fullMark: 5 },
+    { subject: criteria[1] || 'الجانب الإداري', A: Number(globalAverages.mgt.toFixed(2)), fullMark: 5 },
+    { subject: criteria[2] || 'الجانب الإنساني', A: Number(globalAverages.hum.toFixed(2)), fullMark: 5 },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 font-cairo text-slate-800 pb-32" dir="rtl">
       
       {isLoading && (
-        <div className="fixed inset-0 bg-white/80 z-[100] flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4 text-indigo-600"><Loader2 className="w-12 h-12 animate-spin" /><span className="font-black text-lg">تحميل النظام...</span></div>
+        <div className="fixed inset-0 bg-white/80 z-[100] flex items-center justify-center backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 text-indigo-600"><Loader2 className="w-12 h-12 animate-spin" /><span className="font-black text-lg">تحميل نظام الذكاء الإداري...</span></div>
         </div>
       )}
 
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 relative">
         
-        {/* الهيدر الإداري */}
-        <div className="bg-white rounded-[2rem] p-6 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 rounded-full pointer-events-none"></div>
+        {/* 🚀 الهيدر الإداري الحديث */}
+        <div className="bg-white rounded-[2.5rem] p-6 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-indigo-500/10 to-purple-500/5 blur-[100px] pointer-events-none rounded-full"></div>
           
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 flex items-center gap-3">
-                <BarChart2 className="w-8 h-8 text-indigo-600" /> مركز الرقابة والتقييم
-              </h1>
-              <p className="text-slate-500 font-bold text-sm mt-2">متابعة أداء المعلمين من وجهة نظر الطلاب.</p>
-              <div className="text-slate-500 font-bold text-sm flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 mt-3">
-                 <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-inner">حالة المتوسط: <strong className={isMiddleActive ? 'text-emerald-500' : 'text-rose-500'}>{isMiddleActive ? 'مفتوحة' : 'مغلقة'}</strong></span>
-                 <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-inner">حالة الثانوي: <strong className={isHighActive ? 'text-emerald-500' : 'text-rose-500'}>{isHighActive ? 'مفتوحة' : 'مغلقة'}</strong></span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest mb-3 border border-indigo-100 shadow-inner">
+                <Activity className="w-3.5 h-3.5" /> نظام ذكاء الأعمال (BI)
               </div>
+              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 mb-2 tracking-tight">
+                لوحة قياس جودة التدريس
+              </h1>
+              <p className="text-slate-500 font-bold text-sm max-w-xl leading-relaxed">تحليل عميق لأداء المعلمين بناءً على استبيانات الطلاب السرية، لمساعدتك في اتخاذ قرارات إدارية مبنية على البيانات.</p>
             </div>
             
             <div className="flex items-center gap-3 w-full md:w-auto">
-              {/* 🚀 زر تصدير التقرير PDF */}
-              <button onClick={exportToPDF} disabled={isExportingPDF} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-black transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
-                 {isExportingPDF ? <Loader2 className="w-6 h-6 animate-spin"/> : <DownloadCloud className="w-6 h-6" />} تقرير PDF
+              <button onClick={exportToPDF} disabled={isExportingPDF || teacherStats.length === 0} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-black transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
+                 {isExportingPDF ? <Loader2 className="w-6 h-6 animate-spin"/> : <DownloadCloud className="w-6 h-6" />} تصدير التقرير PDF
               </button>
-              <button onClick={() => setIsSettingsOpen(true)} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-slate-800 border-slate-700 text-white hover:bg-slate-900 font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
+              <button onClick={() => setIsSettingsOpen(true)} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-slate-900 border-slate-800 text-white hover:bg-black font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
                  <Settings className="w-6 h-6" /> إعدادات البوابة
               </button>
             </div>
           </div>
         </div>
 
-        {/* الفلتر السحابي */}
-        <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+        {/* 🚀 الفلتر السحابي */}
+        <div className="bg-white border border-slate-200 p-4 rounded-[1.5rem] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm relative z-10">
            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Filter className="w-5 h-5"/></div>
-              <div><p className="font-black text-sm text-slate-700">تحديد نطاق البحث:</p></div>
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner"><Filter className="w-5 h-5"/></div>
+              <div><p className="font-black text-sm text-slate-800">نطاق التحليل البياناتي:</p></div>
            </div>
-           <select value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)} className="w-full sm:w-80 bg-slate-50 border border-slate-200 text-slate-800 font-black text-sm rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-all">
-              <option value="all">كل الفصول (أحدث 500 تقييم)</option>
-              {sections.map(sec => <option key={sec.id} value={sec.id}>{sec.full_name}</option>)}
-           </select>
+           <div className="flex items-center gap-3 w-full sm:w-auto">
+              {isFetchingData && <Loader2 className="w-5 h-5 animate-spin text-indigo-500 shrink-0" />}
+              <select 
+                 value={selectedSectionId} 
+                 onChange={(e) => setSelectedSectionId(e.target.value)} 
+                 className="w-full sm:w-72 bg-slate-50 border border-slate-200 text-slate-800 font-black text-sm rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-all cursor-pointer shadow-inner"
+              >
+                 <option value="all">التحليل الشامل للمدرسة (أحدث 1000 صوت)</option>
+                 {sections.map(sec => <option key={sec.id} value={sec.id}>تحليل فصل: {sec.full_name}</option>)}
+              </select>
+           </div>
         </div>
 
         {/* התבويبات */}
-        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit mx-auto sm:mx-0">
-           <button onClick={() => setActiveTab('stats')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'stats' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><TrendingUp className="w-4 h-4"/> الإحصائيات</button>
-           <button onClick={() => setActiveTab('details')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4"/> سجل الرقابة</button>
+        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit mx-auto sm:mx-0 relative z-10">
+           <button onClick={() => setActiveTab('stats')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'stats' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><TrendingUp className="w-4 h-4"/> لوحة التحليل (Dashboard)</button>
+           <button onClick={() => setActiveTab('details')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4"/> سجل التعليقات التفصيلي</button>
         </div>
 
         {activeTab === 'stats' ? (
           <div className="space-y-6" ref={pdfRef}>
               
-              {/* 🚀 الرسم البياني الجديد (Chart) */}
-              <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
-                 <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><BarChart2 className="w-6 h-6 text-indigo-500"/> مؤشر جودة الأداء (أفضل 10 معلمين)</h2>
-                 <div className="h-[300px] w-full mt-4" dir="ltr">
-                    {chartData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 'bold'}} dy={10} />
-                          <YAxis domain={[0, 5]} axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 'bold'}} dx={-10} />
-                          <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
-                          <Bar dataKey="score" radius={[8, 8, 0, 0]} maxBarSize={50}>
-                            {chartData.map((entry, index) => (
-                               <Cell key={`cell-${index}`} fill={entry.score >= 4 ? '#10b981' : entry.score >= 3.5 ? '#f59e0b' : '#f43f5e'} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-xl">لا توجد بيانات كافية للرسم البياني</div>
-                    )}
+              {/* 🚀 بطاقات الـ KPIs الذكية */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                 <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group hover:border-indigo-300 transition-colors">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-colors"></div>
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl w-fit mb-4 border border-indigo-100 shadow-inner"><Users className="w-6 h-6"/></div>
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">إجمالي الأصوات</p>
+                    <p className="text-3xl font-black text-slate-800">{allRawEvaluations.length}</p>
+                 </div>
+                 <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-300 transition-colors">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-colors"></div>
+                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl w-fit mb-4 border border-emerald-100 shadow-inner"><Star className="w-6 h-6"/></div>
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">متوسط الرضا العام</p>
+                    <p className="text-3xl font-black text-emerald-600 flex items-baseline gap-1">{globalAverages.overall.toFixed(2)} <span className="text-sm font-bold text-slate-400">/ 5</span></p>
+                 </div>
+                 <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group hover:border-amber-300 transition-colors">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-colors"></div>
+                    <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl w-fit mb-4 border border-amber-100 shadow-inner"><Trophy className="w-6 h-6"/></div>
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">المعلم الأعلى تقييماً</p>
+                    <p className="text-xl font-black text-slate-800 truncate">{topTeachers[0]?.name || 'لا يوجد'}</p>
+                 </div>
+                 <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group hover:border-rose-300 transition-colors">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-colors"></div>
+                    <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl w-fit mb-4 border border-rose-100 shadow-inner"><AlertTriangle className="w-6 h-6"/></div>
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">يحتاج تدخل وتطوير</p>
+                    <p className="text-xl font-black text-rose-600 truncate">{bottomTeacher?.name || 'الكل بأداء ممتاز'}</p>
                  </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-gradient-to-br from-indigo-900 to-blue-900 rounded-[2rem] p-6 sm:p-8 shadow-xl relative overflow-hidden border border-indigo-700">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/20 blur-2xl rounded-full"></div>
-                  <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2 relative z-10"><Trophy className="w-6 h-6 text-amber-400"/> أفضل 3 معلمين (في هذا النطاق)</h2>
-                  <div className="space-y-4 relative z-10">
-                    {topTeachers.map((t, idx) => (
-                      <div key={t.teacher_id} className="flex items-center gap-4 bg-white/10 p-3 rounded-2xl border border-white/10">
-                        <div className="w-12 h-12 rounded-xl bg-amber-400 flex items-center justify-center font-black text-indigo-900 text-xl shadow-inner shrink-0 relative">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</div>
-                        <div className="flex-1 min-w-0"><p className="text-white font-black truncate">{t.name}</p><p className="text-indigo-200 text-[10px] font-bold">{t.subject}</p></div>
-                        <div className="text-center shrink-0"><div className="flex items-center gap-1 bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded-xl font-black border border-amber-500/30"><Star className="w-4 h-4 fill-amber-400"/> {t.overall_avg.toFixed(1)}</div></div>
-                      </div>
-                    ))}
-                    {topTeachers.length === 0 && <p className="text-indigo-300 font-bold text-sm text-center py-4">لم يتم تسجيل تقييمات.</p>}
-                  </div>
-                </div>
+              {/* 🚀 قسم الرسوم البيانية (Charts) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 {/* Bar Chart (أفضل المعلمين) */}
+                 <div className="lg:col-span-2 bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
+                    <h2 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2"><BarChart2 className="w-5 h-5 text-indigo-500"/> تصنيف الأداء (أفضل المعلمين في هذا النطاق)</h2>
+                    <div className="h-[300px] w-full mt-4" dir="ltr">
+                       {chartData.length > 0 ? (
+                         <ResponsiveContainer width="100%" height="100%">
+                           <BarChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: 5 }}>
+                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 'bold'}} dy={10} />
+                             <YAxis domain={[0, 5]} axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 'bold'}} dx={-10} />
+                             <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
+                             <Bar dataKey="score" radius={[6, 6, 0, 0]} maxBarSize={40}>
+                               {chartData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.score >= 4 ? '#10b981' : entry.score >= 3.5 ? '#f59e0b' : '#f43f5e'} />
+                               ))}
+                             </Bar>
+                           </BarChart>
+                         </ResponsiveContainer>
+                       ) : (
+                         <div className="flex items-center justify-center h-full text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">لا توجد بيانات كافية للرسم البياني</div>
+                       )}
+                    </div>
+                 </div>
 
-                <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
-                  <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><TrendingDown className="w-6 h-6 text-rose-500"/> مؤشرات تحتاج لتدخل (أقل من 3.5)</h2>
-                  <div className="space-y-4">
-                    {bottomTeachers.map(t => (
-                      <div key={t.teacher_id} className="flex items-center gap-4 bg-rose-50 p-3 rounded-2xl border border-rose-100">
-                        <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-inner"><AlertTriangle className="w-6 h-6"/></div>
-                        <div className="flex-1 min-w-0"><p className="text-slate-800 font-black truncate">{t.name}</p><p className="text-slate-500 text-[10px] font-bold">{t.subject}</p></div>
-                        <div className="text-center shrink-0"><div className="flex items-center gap-1 bg-white text-rose-600 px-3 py-1.5 rounded-xl font-black border border-rose-200 shadow-sm">{t.overall_avg.toFixed(1)} / 5</div></div>
-                      </div>
-                    ))}
-                    {bottomTeachers.length === 0 && <div className="text-center py-8"><div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3"><CheckCircle2 className="w-8 h-8 text-emerald-500"/></div><p className="text-emerald-600 font-black">أداء ممتاز! لا يوجد معلمين دون المستوى.</p></div>}
-                  </div>
-                </div>
+                 {/* Radar Chart (تحليل جودة المدرسة) */}
+                 <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col">
+                    <h2 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2"><Activity className="w-5 h-5 text-fuchsia-500"/> رادار الجودة</h2>
+                    <p className="text-[10px] font-bold text-slate-500 text-center mb-4">متوسط الأداء العام للمدرسة في كل محور</p>
+                    <div className="flex-1 w-full min-h-[250px]" dir="ltr">
+                       {teacherStats.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                             <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                               <PolarGrid stroke="#e2e8f0" />
+                               <PolarAngleAxis dataKey="subject" tick={{fill: '#475569', fontSize: 10, fontWeight: 'bold'}} />
+                               <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                               <Radar name="المتوسط العام" dataKey="A" stroke="#8b5cf6" fill="#d946ef" fillOpacity={0.3} />
+                               <Tooltip content={<CustomTooltip />} />
+                             </RadarChart>
+                          </ResponsiveContainer>
+                       ) : (
+                          <div className="flex items-center justify-center h-full text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">لا يوجد بيانات</div>
+                       )}
+                    </div>
+                 </div>
               </div>
 
+              {/* 🚀 السجل التصنيفي الذكي للمدير */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-indigo-500" /> ملخص تقييمات المعلمين (في هذا النطاق)</h3>
-                  <div className="relative w-full sm:w-72 print:hidden"><div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div><input type="text" className="w-full bg-white border border-slate-200 rounded-xl py-2 pr-11 pl-4 text-sm font-bold text-slate-800 focus:border-indigo-500 shadow-sm outline-none" placeholder="ابحث عن معلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} /></div>
+                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-indigo-500" /> تحليل الأداء الفردي للمعلمين</h3>
+                  <div className="relative w-full sm:w-72 print:hidden">
+                     <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div>
+                     <input type="text" className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:border-indigo-500 shadow-sm outline-none transition-colors" placeholder="ابحث عن معلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} />
+                  </div>
                 </div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredTeacherStats.map(t => (
-                    <div key={t.teacher_id} className="bg-white border border-slate-200 rounded-3xl p-5 hover:border-indigo-300 transition-colors shadow-sm flex flex-col group">
-                      <div className="flex items-start justify-between mb-4 border-b border-slate-100 pb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-full bg-slate-100 border-2 border-white shadow-md overflow-hidden shrink-0">{t.avatar ? <img src={t.avatar} className="w-full h-full object-cover" crossOrigin="anonymous"/> : <UserCircle className="w-full h-full text-slate-400"/>}</div>
-                            <div><h4 className="font-black text-slate-800 text-sm">{t.name}</h4><p className="text-[10px] font-bold text-slate-500">{t.subject} • {t.total_evals} تقييم</p></div>
-                          </div>
-                          <StarDisplay val={t.overall_avg} />
+
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {filteredTeacherStats.map(t => {
+                    const isElite = t.overall_avg >= 4.5;
+                    const isWarning = t.overall_avg < 3.5;
+
+                    return (
+                      <div key={t.teacher_id} className={`bg-white border-2 rounded-[2rem] p-6 hover:shadow-xl transition-all flex flex-col group ${isWarning ? 'border-rose-100 hover:border-rose-300' : isElite ? 'border-amber-200 hover:border-amber-400 bg-gradient-to-b from-white to-amber-50/30' : 'border-slate-100 hover:border-indigo-200'}`}>
+                        <div className="flex items-start justify-between mb-5 border-b border-slate-100 pb-5">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-14 h-14 rounded-[1.2rem] border-2 shadow-sm overflow-hidden shrink-0 flex items-center justify-center ${isWarning ? 'border-rose-200 bg-rose-50 text-rose-500' : isElite ? 'border-amber-300 bg-amber-100 text-amber-600' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>
+                                 {t.avatar ? <img src={t.avatar} className="w-full h-full object-cover" crossOrigin="anonymous"/> : <UserCircle className="w-8 h-8"/>}
+                              </div>
+                              <div>
+                                 <h4 className="font-black text-slate-800 text-base leading-tight group-hover:text-indigo-600 transition-colors">{t.name}</h4>
+                                 <p className="text-[11px] font-bold text-slate-500 mt-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 w-fit">{t.subject}</p>
+                              </div>
+                            </div>
+                            <div className="text-center">
+                               <p className={`text-2xl font-black flex items-baseline gap-0.5 ${isWarning ? 'text-rose-600' : isElite ? 'text-amber-500' : 'text-emerald-600'}`}>{t.overall_avg.toFixed(1)} <Star className="w-3 h-3 fill-current"/></p>
+                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">من {t.total_evals} صوت</p>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 space-y-3 mb-6">
+                           <div>
+                              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1"><span>المحور الأول</span><span>{t.sci_avg.toFixed(1)}</span></div>
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className="bg-blue-500 h-full rounded-full" style={{width: `${(t.sci_avg/5)*100}%`}}></div></div>
+                           </div>
+                           <div>
+                              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1"><span>المحور الثاني</span><span>{t.mgt_avg.toFixed(1)}</span></div>
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className="bg-fuchsia-500 h-full rounded-full" style={{width: `${(t.mgt_avg/5)*100}%`}}></div></div>
+                           </div>
+                           <div>
+                              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1"><span>المحور الثالث</span><span>{t.hum_avg.toFixed(1)}</span></div>
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full rounded-full" style={{width: `${(t.hum_avg/5)*100}%`}}></div></div>
+                           </div>
+                        </div>
+
+                        <button onClick={() => { setSelectedTeacher(t); setIsFeedbackModalOpen(true); }} disabled={t.feedbacks.length === 0} className="w-full mt-auto py-3.5 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-black text-xs rounded-xl transition-all border border-slate-200 hover:border-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 print:hidden active:scale-95 shadow-sm">
+                          <MessageSquare className="w-4 h-4"/> قراءة تعليقات الطلاب ({t.feedbacks.length})
+                        </button>
                       </div>
-                      <button onClick={() => { setSelectedTeacher(t); setIsFeedbackModalOpen(true); }} disabled={t.feedbacks.length === 0} className="w-full mt-auto py-3 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-black text-xs rounded-xl transition-all border border-slate-200 hover:border-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 print:hidden">
-                        <MessageSquare className="w-4 h-4"/> عرض التعليقات ({t.feedbacks.length})
-                      </button>
-                    </div>
-                  ))}
-                  {filteredTeacherStats.length === 0 && <p className="col-span-full text-center py-10 font-bold text-slate-500">لا يوجد بيانات.</p>}
+                    );
+                  })}
+                  {filteredTeacherStats.length === 0 && <p className="col-span-full text-center py-12 font-bold text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">لا يوجد بيانات مطابقة للبحث.</p>}
                 </div>
               </div>
           </div>
         ) : (
           <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
              <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col lg:flex-row items-center justify-between gap-4">
-                 <h3 className="font-black text-slate-800 flex items-center gap-2"><Eye className="w-5 h-5 text-indigo-500" /> تتبع الطلاب</h3>
+                 <h3 className="font-black text-slate-800 flex items-center gap-2"><Eye className="w-5 h-5 text-indigo-500" /> تتبع الطلاب (سجل الرقابة)</h3>
                  <div className="flex gap-3 w-full sm:w-auto">
-                    <input type="text" className="w-full sm:w-48 border rounded-xl py-2 px-4 text-sm font-bold" placeholder="بحث بمعلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} />
-                    <input type="text" className="w-full sm:w-48 border rounded-xl py-2 px-4 text-sm font-bold" placeholder="بحث بفصل..." value={searchClass} onChange={(e) => setSearchClass(e.target.value)} />
+                    <input type="text" className="w-full sm:w-48 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none focus:border-indigo-500 shadow-sm" placeholder="بحث بمعلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} />
+                    <input type="text" className="w-full sm:w-48 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none focus:border-indigo-500 shadow-sm" placeholder="بحث بفصل..." value={searchClass} onChange={(e) => setSearchClass(e.target.value)} />
                  </div>
              </div>
-             <div className="overflow-x-auto">
+             <div className="overflow-x-auto custom-scrollbar p-2">
                 <table className="w-full text-right border-collapse min-w-[900px]">
-                   <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
+                   <thead className="bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
                       <tr>
-                         <th className="p-5">الطالب / الفصل</th>
-                         <th className="p-5">المعلم / المادة</th>
-                         <th className="p-5">التقييم</th>
-                         <th className="p-5">التعليق</th>
-                         <th className="p-5 text-center">إجراء</th>
+                         <th className="p-4 rounded-r-xl">الطالب / الفصل</th>
+                         <th className="p-4">المعلم / المادة</th>
+                         <th className="p-4">التقييم التفصيلي</th>
+                         <th className="p-4 w-[300px]">الرسالة / التعليق</th>
+                         <th className="p-4 rounded-l-xl text-center w-16">إجراء</th>
                       </tr>
                    </thead>
                    <tbody>
                       {filteredRaw.map(ev => (
-                         <tr key={ev.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
-                            <td className="p-5">
-                               <p className="font-black text-slate-800 text-sm">{ev.student_name}</p>
-                               <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-indigo-100">{ev.class_name}</span>
+                         <tr key={ev.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
+                            <td className="p-4">
+                               <p className="font-black text-slate-800 text-sm leading-tight">{ev.student_name}</p>
+                               <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 mt-1.5 inline-block">{ev.class_name}</span>
                             </td>
-                            <td className="p-5">
-                               <div className="flex items-center gap-2">
-                                 <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden shrink-0">{ev.teacher_avatar ? <img src={ev.teacher_avatar} className="w-full h-full object-cover" crossOrigin="anonymous"/> : <UserCircle className="w-full h-full text-slate-400"/>}</div>
-                                 <div><p className="font-bold text-slate-700 text-sm">{ev.teacher_name}</p><p className="text-[10px] text-slate-400">{ev.subject}</p></div>
+                            <td className="p-4">
+                               <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-sm">{ev.teacher_avatar ? <img src={ev.teacher_avatar} className="w-full h-full object-cover" crossOrigin="anonymous"/> : <UserCircle className="w-full h-full text-slate-400 p-1"/>}</div>
+                                 <div><p className="font-bold text-slate-800 text-sm leading-tight">{ev.teacher_name}</p><p className="text-[10px] text-slate-500 font-bold mt-0.5">{ev.subject}</p></div>
                                </div>
                             </td>
-                            <td className="p-5">
-                               <div className="flex flex-col gap-1 w-48">
+                            <td className="p-4">
+                               <div className="flex flex-col gap-1.5 w-56">
                                  {ev.dynamic_ratings && typeof ev.dynamic_ratings === 'object' && Object.keys(ev.dynamic_ratings).length > 0 ? Object.entries(ev.dynamic_ratings).map(([k, v]) => (
-                                    <div key={k} className="flex justify-between items-center text-[9px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded-lg">
-                                       <span className="truncate w-24">{k}</span>
-                                       <span className="font-black flex items-center gap-0.5">{v} <Star className="w-3 h-3 fill-amber-500"/></span>
+                                    <div key={k} className="flex justify-between items-center text-[9px] font-bold bg-white px-2 py-1.5 rounded-lg border border-slate-100 shadow-sm">
+                                       <span className="truncate w-32 text-slate-600" title={k}>{k}</span>
+                                       <span className="font-black text-amber-600 flex items-center gap-0.5">{v} <Star className="w-3 h-3 fill-amber-500"/></span>
                                     </div>
-                                 )) : <span className="text-[10px] text-slate-400 italic">قديم: {ev.avg_score.toFixed(1)}⭐</span>}
+                                 )) : <span className="text-[10px] font-bold text-slate-500 italic bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 w-fit">نظام قديم: {ev.avg_score.toFixed(1)}⭐</span>}
                                </div>
                             </td>
-                            <td className="p-5">
-                               <p className="text-xs font-bold text-slate-600 max-w-[200px] leading-relaxed">{ev.feedback || '-'}</p>
+                            <td className="p-4">
+                               <p className="text-xs font-bold text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-slate-100 shadow-sm line-clamp-3">{ev.feedback || <span className="text-slate-400 italic">لا يوجد تعليق</span>}</p>
                             </td>
-                            <td className="p-5 text-center">
-                               <button onClick={() => deleteEvaluation(ev.id, ev.student_name)} className="p-2 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all border border-rose-100 active:scale-90"><Trash2 className="w-4 h-4"/></button>
+                            <td className="p-4 text-center">
+                               <button onClick={() => deleteEvaluation(ev.id, ev.student_name)} className="p-2.5 text-rose-400 bg-white hover:bg-rose-500 hover:text-white rounded-xl transition-all border border-rose-100 shadow-sm opacity-50 group-hover:opacity-100 active:scale-90" title="حذف هذا التقييم"><Trash2 className="w-4 h-4"/></button>
                             </td>
                          </tr>
                       ))}
+                      {filteredRaw.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-slate-500 font-bold bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-2">لا توجد سجلات مطابقة.</td></tr>}
                    </tbody>
                 </table>
              </div>
@@ -442,7 +533,7 @@ export default function StudentEvaluationsDashboard() {
         )}
       </div>
 
-      {/* 🚀 نافذة الإعدادات النقية والمحمية من الانهيار (Pure Modal) */}
+      {/* 🚀 نافذة الإعدادات النقية */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
            <div className="absolute inset-0 bg-slate-900/90" onClick={() => setIsSettingsOpen(false)}></div>
@@ -450,10 +541,10 @@ export default function StudentEvaluationsDashboard() {
            <div className="bg-white rounded-[2rem] w-full max-w-lg relative z-10 flex flex-col max-h-[85vh] overflow-hidden shadow-2xl" dir="rtl">
                <div className="p-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
                   <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner border border-indigo-200"><Settings className="w-5 h-5"/></div>
+                     <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-white shadow-inner"><Settings className="w-6 h-6"/></div>
                      <div>
                        <h2 className="text-lg font-black text-slate-800 leading-tight">إعدادات بوابة التقييم</h2>
-                       <p className="text-[10px] font-bold text-slate-500 mt-0.5">التحكم بالمراحل وبنود الاستبيان</p>
+                       <p className="text-[10px] font-bold text-slate-500 mt-1">التحكم بالمراحل وبنود الاستبيان</p>
                      </div>
                   </div>
                   <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-white rounded-full border border-slate-200 text-slate-400 hover:text-rose-500 shadow-sm transition-colors active:scale-90"><X className="w-5 h-5"/></button>
@@ -463,13 +554,13 @@ export default function StudentEvaluationsDashboard() {
                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4 shadow-inner">
                      <p className="text-sm font-black text-slate-800 flex items-center gap-2"><Power className="w-4 h-4 text-indigo-500"/> تفعيل البوابة الإلزامية</p>
                      <div className="flex gap-4">
-                        <button onClick={() => setIsMiddleActive(!isMiddleActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isMiddleActive ? "bg-emerald-500 text-white border-emerald-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100")}>
+                        <button onClick={() => setIsMiddleActive(!isMiddleActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isMiddleActive ? "bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100")}>
                            <span>المتوسطة</span>
-                           <span className="text-[10px] opacity-80">{isMiddleActive ? 'شغّال' : 'مُعطّل'}</span>
+                           <span className="text-[10px] opacity-80">{isMiddleActive ? 'تعمل الآن' : 'موقفة'}</span>
                         </button>
-                        <button onClick={() => setIsHighActive(!isHighActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isHighActive ? "bg-emerald-500 text-white border-emerald-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100")}>
+                        <button onClick={() => setIsHighActive(!isHighActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isHighActive ? "bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100")}>
                            <span>الثانوية</span>
-                           <span className="text-[10px] opacity-80">{isHighActive ? 'شغّال' : 'مُعطّل'}</span>
+                           <span className="text-[10px] opacity-80">{isHighActive ? 'تعمل الآن' : 'موقفة'}</span>
                         </button>
                      </div>
                   </div>
@@ -477,14 +568,14 @@ export default function StudentEvaluationsDashboard() {
                   <div className="space-y-4 border-t border-slate-100 pt-6">
                      <p className="text-sm font-black text-slate-800 flex items-center gap-2"><List className="w-4 h-4 text-indigo-500"/> بنود الاستبيان (المحاور)</p>
                      <div className="flex gap-2 mb-4">
-                        <input type="text" value={newCriterion} onChange={e=>setNewCriterion(e.target.value)} placeholder="أضف محوراً جديداً..." className="flex-1 bg-slate-50 border rounded-xl px-4 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-colors" />
+                        <input type="text" value={newCriterion} onChange={e=>setNewCriterion(e.target.value)} placeholder="أضف محوراً جديداً..." className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-colors" />
                         <button onClick={addCriterion} className="p-3 px-5 bg-slate-800 text-white rounded-xl active:scale-95 shadow-md hover:bg-slate-900 transition-colors"><Plus className="w-6 h-6"/></button>
                      </div>
                      <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
                         {criteria && criteria.length > 0 ? criteria.map((c, i) => (
                            <div key={`crit-${i}`} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
                               <span className="text-xs font-black text-slate-700">{c}</span>
-                              <button onClick={() => removeCriterion(c)} className="text-rose-500 bg-rose-50 hover:bg-rose-100 p-2 rounded-lg transition-colors border border-rose-100"><Trash2 className="w-4 h-4"/></button>
+                              <button onClick={() => removeCriterion(c)} className="text-rose-400 bg-rose-50 hover:bg-rose-100 p-2 rounded-lg transition-colors border border-rose-100 active:scale-90"><Trash2 className="w-4 h-4"/></button>
                            </div>
                         )) : <div className="text-center py-4 bg-rose-50 border border-rose-200 border-dashed rounded-xl"><p className="text-xs font-bold text-rose-500">لا توجد بنود مضافة!</p></div>}
                      </div>
@@ -492,7 +583,7 @@ export default function StudentEvaluationsDashboard() {
                </div>
 
                <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0">
-                  <button onClick={saveSettings} disabled={isSavingSettings} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <button onClick={saveSettings} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white font-black rounded-xl shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
                      {isSavingSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> حفظ الإعدادات بالكامل</>}
                   </button>
                </div>
@@ -500,17 +591,17 @@ export default function StudentEvaluationsDashboard() {
         </div>
       )}
 
-      {/* نافذة التعليقات */}
+      {/* نافذة التعليقات الأنيقة */}
       {isFeedbackModalOpen && selectedTeacher && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
            <div className="absolute inset-0 bg-slate-900/90" onClick={() => setIsFeedbackModalOpen(false)}></div>
            <div className="bg-white rounded-[2rem] w-full max-w-xl relative z-10 flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                 <div className="flex items-center gap-3">
+                 <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner border border-indigo-200"><MessageSquare className="w-6 h-6"/></div>
                     <div>
                        <h2 className="text-lg font-black text-slate-800 leading-tight">صندوق الأسرار</h2>
-                       <p className="text-[10px] font-bold text-slate-500 mt-1">المعلم المستهدف: <span className="text-indigo-600 font-black">{selectedTeacher.name}</span></p>
+                       <p className="text-[10px] font-bold text-slate-500 mt-1">التعليقات الواردة للمعلم: <span className="text-indigo-600 font-black text-xs">{selectedTeacher.name}</span></p>
                     </div>
                  </div>
                  <button onClick={() => setIsFeedbackModalOpen(false)} className="p-2 bg-white rounded-full border border-slate-200 text-slate-400 hover:text-rose-500 shadow-sm transition-colors active:scale-90"><X className="w-5 h-5"/></button>
@@ -518,10 +609,10 @@ export default function StudentEvaluationsDashboard() {
               <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar bg-white">
                 {selectedTeacher.feedbacks.map((fb: any, i: number) => (
                   <div key={i} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 relative shadow-sm">
-                     <p className="text-sm font-bold text-slate-700 leading-relaxed pr-2 whitespace-pre-wrap">"{fb.text}"</p>
+                     <p className="text-sm font-bold text-slate-800 leading-relaxed pr-2 whitespace-pre-wrap">"{fb.text}"</p>
                      <div className="mt-4 pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase">
-                        <span className="bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">بواسطة: {fb.student} ({fb.class})</span>
-                        <span dir="ltr">{format(new Date(fb.date), 'dd/MM/yyyy')}</span>
+                        <span className="bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-sm">بواسطة: {fb.student} ({fb.class})</span>
+                        <span dir="ltr" className="bg-slate-100 px-2.5 py-1 rounded-md">{format(new Date(fb.date), 'dd/MM/yyyy')}</span>
                      </div>
                   </div>
                 ))}
