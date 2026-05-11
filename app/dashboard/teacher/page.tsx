@@ -393,6 +393,12 @@ export default function TeacherDashboard() {
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] relative bg-[#090b14] text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+10">
+
+        {/* 🚀 1. مكان زراعة الدرع التذكاري الجديد (يظهر فقط إذا كان للمعلم تكريم) */}
+        {teacherData?.id && (
+           <MemorialShieldDisplay userId={teacherData.id} role="teacher" />
+        )}
 
         {/* 🚀 هرم القيادة: 1. بانر أعضاء الكنترول */}
         <AnimatePresence>
