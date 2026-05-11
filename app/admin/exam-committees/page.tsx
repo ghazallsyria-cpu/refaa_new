@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info,
-  AlertCircle, Clock // 🚀 تم استيراد الـ Clock هنا لحل مشكلة السيرفر
+  AlertCircle, Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -30,7 +30,10 @@ export default function ExamCommitteesControl() {
   const [allocationsStats, setAllocationsStats] = useState<any>({});
   const [timetables, setTimetables] = useState<any[]>([]);
   const [allHeads, setAllHeads] = useState<any[]>([]);
-  const [studentStats, setStudentStats] = useState({ g10: 0, g11: 0, totalAllocated: 0 });
+  
+  // 🚀 الإحصائيات المحدثة لتشمل العلمي والأدبي
+  const [studentStats, setStudentStats] = useState({ g10: 0, g11_sci: 0, g11_lit: 0, totalAllocated: 0 });
+  
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [uniqueExamDates, setUniqueExamDates] = useState<string[]>([]);
   
@@ -99,10 +102,10 @@ export default function ExamCommitteesControl() {
 
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
-      const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(sections(name, classes(level)))').eq('academic_year', currentYear).eq('semester', currentSemester);
+      const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name), exam_timetables(exam_date, subjects(name))');
-      const { data: stds } = await supabase.from('students').select('id, sections(classes(level))');
+      const { data: stds } = await supabase.from('students').select('id, sections(classes(level, name))');
 
       const stats: any = {};
       const uniqueClassesSet = new Set<string>();
@@ -115,12 +118,18 @@ export default function ExamCommitteesControl() {
         }); 
       }
 
-      let g10 = 0, g11 = 0;
+      // 🚀 الفرز الجديد للعلمي والأدبي
+      let g10 = 0, g11_sci = 0, g11_lit = 0;
       (stds || []).forEach((s:any) => {
         const lvl = s.sections?.classes?.level;
-        if(lvl === 10) g10++; if(lvl === 11) g11++;
+        const cName = s.sections?.classes?.name || '';
+        if(lvl === 10) g10++; 
+        if(lvl === 11) {
+            if (cName.includes('أدبي')) g11_lit++;
+            else g11_sci++;
+        }
       });
-      setStudentStats({ g10, g11, totalAllocated: allocs?.length || 0 });
+      setStudentStats({ g10, g11_sci, g11_lit, totalAllocated: allocs?.length || 0 });
       setAvailableClasses(Array.from(uniqueClassesSet).sort());
 
       const datesSet = new Set<string>();
@@ -267,7 +276,7 @@ export default function ExamCommitteesControl() {
   };
 
   const handleDistribute = async () => {
-    if (!confirm('هل أنت متأكد من بدء التوزيع الأبجدي والسحّاب لعاشر وحادي عشر؟ (سيمسح أي توزيع سابق)')) return;
+    if (!confirm('هل أنت متأكد من بدء التوزيع السحّاب لعاشر وحادي عشر (علمي وأدبي)؟ (سيمسح أي توزيع سابق)')) return;
     const result = await generateSeatingAndDistribute(currentYear, currentSemester);
     if (result.success) { alert('تم التوزيع بنجاح!'); fetchData(); }
   };
@@ -506,10 +515,13 @@ export default function ExamCommitteesControl() {
 
           {activeTab === 'management' && (
             <div className="animate-in fade-in slide-in-from-bottom-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                 <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex justify-between items-center"><p className="text-xs font-bold text-emerald-600">عاشر متاح</p><p className="text-2xl font-black text-emerald-800">{studentStats.g10}</p></div>
-                 <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex justify-between items-center"><p className="text-xs font-bold text-blue-600">حادي عشر متاح</p><p className="text-2xl font-black text-blue-800">{studentStats.g11}</p></div>
-                 <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex justify-between items-center"><p className="text-xs font-bold text-indigo-600">إجمالي الموزعين</p><p className="text-2xl font-black text-indigo-800">{studentStats.totalAllocated}</p></div>
+              
+              {/* 🚀 الإحصائيات الجديدة (المفصّلة לעلمي وأدبي) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                 <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-emerald-600 mb-1">عاشر</p><p className="text-2xl font-black text-emerald-800">{studentStats.g10}</p></div>
+                 <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-blue-600 mb-1">11 علمي</p><p className="text-2xl font-black text-blue-800">{studentStats.g11_sci}</p></div>
+                 <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-purple-600 mb-1">11 أدبي</p><p className="text-2xl font-black text-purple-800">{studentStats.g11_lit}</p></div>
+                 <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-indigo-600 mb-1">إجمالي الموزعين</p><p className="text-2xl font-black text-indigo-800">{studentStats.totalAllocated}</p></div>
               </div>
 
               <div className="flex flex-wrap gap-3 mb-8 bg-slate-50 p-3 rounded-2xl border border-slate-200">
@@ -698,7 +710,6 @@ export default function ExamCommitteesControl() {
                        </select>
                        <button onClick={handleAssignHead} className="bg-amber-500 hover:bg-amber-600 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg">اعتماد التكليف</button>
                      </div>
-                     {/* 🚀 إشعار تنبيه التدوير الذكي للمدير */}
                      {headAssignment.head_teacher_id && (() => {
                         const selectedTeacherHeadDates = getTeacherHeadAssignments(headAssignment.head_teacher_id);
                         if(selectedTeacherHeadDates.length > 0) {
