@@ -373,7 +373,7 @@ export default function MemorialShieldsMaker() {
                             <div className="mt-6 w-full flex justify-end">
                                <div className="text-left">
                                   <p className="text-[8px] text-white/30 font-bold mb-1">مدير المدرسة</p>
-                                  <p className={cn("text-[10px] font-black signature-font opacity-80", activeTheme.textPrimary)}>أ. صالح مخلف المطيري</p>
+                                  <p className={cn("text-[10px] font-black signature-font opacity-80", activeTheme.textPrimary)}>أ. صالح مخلد المطيري</p>
                                </div>
                             </div>
                          </div>
