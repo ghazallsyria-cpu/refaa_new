@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Award, Shield, Sparkles, Crown, DownloadCloud, X, UserCircle } from 'lucide-react';
+import { Award, Shield, Sparkles, Crown, DownloadCloud, X, UserCircle ,Loader2} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import html2canvas from 'html2canvas-pro';
 
