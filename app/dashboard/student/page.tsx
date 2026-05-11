@@ -32,6 +32,7 @@ import { useDashboardSystem } from '../../../hooks/useDashboardSystem';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/auth-context';
 import { cn } from '../../../lib/utils';
+import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
 
 const checkIsLocked = (examData: any) => {
   if (!examData?.exam_date) return false;
@@ -267,6 +268,10 @@ export default function StudentDashboard() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 font-cairo pt-6" dir="rtl">
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+
+{studentData?.id && ( 
+   <MemorialShieldDisplay userId={studentData.id} role="student" /> 
+)}
         
         {/* 🚀 الهيدر الرئيسي */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 text-white shadow-2xl border border-white/10">
