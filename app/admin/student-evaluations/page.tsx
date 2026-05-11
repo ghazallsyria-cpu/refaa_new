@@ -2,16 +2,20 @@
 /* eslint-disable */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BarChart2, Users, Star, MessageSquare, Loader2, Search, 
-  TrendingUp, TrendingDown, Trophy, AlertTriangle, X, Power, Trash2, Settings, Plus, Layers, UserCircle, CheckCircle2, List, Eye, Filter, Save // 🚀 هنا أضفنا Save
+  TrendingUp, TrendingDown, Trophy, AlertTriangle, X, Power, Trash2, Settings, Plus, Layers, UserCircle, CheckCircle2, List, Eye, Filter, Save, PrinterIcon, DownloadCloud
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+// 🚀 استيراد مكتبات الرسوم البيانية والـ PDF
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 
 const StarDisplay = ({ val }: { val: number }) => (
   <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 px-2 py-1 rounded-lg font-black text-sm border border-amber-500/20 shadow-inner w-fit">
@@ -19,12 +23,26 @@ const StarDisplay = ({ val }: { val: number }) => (
   </div>
 );
 
+// 🚀 مخصص التلميحات للرسم البياني
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl">
+        <p className="font-black text-white text-sm mb-1">{label}</p>
+        <p className="text-amber-400 font-bold text-xs">متوسط التقييم: {payload[0].value.toFixed(2)} / 5</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function StudentEvaluationsDashboard() {
   const { authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingData, setIsFetchingData] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'details'>('stats');
   
   // الفلترة السحابية والفصول
@@ -39,7 +57,7 @@ export default function StudentEvaluationsDashboard() {
   const [searchTeacher, setSearchTeacher] = useState('');
   const [searchClass, setSearchClass] = useState('');
 
-  // إعدادات المنصة (التحكم بالبوابة)
+  // إعدادات المنصة
   const [settingsId, setSettingsId] = useState<any>(null);
   const [isMiddleActive, setIsMiddleActive] = useState(false);
   const [isHighActive, setIsHighActive] = useState(false);
@@ -53,23 +71,11 @@ export default function StudentEvaluationsDashboard() {
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
+  const pdfRef = useRef<HTMLDivElement>(null);
+
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  // 1. أداة كشف الأخطاء على الموبايل (vConsole)
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = "https://unpkg.com/vconsole@latest/dist/vconsole.min.js";
-    script.onload = () => {
-      if (typeof window !== 'undefined' && !window.vConsole) {
-         window.vConsole = new window.VConsole();
-      }
-    };
-    document.body.appendChild(script);
-    return () => { try { document.body.removeChild(script); } catch(e) {} };
-  }, []);
-
-  // 2. جلب البيانات الأساسية (الإعدادات والفصول)
   useEffect(() => {
     if (!['admin', 'management'].includes(currentRole)) return;
 
@@ -96,7 +102,6 @@ export default function StudentEvaluationsDashboard() {
     loadInitialData();
   }, [currentRole]);
 
-  // 3. جلب التقييمات (مع الفلترة السحابية)
   const fetchEvaluations = async () => {
     setIsFetchingData(true);
     try {
@@ -207,12 +212,38 @@ export default function StudentEvaluationsDashboard() {
       } catch(e) { alert('فشل الحذف'); }
   };
 
+  // 🚀 دالة تصدير تقرير PDF
+  const exportToPDF = async () => {
+    if (!pdfRef.current) return;
+    setIsExportingPDF(true);
+    try {
+      const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, backgroundColor: '#f8fafc' });
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`تقرير_تقييم_المعلمين_${new Date().toLocaleDateString()}.pdf`);
+    } catch (e) {
+      alert('حدث خطأ أثناء تصدير التقرير.');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
   if (!['admin', 'management'].includes(currentRole)) return null;
 
   const topTeachers = teacherStats.slice(0, 3);
   const bottomTeachers = teacherStats.filter(t => t.overall_avg < 3.5).slice(-3).reverse();
   const filteredTeacherStats = teacherStats.filter(t => t.name.toLowerCase().includes(searchTeacher.toLowerCase()));
   const filteredRaw = allRawEvaluations.filter(ev => ev.teacher_name.toLowerCase().includes(searchTeacher.toLowerCase()) && ev.class_name.toLowerCase().includes(searchClass.toLowerCase()));
+
+  // 🚀 بيانات الرسم البياني
+  const chartData = teacherStats.map(t => ({
+     name: t.name,
+     score: Number(t.overall_avg.toFixed(2))
+  })).slice(0, 10); // عرض أفضل 10 معلمين في الرسم البياني لمنع الازدحام
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 font-cairo text-slate-800 pb-32" dir="rtl">
@@ -242,43 +273,62 @@ export default function StudentEvaluationsDashboard() {
             </div>
             
             <div className="flex items-center gap-3 w-full md:w-auto">
+              {/* 🚀 زر تصدير التقرير PDF */}
+              <button onClick={exportToPDF} disabled={isExportingPDF} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-black transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
+                 {isExportingPDF ? <Loader2 className="w-6 h-6 animate-spin"/> : <DownloadCloud className="w-6 h-6" />} تقرير PDF
+              </button>
               <button onClick={() => setIsSettingsOpen(true)} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-slate-800 border-slate-700 text-white hover:bg-slate-900 font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
-                 <Settings className="w-6 h-6" /> إعدادات البوابة والبنود
+                 <Settings className="w-6 h-6" /> إعدادات البوابة
               </button>
             </div>
           </div>
         </div>
 
         {/* الفلتر السحابي */}
-        <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+        <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
            <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Filter className="w-5 h-5"/></div>
-              <div>
-                 <p className="font-black text-indigo-900">نطاق الاستعلام (حماية السيرفر)</p>
-                 <p className="text-[10px] font-bold text-indigo-600/70">اختر فصلاً لتقليل الضغط وعرض الإحصائيات الدقيقة.</p>
-              </div>
+              <div><p className="font-black text-sm text-slate-700">تحديد نطاق البحث:</p></div>
            </div>
-           <div className="flex items-center gap-3 w-full sm:w-auto">
-              {isFetchingData && <Loader2 className="w-5 h-5 animate-spin text-indigo-500 shrink-0" />}
-              <select 
-                 value={selectedSectionId} 
-                 onChange={(e) => setSelectedSectionId(e.target.value)} 
-                 className="w-full sm:w-80 bg-white border border-indigo-300 text-slate-800 font-black text-sm rounded-xl px-4 py-3 outline-none focus:border-indigo-600 shadow-sm transition-all"
-              >
-                 <option value="all">كل الفصول (أحدث 500 تقييم)</option>
-                 {sections.map(sec => <option key={sec.id} value={sec.id}>{sec.full_name}</option>)}
-              </select>
-           </div>
+           <select value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)} className="w-full sm:w-80 bg-slate-50 border border-slate-200 text-slate-800 font-black text-sm rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-all">
+              <option value="all">كل الفصول (أحدث 500 تقييم)</option>
+              {sections.map(sec => <option key={sec.id} value={sec.id}>{sec.full_name}</option>)}
+           </select>
         </div>
 
-        {/* التبويبات */}
+        {/* התבويبات */}
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit mx-auto sm:mx-0">
            <button onClick={() => setActiveTab('stats')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'stats' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><TrendingUp className="w-4 h-4"/> الإحصائيات</button>
            <button onClick={() => setActiveTab('details')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4"/> سجل الرقابة</button>
         </div>
 
         {activeTab === 'stats' ? (
-          <div className="space-y-6">
+          <div className="space-y-6" ref={pdfRef}>
+              
+              {/* 🚀 الرسم البياني الجديد (Chart) */}
+              <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
+                 <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><BarChart2 className="w-6 h-6 text-indigo-500"/> مؤشر جودة الأداء (أفضل 10 معلمين)</h2>
+                 <div className="h-[300px] w-full mt-4" dir="ltr">
+                    {chartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 'bold'}} dy={10} />
+                          <YAxis domain={[0, 5]} axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 'bold'}} dx={-10} />
+                          <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
+                          <Bar dataKey="score" radius={[8, 8, 0, 0]} maxBarSize={50}>
+                            {chartData.map((entry, index) => (
+                               <Cell key={`cell-${index}`} fill={entry.score >= 4 ? '#10b981' : entry.score >= 3.5 ? '#f59e0b' : '#f43f5e'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-xl">لا توجد بيانات كافية للرسم البياني</div>
+                    )}
+                 </div>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-gradient-to-br from-indigo-900 to-blue-900 rounded-[2rem] p-6 sm:p-8 shadow-xl relative overflow-hidden border border-indigo-700">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/20 blur-2xl rounded-full"></div>
@@ -313,7 +363,7 @@ export default function StudentEvaluationsDashboard() {
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-indigo-500" /> ملخص تقييمات المعلمين (في هذا النطاق)</h3>
-                  <div className="relative w-full sm:w-72"><div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div><input type="text" className="w-full bg-white border border-slate-200 rounded-xl py-2 pr-11 pl-4 text-sm font-bold text-slate-800 focus:border-indigo-500 shadow-sm outline-none" placeholder="ابحث عن معلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} /></div>
+                  <div className="relative w-full sm:w-72 print:hidden"><div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div><input type="text" className="w-full bg-white border border-slate-200 rounded-xl py-2 pr-11 pl-4 text-sm font-bold text-slate-800 focus:border-indigo-500 shadow-sm outline-none" placeholder="ابحث عن معلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} /></div>
                 </div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredTeacherStats.map(t => (
@@ -325,7 +375,7 @@ export default function StudentEvaluationsDashboard() {
                           </div>
                           <StarDisplay val={t.overall_avg} />
                       </div>
-                      <button onClick={() => { setSelectedTeacher(t); setIsFeedbackModalOpen(true); }} disabled={t.feedbacks.length === 0} className="w-full mt-auto py-3 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-black text-xs rounded-xl transition-all border border-slate-200 hover:border-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50">
+                      <button onClick={() => { setSelectedTeacher(t); setIsFeedbackModalOpen(true); }} disabled={t.feedbacks.length === 0} className="w-full mt-auto py-3 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-black text-xs rounded-xl transition-all border border-slate-200 hover:border-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 print:hidden">
                         <MessageSquare className="w-4 h-4"/> عرض التعليقات ({t.feedbacks.length})
                       </button>
                     </div>
@@ -359,7 +409,7 @@ export default function StudentEvaluationsDashboard() {
                          <tr key={ev.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
                             <td className="p-5">
                                <p className="font-black text-slate-800 text-sm">{ev.student_name}</p>
-                               <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md mt-1 inline-block">{ev.class_name}</span>
+                               <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-indigo-100">{ev.class_name}</span>
                             </td>
                             <td className="p-5">
                                <div className="flex items-center gap-2">
@@ -395,7 +445,6 @@ export default function StudentEvaluationsDashboard() {
       {/* 🚀 نافذة الإعدادات النقية والمحمية من الانهيار (Pure Modal) */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-           {/* Overlay بدون تأثير Blur لحماية الـ GPU */}
            <div className="absolute inset-0 bg-slate-900/90" onClick={() => setIsSettingsOpen(false)}></div>
            
            <div className="bg-white rounded-[2rem] w-full max-w-lg relative z-10 flex flex-col max-h-[85vh] overflow-hidden shadow-2xl" dir="rtl">
@@ -427,7 +476,7 @@ export default function StudentEvaluationsDashboard() {
                  
                   <div className="space-y-4 border-t border-slate-100 pt-6">
                      <p className="text-sm font-black text-slate-800 flex items-center gap-2"><List className="w-4 h-4 text-indigo-500"/> بنود الاستبيان (المحاور)</p>
-                     <div className="flex gap-2">
+                     <div className="flex gap-2 mb-4">
                         <input type="text" value={newCriterion} onChange={e=>setNewCriterion(e.target.value)} placeholder="أضف محوراً جديداً..." className="flex-1 bg-slate-50 border rounded-xl px-4 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-colors" />
                         <button onClick={addCriterion} className="p-3 px-5 bg-slate-800 text-white rounded-xl active:scale-95 shadow-md hover:bg-slate-900 transition-colors"><Plus className="w-6 h-6"/></button>
                      </div>
@@ -481,7 +530,14 @@ export default function StudentEvaluationsDashboard() {
         </div>
       )}
 
-      <style jsx global>{` .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; } `}</style>
+      <style jsx global>{` 
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; } 
+        @media print {
+            body * { visibility: hidden; }
+            .print\\:hidden { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
