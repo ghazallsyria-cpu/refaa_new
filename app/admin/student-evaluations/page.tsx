@@ -5,26 +5,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   BarChart2, Users, Star, MessageSquare, Loader2, Search, 
-  TrendingUp, TrendingDown, Trophy, AlertTriangle, X, Power, Trash2, Settings, Plus, Layers, UserCircle, CheckCircle2, List, Eye, Filter, Save, PrinterIcon, DownloadCloud, Activity
+  TrendingUp, TrendingDown, Trophy, AlertTriangle, X, Power, Trash2, Settings, Plus, Layers, UserCircle, CheckCircle2, List, Eye, Filter, Save, PrinterIcon, DownloadCloud, Activity, Target
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-// 🚀 استيراد مكتبات الرسوم البيانية الحديثة
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 
-// --- مكونات صغيرة مساعدة ---
 const StarDisplay = ({ val }: { val: number }) => (
   <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 px-2 py-1 rounded-lg font-black text-sm border border-amber-500/20 shadow-inner w-fit">
     <Star className="w-3.5 h-3.5 fill-amber-500 drop-shadow-sm" /> {(val || 0).toFixed(1)}
   </div>
 );
 
-// 🚀 مخصص التلميحات للرسم البياني الشريطي
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
@@ -44,6 +41,7 @@ export default function StudentEvaluationsDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingData, setIsFetchingData] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isExportingTeacherPDF, setIsExportingTeacherPDF] = useState(false); // 🚀 تصدير تقرير المعلم
   const [activeTab, setActiveTab] = useState<'stats' | 'details'>('stats');
   
   const [sections, setSections] = useState<any[]>([]);
@@ -64,10 +62,12 @@ export default function StudentEvaluationsDashboard() {
   const [newCriterion, setNewCriterion] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   
+  // 🚀 ملف الـ 360 درجة للمعلم
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
-  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [isTeacherProfileOpen, setIsTeacherProfileOpen] = useState(false);
 
   const pdfRef = useRef<HTMLDivElement>(null);
+  const teacherPdfRef = useRef<HTMLDivElement>(null); // 🚀 مرجع لتقرير المعلم الفردي
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
@@ -131,7 +131,6 @@ export default function StudentEvaluationsDashboard() {
          try {
              if (ev.dynamic_ratings && typeof ev.dynamic_ratings === 'object' && Object.keys(ev.dynamic_ratings).length > 0) {
                 const keys = Object.keys(ev.dynamic_ratings);
-                // محاولة استنتاج المحاور من الأسماء الديناميكية للرادار
                 sci = Number(ev.dynamic_ratings[keys[0]] || 0);
                 mgt = Number(ev.dynamic_ratings[keys[1]] || sci);
                 hum = Number(ev.dynamic_ratings[keys[2]] || sci);
@@ -165,12 +164,14 @@ export default function StudentEvaluationsDashboard() {
       });
       setAllRawEvaluations(formattedRaw);
 
+      // 🚀 تجميع البيانات وإنشاء إحصائيات دقيقة لكل معلم (Dynamic Averages)
       const groupedData = formattedRaw.reduce((acc: any, curr: any) => {
         const tId = curr.teacher_id;
         if (!acc[tId]) {
           acc[tId] = {
             teacher_id: tId, name: curr.teacher_name, avatar: curr.teacher_avatar, subject: curr.subject,
-            total_evals: 0, sum_score: 0, sum_sci: 0, sum_mgt: 0, sum_hum: 0, feedbacks: []
+            total_evals: 0, sum_score: 0, sum_sci: 0, sum_mgt: 0, sum_hum: 0, feedbacks: [],
+            dynamic_sums: {}
           };
         }
         acc[tId].total_evals += 1;
@@ -179,19 +180,40 @@ export default function StudentEvaluationsDashboard() {
         acc[tId].sum_mgt += curr.mgt_score;
         acc[tId].sum_hum += curr.hum_score;
 
+        // تجميع البنود الديناميكية
+        if (curr.dynamic_ratings && typeof curr.dynamic_ratings === 'object') {
+            Object.entries(curr.dynamic_ratings).forEach(([k, v]) => {
+                if(!isNaN(Number(v))) {
+                   acc[tId].dynamic_sums[k] = (acc[tId].dynamic_sums[k] || 0) + Number(v);
+                }
+            });
+        }
+
         if (curr.feedback && curr.feedback.trim() !== '') {
             acc[tId].feedbacks.push({ text: curr.feedback, date: curr.date, student: curr.student_name, class: curr.class_name });
         }
         return acc;
       }, {});
 
-      const finalStats = Object.values(groupedData).map((t: any) => ({
-        ...t, 
-        overall_avg: t.total_evals > 0 ? (t.sum_score / t.total_evals) : 0,
-        sci_avg: t.total_evals > 0 ? (t.sum_sci / t.total_evals) : 0,
-        mgt_avg: t.total_evals > 0 ? (t.sum_mgt / t.total_evals) : 0,
-        hum_avg: t.total_evals > 0 ? (t.sum_hum / t.total_evals) : 0,
-      })).sort((a: any, b: any) => b.overall_avg - a.overall_avg);
+      const finalStats = Object.values(groupedData).map((t: any) => {
+        // حساب المتوسطات الفردية لكل بند ديناميكي
+        const dynamic_avgs = Object.keys(t.dynamic_sums).length > 0 
+           ? Object.entries(t.dynamic_sums).map(([k, sum]) => ({ subject: k, A: Number((sum as number / t.total_evals).toFixed(2)), fullMark: 5 }))
+           : [
+               { subject: 'المحور العلمي', A: Number((t.sum_sci / t.total_evals).toFixed(2)), fullMark: 5 },
+               { subject: 'المحور الإداري', A: Number((t.sum_mgt / t.total_evals).toFixed(2)), fullMark: 5 },
+               { subject: 'المحور الإنساني', A: Number((t.sum_hum / t.total_evals).toFixed(2)), fullMark: 5 }
+             ];
+
+        return {
+          ...t, 
+          overall_avg: t.total_evals > 0 ? (t.sum_score / t.total_evals) : 0,
+          sci_avg: t.total_evals > 0 ? (t.sum_sci / t.total_evals) : 0,
+          mgt_avg: t.total_evals > 0 ? (t.sum_mgt / t.total_evals) : 0,
+          hum_avg: t.total_evals > 0 ? (t.sum_hum / t.total_evals) : 0,
+          dynamic_avgs
+        };
+      }).sort((a: any, b: any) => b.overall_avg - a.overall_avg);
 
       setTeacherStats(finalStats);
     } catch(err) { console.error(err); }
@@ -206,10 +228,7 @@ export default function StudentEvaluationsDashboard() {
         setNewCriterion('');
     }
   };
-  
-  const removeCriterion = (c: string) => { 
-      setCriteria(prev => prev.filter(item => item !== c)); 
-  };
+  const removeCriterion = (c: string) => { setCriteria(prev => prev.filter(item => item !== c)); };
 
   const saveSettings = async () => {
      if (!settingsId || criteria.length === 0) { alert('يجب إضافة بند واحد على الأقل.'); return; }
@@ -230,6 +249,7 @@ export default function StudentEvaluationsDashboard() {
       } catch(e) { alert('فشل الحذف'); }
   };
 
+  // 🚀 دالة تصدير تقرير المدرسة الكامل
   const exportToPDF = async () => {
     if (!pdfRef.current) return;
     setIsExportingPDF(true);
@@ -239,14 +259,24 @@ export default function StudentEvaluationsDashboard() {
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`تقرير_جودة_التدريس_${new Date().toLocaleDateString()}.pdf`);
-    } catch (e) {
-      alert('حدث خطأ أثناء تصدير التقرير.');
-    } finally {
-      setIsExportingPDF(false);
-    }
+      pdf.save(`التقرير_الشامل_لتقييم_المعلمين.pdf`);
+    } catch (e) { alert('حدث خطأ أثناء التصدير.'); } finally { setIsExportingPDF(false); }
+  };
+
+  // 🚀 دالة تصدير تقرير المعلم الفردي الـ 360 درجة
+  const exportTeacherPDF = async () => {
+    if (!teacherPdfRef.current || !selectedTeacher) return;
+    setIsExportingTeacherPDF(true);
+    try {
+      const canvas = await html2canvas(teacherPdfRef.current, { scale: 2, useCORS: true, backgroundColor: '#f8fafc' });
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`تقرير_الاداء_للمعلم_${selectedTeacher.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) { alert('حدث خطأ أثناء التصدير.'); } finally { setIsExportingTeacherPDF(false); }
   };
 
   if (!['admin', 'management'].includes(currentRole)) return null;
@@ -256,11 +286,7 @@ export default function StudentEvaluationsDashboard() {
   const filteredTeacherStats = teacherStats.filter(t => t.name.toLowerCase().includes(searchTeacher.toLowerCase()));
   const filteredRaw = allRawEvaluations.filter(ev => ev.teacher_name.toLowerCase().includes(searchTeacher.toLowerCase()) && ev.class_name.toLowerCase().includes(searchClass.toLowerCase()));
 
-  // 🚀 تحليلات الرسوم البيانية (BI)
-  const chartData = topTeachers.map(t => ({
-     name: t.name.split(' ')[0] + ' ' + (t.name.split(' ')[1] || ''), // اسم مختصر
-     score: Number(t.overall_avg.toFixed(2))
-  }));
+  const chartData = topTeachers.map(t => ({ name: t.name.split(' ')[0] + ' ' + (t.name.split(' ')[1] || ''), score: Number(t.overall_avg.toFixed(2)) }));
 
   const globalAverages = {
       sci: teacherStats.reduce((acc, t) => acc + t.sci_avg, 0) / (teacherStats.length || 1),
@@ -286,7 +312,7 @@ export default function StudentEvaluationsDashboard() {
 
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 relative">
         
-        {/* 🚀 الهيدر الإداري الحديث */}
+        {/* الهيدر الإداري */}
         <div className="bg-white rounded-[2.5rem] p-6 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-indigo-500/10 to-purple-500/5 blur-[100px] pointer-events-none rounded-full"></div>
           
@@ -303,7 +329,7 @@ export default function StudentEvaluationsDashboard() {
             
             <div className="flex items-center gap-3 w-full md:w-auto">
               <button onClick={exportToPDF} disabled={isExportingPDF || teacherStats.length === 0} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-black transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
-                 {isExportingPDF ? <Loader2 className="w-6 h-6 animate-spin"/> : <DownloadCloud className="w-6 h-6" />} تصدير التقرير PDF
+                 {isExportingPDF ? <Loader2 className="w-6 h-6 animate-spin"/> : <DownloadCloud className="w-6 h-6" />} تصدير تقرير المدرسة
               </button>
               <button onClick={() => setIsSettingsOpen(true)} className="w-full md:w-auto px-6 py-4 rounded-2xl border bg-slate-900 border-slate-800 text-white hover:bg-black font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
                  <Settings className="w-6 h-6" /> إعدادات البوابة
@@ -312,7 +338,7 @@ export default function StudentEvaluationsDashboard() {
           </div>
         </div>
 
-        {/* 🚀 الفلتر السحابي */}
+        {/* الفلتر السحابي */}
         <div className="bg-white border border-slate-200 p-4 rounded-[1.5rem] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm relative z-10">
            <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner"><Filter className="w-5 h-5"/></div>
@@ -331,10 +357,10 @@ export default function StudentEvaluationsDashboard() {
            </div>
         </div>
 
-        {/* התבويبات */}
+        {/* التبويبات */}
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit mx-auto sm:mx-0 relative z-10">
-           <button onClick={() => setActiveTab('stats')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'stats' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><TrendingUp className="w-4 h-4"/> لوحة التحليل (Dashboard)</button>
-           <button onClick={() => setActiveTab('details')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4"/> سجل التعليقات التفصيلي</button>
+           <button onClick={() => setActiveTab('stats')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'stats' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><TrendingUp className="w-4 h-4"/> لوحة التحليل المدرسي</button>
+           <button onClick={() => setActiveTab('details')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><List className="w-4 h-4"/> السجل التفصيلي (الطلاب)</button>
         </div>
 
         {activeTab === 'stats' ? (
@@ -368,11 +394,11 @@ export default function StudentEvaluationsDashboard() {
                  </div>
               </div>
 
-              {/* 🚀 قسم الرسوم البيانية (Charts) */}
+              {/* 🚀 قسم الرسوم البيانية */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                 {/* Bar Chart (أفضل المعلمين) */}
+                 {/* Bar Chart */}
                  <div className="lg:col-span-2 bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
-                    <h2 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2"><BarChart2 className="w-5 h-5 text-indigo-500"/> تصنيف الأداء (أفضل المعلمين في هذا النطاق)</h2>
+                    <h2 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2"><BarChart2 className="w-5 h-5 text-indigo-500"/> تصنيف الأداء (أفضل المعلمين)</h2>
                     <div className="h-[300px] w-full mt-4" dir="ltr">
                        {chartData.length > 0 ? (
                          <ResponsiveContainer width="100%" height="100%">
@@ -389,15 +415,15 @@ export default function StudentEvaluationsDashboard() {
                            </BarChart>
                          </ResponsiveContainer>
                        ) : (
-                         <div className="flex items-center justify-center h-full text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">لا توجد بيانات كافية للرسم البياني</div>
+                         <div className="flex items-center justify-center h-full text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">لا توجد بيانات كافية</div>
                        )}
                     </div>
                  </div>
 
-                 {/* Radar Chart (تحليل جودة المدرسة) */}
+                 {/* Radar Chart */}
                  <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col">
-                    <h2 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2"><Activity className="w-5 h-5 text-fuchsia-500"/> رادار الجودة</h2>
-                    <p className="text-[10px] font-bold text-slate-500 text-center mb-4">متوسط الأداء العام للمدرسة في كل محور</p>
+                    <h2 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2"><Activity className="w-5 h-5 text-fuchsia-500"/> رادار جودة المدرسة</h2>
+                    <p className="text-[10px] font-bold text-slate-500 text-center mb-4">متوسط الأداء العام في كل محور</p>
                     <div className="flex-1 w-full min-h-[250px]" dir="ltr">
                        {teacherStats.length > 0 ? (
                           <ResponsiveContainer width="100%" height="100%">
@@ -416,12 +442,12 @@ export default function StudentEvaluationsDashboard() {
                  </div>
               </div>
 
-              {/* 🚀 السجل التصنيفي الذكي للمدير */}
+              {/* 🚀 تصنيف المعلمين (قائمة تفاعلية) */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-indigo-500" /> تحليل الأداء الفردي للمعلمين</h3>
                   <div className="relative w-full sm:w-72 print:hidden">
-                     <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div>
+                     <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                      <input type="text" className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:border-indigo-500 shadow-sm outline-none transition-colors" placeholder="ابحث عن معلم..." value={searchTeacher} onChange={(e) => setSearchTeacher(e.target.value)} />
                   </div>
                 </div>
@@ -432,7 +458,7 @@ export default function StudentEvaluationsDashboard() {
                     const isWarning = t.overall_avg < 3.5;
 
                     return (
-                      <div key={t.teacher_id} className={`bg-white border-2 rounded-[2rem] p-6 hover:shadow-xl transition-all flex flex-col group ${isWarning ? 'border-rose-100 hover:border-rose-300' : isElite ? 'border-amber-200 hover:border-amber-400 bg-gradient-to-b from-white to-amber-50/30' : 'border-slate-100 hover:border-indigo-200'}`}>
+                      <div key={t.teacher_id} className={`bg-white border-2 rounded-[2rem] p-6 hover:shadow-xl transition-all flex flex-col group cursor-pointer ${isWarning ? 'border-rose-100 hover:border-rose-300' : isElite ? 'border-amber-200 hover:border-amber-400 bg-gradient-to-b from-white to-amber-50/30' : 'border-slate-100 hover:border-indigo-200'}`} onClick={() => { setSelectedTeacher(t); setIsTeacherProfileOpen(true); }}>
                         <div className="flex items-start justify-between mb-5 border-b border-slate-100 pb-5">
                             <div className="flex items-center gap-4">
                               <div className={`w-14 h-14 rounded-[1.2rem] border-2 shadow-sm overflow-hidden shrink-0 flex items-center justify-center ${isWarning ? 'border-rose-200 bg-rose-50 text-rose-500' : isElite ? 'border-amber-300 bg-amber-100 text-amber-600' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>
@@ -449,23 +475,8 @@ export default function StudentEvaluationsDashboard() {
                             </div>
                         </div>
 
-                        <div className="flex-1 space-y-3 mb-6">
-                           <div>
-                              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1"><span>المحور الأول</span><span>{t.sci_avg.toFixed(1)}</span></div>
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className="bg-blue-500 h-full rounded-full" style={{width: `${(t.sci_avg/5)*100}%`}}></div></div>
-                           </div>
-                           <div>
-                              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1"><span>المحور الثاني</span><span>{t.mgt_avg.toFixed(1)}</span></div>
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className="bg-fuchsia-500 h-full rounded-full" style={{width: `${(t.mgt_avg/5)*100}%`}}></div></div>
-                           </div>
-                           <div>
-                              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1"><span>المحور الثالث</span><span>{t.hum_avg.toFixed(1)}</span></div>
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full rounded-full" style={{width: `${(t.hum_avg/5)*100}%`}}></div></div>
-                           </div>
-                        </div>
-
-                        <button onClick={() => { setSelectedTeacher(t); setIsFeedbackModalOpen(true); }} disabled={t.feedbacks.length === 0} className="w-full mt-auto py-3.5 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-black text-xs rounded-xl transition-all border border-slate-200 hover:border-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 print:hidden active:scale-95 shadow-sm">
-                          <MessageSquare className="w-4 h-4"/> قراءة تعليقات الطلاب ({t.feedbacks.length})
+                        <button className="w-full mt-auto py-3.5 bg-slate-800 hover:bg-slate-900 text-white font-black text-xs rounded-xl transition-all flex items-center justify-center gap-2 print:hidden shadow-md active:scale-95">
+                          <Target className="w-4 h-4"/> عرض الملف الشامل (360 درجة)
                         </button>
                       </div>
                     );
@@ -533,7 +544,7 @@ export default function StudentEvaluationsDashboard() {
         )}
       </div>
 
-      {/* 🚀 نافذة الإعدادات النقية */}
+      {/* 🚀 نافذة الإعدادات */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
            <div className="absolute inset-0 bg-slate-900/90" onClick={() => setIsSettingsOpen(false)}></div>
@@ -554,11 +565,11 @@ export default function StudentEvaluationsDashboard() {
                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4 shadow-inner">
                      <p className="text-sm font-black text-slate-800 flex items-center gap-2"><Power className="w-4 h-4 text-indigo-500"/> تفعيل البوابة الإلزامية</p>
                      <div className="flex gap-4">
-                        <button onClick={() => setIsMiddleActive(!isMiddleActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isMiddleActive ? "bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100")}>
+                        <button onClick={() => setIsMiddleActive(!isMiddleActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isMiddleActive ? "bg-emerald-500 text-white border-emerald-600 shadow-md" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100")}>
                            <span>المتوسطة</span>
                            <span className="text-[10px] opacity-80">{isMiddleActive ? 'تعمل الآن' : 'موقفة'}</span>
                         </button>
-                        <button onClick={() => setIsHighActive(!isHighActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isHighActive ? "bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100")}>
+                        <button onClick={() => setIsHighActive(!isHighActive)} className={cn("flex-1 py-4 rounded-xl font-black text-sm transition-all border flex flex-col items-center gap-1 active:scale-95", isHighActive ? "bg-emerald-500 text-white border-emerald-600 shadow-md" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100")}>
                            <span>الثانوية</span>
                            <span className="text-[10px] opacity-80">{isHighActive ? 'تعمل الآن' : 'موقفة'}</span>
                         </button>
@@ -568,14 +579,14 @@ export default function StudentEvaluationsDashboard() {
                   <div className="space-y-4 border-t border-slate-100 pt-6">
                      <p className="text-sm font-black text-slate-800 flex items-center gap-2"><List className="w-4 h-4 text-indigo-500"/> بنود الاستبيان (المحاور)</p>
                      <div className="flex gap-2 mb-4">
-                        <input type="text" value={newCriterion} onChange={e=>setNewCriterion(e.target.value)} placeholder="أضف محوراً جديداً..." className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-colors" />
+                        <input type="text" value={newCriterion} onChange={e=>setNewCriterion(e.target.value)} placeholder="أضف محوراً جديداً..." className="flex-1 bg-slate-50 border rounded-xl px-4 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-colors" />
                         <button onClick={addCriterion} className="p-3 px-5 bg-slate-800 text-white rounded-xl active:scale-95 shadow-md hover:bg-slate-900 transition-colors"><Plus className="w-6 h-6"/></button>
                      </div>
                      <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
                         {criteria && criteria.length > 0 ? criteria.map((c, i) => (
                            <div key={`crit-${i}`} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
                               <span className="text-xs font-black text-slate-700">{c}</span>
-                              <button onClick={() => removeCriterion(c)} className="text-rose-400 bg-rose-50 hover:bg-rose-100 p-2 rounded-lg transition-colors border border-rose-100 active:scale-90"><Trash2 className="w-4 h-4"/></button>
+                              <button onClick={() => removeCriterion(c)} className="text-rose-500 bg-rose-50 hover:bg-rose-100 p-2 rounded-lg transition-colors border border-rose-100 active:scale-90"><Trash2 className="w-4 h-4"/></button>
                            </div>
                         )) : <div className="text-center py-4 bg-rose-50 border border-rose-200 border-dashed rounded-xl"><p className="text-xs font-bold text-rose-500">لا توجد بنود مضافة!</p></div>}
                      </div>
@@ -583,7 +594,7 @@ export default function StudentEvaluationsDashboard() {
                </div>
 
                <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0">
-                  <button onClick={saveSettings} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white font-black rounded-xl shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <button onClick={saveSettings} disabled={isSavingSettings} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
                      {isSavingSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> حفظ الإعدادات بالكامل</>}
                   </button>
                </div>
@@ -591,31 +602,116 @@ export default function StudentEvaluationsDashboard() {
         </div>
       )}
 
-      {/* نافذة التعليقات الأنيقة */}
-      {isFeedbackModalOpen && selectedTeacher && (
+      {/* 🚀 ملف 360 درجة الخاص بالمعلم (Teacher 360 Profile) */}
+      {isTeacherProfileOpen && selectedTeacher && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-           <div className="absolute inset-0 bg-slate-900/90" onClick={() => setIsFeedbackModalOpen(false)}></div>
-           <div className="bg-white rounded-[2rem] w-full max-w-xl relative z-10 flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
+           <div className="absolute inset-0 bg-slate-900/90" onClick={() => setIsTeacherProfileOpen(false)}></div>
+           
+           <div className="bg-white rounded-[2rem] w-full max-w-5xl relative z-10 flex flex-col max-h-[90vh] overflow-hidden shadow-2xl">
+              
               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner border border-indigo-200"><MessageSquare className="w-6 h-6"/></div>
+                    <div className="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg"><Target className="w-6 h-6"/></div>
                     <div>
-                       <h2 className="text-lg font-black text-slate-800 leading-tight">صندوق الأسرار</h2>
-                       <p className="text-[10px] font-bold text-slate-500 mt-1">التعليقات الواردة للمعلم: <span className="text-indigo-600 font-black text-xs">{selectedTeacher.name}</span></p>
+                       <h2 className="text-lg font-black text-slate-800 leading-tight">الملف التحليلي للمعلم (360 درجة)</h2>
+                       <p className="text-[10px] font-bold text-slate-500 mt-1">تقرير تفصيلي خاص وموجّه للإدارة فقط.</p>
                     </div>
                  </div>
-                 <button onClick={() => setIsFeedbackModalOpen(false)} className="p-2 bg-white rounded-full border border-slate-200 text-slate-400 hover:text-rose-500 shadow-sm transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+                 <div className="flex items-center gap-3">
+                    <button onClick={exportTeacherPDF} disabled={isExportingTeacherPDF} className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-xl font-black text-xs transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
+                       {isExportingTeacherPDF ? <Loader2 className="w-4 h-4 animate-spin"/> : <DownloadCloud className="w-4 h-4"/>} طباعة التقرير الفردي
+                    </button>
+                    <button onClick={() => setIsTeacherProfileOpen(false)} className="p-2 bg-white rounded-full border border-slate-200 text-slate-400 hover:text-rose-500 shadow-sm transition-colors active:scale-90"><X className="w-5 h-5"/></button>
+                 </div>
               </div>
-              <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar bg-white">
-                {selectedTeacher.feedbacks.map((fb: any, i: number) => (
-                  <div key={i} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 relative shadow-sm">
-                     <p className="text-sm font-bold text-slate-800 leading-relaxed pr-2 whitespace-pre-wrap">"{fb.text}"</p>
-                     <div className="mt-4 pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase">
-                        <span className="bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-sm">بواسطة: {fb.student} ({fb.class})</span>
-                        <span dir="ltr" className="bg-slate-100 px-2.5 py-1 rounded-md">{format(new Date(fb.date), 'dd/MM/yyyy')}</span>
-                     </div>
-                  </div>
-                ))}
+
+              {/* المنطقة التي سيتم تحويلها لـ PDF */}
+              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar bg-slate-50/50" ref={teacherPdfRef}>
+                 
+                 {/* 1. الهيدر التعريفي للمعلم */}
+                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center gap-6 mb-6">
+                    <div className="w-24 h-24 rounded-2xl bg-slate-100 border-4 border-white shadow-md overflow-hidden shrink-0">
+                       {selectedTeacher.avatar ? <img src={selectedTeacher.avatar} className="w-full h-full object-cover" crossOrigin="anonymous"/> : <UserCircle className="w-full h-full text-slate-300 p-2"/>}
+                    </div>
+                    <div className="flex-1 text-center sm:text-right">
+                       <h2 className="text-2xl font-black text-slate-800">{selectedTeacher.name}</h2>
+                       <p className="text-xs font-bold text-slate-500 mt-1 bg-slate-100 px-3 py-1 rounded-lg w-fit mx-auto sm:mx-0 border border-slate-200">{selectedTeacher.subject}</p>
+                    </div>
+                    <div className="flex flex-row sm:flex-col gap-4 text-center">
+                       <div className="bg-indigo-50 px-6 py-3 rounded-2xl border border-indigo-100">
+                          <p className="text-[10px] font-black text-indigo-500 uppercase">إجمالي الأصوات</p>
+                          <p className="text-2xl font-black text-indigo-700">{selectedTeacher.total_evals}</p>
+                       </div>
+                       <div className="bg-amber-50 px-6 py-3 rounded-2xl border border-amber-100">
+                          <p className="text-[10px] font-black text-amber-600 uppercase">المتوسط العام</p>
+                          <p className="text-2xl font-black text-amber-600 flex items-center justify-center gap-1">{selectedTeacher.overall_avg.toFixed(2)} <Star className="w-4 h-4 fill-amber-500"/></p>
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* 2. شبكة التحليل (Charts & Progress) */}
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    
+                    {/* الرادار الخاص بالمعلم */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+                       <h3 className="text-sm font-black text-slate-800 mb-2 flex items-center gap-2"><Activity className="w-4 h-4 text-indigo-500"/> البصمة الأكاديمية (رادار الأداء)</h3>
+                       <div className="flex-1 min-h-[250px]" dir="ltr">
+                          <ResponsiveContainer width="100%" height="100%">
+                             <RadarChart cx="50%" cy="50%" outerRadius="70%" data={selectedTeacher.dynamic_avgs}>
+                               <PolarGrid stroke="#e2e8f0" />
+                               <PolarAngleAxis dataKey="subject" tick={{fill: '#475569', fontSize: 10, fontWeight: 'bold'}} />
+                               <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                               <Radar name="أداء المعلم" dataKey="A" stroke="#10b981" fill="#34d399" fillOpacity={0.4} />
+                             </RadarChart>
+                          </ResponsiveContainer>
+                       </div>
+                    </div>
+
+                    {/* تفصيل البنود الديناميكية */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                       <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2"><BarChart2 className="w-4 h-4 text-indigo-500"/> تفصيل المحاور</h3>
+                       <div className="space-y-6">
+                          {selectedTeacher.dynamic_avgs.map((item: any, idx: number) => {
+                             const percentage = (item.A / 5) * 100;
+                             const color = percentage >= 80 ? 'bg-emerald-500' : percentage >= 60 ? 'bg-amber-500' : 'bg-rose-500';
+                             return (
+                               <div key={idx}>
+                                  <div className="flex justify-between items-center mb-2 text-[10px] font-bold text-slate-500">
+                                     <span className="truncate w-48 text-slate-700">{item.subject}</span>
+                                     <span className="font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{item.A.toFixed(1)} / 5</span>
+                                  </div>
+                                  <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200 shadow-inner">
+                                     <div className={cn("h-full rounded-full transition-all duration-1000", color)} style={{ width: `${percentage}%` }}></div>
+                                  </div>
+                               </div>
+                             );
+                          })}
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* 3. صندوق التعليقات */}
+                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                    <h3 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2"><MessageSquare className="w-4 h-4 text-indigo-500"/> الرسائل والملاحظات المكتوبة ({selectedTeacher.feedbacks.length})</h3>
+                    {selectedTeacher.feedbacks.length > 0 ? (
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {selectedTeacher.feedbacks.map((fb: any, i: number) => (
+                             <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 relative shadow-sm hover:shadow-md transition-shadow">
+                                <p className="text-sm font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">"{fb.text}"</p>
+                                <div className="mt-4 pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase">
+                                   <span className="bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm truncate max-w-[150px]">{fb.student} ({fb.class})</span>
+                                   <span dir="ltr">{format(new Date(fb.date), 'dd/MM/yyyy')}</span>
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    ) : (
+                       <div className="text-center py-8 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+                          <p className="text-xs font-bold text-slate-400">لم يكتب الطلاب أي تعليقات أو رسائل إضافية لهذا المعلم.</p>
+                       </div>
+                    )}
+                 </div>
+
               </div>
            </div>
         </div>
