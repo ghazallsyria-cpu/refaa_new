@@ -1,8 +1,8 @@
 /**
  * ============================================================================
- * @file        hooks/useExamSeating.ts
- * @version     3.1.0 (TypeScript Strict Type Fix)
- * @description محرك التوزيع وبناء اللجان مع الهدم الآمن (Cascading Delete).
+ * @file      hooks/useExamSeating.ts
+ * @version   4.0.0 (Triple Zipper - Scientific & Literary Separation)
+ * @description محرك التوزيع وبناء اللجان مع الهدم الآمن والتوزيع الثلاثي الأبعاد
  * ============================================================================
  */
 
@@ -15,7 +15,7 @@ export function useExamSeating() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
 
-  // 🚀 1. بناء اللجان الديناميكي (بناءً على طلب المدير)
+  // 1. بناء اللجان الديناميكي
   const buildCommittees = useCallback(async (academicYear: string, semester: string, count: number, capacity: number) => {
     setIsLoading(true);
     setProgressMsg('جاري صب القواعد وبناء اللجان...');
@@ -31,7 +31,6 @@ export function useExamSeating() {
       if (error) throw error;
       return true;
     } catch (error: any) {
-      console.error(error);
       alert('خطأ في البناء: ' + error.message);
       return false;
     } finally {
@@ -40,12 +39,11 @@ export function useExamSeating() {
     }
   }, []);
 
-  // 🚀 2. الهدم الشامل الآمن (Cascading Delete)
+  // 2. الهدم الشامل الآمن
   const nukeEverything = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     setProgressMsg('بدء بروتوكول الهدم الشامل...');
     try {
-      // 1. جلب اللجان الحالية
       const { data: comms } = await supabase.from('exam_committees').select('id').eq('academic_year', academicYear).eq('semester', semester);
       if (!comms || comms.length === 0) return true;
       const commIds = comms.map(c => c.id);
@@ -70,7 +68,6 @@ export function useExamSeating() {
 
       return true;
     } catch (error: any) {
-      console.error(error);
       alert('فشل الهدم لوجود ارتباطات قوية: ' + error.message);
       return false;
     } finally {
@@ -79,7 +76,7 @@ export function useExamSeating() {
     }
   }, []);
 
-  // 🚀 3. السحّاب الأبجدي للتوزيع
+  // 🚀 3. السحّاب الثلاثي (عاشر - علمي - أدبي)
   const generateSeatingAndDistribute = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     try {
@@ -96,33 +93,56 @@ export function useExamSeating() {
         return numA - numB;
       });
 
-      setProgressMsg('جاري سحب بيانات العاشر والحادي عشر...');
-      const { data: studentsData } = await supabase.from('students').select(`id, users!inner(full_name), sections!inner(classes!inner(level))`);
-      let grade10: any[] = []; let grade11: any[] = [];
+      setProgressMsg('جاري سحب وتصنيف بيانات الطلاب...');
+      // 🚀 جلب المسار (علمي/أدبي) لمعرفة نوع الطالب
+      const { data: studentsData } = await supabase.from('students').select(`id, next_year_track, users!inner(full_name), sections!inner(classes!inner(name, level))`);
+      
+      let grade10: any[] = []; 
+      let grade11_sci: any[] = []; 
+      let grade11_lit: any[] = [];
 
       (studentsData || []).forEach((s: any) => {
         const level = s.sections?.classes?.level;
+        const className = s.sections?.classes?.name || '';
+        const track = s.next_year_track || ''; 
         const obj = { id: s.id, fullName: s.users?.full_name || '' };
-        if (level === 10) grade10.push(obj);
-        else if (level === 11) grade11.push(obj);
+
+        if (level === 10) {
+            grade10.push(obj);
+        } else if (level === 11) {
+            // تصنيف الذكاء الاصطناعي: الاعتماد على المسار أو اسم الفصل
+            if (track === 'literary' || className.includes('أدبي')) {
+                grade11_lit.push(obj);
+            } else {
+                grade11_sci.push(obj);
+            }
+        }
       });
 
       setProgressMsg('التطهير والفرز الأبجدي...');
       const clean = (name: string) => name.replace(/^[\s\.\-\_]+/, '').replace(/[أإآ]/g, 'ا').trim();
       const sortAr = (a: any, b: any) => clean(a.fullName).localeCompare(clean(b.fullName), 'ar');
-      grade10.sort(sortAr); grade11.sort(sortAr);
+      
+      grade10.sort(sortAr); 
+      grade11_sci.sort(sortAr); 
+      grade11_lit.sort(sortAr);
 
+      // 🚀 ترقيم الجلوس الذكي لمنع التلخبط
       grade10 = grade10.map((s, idx) => ({ ...s, seatNumber: `10${String(idx + 1).padStart(3, '0')}` }));
-      grade11 = grade11.map((s, idx) => ({ ...s, seatNumber: `11${String(idx + 1).padStart(3, '0')}` }));
+      grade11_sci = grade11_sci.map((s, idx) => ({ ...s, seatNumber: `111${String(idx + 1).padStart(3, '0')}` })); // 111 = علمي
+      grade11_lit = grade11_lit.map((s, idx) => ({ ...s, seatNumber: `112${String(idx + 1).padStart(3, '0')}` })); // 112 = أدبي
 
+      // 🚀 السحّاب الثلاثي (مهم جداً للكنترول)
       const zipped: any[] = [];
-      const max = Math.max(grade10.length, grade11.length);
+      const max = Math.max(grade10.length, grade11_sci.length, grade11_lit.length);
+      
       for (let i = 0; i < max; i++) {
         if (i < grade10.length) zipped.push(grade10[i]);
-        if (i < grade11.length) zipped.push(grade11[i]);
+        if (i < grade11_sci.length) zipped.push(grade11_sci[i]);
+        if (i < grade11_lit.length) zipped.push(grade11_lit[i]);
       }
 
-      setProgressMsg('جاري التوزيع بالتبادل...');
+      setProgressMsg('جاري التوزيع والتسكين في اللجان...');
       const allocations: any[] = [];
       let pointer = 0;
 
@@ -136,10 +156,9 @@ export function useExamSeating() {
       }
 
       if (pointer < zipped.length) {
-        setProgressMsg('إنشاء لجنة الفائض...');
+        setProgressMsg('إنشاء لجنة الفائض (للاحتياط)...');
         let overflow = committees.find(c => c.name.includes('الفائض'));
         if (!overflow) {
-          // 🚀 الحل: إضافة name و capacity في أمر الـ select
           const { data: newO, error: err } = await supabase.from('exam_committees')
             .insert({ name: 'لجنة الفائض (للتوزيع اليدوي)', capacity: zipped.length - pointer, academic_year: academicYear, semester: semester, location: 'الانتظار' })
             .select('id, name, capacity').single();
