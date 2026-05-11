@@ -22,6 +22,8 @@ import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog';
+import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
+
 
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
