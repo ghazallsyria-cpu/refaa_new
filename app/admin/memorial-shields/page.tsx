@@ -6,6 +6,7 @@ import { Award, Search, CheckCircle2, Shield, Loader2, UserCircle, GraduationCap
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils'; // 🚀 هذا هو السطر الذي نسيناه وتسبب في الانهيار!
 
 export default function MemorialShieldsMaker() {
   const { authRole, userRole } = useAuth() as any;
