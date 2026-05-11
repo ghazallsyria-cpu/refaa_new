@@ -1,8 +1,8 @@
 /**
  * ============================================================================
  * @file      hooks/useExamSeating.ts
- * @version   4.0.0 (Triple Zipper - Scientific & Literary Separation)
- * @description محرك التوزيع وبناء اللجان مع الهدم الآمن والتوزيع الثلاثي الأبعاد
+ * @version   5.0.0 (Smart Load Balancing & Chunked Triple Zipper)
+ * @description محرك التوزيع المتوازن (توزيع عادل للأدبي والعلمي على جميع اللجان)
  * ============================================================================
  */
 
@@ -11,11 +11,27 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
+// 🚀 دالة التقسيم العادل رياضياً (لضمان توزيع الـ 19 طالب على 3 لجان بالتساوي 7, 6, 6)
+const distributeEvenly = (array: any[], numChunks: number) => {
+  const chunks = [];
+  const baseSize = Math.floor(array.length / numChunks);
+  let remainder = array.length % numChunks;
+  let offset = 0;
+
+  for (let i = 0; i < numChunks; i++) {
+    const chunkSize = baseSize + (remainder > 0 ? 1 : 0);
+    chunks.push(array.slice(offset, offset + chunkSize));
+    offset += chunkSize;
+    if (remainder > 0) remainder--;
+  }
+  return chunks;
+};
+
 export function useExamSeating() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
 
-  // 1. بناء اللجان الديناميكي
+  // 1. بناء اللجان
   const buildCommittees = useCallback(async (academicYear: string, semester: string, count: number, capacity: number) => {
     setIsLoading(true);
     setProgressMsg('جاري صب القواعد وبناء اللجان...');
@@ -76,7 +92,7 @@ export function useExamSeating() {
     }
   }, []);
 
-  // 🚀 3. السحّاب الثلاثي (عاشر - علمي - أدبي)
+  // 🚀 3. السحّاب المُقسم المتوازن (The Balanced Zipper)
   const generateSeatingAndDistribute = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     try {
@@ -87,14 +103,16 @@ export function useExamSeating() {
 
       if (commError || !fetchedCommittees || fetchedCommittees.length === 0) throw new Error('لا يوجد لجان!');
 
-      const committees = fetchedCommittees.sort((a, b) => {
+      // فرز اللجان الأساسية واستبعاد لجنة الفائض للحسابات الرياضية
+      const regularComms = fetchedCommittees.filter(c => !c.name.includes('الفائض')).sort((a, b) => {
         const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
         return numA - numB;
       });
 
+      if (regularComms.length === 0) throw new Error('يرجى بناء لجان أساسية أولاً!');
+
       setProgressMsg('جاري سحب وتصنيف بيانات الطلاب...');
-      // 🚀 جلب المسار (علمي/أدبي) لمعرفة نوع الطالب
       const { data: studentsData } = await supabase.from('students').select(`id, next_year_track, users!inner(full_name), sections!inner(classes!inner(name, level))`);
       
       let grade10: any[] = []; 
@@ -110,16 +128,12 @@ export function useExamSeating() {
         if (level === 10) {
             grade10.push(obj);
         } else if (level === 11) {
-            // تصنيف الذكاء الاصطناعي: الاعتماد على المسار أو اسم الفصل
-            if (track === 'literary' || className.includes('أدبي')) {
-                grade11_lit.push(obj);
-            } else {
-                grade11_sci.push(obj);
-            }
+            if (track === 'literary' || className.includes('أدبي')) grade11_lit.push(obj);
+            else grade11_sci.push(obj);
         }
       });
 
-      setProgressMsg('التطهير والفرز الأبجدي...');
+      setProgressMsg('الفرز الأبجدي وإصدار أرقام الجلوس...');
       const clean = (name: string) => name.replace(/^[\s\.\-\_]+/, '').replace(/[أإآ]/g, 'ا').trim();
       const sortAr = (a: any, b: any) => clean(a.fullName).localeCompare(clean(b.fullName), 'ar');
       
@@ -127,50 +141,69 @@ export function useExamSeating() {
       grade11_sci.sort(sortAr); 
       grade11_lit.sort(sortAr);
 
-      // 🚀 ترقيم الجلوس الذكي لمنع التلخبط
+      // الترقيم الجميل
       grade10 = grade10.map((s, idx) => ({ ...s, seatNumber: `10${String(idx + 1).padStart(3, '0')}` }));
-      grade11_sci = grade11_sci.map((s, idx) => ({ ...s, seatNumber: `111${String(idx + 1).padStart(3, '0')}` })); // 111 = علمي
-      grade11_lit = grade11_lit.map((s, idx) => ({ ...s, seatNumber: `112${String(idx + 1).padStart(3, '0')}` })); // 112 = أدبي
+      grade11_sci = grade11_sci.map((s, idx) => ({ ...s, seatNumber: `111${String(idx + 1).padStart(3, '0')}` }));
+      grade11_lit = grade11_lit.map((s, idx) => ({ ...s, seatNumber: `112${String(idx + 1).padStart(3, '0')}` }));
 
-      // 🚀 السحّاب الثلاثي (مهم جداً للكنترول)
-      const zipped: any[] = [];
-      const max = Math.max(grade10.length, grade11_sci.length, grade11_lit.length);
-      
-      for (let i = 0; i < max; i++) {
-        if (i < grade10.length) zipped.push(grade10[i]);
-        if (i < grade11_sci.length) zipped.push(grade11_sci[i]);
-        if (i < grade11_lit.length) zipped.push(grade11_lit[i]);
-      }
+      setProgressMsg('التقسيم العادل على اللجان (Load Balancing)...');
+      // 🚀 هنا السحر: نقسم كل مرحلة إلى حصص متساوية بعدد اللجان!
+      const chunks10 = distributeEvenly(grade10, regularComms.length);
+      const chunks11Sci = distributeEvenly(grade11_sci, regularComms.length);
+      const chunks11Lit = distributeEvenly(grade11_lit, regularComms.length);
 
-      setProgressMsg('جاري التوزيع والتسكين في اللجان...');
       const allocations: any[] = [];
-      let pointer = 0;
+      const overflowQueue: any[] = [];
 
-      for (const comm of committees) {
-        if (comm.name.includes('الفائض')) continue;
-        let c = 0;
-        while (c < comm.capacity && pointer < zipped.length) {
-          allocations.push({ student_id: zipped[pointer].id, committee_id: comm.id, seat_number: zipped[pointer].seatNumber, academic_year: academicYear, semester: semester });
-          c++; pointer++;
-        }
+      setProgressMsg('ترصيص اللجان بالسحّاب المتداخل...');
+      
+      // نمر على كل لجنة ونعطيها حصتها من كل قسم
+      for (let i = 0; i < regularComms.length; i++) {
+         const comm = regularComms[i];
+         const c10 = chunks10[i] || [];
+         const c11S = chunks11Sci[i] || [];
+         const c11L = chunks11Lit[i] || [];
+
+         let p10 = 0, p11S = 0, p11L = 0;
+         const committeeZipped = [];
+
+         // 🚀 السحّاب الثلاثي (عاشر -> 11 أدبي -> 11 علمي) لمنع الغش تماماً
+         while (p10 < c10.length || p11S < c11S.length || p11L < c11L.length) {
+            if (p10 < c10.length) committeeZipped.push(c10[p10++]);
+            if (p11L < c11L.length) committeeZipped.push(c11L[p11L++]);
+            if (p11S < c11S.length) committeeZipped.push(c11S[p11S++]);
+         }
+
+         // التحقق من سعة اللجنة
+         let seatsFilled = 0;
+         for (const student of committeeZipped) {
+            if (seatsFilled < comm.capacity) {
+               allocations.push({ student_id: student.id, committee_id: comm.id, seat_number: student.seatNumber, academic_year: academicYear, semester: semester });
+               seatsFilled++;
+            } else {
+               // إذا زاد العدد عن السعة، يذهبون لقائمة الانتظار (الفائض)
+               overflowQueue.push(student);
+            }
+         }
       }
 
-      if (pointer < zipped.length) {
-        setProgressMsg('إنشاء لجنة الفائض (للاحتياط)...');
-        let overflow = committees.find(c => c.name.includes('الفائض'));
-        if (!overflow) {
+      // معالجة الفائض (إن وُجد)
+      if (overflowQueue.length > 0) {
+        setProgressMsg('إنشاء لجنة الفائض للاحتياط...');
+        let overflowComm = fetchedCommittees.find(c => c.name.includes('الفائض'));
+        if (!overflowComm) {
           const { data: newO, error: err } = await supabase.from('exam_committees')
-            .insert({ name: 'لجنة الفائض (للتوزيع اليدوي)', capacity: zipped.length - pointer, academic_year: academicYear, semester: semester, location: 'الانتظار' })
+            .insert({ name: 'لجنة الفائض (للتوزيع اليدوي)', capacity: overflowQueue.length, academic_year: academicYear, semester: semester, location: 'الانتظار' })
             .select('id, name, capacity').single();
           if (err) throw err;
-          overflow = newO;
+          overflowComm = newO;
         }
-        while (pointer < zipped.length) {
-          allocations.push({ student_id: zipped[pointer].id, committee_id: overflow.id, seat_number: zipped[pointer].seatNumber, academic_year: academicYear, semester: semester });
-          pointer++;
+        for (const student of overflowQueue) {
+          allocations.push({ student_id: student.id, committee_id: overflowComm.id, seat_number: student.seatNumber, academic_year: academicYear, semester: semester });
         }
       }
 
+      setProgressMsg('اعتماد التوزيع في قاعدة البيانات...');
       await supabase.from('student_seat_allocations').delete().eq('academic_year', academicYear).eq('semester', semester);
       
       const chunkSize = 100;
