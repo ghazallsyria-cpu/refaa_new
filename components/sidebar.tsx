@@ -17,7 +17,7 @@ import {
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
   AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target, Wand2, MonitorUp,
   ShieldCheck, FileKey, ScanLine, FileSignature, UserSearch,
-  CreditCard, ClipboardList, Globe, ScrollText, ChevronDown, Star // 🚀 تم استيراد أيقونة النجمة هنا
+  CreditCard, ClipboardList, Globe, ScrollText, ChevronDown, Star, Shield // 🚀 تم استيراد أيقونة Shield هنا
 } from 'lucide-react';
 
 // 🚀 الهيكلة الجديدة: تجميع القوائم في مجلدات ذكية (Smart Workspaces)
@@ -53,7 +53,7 @@ const navigationGroups = [
       { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
       { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
       { name: 'تقييم المعلمين (الإدارة)', href: '/admin/evaluations', icon: Activity },
-      { name: 'تقييم الطلاب للمُعلمين', href: '/admin/student-evaluations', icon: Star }, // 🚀 الرابط الجديد
+      { name: 'تقييم الطلاب للمُعلمين', href: '/admin/student-evaluations', icon: Star },
       { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
     ]
   },
@@ -125,6 +125,7 @@ const navigationGroups = [
       { name: 'التقارير', href: '/reports', icon: BarChart3 },
       { name: 'سجل الأداء', href: '/student/performance', icon: Award },
       { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
+      { name: 'مصنع الدروع', href: '/admin/memorial-shields', icon: Shield }, // 🚀 الرابط الجديد للدروع التذكارية
       { name: 'المستندات', href: '/documents', icon: FolderOpen },
       { name: 'استيراد البيانات', href: '/seed', icon: Database },
       { name: 'تقرير التدقيق', href: '/report', icon: FileText },
@@ -169,8 +170,8 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'الرئيسية (الحرم الرقمي)') return true;
     if (item.name === 'إدارة الحرم الرقمي') return (authRole === 'admin' || authRole === 'management');
     
-    // 🚀 إضافة الرابط الجديد هنا ليراه الإداري فقط
-    if (['ملف الإدارة', 'الفريق الإداري', 'استيراد البيانات', 'الإعدادات', 'مستكشف الطلاب 360', 'فريق الكنترول', 'كنترول اللجان', 'رادار الكنترول', 'مسار إنجاز الكنترول', 'جداول الاختبارات', 'نماذج الإجابات', 'تقرير غياب الاختبارات', 'وثائق التخرج', 'استوديو الهويات', 'العمليات المركزية', 'محرك الجدولة الذكي', 'الواجبات بالذكاء الاصطناعي', 'تقييم الطلاب للمُعلمين'].includes(item.name)) return (authRole === 'admin' || authRole === 'management');
+    // 🚀 إضافة 'مصنع الدروع' هنا ليراه الإداري فقط
+    if (['ملف الإدارة', 'الفريق الإداري', 'استيراد البيانات', 'الإعدادات', 'مستكشف الطلاب 360', 'فريق الكنترول', 'كنترول اللجان', 'رادار الكنترول', 'مسار إنجاز الكنترول', 'جداول الاختبارات', 'نماذج الإجابات', 'تقرير غياب الاختبارات', 'وثائق التخرج', 'استوديو الهويات', 'العمليات المركزية', 'محرك الجدولة الذكي', 'الواجبات بالذكاء الاصطناعي', 'تقييم الطلاب للمُعلمين', 'مصنع الدروع'].includes(item.name)) return (authRole === 'admin' || authRole === 'management');
     
     if (item.name === 'الغلاف الرقمي') return (authRole === 'admin' || authRole === 'management' || authRole === 'teacher');
     if (['سجل البوابة', 'رادار البوابة'].includes(item.name)) return (authRole === 'admin' || authRole === 'management' || authRole === 'staff');
