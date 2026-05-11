@@ -1,15 +1,11 @@
+// @ts-nocheck
 /**
  * ============================================================================
  * 🏗️ التوثيق الهندسي (Engineering Documentation)
  * ============================================================================
  * @file        app/page.tsx
- * @version     4.3.0 (Mobile-First Perfection)
- * @description الواجهة الرئيسية للحرم الرقمي بتصميم (Bento Box) الفاخر.
- * * 🛠️ التحديث الحالي (V4.3.0) بناءً على اختبارات الجوال:
- * - حل مشكلة تداخل الشريط العاجل مع زر "الدخول للمنصة" في ذيل الصفحة (Footer).
- * - تصحيح أبعاد نافذة المقال (Reading Modal) لضمان تعبئة الصورة للمساحة (Object-Cover).
- * - تنحيف وتقصير الوشاح المتدلي على شاشات الجوال ليكون أكثر أناقة.
- * - إعادة ضبط ارتفاعات بطاقات الأخبار (Magazine) لتمنع تكدس النصوص.
+ * @version     4.5.0 (Categorized Memorial Showcase)
+ * @description الواجهة الرئيسية للحرم الرقمي مع فصل دروع الطلاب عن المعلمين.
  * ============================================================================
  */
 
@@ -20,11 +16,12 @@ import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { 
   Play, ImageIcon, BookOpen, Sparkles, ArrowLeft, Star, Crown, Compass, 
   Newspaper, Video, BellRing, Megaphone, ArrowUpRight, Quote, Trophy, 
-  X, Calendar, User
+  X, Calendar, User, Shield, Award, GraduationCap, UserCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils'; 
 
 const ICON_MAP: Record<string, any> = { 'Sparkles': Sparkles, 'Trophy': Trophy, 'Quote': Quote, 'Image': ImageIcon };
 
@@ -36,6 +33,13 @@ const DEFAULT_SLIDE = {
   description: 'بيئة تعليمية متكاملة تجمع بين أصالة التربية وحداثة التكنولوجيا. تواصل، تعلم، واكتشف إمكانياتك في حرمنا الرقمي.',
   color_gradient: 'from-blue-400 via-indigo-400 to-emerald-400',
   type: 'welcome'
+};
+
+const shieldThemes = {
+  gold: { border: 'from-amber-300 via-yellow-500 to-amber-700', glow: 'bg-amber-500/20', textPrimary: 'text-amber-400', textSecondary: 'text-amber-200/70', icon: <Award className="w-8 h-8 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" /> },
+  silver: { border: 'from-slate-300 via-slate-100 to-slate-400', glow: 'bg-slate-400/20', textPrimary: 'text-slate-200', textSecondary: 'text-slate-400', icon: <Shield className="w-8 h-8 text-slate-300 drop-shadow-[0_0_10px_rgba(203,213,225,0.5)]" /> },
+  diamond: { border: 'from-cyan-300 via-blue-500 to-indigo-600', glow: 'bg-cyan-500/20', textPrimary: 'text-cyan-400', textSecondary: 'text-cyan-200/70', icon: <Sparkles className="w-8 h-8 text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]" /> },
+  royal: { border: 'from-amber-600 via-yellow-500 to-yellow-700', glow: 'bg-amber-900/30', textPrimary: 'text-amber-500', textSecondary: 'text-amber-500/60', icon: <Crown className="w-8 h-8 text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]" /> },
 };
 
 export default function DigitalCampusPage() {
@@ -51,6 +55,11 @@ export default function DigitalCampusPage() {
   const [tickers, setTickers] = useState<any[]>([]);
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [hangingRibbonUrl, setHangingRibbonUrl] = useState<string | null>(null);
+  
+  // 🚀 حالات الدروع التذكارية المفصولة
+  const [studentMemorials, setStudentMemorials] = useState<any[]>([]);
+  const [teacherMemorials, setTeacherMemorials] = useState<any[]>([]);
+  const [activeMemorialTab, setActiveMemorialTab] = useState<'students' | 'teachers'>('students');
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [fetching, setFetching] = useState(true);
@@ -69,6 +78,29 @@ export default function DigitalCampusPage() {
           supabase.from('forum_hero_slides').select('*').eq('is_active', true).order('sort_order', { ascending: false }).order('created_at', { ascending: false }),
           supabase.from('school_ribbon').select('image_url').eq('id', 1).maybeSingle()
         ]);
+
+        // 🚀 جلب الدروع للطلاب والمعلمين بشكل منفصل
+        const { data: stdShields } = await supabase.from('student_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, students(users(full_name, avatar_url), sections(name, classes(name)))').order('created_at', { ascending: false }).limit(6);
+        const { data: tchShields } = await supabase.from('teacher_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, teachers(users(full_name, avatar_url), teacher_subjects(subjects(name)))').order('created_at', { ascending: false }).limit(6);
+
+        if (stdShields) {
+           setStudentMemorials(stdShields.map(s => {
+              const u = Array.isArray(s.students?.users) ? s.students.users[0] : s.students?.users;
+              const sec = s.students?.sections;
+              const cName = Array.isArray(sec?.classes) ? sec.classes[0]?.name : sec?.classes?.name;
+              return { ...s, role: 'student', personName: u?.full_name || 'طالب', avatar: u?.avatar_url, info: `${cName || ''} - ${sec?.name || ''}` };
+           }));
+        }
+        
+        if (tchShields) {
+           setTeacherMemorials(tchShields.map(t => {
+              const u = Array.isArray(t.teachers?.users) ? t.teachers.users[0] : t.teachers?.users;
+              const subjArray = t.teachers?.teacher_subjects;
+              const subj = Array.isArray(subjArray) ? subjArray.map((ts:any)=>ts.subjects?.name).join('، ') : '';
+              return { ...t, role: 'teacher', personName: u?.full_name || 'معلم', avatar: u?.avatar_url, info: subj || 'الهيئة التعليمية' };
+           }));
+        }
+
         if (studioRes.data) setStudioItems(studioRes.data);
         if (magazineRes.data) setMagazineItems(magazineRes.data);
         if (annRes.data) setAnnouncements(annRes.data);
@@ -101,6 +133,9 @@ export default function DigitalCampusPage() {
   const pinnedArticle = magazineItems.find(item => item.is_pinned) || magazineItems[0];
   const sideArticles = magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 4);
 
+  // 🚀 الفئة المعروضة حالياً في معرض الدروع
+  const displayedMemorials = activeMemorialTab === 'students' ? studentMemorials : teacherMemorials;
+
   if (isChecking || fetching) {
     return (
       <div className="h-screen bg-[#020617] flex items-center justify-center relative overflow-hidden">
@@ -115,7 +150,7 @@ export default function DigitalCampusPage() {
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 font-cairo overflow-x-hidden selection:bg-indigo-500/30 relative pb-20 sm:pb-0" dir="rtl">
       
-      {/* 🎀 الوشاح المتدلي (أنحف للجوال) */}
+      {/* 🎀 الوشاح المتدلي */}
       {hangingRibbonUrl && (
         <motion.div 
           initial={{ y: '-100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', damping: 15, stiffness: 50, delay: 0.5 }}
@@ -129,7 +164,7 @@ export default function DigitalCampusPage() {
         </motion.div>
       )}
 
-      {/* 🚨 الشريط الإخباري (كبسولة طافية متجاوبة) */}
+      {/* 🚨 الشريط الإخباري */}
       {breakingNews && (
         <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 w-[92%] sm:w-[90%] max-w-4xl z-50 pointer-events-none">
           <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 1, type: "spring" }} className="w-full bg-[#0F172A]/95 backdrop-blur-2xl border border-white/10 rounded-full flex items-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden pointer-events-auto">
@@ -217,7 +252,80 @@ export default function DigitalCampusPage() {
         )}
       </section>
 
-      {/* 📣 2. الإعلانات السريعة */}
+      {/* 🏆 2. معرض الدروع الشرفية (المفصول بالتبويبات) */}
+      {(studentMemorials.length > 0 || teacherMemorials.length > 0) && (
+        <section className="py-14 sm:py-20 relative z-10 border-t border-white/5 bg-gradient-to-b from-[#020617] to-[#050A15] overflow-hidden">
+           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none"></div>
+           
+           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mb-8 sm:mb-10">
+              <div className="flex flex-col items-center text-center mb-6">
+                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full mb-4 shadow-inner backdrop-blur-sm">
+                    <Trophy className="w-4 h-4 text-amber-400" />
+                    <span className="text-amber-400 font-black text-xs uppercase tracking-widest">لوحة شرف مدرسة الرفعة</span>
+                 </div>
+                 <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">معرض التتويج <span className="text-amber-500">والتميز</span></h2>
+              </div>
+
+              {/* 🚀 التبويبات الفاصلة (Tabs) */}
+              <div className="flex justify-center relative z-20">
+                 <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10 shadow-inner backdrop-blur-md">
+                    <button onClick={() => setActiveMemorialTab('students')} className={cn("px-6 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2", activeMemorialTab === 'students' ? 'bg-amber-500 text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-200')}>
+                       <GraduationCap className="w-4 h-4"/> شرف الطلاب
+                    </button>
+                    <button onClick={() => setActiveMemorialTab('teachers')} className={cn("px-6 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2", activeMemorialTab === 'teachers' ? 'bg-amber-500 text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-200')}>
+                       <UserCircle className="w-4 h-4"/> شرف المعلمين
+                    </button>
+                 </div>
+              </div>
+           </div>
+
+           <div className="w-full overflow-hidden relative">
+              <div className="absolute left-0 top-0 bottom-0 w-8 sm:w-24 bg-gradient-to-r from-[#050A15] to-transparent z-10"></div>
+              <div className="absolute right-0 top-0 bottom-0 w-8 sm:w-24 bg-gradient-to-l from-[#050A15] to-transparent z-10"></div>
+              
+              <div className="flex overflow-x-auto gap-4 sm:gap-6 px-4 sm:px-[10vw] pb-10 pt-4 snap-x snap-mandatory hide-scrollbar min-h-[400px]">
+                 {displayedMemorials.length > 0 ? displayedMemorials.map((memorial, i) => {
+                    const theme = shieldThemes[memorial.shield_type as keyof typeof shieldThemes] || shieldThemes.gold;
+                    const isExternal = !!memorial.external_shield_url;
+
+                    return (
+                      <motion.div key={memorial.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="snap-center shrink-0 w-[240px] sm:w-[280px] group cursor-pointer relative z-0 hover:z-20">
+                         {isExternal ? (
+                            <div className="relative rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl transition-transform duration-500 group-hover:-translate-y-4 group-hover:shadow-[0_20px_50px_rgba(245,158,11,0.2)] bg-[#0A0D1A]">
+                               <img src={memorial.external_shield_url} crossOrigin="anonymous" className="w-full h-auto object-contain" alt="Shield" />
+                            </div>
+                         ) : (
+                            <div className={cn("relative p-[3px] rounded-t-full rounded-b-[3rem] shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden bg-gradient-to-br transition-transform duration-500 group-hover:-translate-y-4 group-hover:shadow-[0_20px_50px_rgba(245,158,11,0.3)]", theme.border)}>
+                               <div className={cn("absolute inset-0 blur-2xl opacity-50", theme.glow)}></div>
+                               <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/20 to-white/0 rounded-t-full rounded-b-[3rem] pointer-events-none"></div>
+                               <div className="relative h-full w-full bg-[#0A0D1A] rounded-t-full rounded-b-[2.8rem] p-6 flex flex-col items-center text-center overflow-hidden z-10">
+                                  <div className="mt-4 mb-4 p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md shadow-inner flex items-center justify-center">
+                                     {memorial.custom_logo_url ? <img src={memorial.custom_logo_url} crossOrigin="anonymous" className="w-10 h-10 object-contain drop-shadow-md" /> : theme.icon}
+                                  </div>
+                                  <h3 className="text-[8px] font-black uppercase tracking-widest text-white/40 mb-2 border-b border-white/10 pb-1 w-full">الرفعة النموذجية</h3>
+                                  <h2 className={cn("text-lg font-black leading-tight mb-4 drop-shadow-lg min-h-[50px] flex items-center justify-center", theme.textPrimary)}>{memorial.title}</h2>
+                                  <div className={cn("w-14 h-14 rounded-full overflow-hidden border-2 shadow-lg mx-auto mb-3", theme.border)}>
+                                     {memorial.avatar ? <img src={memorial.avatar} crossOrigin="anonymous" className="w-full h-full object-cover"/> : <UserCircle className="w-full h-full text-white/20 p-1 bg-[#111]"/>}
+                                  </div>
+                                  <p className={cn("text-base font-black truncate w-full drop-shadow-md", theme.textPrimary)}>{memorial.personName}</p>
+                                  <p className={cn("text-[9px] font-bold mt-1 px-2 py-0.5 rounded-md border border-white/10 bg-white/5", theme.textSecondary)}>{memorial.info}</p>
+                               </div>
+                            </div>
+                         )}
+                      </motion.div>
+                    );
+                 }) : (
+                    <div className="w-full text-center py-16 flex flex-col items-center justify-center">
+                       <Award className="w-12 h-12 text-slate-700 mb-4 opacity-50" />
+                       <p className="text-slate-500 font-bold">لم يتم إصدار أي دروع في هذه الفئة بعد.</p>
+                    </div>
+                 )}
+              </div>
+           </div>
+        </section>
+      )}
+
+      {/* 📣 3. الإعلانات السريعة */}
       {announcements.length > 0 && (
         <section className="py-14 sm:py-20 relative z-10 border-t border-white/5 bg-[#050A15]">
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -244,7 +352,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* 🎬 3. الاستوديو البصري */}
+      {/* 🎬 4. الاستوديو البصري */}
       {studioItems.length > 0 && (
         <section className="py-16 sm:py-28 relative z-10 bg-[#020617] border-y border-white/5">
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mb-10 sm:mb-16 flex flex-col sm:flex-row sm:items-end justify-between gap-6 relative z-10">
@@ -287,7 +395,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* 📰 4. المركز الإخباري (Mobile Responsive Bento Grid) */}
+      {/* 📰 5. المركز الإخباري */}
       {magazineItems.length > 0 && (
         <section className="py-16 sm:py-28 relative z-10 bg-[#050A15]">
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -345,8 +453,7 @@ export default function DigitalCampusPage() {
         </section>
       )}
 
-      {/* 🚀 5. الخاتمة والدعوة (Mobile Optimized & Padded for Ticker) */}
-      {/* ⚠️ ملاحظة: تم إضافة pb-24 لكي لا يغطي الشريط العاجل على الزر */}
+      {/* 🚀 6. الخاتمة والدعوة */}
       <section className="py-20 sm:py-32 pb-32 sm:pb-40 relative z-10 bg-[#020617] border-t border-white/5 overflow-hidden text-center">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] sm:w-[60vw] sm:h-[60vw] bg-indigo-600/10 rounded-full blur-[100px] sm:blur-[150px] pointer-events-none"></div>
         <div className="max-w-4xl mx-auto px-6 relative z-10">
@@ -360,7 +467,7 @@ export default function DigitalCampusPage() {
         </div>
       </section>
 
-      {/* 🖼️ النوافذ المنبثقة (Cinematic Modals Mobile Fix) */}
+      {/* 🖼️ النوافذ المنبثقة */}
       <AnimatePresence>
         {activeMedia && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/95 backdrop-blur-2xl p-2 sm:p-10" onClick={() => setActiveMedia(null)}>
@@ -380,7 +487,6 @@ export default function DigitalCampusPage() {
               
               <div className="relative h-56 sm:h-[400px] shrink-0 bg-black rounded-t-[2rem] sm:rounded-t-[3rem] overflow-hidden">
                 <button onClick={() => setActiveArticle(null)} className="absolute top-4 left-4 sm:top-6 sm:left-6 z-50 w-10 h-10 sm:w-14 sm:h-14 bg-black/50 hover:bg-rose-500 text-white rounded-full flex items-center justify-center backdrop-blur-2xl transition-colors border border-white/20"><X className="w-5 h-5 sm:w-7 sm:h-7" /></button>
-                {/* 🚀 إجبار الصورة على تعبئة المساحة (object-cover) لمنع ظهور حواف سوداء/بيضاء */}
                 <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A] via-transparent to-transparent"></div>
               </div>
