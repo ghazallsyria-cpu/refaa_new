@@ -81,7 +81,7 @@ export default function MemorialShieldDisplay({ userId, role }: { userId: string
       // 🚀 إذا كانت هذه أول مرة، أطلق الاحتفال!
       if (!data.is_viewed) {
          setShowCelebration(true);
-         setTimeout(() => triggerFireworks(), 500); // إطلاق الألعاب النارية بعد نصف ثانية من ظهور الشاشة
+         setTimeout(() => triggerFireworks(), 500); // إطلاق الألعاب النارية بعد نصف ثانية
          await supabase.from(tableName).update({ is_viewed: true }).eq('id', data.id);
       }
     } catch (e) {
@@ -117,15 +117,18 @@ export default function MemorialShieldDisplay({ userId, role }: { userId: string
   const theme = shieldThemes[shieldData.shield_type as keyof typeof shieldThemes] || shieldThemes.gold;
   const isExternal = !!shieldData.external_shield_url;
 
+  // 🖼️ مكون عرض الدرع الفعلي (مقاوم للتشوه على شاشات الجوال)
   const ShieldRender = () => (
-    <div ref={shieldRef} className={cn("relative w-full max-w-[280px] aspect-[3/4] p-1 rounded-t-full rounded-b-[4rem] flex flex-col mx-auto shrink-0", !isExternal && `bg-gradient-to-br ${theme.border} shadow-[0_20px_50px_rgba(0,0,0,0.5)]`)}>
+    <div ref={shieldRef} className={cn("relative w-[260px] sm:w-[280px] min-h-[380px] sm:min-h-[420px] p-1.5 rounded-t-[140px] rounded-b-[3rem] flex flex-col mx-auto shrink-0", !isExternal && `bg-gradient-to-br ${theme.border} shadow-[0_20px_50px_rgba(0,0,0,0.5)]`)}>
        {isExternal ? (
-          <img src={shieldData.external_shield_url} crossOrigin="anonymous" alt="Shield" className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.8)]" />
+          <img src={shieldData.external_shield_url} crossOrigin="anonymous" alt="Shield" className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-t-[140px] rounded-b-[3rem]" />
        ) : (
           <>
-             <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/30 to-white/0 rounded-t-full rounded-b-[4rem] pointer-events-none"></div>
-             <div className={cn("relative rounded-t-[2.8rem] rounded-b-[3.8rem] h-full w-full p-6 sm:p-8 flex flex-col items-center text-center overflow-hidden border-2 border-white/5", theme.bgInner)}>
-                <div className="absolute top-0 inset-x-0 h-1/3 bg-gradient-to-b from-white/10 to-transparent pointer-events-none rounded-t-[2.8rem]"></div>
+             <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/30 to-white/0 rounded-t-[140px] rounded-b-[3rem] pointer-events-none"></div>
+             
+             {/* 🚀 الحل هنا: استخدام flex-1 مع إزالة h-full لمنع تمزق الحواف */}
+             <div className={cn("relative rounded-t-[134px] rounded-b-[2.7rem] flex-1 w-full p-5 sm:p-7 flex flex-col items-center text-center overflow-hidden border border-white/10", theme.bgInner)}>
+                <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-white/10 to-transparent pointer-events-none rounded-t-[134px]"></div>
                 
                 <div className="mt-2 mb-4 relative w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
                    <div className={cn("absolute inset-0 blur-2xl rounded-full", theme.glow)}></div>
@@ -134,22 +137,22 @@ export default function MemorialShieldDisplay({ userId, role }: { userId: string
                    </div>
                 </div>
                 
-                <h3 className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-white/40 mb-2 border-b border-white/10 pb-2 px-4 inline-block">مدرسة الرفعة النموذجية</h3>
-                <h2 className={cn("text-lg sm:text-2xl font-black leading-tight mb-4 drop-shadow-lg", theme.textPrimary)}>{shieldData.title}</h2>
+                <h3 className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-white/40 mb-2 border-b border-white/10 pb-2 px-4 inline-block shrink-0">مدرسة الرفعة النموذجية</h3>
+                <h2 className={cn("text-lg sm:text-2xl font-black leading-tight mb-4 drop-shadow-lg shrink-0", theme.textPrimary)}>{shieldData.title}</h2>
 
                 <div className={cn("w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-2 p-0.5 shadow-[0_0_20px_rgba(0,0,0,0.5)] mx-auto mb-3 shrink-0", theme.border)}>
                    <div className="w-full h-full rounded-full overflow-hidden bg-[#111]">
                       {userInfo.avatar ? <img src={userInfo.avatar} crossOrigin="anonymous" className="w-full h-full object-cover"/> : <UserCircle className="w-full h-full text-white/20 p-2"/>}
                    </div>
                 </div>
-                <p className={cn("text-base sm:text-xl font-black truncate w-full drop-shadow-md", theme.textPrimary)}>{userInfo.name}</p>
-                <p className={cn("text-[9px] sm:text-[11px] font-bold mt-1 px-3 py-0.5 sm:py-1 rounded-md border border-white/10 bg-white/5 inline-block", theme.textSecondary)}>{userInfo.info}</p>
+                <p className={cn("text-base sm:text-xl font-black truncate w-full drop-shadow-md shrink-0", theme.textPrimary)}>{userInfo.name}</p>
+                <p className={cn("text-[9px] sm:text-[11px] font-bold mt-1 px-3 py-0.5 sm:py-1 rounded-md border border-white/10 bg-white/5 inline-block shrink-0", theme.textSecondary)}>{userInfo.info}</p>
 
-                <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 w-full border-t border-white/10 relative z-10">
+                <div className="mt-4 sm:mt-5 pt-3 sm:pt-4 w-full border-t border-white/10 relative z-10 shrink-0">
                    <p className={cn("text-[10px] sm:text-xs font-bold leading-relaxed line-clamp-3", theme.textSecondary)}>{shieldData.message}</p>
                 </div>
                 
-                <div className="mt-auto w-full flex justify-end pb-2">
+                <div className="mt-auto pt-4 w-full flex justify-end shrink-0 pb-1">
                    <div className="text-left">
                       <p className="text-[7px] sm:text-[8px] text-white/30 font-bold mb-0.5">إدارة المدرسة</p>
                       <p className={cn("text-[9px] sm:text-[10px] font-black signature-font opacity-80", theme.textPrimary)}>أ. صالح مخلف المطيري</p>
@@ -222,7 +225,7 @@ export default function MemorialShieldDisplay({ userId, role }: { userId: string
               </button>
            </div>
 
-           <div className="relative z-10 w-full max-w-[220px] sm:max-w-[280px] shrink-0 mx-auto md:mx-0 flex justify-center">
+           <div className="relative z-10 w-full flex justify-center shrink-0 md:w-auto">
               <ShieldRender />
            </div>
         </motion.div>
