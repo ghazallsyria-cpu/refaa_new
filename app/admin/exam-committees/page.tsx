@@ -31,7 +31,7 @@ export default function ExamCommitteesControl() {
   const [timetables, setTimetables] = useState<any[]>([]);
   const [allHeads, setAllHeads] = useState<any[]>([]);
   
-  // 🚀 الإحصائيات المحدثة لتشمل العلمي والأدبي
+  // 🚀 الإحصائيات المحدثة
   const [studentStats, setStudentStats] = useState({ g10: 0, g11_sci: 0, g11_lit: 0, totalAllocated: 0 });
   
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
@@ -102,10 +102,11 @@ export default function ExamCommitteesControl() {
 
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
-      // 🚀 ركز هنا: جلبنا اسم الشعبة للطلاب لمعرفة هل هو أدبي أم لا
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name), exam_timetables(exam_date, subjects(name))');
+      
+      // 🚀 جلبنا مسار الطالب واسم الشعبة معاً لتحديد هويته بدقة
       const { data: stds } = await supabase.from('students').select('id, next_year_track, sections(name, classes(level, name))');
 
       const stats: any = {};
@@ -119,21 +120,22 @@ export default function ExamCommitteesControl() {
         }); 
       }
 
-      // 🚀 الفرز الجديد للواجهة: الرادار المزدوج
+      // 🚀 الفرز الدقيق للعلمي والأدبي
       let g10 = 0, g11_sci = 0, g11_lit = 0;
       (stds || []).forEach((s:any) => {
         const secObj = Array.isArray(s.sections) ? s.sections[0] : s.sections;
         const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
-        
-        const lvl = classObj?.level;
-        const cName = classObj?.name || '';
-        const sName = secObj?.name || '';
-        const track = s.next_year_track || '';
 
-        if(lvl === 10) g10++; 
-        if(lvl === 11) {
-            // نبحث في المسار، واسم المرحلة، واسم الشعبة!
-            if (track === 'literary' || cName.includes('أدبي') || sName.includes('أدبي') || sName.includes('ادبي')) {
+        const lvl = Number(classObj?.level);
+        const cName = String(classObj?.name || '');
+        const sName = String(secObj?.name || '');
+        const track = String(s.next_year_track || '');
+
+        if (lvl === 10) {
+            g10++; 
+        } else if (lvl === 11) {
+            // نبحث عن الأدبي في اسم المرحلة أو الشعبة (بالهمزة وبدونها) أو المسار المستقبلي
+            if (track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي')) {
                 g11_lit++;
             } else {
                 g11_sci++;
