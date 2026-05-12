@@ -2,14 +2,14 @@
 
 /* ==========================================
    🎨 1. المتغيرات والألوان (Theme Variables)
-   هنا نحدد الهوية البصرية الأساسية للمنصة
+   نظام Tailwind v4 الجديد
    ========================================== */
 @theme {
   --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
   --radius-3xl: 1.5rem;
   --radius-4xl: 2rem;
   
-  /* 🚀 ألوان الذهب الخالص (Pure Gold) للعلامة التجارية */
+  /* ألوان الذهب الخالص (للحفاظ على هوية الرفعة) */
   --color-brand-400: #fbbf24;
   --color-brand-500: #f59e0b;
   --color-brand-600: #d97706;
@@ -17,85 +17,72 @@
 
 /* ==========================================
    🏗️ 2. الطبقة الأساسية (Base Layer)
-   إعدادات الجسم الأساسي (Body) وإلغاء التنسيقات الافتراضية المزعجة
    ========================================== */
 @layer base {
   * {
-    /* توحيد لون الحدود لجميع العناصر الشفافة */
-    @apply border-white/10;
+    @apply border-white/5; /* 🚀 حدود أنحف وأكثر فخامة لستايل جيمناي */
   }
   
   body {
-    /* 🚀 أسود ملكي عميق جداً يبرز الذهب والأبيض */
+    /* أسود كوني كخلفية أساسية */
     @apply bg-[#02040a] text-slate-100 relative overflow-x-hidden;
-    /* 🚀 منع التكبير العشوائي (Pinch-zoom) في الجوال لحماية تجربة المستخدم (UX) */
     touch-action: pan-y; 
   }
 
-  /* 🌌 نسيج خفيف جداً (Noise Texture) لمنع اللون الميت وإعطاء طابع سينمائي */
-  body::before {
+  /* 🌌 نسيج غبار النجوم (Stardust Texture) */
+  body::after {
     content: "";
-    @apply fixed inset-0 pointer-events-none z-[-1] opacity-[0.05];
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    @apply fixed inset-0 pointer-events-none z-[-1] opacity-[0.15] mix-blend-screen;
+    background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
   }
 }
 
 /* ==========================================
-   🧱 3. طبقة المكونات الجاهزة (Components Layer)
-   كلاسات مخصصة يمكن استخدامها في أي مكان في المشروع
+   🧱 3. طبقة المكونات (Glassmorphism 2.0)
    ========================================== */
 @layer components {
-  /* 🚀 زجاج داكن فخم (Smoked Glass) مع توهج تفاعلي عند مرور الماوس */
+  /* 🚀 بطاقات هولوجرامية طافية */
   .glass-panel {
-    @apply bg-[#0f1423]/60 backdrop-blur-2xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.8)] hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] transition-all duration-500;
+    @apply bg-[#0f1423]/40 backdrop-blur-2xl border border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] hover:border-white/10 hover:bg-[#0f1423]/60 transition-all duration-700 ease-out;
   }
   
-  /* 🚀 ترويسة زجاجية لتثبيتها في أعلى الصفحات */
+  /* 🚀 ترويسة زجاجية خفية */
   .glass-header {
-    @apply bg-[#02040a]/80 backdrop-blur-3xl border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.9)];
+    @apply bg-[#02040a]/70 backdrop-blur-3xl border-b border-white/5 shadow-[0_4px_30px_rgba(0,0,0,0.8)];
   }
   
-  /* 🚀 حقول إدخال زجاجية تتفاعل عند التركيز (Focus) */
+  /* 🚀 حقول إدخال ذكية */
   .glass-input {
-    @apply bg-[#090c15]/80 backdrop-blur-md border border-white/10 focus:bg-[#0f1423] focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all text-white placeholder:text-slate-500 shadow-inner;
-  }
-
-  /* 🚀 روابط الشريط الجانبي (Sidebar) العادية */
-  .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-400 hover:bg-white/5 hover:text-white transition-all duration-300 font-bold;
-  }
-  
-  /* 🚀 رابط الشريط الجانبي النشط (ينفجر بالفخامة الذهبية عند اختياره) */
-  .sidebar-link-active {
-    @apply bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black shadow-[0_0_25px_rgba(245,158,11,0.5)] border border-amber-300;
+    @apply bg-[#02040a]/50 backdrop-blur-xl border border-white/10 focus:bg-[#0f1423]/80 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all duration-300 text-white placeholder:text-slate-500 shadow-inner rounded-xl;
   }
 }
 
 /* ==========================================
-   📜 4. تخصيص شريط التمرير (Custom Scrollbar)
-   تصميم نحيف وداكن يتماشى مع فخامة المنصة
+   📜 4. شريط التمرير (Cyber Scrollbar)
    ========================================== */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-[#02040a]; }
-::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full hover:bg-amber-500 transition-colors; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
+::-webkit-scrollbar-thumb { @apply bg-white/10 rounded-full hover:bg-indigo-500/50 transition-colors; }
 
 /* ==========================================
-   🎬 5. الحركات المخصصة (Animations)
-   تُستخدم للكرات المضيئة في خلفية صفحات التسجيل والإدارة
+   🎬 5. حركات جيمناي الحية (Alive UI Animations)
+   تجعل الخلفية تتنفس وتتحرك ببطء شديد كالمجرات
    ========================================== */
-@keyframes cinematic-glow {
-  0% { transform: translate(0px, 0px) scale(1) rotate(0deg); opacity: 0.4; }
-  33% { transform: translate(40px, -60px) scale(1.1) rotate(15deg); opacity: 0.7; }
-  66% { transform: translate(-30px, 40px) scale(0.9) rotate(-15deg); opacity: 0.5; }
-  100% { transform: translate(0px, 0px) scale(1) rotate(0deg); opacity: 0.4; }
+@keyframes nebula-drift {
+  0% { transform: translate(0px, 0px) scale(1) rotate(0deg); opacity: 0.3; }
+  33% { transform: translate(5vw, -5vh) scale(1.2) rotate(45deg); opacity: 0.5; }
+  66% { transform: translate(-5vw, 5vh) scale(0.8) rotate(-45deg); opacity: 0.4; }
+  100% { transform: translate(0px, 0px) scale(1) rotate(0deg); opacity: 0.3; }
 }
-.animate-blob { animation: cinematic-glow 15s infinite alternate ease-in-out; }
-.animation-delay-2000 { animation-delay: 3s; }
-.animation-delay-4000 { animation-delay: 6s; }
+
+.animate-nebula { 
+  animation: nebula-drift 25s infinite alternate ease-in-out; 
+}
+.animation-delay-2000 { animation-delay: -5s; }
+.animation-delay-4000 { animation-delay: -10s; }
 
 /* ==========================================
-   🖨️ 6. إعدادات الطباعة (Print Media Queries)
-   لضمان خروج الكشوف والجداول بخلفية بيضاء نقية وتوفير الحبر
+   🖨️ 6. إعدادات الطباعة
    ========================================== */
 @media print {
   @page { size: landscape; margin: 10mm; }
@@ -105,7 +92,7 @@
     background: white !important; 
     color: black !important; 
   }
-  body::before { display: none !important; } /* إخفاء النسيج */
+  body::after, .animate-nebula { display: none !important; }
   .glass-panel, .glass-header { 
     background: white !important; 
     backdrop-filter: none !important; 
@@ -116,22 +103,15 @@
 }
 
 /* ==========================================
-   🧮 7. درع الحماية العالمي للمعادلات الرياضية (KaTeX RTL Isolation)
-   يحمي المعادلات من التكسر والتداخل في الواجهات العربية (من اليمين لليسار)
+   🧮 7. عزل المعادلات الرياضية
    ========================================== */
-.katex, .katex * { 
-  direction: ltr !important; 
-}
-.katex-html {
-  /* عزل الـ Bidi لمنع المتصفح من عكس الرموز الرياضية */
-  unicode-bidi: isolate-override !important;
-}
+.katex, .katex * { direction: ltr !important; }
+.katex-html { unicode-bidi: isolate-override !important; }
 .katex-display { 
   display: flex !important; 
   justify-content: center !important;
   margin: 0.5rem 0 !important; 
   width: 100% !important;
-  /* حماية المعادلات الطويلة من كسر الشاشة وإضافة تمرير أفقي لها */
   overflow-x: auto;
   overflow-y: hidden;
 }
