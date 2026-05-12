@@ -39,7 +39,7 @@ const getNavLinks = (role: string | null) => {
         { name: 'جدولي', href: '/dashboard/student/schedule', icon: Calendar },
         { name: 'الاختبارات', href: '/exams', icon: FileText },
         { name: 'واجباتي', href: '/assignments', icon: BookOpen },
-        { name: 'الأوسمة', href: '/student/performance', icon: Award },
+        { name: 'نتائجي', href: '/student/performance', icon: Award },
         { name: 'المجلس', href: '/messages', icon: MessageSquare },
       ];
     default:
