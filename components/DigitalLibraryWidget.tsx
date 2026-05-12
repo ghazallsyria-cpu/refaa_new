@@ -3,8 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { FileText, Folder, FileArchive, ExternalLink, ChevronLeft, Loader2, Library } from 'lucide-react';
-import Link from 'next/link';
+import { FileText, Folder, FileArchive, ExternalLink, Loader2, Library } from 'lucide-react';
 
 interface Document {
   id: string;
@@ -23,13 +22,13 @@ export default function DigitalLibraryWidget({ userRole }: { userRole: 'student'
   useEffect(() => {
     const fetchDocs = async () => {
       try {
-        // 🚀 جلب المستندات الموجهة للجميع (all) أو الموجهة لهذا المستخدم تحديداً
+        // 🚀 التحديث هنا: جلب الموجه للجميع (all)، أو للمستخدم الحالي، أو ما لم يتم تحديد فئته (null)
         const { data, error } = await supabase
           .from('documents')
           .select('*')
-          .or(`target_role.eq.all,target_role.eq.${userRole}`)
+          .or(`target_role.eq.all,target_role.eq.${userRole},target_role.is.null`)
           .order('created_at', { ascending: false })
-          .limit(8); // نعرض أحدث 8 مستندات فقط في الرئيسية
+          .limit(8);
 
         if (error) throw error;
         setDocuments(data || []);
@@ -54,34 +53,31 @@ export default function DigitalLibraryWidget({ userRole }: { userRole: 'student'
 
   if (loading) {
     return (
-      <div className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] p-8 flex justify-center items-center h-48">
+      <div className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] p-8 flex justify-center items-center h-48 shadow-lg">
         <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
       </div>
     );
   }
 
-  // إذا لم يكن هناك مستندات، يختفي المكون بصمت (أو يمكننا إظهار رسالة فارغة أنيقة)
+  // 🚀 إخفاء المكون تماماً إذا لم يكن هناك ملفات (كما طلبت)
   if (documents.length === 0) return null;
 
   return (
-    <div className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
+    <div className="bg-[#131836]/60 backdrop-blur-md border border-white/5 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)]">
       <div className="absolute top-0 left-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none -z-10"></div>
       
-      {/* 🏷️ هيدر الودجت */}
-      <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-        <h2 className="text-xl sm:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm">
+      <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4 relative z-10">
+        <h2 className="text-xl sm:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm w-full sm:w-auto">
           <div className="p-2.5 bg-indigo-500/10 rounded-xl sm:rounded-2xl border border-indigo-500/20 shadow-inner">
              <Library className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400 drop-shadow-md" />
           </div> 
           المكتبة والمستندات
         </h2>
-        {/* زر لعرض كل المستندات في حال أردنا إضافة صفحة كاملة مستقبلاً */}
-        <button className="text-xs sm:text-sm font-bold text-indigo-400 flex items-center gap-1 opacity-50 cursor-not-allowed">
-          أحدث الملفات المُضافة
-        </button>
+        <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 w-full sm:w-auto">
+          {documents.length} ملفات متاحة
+        </span>
       </div>
 
-      {/* 📁 شريط تمرير المستندات */}
       <div className="p-5 sm:p-6 lg:p-8 flex overflow-x-auto gap-4 snap-x snap-mandatory custom-scrollbar pb-6 relative z-10" dir="rtl">
         {documents.map((doc) => {
           const styles = getCategoryStyles(doc.category);
