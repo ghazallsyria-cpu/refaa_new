@@ -7,8 +7,8 @@ const withPWA = withPWAInit({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
-  swcMinify: true,
-  disable: process.env.NODE_ENV === "development", // إيقافه في التطوير لمنع مشاكل الكاش لديك
+  // تم إزالة swcMinify من هنا لأن Next.js يعالجه تلقائياً
+  disable: process.env.NODE_ENV === "development", // إيقافه في التطوير لمنع مشاكل الكاش
   workboxOptions: {
     disableDevLogs: true,
   },
