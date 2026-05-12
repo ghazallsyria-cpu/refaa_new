@@ -704,7 +704,7 @@ export default function StudentDashboard() {
                 </div>
             )}
 
-full">
+
 
 {/* 🚀 ودجت المكتبة الرقمية */} 
 <DigitalLibraryWidget userRole="student" />
