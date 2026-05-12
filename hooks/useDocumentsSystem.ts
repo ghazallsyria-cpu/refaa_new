@@ -9,6 +9,7 @@ export type Document = {
   file_url: string;
   category: string;
   created_at: string;
+  target_role?: string; // 🚀 الإضافة الجديدة للجمهور المستهدف
 };
 
 export function useDocumentsSystem() {
@@ -97,14 +98,12 @@ export function useDocumentsSystem() {
     setLoading(true);
     setError(null);
     try {
-      // Delete from DB first
       const response = await fetch(`/api/documents/delete?id=${id}`, {
         method: 'DELETE',
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to delete document from DB');
 
-      // 🚀 Then optionally delete from Cloudinary safely
       if (fileUrl && fileUrl.includes('cloudinary')) {
         try {
           await deleteFromCloudinary(fileUrl, 'raw');
