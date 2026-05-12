@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context'; 
+import { useQuery } from '@tanstack/react-query';
 import { 
-  Radio, Clock, TrendingUp, Activity, 
-  GraduationCap, UserCheck, MonitorPlay, 
-  Search, Zap, ArrowRight, Loader2, RefreshCcw
+  Clock, TrendingUp, Activity, 
+  GraduationCap, UserCheck, Search, ArrowRight, Loader2, RefreshCcw, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 
-// واجهة السجل اليومي الخفيف
 interface DailyLogin {
   id: string;
   user_id: string;
@@ -23,19 +22,18 @@ interface DailyLogin {
 
 export default function LiveMonitorPage() {
   const { authRole, isChecking } = useAuth(); 
-
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // حالات السجل اليومي
-  const [dailyLogins, setDailyLogins] = useState<DailyLogin[]>([]);
   const [dailyTab, setDailyTab] = useState<'all' | 'teachers' | 'students'>('all');
 
-  // جلب السجل اليومي (مكتوبة بشكل خفيف Bulk Fetching لمرة واحدة)
-  const fetchDailyLogins = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
+  // 🚀 جلب البيانات باستخدام React Query لحماية السيرفر (Caching + Stale-While-Revalidate)
+  const { 
+    data: dailyLogins = [], 
+    isLoading, 
+    isFetching, 
+    refetch 
+  } = useQuery({
+    queryKey: ['daily-presence'],
+    queryFn: async () => {
       const today = new Date().toISOString().split('T')[0];
       const { data: presenceData } = await supabase
         .from('daily_presence')
@@ -43,62 +41,52 @@ export default function LiveMonitorPage() {
         .eq('record_date', today)
         .order('last_seen', { ascending: false });
 
-      if (presenceData && presenceData.length > 0) {
-         const detailsMap = new Map<string, string>();
+      if (!presenceData || presenceData.length === 0) return [];
 
-         // جلب تفاصيل الطلاب دفعة واحدة
-         const studentIds = presenceData.filter(p => p.role === 'student').map(p => p.user_id);
-         if (studentIds.length > 0) {
-            const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
-            stData?.forEach(st => {
-               if (st.sections) {
-                  const className = (st.sections as any).classes?.name || (st.sections as any).class?.name || '';
-                  const secName = (st.sections as any).name || '';
-                  detailsMap.set(st.id, className ? `${className} - ${secName}` : secName);
-               }
-            });
-         }
+      const detailsMap = new Map<string, string>();
 
-         // جلب تفاصيل المعلمين دفعة واحدة
-         const teacherIds = presenceData.filter(p => p.role === 'teacher').map(p => p.user_id);
-         if (teacherIds.length > 0) {
-            const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
-            tsData?.forEach((ts: any) => {
-               const subjectName = Array.isArray(ts.subjects) ? ts.subjects[0]?.name : ts.subjects?.name;
-               if (subjectName && !detailsMap.has(ts.teacher_id)) {
-                  detailsMap.set(ts.teacher_id, subjectName);
-               }
-            });
-            const missing = teacherIds.filter(id => !detailsMap.has(id));
-            if (missing.length > 0) {
-               const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missing);
-               tData?.forEach(t => { if(t.specialization) detailsMap.set(t.id, t.specialization); });
-            }
-         }
-
-         const enriched = presenceData.map(p => ({
-            ...p,
-            detail: detailsMap.get(p.user_id) || (p.role === 'teacher' ? 'معلم عام' : p.role === 'student' ? 'بدون فصل' : 'إدارة')
-         }));
-         setDailyLogins(enriched);
-      } else {
-         setDailyLogins([]);
+      // جلب تفاصيل الطلاب دفعة واحدة
+      const studentIds = presenceData.filter(p => p.role === 'student').map(p => p.user_id);
+      if (studentIds.length > 0) {
+        const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
+        stData?.forEach(st => {
+          if (st.sections) {
+            const className = (st.sections as any).classes?.name || (st.sections as any).class?.name || '';
+            const secName = (st.sections as any).name || '';
+            detailsMap.set(st.id, className ? `${className} - ${secName}` : secName);
+          }
+        });
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsRefreshing(false);
-      setLoading(false);
-    }
-  }, []);
 
-  useEffect(() => {
-    if (authRole !== 'admin' && authRole !== 'management') return;
-    // يتم التنفيذ مرة واحدة فقط عند فتح الصفحة (لا يوجد WebSockets ولا Interval)
-    fetchDailyLogins();
-  }, [fetchDailyLogins, authRole]);
+      // جلب تفاصيل المعلمين دفعة واحدة
+      const teacherIds = presenceData.filter(p => p.role === 'teacher').map(p => p.user_id);
+      if (teacherIds.length > 0) {
+        const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
+        tsData?.forEach((ts: any) => {
+          const subjectName = Array.isArray(ts.subjects) ? ts.subjects[0]?.name : ts.subjects?.name;
+          if (subjectName && !detailsMap.has(ts.teacher_id)) detailsMap.set(ts.teacher_id, subjectName);
+        });
+        
+        const missing = teacherIds.filter(id => !detailsMap.has(id));
+        if (missing.length > 0) {
+          const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missing);
+          tData?.forEach(t => { if(t.specialization) detailsMap.set(t.id, t.specialization); });
+        }
+      }
 
-  // إحصائيات مبنية على السجل اليومي فقط 
+      const enriched = presenceData.map(p => ({
+        ...p,
+        detail: detailsMap.get(p.user_id) || (p.role === 'teacher' ? 'معلم عام' : p.role === 'student' ? 'بدون فصل' : 'إدارة')
+      }));
+
+      return enriched as DailyLogin[];
+    },
+    // تحديث البيانات كل 5 دقائق في الخلفية إذا كانت الصفحة مفتوحة، لمنع الضغط
+    staleTime: 5 * 60 * 1000, 
+    enabled: authRole === 'admin' || authRole === 'management',
+  });
+
+  // إحصائيات سريعة
   const analytics = useMemo(() => {
     const teachers = dailyLogins.filter(u => u.role === 'teacher');
     const students = dailyLogins.filter(u => u.role === 'student');
@@ -117,7 +105,7 @@ export default function LiveMonitorPage() {
     };
   }, [dailyLogins]);
 
-  // فلترة حسب التبويب والبحث
+  // الفلترة
   const filteredDailyLogins = dailyLogins.filter(u => 
     (dailyTab === 'all' || 
     (dailyTab === 'teachers' && u.role === 'teacher') || 
@@ -127,156 +115,138 @@ export default function LiveMonitorPage() {
 
   if (isChecking) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#020817]">
-        <div className="relative flex flex-col items-center gap-6">
-          <div className="absolute inset-0 bg-emerald-500/20 blur-[50px] rounded-full animate-pulse"></div>
-          <Loader2 className="w-16 h-16 text-emerald-500 animate-spin" />
-          <p className="text-emerald-400 font-mono text-xs uppercase tracking-widest">AUTHENTICATING...</p>
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق من الصلاحيات...</p>
         </div>
       </div>
     );
   }
 
   if (authRole !== 'admin' && authRole !== 'management') {
-    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة لفريق الإدارة فقط.</div>;
-  }
-
-  if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#020817]">
-        <div className="relative flex flex-col items-center gap-6">
-          <div className="absolute inset-0 bg-emerald-500/20 blur-[50px] rounded-full animate-pulse"></div>
-          <Radio className="w-16 h-16 text-emerald-500 animate-ping" />
-          <p className="text-emerald-400 font-mono text-xs uppercase tracking-widest">CONNECTING TO PRESENCE NETWORK...</p>
+      <div className="flex h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-200 shadow-xl">
+           <ShieldCheck className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
+           <h2 className="text-2xl font-black text-slate-800 mb-2">وصول مقيد</h2>
+           <p className="text-slate-500 font-bold">هذه الصفحة مخصصة للإدارة المدرسية فقط.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6" dir="rtl">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-8" dir="rtl">
       
-      <div className="mb-2">
-        <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-emerald-600 font-bold bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-slate-200 transition-all w-fit group">
-          <ArrowRight className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة الإدارة
-        </Link>
-      </div>
-
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-[#020817] p-8 sm:p-12 text-white shadow-2xl border border-emerald-900/50">
-        <div className="absolute top-1/2 left-1/4 w-[800px] h-[800px] -translate-x-1/2 -translate-y-1/2 border border-emerald-500/10 rounded-full pointer-events-none">
-          <div className="absolute inset-0 border border-emerald-500/20 rounded-full scale-75"></div>
-        </div>
-
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="space-y-4 text-center md:text-right w-full">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black uppercase tracking-widest backdrop-blur-sm">
-              <Clock className="w-3 h-3" /> سجل اليوم
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-300">
-              سجل نشاط المنصة
+      {/* هيدر الصفحة */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="p-3 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl shadow-sm border border-slate-200 transition-all">
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+              سجل نشاط المنصة <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-xs rounded-full border border-indigo-100 uppercase tracking-widest">مباشر</span>
             </h1>
-            <p className="text-emerald-100/70 font-bold text-sm max-w-lg">يعرض هذا السجل كل من قام بتسجيل الدخول إلى المنصة خلال هذا اليوم. اضغط على تحديث لجلب أحدث البيانات دون إرهاق السيرفر.</p>
+            <p className="text-slate-500 font-bold mt-1">يعرض جميع الدخولات الموثقة لليوم بشكل خفيف وآمن.</p>
           </div>
-          
-          <div className="flex gap-4 shrink-0">
-             <div className="text-center p-6 bg-slate-900/60 backdrop-blur-xl rounded-3xl border border-white/5">
-                <p className="text-emerald-400 text-xs font-black uppercase mb-1">دخول اليوم</p>
-                <span className="text-6xl font-black text-white">{analytics.totalToday}</span>
-             </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-center px-6 border-l border-slate-200">
+             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">إجمالي الدخول</p>
+             <p className="text-3xl font-black text-indigo-600">{analytics.totalToday}</p>
           </div>
+          <button onClick={() => refetch()} disabled={isFetching} className="p-4 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 rounded-2xl transition-all shadow-sm border border-slate-200 active:scale-95 disabled:opacity-50">
+             <RefreshCcw className={`w-5 h-5 ${isFetching ? 'animate-spin text-indigo-600' : ''}`} />
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* بطاقات الإحصائيات */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         {[
-          { title: 'الطلاب النشطين اليوم', value: analytics.studentsCount, icon: GraduationCap, color: 'emerald' },
-          { title: 'المعلمين المتصلين', value: analytics.teachersCount, icon: UserCheck, color: 'indigo' },
-          { title: 'الفصل الأكثر تفاعلاً', value: analytics.topClass, icon: TrendingUp, color: 'amber' },
+          { title: 'الطلاب النشطين اليوم', value: analytics.studentsCount, icon: GraduationCap, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+          { title: 'المعلمين المتصلين', value: analytics.teachersCount, icon: UserCheck, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+          { title: 'الفصل الأكثر تفاعلاً', value: analytics.topClass, icon: TrendingUp, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
         ].map((stat, i) => (
-          <div key={i} className={`bg-white p-6 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group`}>
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{stat.title}</p>
-                <p className="text-xl font-black text-slate-900 truncate">{stat.value}</p>
-              </div>
-              <div className={`p-3 bg-${stat.color}-50 text-${stat.color}-600 rounded-xl`}><stat.icon className="h-5 w-5" /></div>
+          <div key={i} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all hover:border-indigo-100">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{stat.title}</p>
+              <p className="text-2xl font-black text-slate-800 truncate">{stat.value}</p>
+            </div>
+            <div className={`p-4 ${stat.bg} ${stat.color} ${stat.border} rounded-2xl border shadow-inner group-hover:scale-110 transition-transform`}>
+              <stat.icon className="h-6 w-6" />
             </div>
           </div>
         ))}
       </div>
 
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-6 sm:p-8 mt-6">
-         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8 border-b border-slate-100 pb-6">
-            <div className="flex items-center gap-4">
-               <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 shadow-sm"><Activity className="w-7 h-7"/></div>
-               <div>
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">سجل التواجد المفصل</h3>
-                  <p className="text-sm font-bold text-slate-500 mt-1">يتم ترتيبه من الأحدث إلى الأقدم</p>
-               </div>
-            </div>
-            <div className="flex gap-2">
-                <button onClick={fetchDailyLogins} disabled={isRefreshing} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 rounded-xl font-black text-sm transition-colors active:scale-95 disabled:opacity-50">
-                    <RefreshCcw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /> {isRefreshing ? 'جاري التحديث...' : 'تحديث القائمة'}
-                </button>
-            </div>
-         </div>
-
-         <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <div className="flex bg-slate-50 p-1.5 rounded-xl border border-slate-100 w-full md:w-auto shrink-0">
-               {['all', 'teachers', 'students'].map((tab) => (
-                  <button key={tab} onClick={() => setDailyTab(tab as any)} className={`flex-1 md:flex-none px-6 py-2.5 text-xs font-black rounded-lg transition-all ${dailyTab === tab ? 'bg-white text-indigo-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
-                     {tab === 'all' ? 'الكل' : tab === 'teachers' ? 'المعلمين' : 'الطلاب'} 
-                     <span className="opacity-60 mr-1">
-                        ({tab === 'all' ? dailyLogins.length : dailyLogins.filter(u => u.role === (tab === 'teachers' ? 'teacher' : 'student')).length})
-                     </span>
-                  </button>
-               ))}
+      {/* جدول البيانات */}
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-6 sm:p-8">
+         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-6 mb-6">
+            <div className="flex items-center gap-3">
+               <div className="p-3 bg-slate-50 text-slate-600 rounded-xl border border-slate-200"><Activity className="w-5 h-5"/></div>
+               <h3 className="text-xl font-black text-slate-800">السجل المفصل</h3>
             </div>
             
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input type="text" placeholder="ابحث بالاسم أو الفصل..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full rounded-xl bg-slate-50 border border-slate-200 py-2.5 pr-9 pl-3 text-sm font-bold outline-none focus:border-indigo-400 focus:bg-white transition-colors shadow-inner" />
+            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+              <div className="flex bg-slate-50 p-1.5 rounded-xl border border-slate-200 shrink-0">
+                 {['all', 'teachers', 'students'].map((tab) => (
+                    <button key={tab} onClick={() => setDailyTab(tab as any)} className={`px-4 py-2 text-xs font-black rounded-lg transition-all ${dailyTab === tab ? 'bg-white text-indigo-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+                       {tab === 'all' ? 'الكل' : tab === 'teachers' ? 'المعلمين' : 'الطلاب'}
+                    </button>
+                 ))}
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input type="text" placeholder="بحث بالاسم أو الفصل..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full rounded-xl bg-slate-50 border border-slate-200 py-2.5 pr-9 pl-4 text-xs font-bold outline-none focus:border-indigo-400 focus:bg-white transition-colors" />
+              </div>
             </div>
          </div>
 
-         <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-slate-50/30">
-           <table className="w-full text-right border-collapse whitespace-nowrap">
-             <thead>
-               <tr className="bg-slate-50 border-b border-slate-100">
-                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest w-1/3">المستخدم</th>
-                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest w-1/4">التصنيف</th>
-                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest w-1/4">الفصل / التخصص</th>
-                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest">توقيت الدخول اليوم</th>
-               </tr>
-             </thead>
-             <tbody className="divide-y divide-slate-100">
-               {filteredDailyLogins.map(u => (
-                 <tr key={u.id} className="hover:bg-white transition-colors group bg-white/50">
-                   <td className="p-4">
-                     <div className="flex items-center gap-3">
-                       <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm ${u.role === 'teacher' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : u.role === 'student' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
-                         {u.full_name.charAt(0)}
-                       </div>
-                       <span className="font-bold text-slate-800">{u.full_name}</span>
-                     </div>
-                   </td>
-                   <td className="p-4">
-                      <span className={`px-3 py-1.5 text-[10px] font-black rounded-full border ${u.role === 'teacher' ? 'bg-blue-50 text-blue-600 border-blue-100' : u.role === 'student' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                         {u.role === 'teacher' ? 'معلم' : u.role === 'student' ? 'طالب' : 'إدارة'}
-                      </span>
-                   </td>
-                   <td className="p-4 font-bold text-slate-600 text-sm">{u.detail}</td>
-                   <td className="p-4 font-bold text-slate-500 text-sm" dir="ltr">
-                      {new Date(u.last_seen).toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'})}
-                   </td>
+         {isLoading ? (
+           <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /></div>
+         ) : (
+           <div className="overflow-x-auto rounded-2xl border border-slate-100">
+             <table className="w-full text-right border-collapse whitespace-nowrap">
+               <thead>
+                 <tr className="bg-slate-50 border-b border-slate-100">
+                   <th className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest w-1/3">المستخدم</th>
+                   <th className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest w-1/4">التصنيف</th>
+                   <th className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest w-1/4">الفصل / التخصص</th>
+                   <th className="p-4 font-black text-slate-400 text-[10px] uppercase tracking-widest">توقيت الدخول</th>
                  </tr>
-               ))}
-               {filteredDailyLogins.length === 0 && (
-                 <tr><td colSpan={4} className="p-12 text-center text-slate-400 font-bold text-sm bg-white">لا يوجد سجلات مطابقة.</td></tr>
-               )}
-             </tbody>
-           </table>
-         </div>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                 {filteredDailyLogins.map(u => (
+                   <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                     <td className="p-4">
+                       <div className="flex items-center gap-3">
+                         <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-black text-xs shadow-inner border ${u.role === 'teacher' ? 'bg-blue-50 text-blue-600 border-blue-100' : u.role === 'student' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                           {u.full_name.charAt(0)}
+                         </div>
+                         <span className="font-bold text-sm text-slate-800">{u.full_name}</span>
+                       </div>
+                     </td>
+                     <td className="p-4">
+                        <span className={`px-3 py-1 text-[9px] font-black rounded-full border ${u.role === 'teacher' ? 'bg-blue-50 text-blue-600 border-blue-100' : u.role === 'student' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                           {u.role === 'teacher' ? 'معلم' : u.role === 'student' ? 'طالب' : 'إدارة'}
+                        </span>
+                     </td>
+                     <td className="p-4 font-bold text-slate-500 text-xs">{u.detail}</td>
+                     <td className="p-4 font-black text-slate-600 text-xs" dir="ltr">
+                        {new Date(u.last_seen).toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'})}
+                     </td>
+                   </tr>
+                 ))}
+                 {filteredDailyLogins.length === 0 && (
+                   <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-bold text-sm">لا يوجد سجلات مطابقة.</td></tr>
+                 )}
+               </tbody>
+             </table>
+           </div>
+         )}
       </div>
 
     </motion.div>
