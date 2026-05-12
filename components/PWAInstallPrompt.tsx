@@ -1,5 +1,4 @@
 // @ts-nocheck
-/* eslint-disable */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,55 +6,43 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, X, Share, Smartphone, MoreVertical } from 'lucide-react';
 
 export default function PWAInstallPrompt() {
-  const [isReady, setIsReady] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [shouldHide, setShouldHide] = useState(true);
 
   useEffect(() => {
-    // 1. التحقق من التثبيت
-    const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || 
-                            (window.navigator as any).standalone || 
-                            document.referrer.includes('android-app://');
+    // 1. هل التطبيق مثبت بالفعل؟ (إذا كان كذلك، لا حاجة لإظهار البانر)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                         (window.navigator as any).standalone || 
+                         document.referrer.includes('android-app://');
 
-    const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
+    if (isStandalone) return;
 
-    if (checkStandalone || isDismissed) return;
-
-    setShouldHide(false);
-
-    // 2. اكتشاف الأجهزة
+    // 2. اكتشاف نوع الجهاز
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIosDevice);
 
-    let timer: NodeJS.Timeout;
-
-    // 3. التقاط إشارة التثبيت الحقيقية من متصفح كروم/أندرويد
+    // 3. اصطياد إشارة التثبيت الحقيقية من متصفح أندرويد/كروم
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowPrompt(true); // إذا وصلت الإشارة، نعرض النافذة فوراً
-      if (timer) clearTimeout(timer);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // 4. التوقيت الذكي
-    if (isIosDevice) {
-      // آيفون لا يدعم الإشارة، نعرض التعليمات بعد 3 ثواني
-      timer = setTimeout(() => setShowPrompt(true), 3000);
-    } else {
-      // أندرويد/ديسكتوب: ننتظر 5 ثواني، إذا لم تصل الإشارة (بسبب مشكلة الأيقونات) نظهر التعليمات اليدوية
-      timer = setTimeout(() => setShowPrompt(true), 5000);
-    }
-
-    setIsReady(true);
+    // 4. إظهار البانر بعد 3 ثوانٍ (فقط إذا لم يقم المستخدم بإغلاقه مسبقاً)
+    const timer = setTimeout(() => {
+      const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
+      // 🚀 تنبيه: إذا ضغطت X سابقاً، لن يظهر. اختبره في المتصفح الخفي (Incognito)
+      if (!isDismissed) {
+        setShowPrompt(true);
+      }
+    }, 3000);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
     };
   }, []);
 
@@ -71,10 +58,11 @@ export default function PWAInstallPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false);
+    // حفظ قرار المستخدم بعدم الإزعاج
     localStorage.setItem('pwa-prompt-dismissed', 'true');
   };
 
-  if (shouldHide || !isReady || !showPrompt) return null;
+  if (!showPrompt) return null;
 
   return (
     <AnimatePresence>
@@ -100,7 +88,7 @@ export default function PWAInstallPrompt() {
             <div className="pr-1">
               <h3 className="font-black text-white text-sm mb-1">ثبّت تطبيق الرفعة</h3>
               <p className="text-[10px] sm:text-xs font-bold text-slate-300 leading-relaxed">
-                استمتع بتجربة أسرع وسهولة في الوصول للدروس والإعلانات من شاشة هاتفك مباشرة.
+                احصل على تجربة أسرع للوصول إلى دروسك وجداولك بنقرة واحدة من الشاشة الرئيسية.
               </p>
             </div>
           </div>
@@ -109,21 +97,21 @@ export default function PWAInstallPrompt() {
             {isIOS ? (
               <div className="bg-[#02040a]/60 border border-white/5 rounded-xl p-3 text-center">
                 <p className="text-[10px] font-bold text-slate-300 leading-relaxed">
-                  للآيفون: اضغط على أيقونة المشاركة <Share className="w-3 h-3 text-indigo-400 inline mx-0.5" /> أسفل المتصفح، ثم اختر <br/> 
+                  للآيفون: اضغط على أيقونة المشاركة <Share className="w-3 h-3 text-indigo-400 inline mx-0.5" /> بالأسفل، ثم اختر <br/> 
                   <span className="text-white bg-white/10 px-2 py-0.5 rounded mt-1.5 inline-block border border-white/10 shadow-inner">إضافة للشاشة الرئيسية 📱</span>
                 </p>
               </div>
             ) : deferredPrompt ? (
               <button 
                 onClick={handleInstallClick}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 border border-indigo-500/50"
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2 border border-indigo-500/50"
               >
-                <Download className="w-4 h-4" /> اضغط هنا لتثبيت التطبيق الآن
+                <Download className="w-4 h-4" /> تثبيت التطبيق الآن
               </button>
             ) : (
               <div className="bg-[#02040a]/60 border border-white/5 rounded-xl p-3 text-center">
                 <p className="text-[10px] font-bold text-slate-300 leading-relaxed">
-                  للأندرويد: من قائمة المتصفح العلوية <MoreVertical className="w-3 h-3 text-indigo-400 inline mx-0.5" /> اختر <br/> 
+                  من قائمة المتصفح العلوية <MoreVertical className="w-3 h-3 text-indigo-400 inline mx-0.5" /> اختر <br/> 
                   <span className="text-white bg-white/10 px-2 py-0.5 rounded mt-1.5 inline-block border border-white/10 shadow-inner">تثبيت التطبيق (Install App) 📱</span>
                 </p>
               </div>
