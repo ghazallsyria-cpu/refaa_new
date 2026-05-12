@@ -38,6 +38,43 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// 🚀 دالة المتتبع الصامت (Silent Tracker)
+const recordDailyPresence = async (currentUser: SupabaseUser, role: string) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const now = Date.now();
+    
+    // 🛡️ صمام الأمان: منع إرسال الطلبات المتكررة (كل 15 دقيقة كحد أقصى)
+    const lastUpdate = localStorage.getItem('last_presence_update');
+    if (lastUpdate && (now - parseInt(lastUpdate)) < 15 * 60 * 1000) {
+      return; 
+    }
+
+    const fullName = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'مستخدم مجهول';
+
+    const { error } = await supabase
+      .from('daily_presence')
+      .upsert({
+        user_id: currentUser.id,
+        record_date: today,
+        full_name: fullName,
+        role: role,
+        last_seen: new Date().toISOString()
+      }, { 
+        onConflict: 'user_id, record_date' 
+      });
+
+    if (error) {
+       console.error("Presence recording error:", error);
+    } else {
+       localStorage.setItem('last_presence_update', now.toString());
+    }
+  } catch (err) {
+    console.error("Silent Tracker Error:", err);
+  }
+};
+
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 🚀 حارس الإصدار لتنظيف مخلفات التحديثات القديمة
   const APP_VERSION = '1.1.0';
@@ -136,6 +173,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     localStorage.setItem('cached_role', userRes.data.role);
     localStorage.setItem('cached_name', name);
+
+    // 🚀 تسجيل الحضور فوراً بعد تسجيل الدخول الناجح
+    recordDailyPresence(authResult.user, userRes.data.role);
+
     setIsChecking(false);
     
     if (userRes.data.must_reset_password) {
@@ -170,7 +211,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.warn(`Version updated. Clearing old caches...`);
           localStorage.removeItem('cached_role');
           localStorage.removeItem('cached_name');
-          localStorage.removeItem('school_settings'); // 🚀 تنظيف كاش الإعدادات القديم المسبب للمشكلة
+          localStorage.removeItem('school_settings'); 
+          localStorage.removeItem('last_presence_update'); // 🚀 تصفير كاش الحضور مع التحديث
           
           for (let i = 0; i < localStorage.length; i++) {
              const key = localStorage.key(i);
@@ -179,14 +221,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem('app_version', APP_VERSION);
         }
 
-        const cachedRole = localStorage.getItem('cached_role');
-        const cachedName = localStorage.getItem('cached_name');
-
         // جلب الـ Session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         
         if (!session?.user) {
-          // 🚀 جلب إعدادات المنصة حتى للزوار لمعرفة حالة الإغلاق
+          // جلب إعدادات المنصة للزوار لمعرفة حالة الإغلاق
           const { data: guestSettings } = await supabase.from('platform_settings').select('*').limit(1).maybeSingle();
           if (guestSettings && mounted) setRawSettings(guestSettings);
 
@@ -198,20 +237,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             localStorage.removeItem('cached_name');
             
             if (!isPublicPage) window.location.replace('/login');
-            setIsChecking(false); // تم الانتهاء من التحقق
+            setIsChecking(false);
           }
           return;
         }
 
         if (mounted) setUser(session.user);
 
-        // جلب التفاصيل من السيرفر مباشرة وتجاهل الكاش الخاص بإعدادات المنصة
+        // جلب التفاصيل من السيرفر
         if (fetchedUserId.current !== session.user.id) {
            fetchedUserId.current = session.user.id;
 
            const [userRes, settingsRes, controlRes] = await Promise.all([
              supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
-             supabase.from('platform_settings').select('*').limit(1).maybeSingle(), // 🚀 دائماً نجلب الإعدادات من السيرفر لمنع تسمم الكاش
+             supabase.from('platform_settings').select('*').limit(1).maybeSingle(),
              supabase.from('exam_control_team').select('id').eq('user_id', session.user.id).eq('academic_year', '2025-2026').maybeSingle()
            ]);
 
@@ -224,14 +263,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setMustResetPassword(userRes.data.must_reset_password || false);
                 localStorage.setItem('cached_role', userRes.data.role);
                 localStorage.setItem('cached_name', userRes.data.full_name || '');
+                
+                // 🚀 تسجيل الحضور عند إعادة تحميل الصفحة أو التنقل
+                recordDailyPresence(session.user, userRes.data.role);
              }
              if (settingsRes?.data) {
                setRawSettings(settingsRes.data);
              }
-             setIsChecking(false); // 🚀 إغلاق الحارس الأمني والسماح ببدء العمل
+             setIsChecking(false);
            }
         } else {
-           if (mounted) setIsChecking(false);
+           if (mounted) {
+              setIsChecking(false);
+              // 🚀 تسجيل الحضور حتى لو كان المستخدم موجوداً مسبقاً (سيتم صده إذا لم تمر 15 دقيقة)
+              if (authRole) recordDailyPresence(session.user, authRole);
+           }
         }
       } catch (err) {
         console.error("Auth init exception:", err);
@@ -265,19 +311,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false; 
       subscription.unsubscribe(); 
     };
-  }, [isPublicPage]); 
+  }, [isPublicPage, authRole]); // 🚀 أضفنا authRole هنا لضمان عمل المتتبع
 
-  // 🚀 منطق إغلاق المنصة الصارم والمحمي من التضارب (Race Conditions)
+  // 🚀 منطق إغلاق المنصة الصارم
   useEffect(() => {
-    // 🛑 الأهم: لا تتخذ قرار إغلاق أو فتح المنصة أبداً إذا كان النظام لا يزال في حالة (التحقق isChecking)
     if (isChecking) return;
 
-    let isOpen = true; // الافتراضي
+    let isOpen = true;
     if (rawSettings && typeof rawSettings.is_open !== 'undefined') {
       isOpen = rawSettings.is_open === true || String(rawSettings.is_open).toLowerCase() === 'true';
     }
     
-    // الإدارة العليا والكنترول مستثنون دائماً
     if (!isOpen && authRole !== 'admin' && authRole !== 'management' && !isControlTeamMember) {
       setPlatformClosed(true);
       setCloseMessage(rawSettings?.message || '<div class="text-center text-white">المنصة مغلقة للصيانة</div>');
@@ -286,7 +330,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [rawSettings, authRole, isControlTeamMember, isChecking]);
 
-  // 🚀 شاشة التحميل تُعرض أولاً دائماً لمنع أي وميض أو تضارب
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#02040a] font-cairo">
@@ -312,7 +355,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 🚀 شاشة الصيانة تظهر فقط إذا كانت المنصة مغلقة والصفحة الحالية ليست صفحة تسجيل الدخول (ليتمكن المدير من الدخول)
   if (platformClosed && pathname !== '/login') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden font-cairo" dir="rtl">
