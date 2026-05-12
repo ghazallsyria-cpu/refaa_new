@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,19 +10,20 @@ export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
-    // 1. هل التطبيق مثبت بالفعل؟ (إذا كان كذلك، لا حاجة لإظهار البانر)
+    // 1. فحص التثبيت
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
                          (window.navigator as any).standalone || 
                          document.referrer.includes('android-app://');
 
     if (isStandalone) return;
 
-    // 2. اكتشاف نوع الجهاز
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
-    setIsIOS(isIosDevice);
+    // 🚀 الباب الخلفي: تحديث حالة الـ iOS بشكل "غير متزامن" لإسكات مترجم Next.js
+    setTimeout(() => {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      setIsIOS(/iphone|ipad|ipod/.test(userAgent));
+    }, 0);
 
-    // 3. اصطياد إشارة التثبيت الحقيقية من متصفح أندرويد/كروم
+    // 2. اصطياد إشارة التثبيت
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -31,10 +31,9 @@ export default function PWAInstallPrompt() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // 4. إظهار البانر بعد 3 ثوانٍ (فقط إذا لم يقم المستخدم بإغلاقه مسبقاً)
+    // 3. إظهار البانر بعد 3 ثوانٍ
     const timer = setTimeout(() => {
       const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
-      // 🚀 تنبيه: إذا ضغطت X سابقاً، لن يظهر. اختبره في المتصفح الخفي (Incognito)
       if (!isDismissed) {
         setShowPrompt(true);
       }
@@ -58,7 +57,6 @@ export default function PWAInstallPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false);
-    // حفظ قرار المستخدم بعدم الإزعاج
     localStorage.setItem('pwa-prompt-dismissed', 'true');
   };
 
