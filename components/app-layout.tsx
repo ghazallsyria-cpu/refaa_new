@@ -1,7 +1,6 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { Footer } from './footer';
 import { useEffect, useState } from 'react';
@@ -9,7 +8,10 @@ import { School, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/auth-context';
 import { cn } from '../lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { supabase } from '../lib/supabase'; // 🚀 استيراد قاعدة البيانات للتحقق السري
+import { supabase } from '../lib/supabase'; 
+
+// 🚀 استيراد كبسولة جيمناي بدلاً من السايد بار القديم
+import GeminiNavigation from './GeminiNavigation';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   // ==========================================
@@ -32,9 +34,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     closeMessage, 
     signOut 
   } = useAuth() as any;
-  
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); 
   
   // 🚀 حالة نظام التعافي التلقائي
   const [isVerifyingClosure, setIsVerifyingClosure] = useState(false);
@@ -62,7 +61,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ==========================================
   // 🛡️ 5. نظام التعافي التلقائي (Auto-Healing Cache)
-  // 🚀 يتحقق سرياً من قاعدة البيانات إذا ظهرت شاشة الإغلاق لحل مشكلة الكاش المسمم
   // ==========================================
   useEffect(() => {
     if (platformClosed && !isPublicPage) {
@@ -72,7 +70,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         try {
           const { data } = await supabase.from('platform_settings').select('is_open').limit(1).maybeSingle();
           if (data && (data.is_open === true || String(data.is_open).toLowerCase() === 'true')) {
-            // 🚨 اكتشاف خلل! المنصة مفتوحة ولكن الكاش يكذب. مسح الكاش والإنعاش التلقائي
             localStorage.removeItem('school_settings');
             if (isMounted) window.location.reload(); 
           }
@@ -115,7 +112,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // 🚀 7. التوجيه الإجباري (Auto-Redirect)
   // ==========================================
   useEffect(() => {
-    // 🚀 التعديل: لا تقم بأي توجيه إذا لم يتم تحميل الرتبة بعد لتجنب التضارب
     if (isChecking || isPublicPage || !user || !authRole) return;
     
     if (mustResetPassword && !isResetPasswordPage) { router.push('/reset-password'); return; }
@@ -147,7 +143,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ==========================================
   // ⏳ 8. شاشة التحميل الحاجزة
-  // 🚀 التعديل الجذري: ننتظر حتى وصول الرتبة (authRole) ولا نستعجل أبداً
   // ==========================================
   const isRolePending = !!user && !authRole;
 
@@ -164,7 +159,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ==========================================
   // 🛑 9. شاشة إغلاق المنصة
-  // 🚀 حماية إضافية: الإدارة معفية تماماً من رؤية هذه الشاشة 
   // ==========================================
   const isExemptFromClosure = ['admin', 'management'].includes(authRole);
 
@@ -183,7 +177,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           
           <h1 className="text-3xl font-black text-white mb-4 tracking-tight drop-shadow-md">المنصة مغلقة مؤقتاً</h1>
           
-          {/* 🚀 إظهار جاري التحقق أثناء التعافي التلقائي */}
           {isVerifyingClosure ? (
             <div className="flex flex-col items-center gap-2 mb-8 bg-black/40 p-4 rounded-2xl border border-white/5">
                <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
@@ -218,28 +211,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const showSidebar = !isPublicPage;
 
   // ==========================================
-  // 🏗️ 11. الهيكل الرئيسي للتطبيق (لوحات التحكم)
+  // 🏗️ 11. الهيكل الرئيسي للتطبيق (Gemini Style)
   // ==========================================
   return (
     <div className="flex h-full overflow-hidden bg-transparent selection:bg-amber-500/30 selection:text-amber-200" dir="rtl">
-      <AnimatePresence>
-        {isSidebarOpen && showSidebar && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-[#02040a]/80 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
-        )}
-      </AnimatePresence>
       
-      {showSidebar && (
-        <div className={cn("fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] print:hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] lg:shadow-none", isSidebarCollapsed ? "w-20" : "w-72", isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0", !isSidebarOpen && "lg:translate-x-full lg:w-0", isSidebarOpen && "lg:translate-x-0 lg:static")}>
-          <Sidebar onClose={() => setIsSidebarOpen(false)} authRole={authRole || 'student'} isCollapsed={isSidebarCollapsed} onToggleCollapse={() => { setIsSidebarCollapsed(!isSidebarCollapsed); if (window.innerWidth >= 1024) setIsSidebarOpen(false); }} />
-        </div>
-      )}
+      {/* 🚀 زراعة كبسولة جيمناي */}
+      {showSidebar && <GeminiNavigation />}
       
       <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full relative bg-transparent">
         <div className="print:hidden sticky top-0 z-30">
-          <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} showMenuButton={showSidebar} user={user} authRole={authRole || ''} userName={userName} isSidebarCollapsed={!isSidebarOpen} />
+          <Header 
+            onMenuClick={() => {}} // تم إيقاف الاعتماد عليها
+            showMenuButton={false} // 🚀 إخفاء زر الهمبرغر القديم لأننا نستخدم Dock / Capsule
+            user={user} 
+            authRole={authRole || ''} 
+            userName={userName} 
+            isSidebarCollapsed={true} 
+          />
         </div>
         
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 print:p-0 print:overflow-visible flex flex-col scroll-smooth">
+        {/* 🚀 مساحة إضافية لحماية المحتوى من التغطية بالكبسولة أو الجزيرة السفلية */}
+        <main className={cn(
+          "flex-1 overflow-y-auto print:p-0 print:overflow-visible flex flex-col scroll-smooth",
+          showSidebar ? "p-4 pb-28 md:pr-[110px] sm:p-6 lg:p-8 lg:pb-8" : "p-4 sm:p-6 lg:p-8"
+        )}>
           <div className="flex-1 max-w-[1600px] mx-auto w-full">
             {children} 
           </div>
