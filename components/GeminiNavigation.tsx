@@ -29,7 +29,7 @@ const getNavLinks = (role: string | null) => {
       return [
         { name: 'لوحة المعلم', href: '/dashboard/teacher', icon: LayoutDashboard },
         { name: 'جدول الحصص', href: '/dashboard/teacher/schedule', icon: Calendar },
-        { name: 'الواجبات الذكية', href: '/ai-assignments-v2', icon: BookOpen },
+        { name: 'الواجبات الذكية', href: '/assignments', icon: BookOpen },
         { name: 'الاختبارات', href: '/exams', icon: FileText },
         { name: 'الرسائل والمجالس', href: '/messages', icon: MessageSquare },
       ];
