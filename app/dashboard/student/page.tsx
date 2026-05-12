@@ -33,6 +33,8 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/auth-context';
 import { cn } from '../../../lib/utils';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
+import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
+
 
 const checkIsLocked = (examData: any) => {
   if (!examData?.exam_date) return false;
@@ -701,6 +703,11 @@ export default function StudentDashboard() {
                   </div>
                 </div>
             )}
+
+full">
+    
+    {/* 🚀 ودجت المكتبة الرقمية */}
+    <DigitalLibraryWidget userRole="student" />
 
             {/* 🚀 Today's Schedule Timeline */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
