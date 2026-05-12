@@ -796,6 +796,8 @@ export default function TeacherDashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8 items-start">
           
           <div className="xl:col-span-2 space-y-6 lg:space-y-8 w-full">
+{/* 🚀 ودجت المكتبة الرقمية */}
+    <DigitalLibraryWidget userRole="teacher" />
             {/* Today's Schedule (Live Pulse) */}
             <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden border border-white/5">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
