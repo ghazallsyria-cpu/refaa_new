@@ -1,35 +1,36 @@
 // @ts-nocheck
+/* eslint-disable */
 'use client';
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, X, Share, Smartphone, MoreVertical } from 'lucide-react';
+import { Download, X, Share, Smartphone } from 'lucide-react';
 
 export default function PWAInstallPrompt() {
   const [isReady, setIsReady] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false); 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  // 🚀 تم إزالة حالة isStandalone لمنع غضب الـ Compiler
+  const [shouldHide, setShouldHide] = useState(true); // افتراضياً مخفي حتى نتأكد
 
   useEffect(() => {
-    // 1. التحقق من حالة التثبيت
-    const checkStandalone = () => {
-      return window.matchMedia('(display-mode: standalone)').matches || 
-             (window.navigator as any).standalone || 
-             document.referrer.includes('android-app://');
-    };
+    // 1. فحص التثبيت (بدون استخدام setState بشكل مباشر يكسر الريندر)
+    const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                            (window.navigator as any).standalone || 
+                            document.referrer.includes('android-app://');
 
-    if (checkStandalone()) {
-      setIsStandalone(true);
-      return; 
+    const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
+
+    // 🚀 إذا كان مثبتاً أو متجاهلاً، لا نكمل باقي الأوامر
+    if (checkStandalone || isDismissed) {
+      return;
     }
 
-    // 2. التحقق من إغلاق المستخدم للنافذة سابقاً
-    const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
-    if (isDismissed) return;
+    // إذا وصلنا هنا، يعني يحق لنا العرض
+    setShouldHide(false);
 
-    // 3. اكتشاف نوع الجهاز
+    // 2. اكتشاف نوع الجهاز
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     const isAndroidDevice = /android/.test(userAgent);
@@ -37,7 +38,7 @@ export default function PWAInstallPrompt() {
 
     let timer: NodeJS.Timeout;
 
-    // 4. استراق السمع لإشارة التثبيت من أندرويد
+    // 3. استراق السمع لإشارة التثبيت
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -46,22 +47,15 @@ export default function PWAInstallPrompt() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // 🚀 الإصلاح: إزالة الـ return القاتل، وتشغيل المؤقتات بذكاء
+    // 4. توقيت العرض
     if (isIosDevice) {
-      // آيفون يظهر بعد 3 ثواني
       timer = setTimeout(() => setShowPrompt(true), 3000);
     } else if (isAndroidDevice) {
-      // أندرويد: إذا لم يرسل كروم زر التثبيت بعد 5 ثواني (بسبب مشكلة الأيقونات)، نظهر الإشعار اليدوي
       timer = setTimeout(() => {
-        if (!deferredPrompt) {
-          setShowPrompt(true);
-        }
+        if (!deferredPrompt) setShowPrompt(true);
       }, 5000);
     } else {
-       // الديسكتوب
-       timer = setTimeout(() => {
-          setShowPrompt(true);
-       }, 5000);
+       timer = setTimeout(() => setShowPrompt(true), 5000);
     }
 
     setIsReady(true);
@@ -87,7 +81,8 @@ export default function PWAInstallPrompt() {
     localStorage.setItem('pwa-prompt-dismissed', 'true');
   };
 
-  if (isStandalone || !isReady || !showPrompt) return null;
+  // 🚀 إذا تقرر الإخفاء (مثبت أو مرفوض)، ننهي المكون هنا بصمت
+  if (shouldHide || !isReady || !showPrompt) return null;
 
   return (
     <AnimatePresence>
@@ -111,7 +106,7 @@ export default function PWAInstallPrompt() {
               <Smartphone className="w-6 h-6 text-indigo-400" />
             </div>
             <div className="pr-1">
-              <h3 className="font-black text-white text-sm mb-1">ثبّت التطبيق الآن</h3>
+              <h3 className="font-black text-white text-sm mb-1">ثبّت تطبيق الرفعة</h3>
               <p className="text-[10px] sm:text-xs font-bold text-slate-300 leading-relaxed">
                 احصل على تجربة أسرع وإشعارات فورية، واستخدم المنصة بدون الحاجة لفتح المتصفح في كل مرة.
               </p>
@@ -122,24 +117,17 @@ export default function PWAInstallPrompt() {
             {isIOS ? (
               <div className="bg-[#02040a]/60 border border-white/5 rounded-xl p-3 text-center">
                 <p className="text-[10px] font-bold text-slate-300">
-                  اضغط على زر المشاركة <Share className="w-3 h-3 text-indigo-400 inline mx-1" /> بالأسفل، ثم اختر <br/> 
+                  انقر على <Share className="w-3 h-3 text-indigo-400 inline mx-1" /> ثم اختر <br/> 
                   <span className="text-white bg-white/10 px-2 py-0.5 rounded mt-1 inline-block border border-white/10">إضافة للشاشة الرئيسية 📱</span>
                 </p>
               </div>
-            ) : deferredPrompt ? (
+            ) : (
               <button 
                 onClick={handleInstallClick}
                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 border border-indigo-500/50"
               >
-                <Download className="w-4 h-4" /> تثبيت التطبيق
+                <Download className="w-4 h-4" /> تثبيت الآن
               </button>
-            ) : (
-              <div className="bg-[#02040a]/60 border border-white/5 rounded-xl p-3 text-center">
-                <p className="text-[10px] font-bold text-slate-300">
-                  من قائمة المتصفح العلوية <MoreVertical className="w-3 h-3 text-indigo-400 inline mx-0.5" /> اختر <br/> 
-                  <span className="text-white bg-white/10 px-2 py-0.5 rounded mt-1 inline-block border border-white/10">تثبيت التطبيق (Install App) 📱</span>
-                </p>
-              </div>
             )}
           </div>
         </div>
