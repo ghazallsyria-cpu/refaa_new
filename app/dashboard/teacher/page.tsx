@@ -9,7 +9,7 @@ import {
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
   AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2, Sparkles,
-  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key, FileSignature, X
+  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key, FileSignature, X, Stethoscope
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -24,7 +24,6 @@ import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
 import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
-
 
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
@@ -49,7 +48,7 @@ export default function TeacherDashboard() {
   const [finalExamsTimetable, setFinalExamsTimetable] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
-  // 🚀 حالات الاعتذار عن المراقبة (تم فصل المفاتيح لمنع الانهيار)
+  // 🚀 حالات الاعتذار عن المراقبة
   const [isDutyExcuseModalOpen, setIsDutyExcuseModalOpen] = useState(false);
   const [selectedDutyId, setSelectedDutyId] = useState('');
   const [dutyExcuseText, setDutyExcuseText] = useState('');
@@ -251,7 +250,6 @@ export default function TeacherDashboard() {
     if (!isChecking && (authRole === 'teacher' || authRole === 'admin' || authRole === 'management')) fetchData();
   }, [fetchData, isChecking, authRole]);
 
-  // 🚀 دوال العهد والتوثيق الرقمي للمراقبة
   const signDuty = async (id: string) => {
     if (!confirm('هل أنت متأكد من توقيعك إلكترونياً لاستلام مهام هذه اللجنة؟')) return;
     setIsProcessingDuty(true);
@@ -280,7 +278,6 @@ export default function TeacherDashboard() {
     } catch(e) { alert('حدث خطأ أثناء رفع العذر.'); } finally { setIsProcessingDuty(false); }
   };
 
-  // 🚀 دوال العذر الطبي للغياب
   const handleAddDate = () => {
     if (!currentDateInput) return;
     if (excuseForm.absent_dates.includes(currentDateInput)) { alert('هذا التاريخ مضاف مسبقاً.'); return; }
@@ -397,8 +394,7 @@ export default function TeacherDashboard() {
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] relative bg-[#090b14] text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
 
-
-        {/* 🚀 1. مكان زراعة الدرع التذكاري الجديد (يظهر فقط إذا كان للمعلم تكريم) */}
+        {/* 🚀 1. مكان زراعة الدرع التذكاري الجديد */}
         {teacherData?.id && (
            <MemorialShieldDisplay userId={teacherData.id} role="teacher" />
         )}
@@ -479,7 +475,7 @@ export default function TeacherDashboard() {
                            </div>
                            <h3 className="text-xl font-black text-white drop-shadow-sm truncate">{duty.exam_timetables?.subjects?.name}</h3>
                            <p className="text-sm font-bold text-amber-200/80 bg-amber-900/40 p-3 rounded-xl border border-amber-500/20 mt-auto leading-relaxed">
-                             📍 إشراف على: <span className="text-amber-400 font-black">{duty.committees_range}</span>
+                              📍 إشراف على: <span className="text-amber-400 font-black">{duty.committees_range}</span>
                            </p>
                         </div>
                      ))}
@@ -489,7 +485,7 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 هرم القيادة: 3. بانر تكليف المراقبة (مع التوقيع والاعتذار) */}
+        {/* 🚀 هرم القيادة: 3. بانر تكليف المراقبة */}
         <AnimatePresence>
           {invigilationDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[3rem] bg-[#02040a] p-8 md:p-10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border-[3px] border-[#0f1423] group">
@@ -526,7 +522,6 @@ export default function TeacherDashboard() {
                                      <button onClick={() => signDuty(duty.id)} disabled={isProcessingDuty} className="flex-1 sm:flex-none px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-xs sm:text-sm rounded-xl transition-all shadow-md flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
                                        <FileSignature className="w-4 h-4" /> توقيع إلكتروني بالاستلام
                                      </button>
-                                     {/* 🚀 الزر الذي يفتح نافذة عذر المراقبة */}
                                      <button onClick={() => openDutyExcuseModal(duty.id)} disabled={isProcessingDuty} className="px-5 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-black text-xs sm:text-sm rounded-xl transition-all border border-rose-500/30 flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
                                        <X className="w-4 h-4" /> لدي مانع (اعتذار)
                                      </button>
@@ -685,7 +680,7 @@ export default function TeacherDashboard() {
           </div>
         </motion.div>
 
-        {/* 🚀 البانر السينمائي (مجالس الفصول - للمعلم) */}
+        {/* 🚀 البانر السينمائي (مجالس الفصول) */}
         {sections.length > 0 && (
           <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(245,158,11,0.1)] border border-amber-500/30 backdrop-blur-xl bg-[#0f1423]/80">
             <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-amber-600/10 to-transparent pointer-events-none z-0"></div>
@@ -792,12 +787,16 @@ export default function TeacherDashboard() {
           ))}
         </div>
 
-        {/* 🚀 Main Grids */}
+        {/* 🚀 Main Grids (الشبكة الرئيسية) */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8 items-start">
           
           <div className="xl:col-span-2 space-y-6 lg:space-y-8 w-full">
-{/* 🚀 ودجت المكتبة الرقمية */}
-    <DigitalLibraryWidget userRole="teacher" />
+            
+            {/* 🚀 💡 لقد قمت بوضع الودجت هنا بشكل منعزل ومستقل تماماً! */}
+            <motion.div variants={itemVariants}>
+              <DigitalLibraryWidget userRole="teacher" />
+            </motion.div>
+
             {/* Today's Schedule (Live Pulse) */}
             <motion.div variants={itemVariants} className="bg-[#131836]/60 backdrop-blur-md rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden border border-white/5">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
