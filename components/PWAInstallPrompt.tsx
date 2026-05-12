@@ -4,58 +4,51 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, X, Share, Smartphone } from 'lucide-react';
+import { Download, X, Share, Smartphone, MoreVertical } from 'lucide-react';
 
 export default function PWAInstallPrompt() {
   const [isReady, setIsReady] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPrompt, setShowPrompt] = useState(false);
-  // 🚀 تم إزالة حالة isStandalone لمنع غضب الـ Compiler
-  const [shouldHide, setShouldHide] = useState(true); // افتراضياً مخفي حتى نتأكد
+  const [shouldHide, setShouldHide] = useState(true);
 
   useEffect(() => {
-    // 1. فحص التثبيت (بدون استخدام setState بشكل مباشر يكسر الريندر)
+    // 1. التحقق من التثبيت
     const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || 
                             (window.navigator as any).standalone || 
                             document.referrer.includes('android-app://');
 
     const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
 
-    // 🚀 إذا كان مثبتاً أو متجاهلاً، لا نكمل باقي الأوامر
-    if (checkStandalone || isDismissed) {
-      return;
-    }
+    if (checkStandalone || isDismissed) return;
 
-    // إذا وصلنا هنا، يعني يحق لنا العرض
     setShouldHide(false);
 
-    // 2. اكتشاف نوع الجهاز
+    // 2. اكتشاف الأجهزة
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
-    const isAndroidDevice = /android/.test(userAgent);
     setIsIOS(isIosDevice);
 
     let timer: NodeJS.Timeout;
 
-    // 3. استراق السمع لإشارة التثبيت
+    // 3. التقاط إشارة التثبيت الحقيقية من متصفح كروم/أندرويد
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowPrompt(true);
+      setShowPrompt(true); // إذا وصلت الإشارة، نعرض النافذة فوراً
+      if (timer) clearTimeout(timer);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // 4. توقيت العرض
+    // 4. التوقيت الذكي
     if (isIosDevice) {
+      // آيفون لا يدعم الإشارة، نعرض التعليمات بعد 3 ثواني
       timer = setTimeout(() => setShowPrompt(true), 3000);
-    } else if (isAndroidDevice) {
-      timer = setTimeout(() => {
-        if (!deferredPrompt) setShowPrompt(true);
-      }, 5000);
     } else {
-       timer = setTimeout(() => setShowPrompt(true), 5000);
+      // أندرويد/ديسكتوب: ننتظر 5 ثواني، إذا لم تصل الإشارة (بسبب مشكلة الأيقونات) نظهر التعليمات اليدوية
+      timer = setTimeout(() => setShowPrompt(true), 5000);
     }
 
     setIsReady(true);
@@ -64,7 +57,7 @@ export default function PWAInstallPrompt() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       if (timer) clearTimeout(timer);
     };
-  }, [deferredPrompt]);
+  }, []);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -81,7 +74,6 @@ export default function PWAInstallPrompt() {
     localStorage.setItem('pwa-prompt-dismissed', 'true');
   };
 
-  // 🚀 إذا تقرر الإخفاء (مثبت أو مرفوض)، ننهي المكون هنا بصمت
   if (shouldHide || !isReady || !showPrompt) return null;
 
   return (
@@ -108,26 +100,33 @@ export default function PWAInstallPrompt() {
             <div className="pr-1">
               <h3 className="font-black text-white text-sm mb-1">ثبّت تطبيق الرفعة</h3>
               <p className="text-[10px] sm:text-xs font-bold text-slate-300 leading-relaxed">
-                احصل على تجربة أسرع وإشعارات فورية، واستخدم المنصة بدون الحاجة لفتح المتصفح في كل مرة.
+                استمتع بتجربة أسرع وسهولة في الوصول للدروس والإعلانات من شاشة هاتفك مباشرة.
               </p>
             </div>
           </div>
 
-          <div className="relative z-10 mt-1">
+          <div className="relative z-10 mt-1 border-t border-white/5 pt-3">
             {isIOS ? (
               <div className="bg-[#02040a]/60 border border-white/5 rounded-xl p-3 text-center">
-                <p className="text-[10px] font-bold text-slate-300">
-                  انقر على <Share className="w-3 h-3 text-indigo-400 inline mx-1" /> ثم اختر <br/> 
-                  <span className="text-white bg-white/10 px-2 py-0.5 rounded mt-1 inline-block border border-white/10">إضافة للشاشة الرئيسية 📱</span>
+                <p className="text-[10px] font-bold text-slate-300 leading-relaxed">
+                  للآيفون: اضغط على أيقونة المشاركة <Share className="w-3 h-3 text-indigo-400 inline mx-0.5" /> أسفل المتصفح، ثم اختر <br/> 
+                  <span className="text-white bg-white/10 px-2 py-0.5 rounded mt-1.5 inline-block border border-white/10 shadow-inner">إضافة للشاشة الرئيسية 📱</span>
                 </p>
               </div>
-            ) : (
+            ) : deferredPrompt ? (
               <button 
                 onClick={handleInstallClick}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 border border-indigo-500/50"
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 border border-indigo-500/50"
               >
-                <Download className="w-4 h-4" /> تثبيت الآن
+                <Download className="w-4 h-4" /> اضغط هنا لتثبيت التطبيق الآن
               </button>
+            ) : (
+              <div className="bg-[#02040a]/60 border border-white/5 rounded-xl p-3 text-center">
+                <p className="text-[10px] font-bold text-slate-300 leading-relaxed">
+                  للأندرويد: من قائمة المتصفح العلوية <MoreVertical className="w-3 h-3 text-indigo-400 inline mx-0.5" /> اختر <br/> 
+                  <span className="text-white bg-white/10 px-2 py-0.5 rounded mt-1.5 inline-block border border-white/10 shadow-inner">تثبيت التطبيق (Install App) 📱</span>
+                </p>
+              </div>
             )}
           </div>
         </div>
