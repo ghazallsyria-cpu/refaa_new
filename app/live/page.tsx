@@ -125,35 +125,15 @@ export default function LiveClassesPublicPage() {
     }
   };
 
-  // 🚀 خوارزمية الفرز الذكية (تقسيم المراحل والترتيب التصاعدي)
+// 🚀 خوارزمية فرز هندسية تعتمد على رقم المستوى (Level) المجلوب من السيرفر
   const { middleClasses, highClasses, otherClasses } = useMemo(() => {
-    const processed = activeClasses.map(cls => {
-      const nameStr = cls.class_name.toLowerCase();
-      let level = 99; // افتراضي للفصول غير المعروفة
-      
-      // اكتشاف مستوى الصف من اسمه (أرقام أو حروف)
-      if (nameStr.includes('12') || nameStr.includes('ثاني عشر')) level = 12;
-      else if (nameStr.includes('11') || nameStr.includes('حادي')) level = 11;
-      else if (nameStr.includes('10') || nameStr.includes('عاشر')) level = 10;
-      else if (nameStr.includes('9') || nameStr.includes('تاسع')) level = 9;
-      else if (nameStr.includes('8') || nameStr.includes('ثامن')) level = 8;
-      else if (nameStr.includes('7') || nameStr.includes('سابع')) level = 7;
-      else if (nameStr.includes('6') || nameStr.includes('سادس')) level = 6;
-
-      let stage = 'other';
-      if (level >= 6 && level <= 9) stage = 'middle';
-      else if (level >= 10 && level <= 12) stage = 'high';
-
-      return { ...cls, level, stage };
-    });
-
-    // الفرز: أولاً بالصف (السادس قبل السابع)، ثم أبجدياً باسم الشعبة
-    processed.sort((a, b) => a.level - b.level || a.class_name.localeCompare(b.class_name));
+    // الترتيب التصاعدي أولاً
+    const sorted = [...activeClasses].sort((a, b) => a.level - b.level || a.class_name.localeCompare(b.class_name));
 
     return {
-      middleClasses: processed.filter(c => c.stage === 'middle'),
-      highClasses: processed.filter(c => c.stage === 'high'),
-      otherClasses: processed.filter(c => c.stage === 'other')
+      middleClasses: sorted.filter(c => c.level >= 6 && c.level <= 9),
+      highClasses: sorted.filter(c => c.level >= 10 && c.level <= 12),
+      otherClasses: sorted.filter(c => c.level < 6 || c.level > 12)
     };
   }, [activeClasses]);
 
