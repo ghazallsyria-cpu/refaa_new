@@ -239,8 +239,8 @@ export default function StudentDashboard() {
       }
   }
 
-  if (isChecking || loading || !mounted) return <div className="flex h-screen items-center justify-center bg-[#090b14]"><Loader2 className="w-12 h-12 animate-spin text-blue-500" /></div>;
-  if (authRole !== 'student') return <div className="flex h-screen items-center justify-center bg-[#090b14] text-white">وصول مقيد. للطلاب فقط.</div>;
+  if (isChecking || loading || !mounted) return <div className="flex h-screen items-center justify-center bg-transparent"><Loader2 className="w-12 h-12 animate-spin text-blue-500" /></div>;
+  if (authRole !== 'student') return <div className="flex h-screen items-center justify-center bg-transparent text-white">وصول مقيد. للطلاب فقط.</div>;
 
   const rawFullName = studentData?.users?.full_name || studentData?.full_name || user?.user_metadata?.full_name || 'بطلنا';
   const displayFirstName = rawFullName.split(' ')[0];
@@ -258,96 +258,100 @@ export default function StudentDashboard() {
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=1`;
 
   let warningLevel = 0; let warningTitle = ""; let warningMessage = ""; let warningColors = ""; let warningIconColor = ""; let WarningIcon = Info; let warningPulse = false;
-  if (absentPeriods >= 100) { warningLevel = 4; warningTitle = "إشعار فصل نهائي"; warningMessage = "تجاوزت 100 حصة غياب."; warningColors = "from-slate-900 via-rose-950 to-slate-900 border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]"; warningIconColor = "text-rose-500"; WarningIcon = Siren; warningPulse = true; } 
-  else if (absentPeriods >= 75) { warningLevel = 3; warningTitle = "إنذار ثالث"; warningMessage = "غيابك بمرحلة حرجة."; warningColors = "from-rose-500/20 to-red-600/20 border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]"; warningIconColor = "text-rose-500"; WarningIcon = ShieldAlert; warningPulse = true; } 
-  else if (absentPeriods >= 50) { warningLevel = 2; warningTitle = "إنذار ثاني"; warningMessage = "برر غيابك فوراً."; warningColors = "from-orange-500/20 to-amber-600/20 border-orange-500/50 text-orange-500"; warningIconColor = "text-orange-500"; WarningIcon = AlertTriangle; } 
-  else if (absentPeriods >= 25) { warningLevel = 1; warningTitle = "إنذار أول"; warningMessage = "الالتزام بالحضور مطلوب."; warningColors = "from-amber-500/20 to-yellow-600/20 border-amber-500/50 text-amber-500"; warningIconColor = "text-amber-500"; WarningIcon = AlertTriangle; }
+  if (absentPeriods >= 100) { warningLevel = 4; warningTitle = "إشعار فصل نهائي"; warningMessage = "تجاوزت 100 حصة غياب."; warningColors = "border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]"; warningIconColor = "text-rose-500"; WarningIcon = Siren; warningPulse = true; } 
+  else if (absentPeriods >= 75) { warningLevel = 3; warningTitle = "إنذار ثالث"; warningMessage = "غيابك بمرحلة حرجة."; warningColors = "border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]"; warningIconColor = "text-rose-500"; WarningIcon = ShieldAlert; warningPulse = true; } 
+  else if (absentPeriods >= 50) { warningLevel = 2; warningTitle = "إنذار ثاني"; warningMessage = "برر غيابك فوراً."; warningColors = "border-orange-500/50 text-orange-500"; warningIconColor = "text-orange-500"; WarningIcon = AlertTriangle; } 
+  else if (absentPeriods >= 25) { warningLevel = 1; warningTitle = "إنذار أول"; warningMessage = "الالتزام بالحضور مطلوب."; warningColors = "border-amber-500/50 text-amber-500"; warningIconColor = "text-amber-500"; WarningIcon = AlertTriangle; }
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 font-cairo pt-6" dir="rtl">
-      <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 font-sans pt-2 sm:pt-6" dir="rtl">
+      <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto relative z-10">
 
         {studentData?.id && ( 
            <MemorialShieldDisplay userId={studentData.id} role="student" /> 
         )}
         
-        {/* 🚀 الهيدر الرئيسي */}
-        <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 text-white shadow-2xl border border-white/10">
+        {/* 🚀 الهيدر الرئيسي للطالب (Holographic Blue Glass) */}
+        <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-blue-500/30 group">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110 opacity-50"></div>
           <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
             <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-right">
-              <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-4 border-white/10 bg-[#0f1423] flex items-center justify-center relative">
+              <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-2 border-white/10 bg-[#0f1423]/50 backdrop-blur-xl flex items-center justify-center relative shadow-[0_0_30px_rgba(59,130,246,0.1)] group-hover:scale-105 group-hover:border-blue-500/30 transition-transform duration-500">
                 {avatarUrl ? <img src={avatarUrl} alt="av" className="w-full h-full object-cover" /> : <span className="text-4xl font-black text-blue-400">{rawFullName.charAt(0)}</span>}
-                <div className="absolute bottom-2 left-2 w-5 h-5 bg-emerald-400 border-4 border-[#02040a] rounded-full animate-pulse"></div>
               </div>
               <div>
-                <h1 className="text-2xl sm:text-4xl font-black mb-2 leading-tight">وفقك الله يا {displayFirstName} 🌟</h1>
-                <p className="text-slate-300 font-bold text-sm sm:text-base">{classNameStr} - {sectionNameStr}</p>
+                <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-xs font-black uppercase tracking-widest mb-3 shadow-inner text-blue-400">
+                  <Star className="w-3.5 h-3.5 drop-shadow-sm" /> <span>لوحة الطالب المخصصة</span>
+                </div>
+                <h1 className="text-3xl sm:text-5xl font-black mb-2 leading-tight drop-shadow-xl">وفقك الله يا {displayFirstName} 🌟</h1>
+                <p className="text-slate-200 font-bold text-sm sm:text-lg drop-shadow-md">{classNameStr} - {sectionNameStr}</p>
               </div>
             </div>
-            <div className="flex gap-4">
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center min-w-[100px]">
-                <p className="text-[10px] text-slate-400 uppercase font-bold">الحضور</p>
-                <p className="text-2xl font-black text-emerald-400">{attendanceStats.rate}%</p>
+            <div className="flex gap-4 w-full sm:w-auto shrink-0 justify-center">
+              <div className="bg-white/5 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/10 text-center min-w-[100px] shadow-inner group-hover:border-white/20 transition-colors">
+                <p className="text-[10px] sm:text-xs text-slate-300 uppercase font-bold tracking-widest drop-shadow-sm">نسبة الحضور</p>
+                <p className="text-2xl sm:text-3xl font-black text-emerald-400 drop-shadow-lg">{attendanceStats.rate}%</p>
               </div>
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center min-w-[100px]">
-                <p className="text-[10px] text-slate-400 uppercase font-bold">المتوسط</p>
-                <p className="text-2xl font-black text-amber-400">{avgScore}%</p>
+              <div className="bg-white/5 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/10 text-center min-w-[100px] shadow-inner group-hover:border-white/20 transition-colors">
+                <p className="text-[10px] sm:text-xs text-slate-300 uppercase font-bold tracking-widest drop-shadow-sm">متوسط الدرجات</p>
+                <p className="text-2xl sm:text-3xl font-black text-blue-400 drop-shadow-lg">{avgScore}%</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 🚀 الهوية الامتحانية */}
+        {/* 🚀 ההوية الامتحانية (Glass Modal Style) */}
         <AnimatePresence>
           {seatAllocation && (
-             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative overflow-hidden rounded-[2.5rem] bg-[#02040a] p-6 sm:p-10 border-[3px] border-[#0f1423] shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-8 group">
-                <div className="absolute inset-0 bg-rose-600/5 blur-[100px] pointer-events-none"></div>
+             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-rose-500/30 flex flex-col lg:flex-row items-center justify-between gap-8 group">
+                <div className="absolute inset-0 bg-rose-600/5 blur-[100px] pointer-events-none mix-blend-screen opacity-50"></div>
                 <div className="flex-1 text-center lg:text-right relative z-10">
-                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black mb-4">
-                     <Ticket className="w-4 h-4" /> بطاقة دخول الاختبار
+                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/10 backdrop-blur-md border border-rose-500/30 text-rose-300 text-xs font-black mb-4 shadow-inner">
+                     <Ticket className="w-4 h-4" /> بطاقة دخول الاختبار المعتمدة
                    </div>
-                   <h2 className="text-2xl sm:text-4xl font-black text-white mb-4">رقم جلوسك المعتمد: <span className="text-rose-500">{seatAllocation.seat_number}</span></h2>
-                   <p className="text-slate-300 font-bold text-sm sm:text-lg">لجنتك: <span className="text-white bg-rose-500/20 px-3 py-1 rounded-xl">{seatAllocation.exam_committees?.name}</span></p>
-                   <p className="text-[10px] text-slate-500 mt-4">📍 الموقع: {seatAllocation.exam_committees?.location || 'المبنى الرئيسي'}</p>
+                   <h2 className="text-2xl sm:text-4xl font-black text-white mb-4 drop-shadow-lg">رقم جلوسك المعتمد: <span className="text-rose-400">{seatAllocation.seat_number}</span></h2>
+                   <p className="text-slate-200 font-bold text-sm sm:text-lg mb-2">لجنتك: <span className="text-white bg-white/10 backdrop-blur-sm border border-white/20 px-3 py-1 rounded-xl shadow-inner">{seatAllocation.exam_committees?.name}</span></p>
+                   <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-4">📍 الموقع: {seatAllocation.exam_committees?.location || 'المبنى الرئيسي'}</p>
                 </div>
                 
+                {/* البطاقة ثلاثية الأبعاد (هولوجرامية) */}
                 <div className="shrink-0 perspective-1000 hidden md:block">
-                   <div className="w-[65mm] min-h-[100mm] pb-4 border-[4px] border-slate-900 rounded-[2rem] relative flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] bg-white group-hover:scale-105 transition-transform duration-500">
-                      <div className="w-full h-[25mm] bg-slate-900 pt-3 border-b-[3px] border-slate-700 shrink-0">
-                         <p className="text-white font-black text-[13px] tracking-wide">مدرسة الرفعة النموذجية بنين</p>
-                         <div className="mt-1.5 bg-slate-100 px-3 py-1 rounded-full inline-flex"><p className="text-slate-900 font-black text-[9px]">{seatAllocation.exam_committees?.name}</p></div>
+                   <div className="w-[65mm] min-h-[100mm] pb-4 border-[2px] border-white/10 rounded-[2rem] relative flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-[#02040a]/80 backdrop-blur-2xl group-hover:scale-105 group-hover:border-rose-500/30 transition-all duration-500 overflow-hidden">
+                      <div className="w-full h-[25mm] bg-rose-600/20 backdrop-blur-md pt-3 border-b border-rose-500/30 shrink-0">
+                         <p className="text-white font-black text-[13px] tracking-wide drop-shadow-md">مدرسة الرفعة النموذجية بنين</p>
+                         <div className="mt-1.5 bg-[#02040a]/80 px-3 py-1 rounded-full inline-flex border border-white/10 shadow-inner"><p className="text-rose-400 font-black text-[9px]">{seatAllocation.exam_committees?.name}</p></div>
                       </div>
-                      <div className="w-[22mm] h-[22mm] -mt-[11mm] rounded-2xl bg-white border-4 border-white shadow-xl overflow-hidden z-10 shrink-0">
-                         {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-slate-300" />}
+                      <div className="w-[22mm] h-[22mm] -mt-[11mm] rounded-2xl bg-[#0f1423] border border-white/20 shadow-xl overflow-hidden z-10 shrink-0 flex items-center justify-center">
+                         {avatarUrl ? <img src={avatarUrl} crossOrigin="anonymous" alt="Student" className="w-full h-full object-cover" /> : <UserCircle className="w-10 h-10 text-slate-500" />}
                       </div>
-                      <div className="w-full px-4 flex-1 flex flex-col items-center justify-between mt-3">
+                      <div className="w-full px-4 flex-1 flex flex-col items-center justify-between mt-3 relative z-10">
                          <div>
-                            <h2 className="text-[15px] font-black text-slate-900 line-clamp-2 leading-tight">{rawFullName}</h2>
-                            <p className="text-[10px] font-bold text-slate-500 mb-2 border-b-2 border-slate-200 pb-1 w-full">{classNameStr}</p>
+                            <h2 className="text-[15px] font-black text-white line-clamp-2 leading-tight drop-shadow-md">{rawFullName}</h2>
+                            <p className="text-[10px] font-bold text-slate-400 mb-2 border-b border-white/10 pb-1 w-full">{classNameStr}</p>
                          </div>
-                         <div className="flex flex-col items-center mt-1">
-                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">رقم الجلوس</p>
-                            <p className="text-3xl font-black text-rose-600 tracking-widest drop-shadow-sm">{seatAllocation.seat_number}</p>
+                         <div className="flex flex-col items-center mt-1 bg-rose-500/10 w-full rounded-xl py-2 border border-rose-500/20 shadow-inner">
+                            <p className="text-[9px] font-black text-rose-300 uppercase tracking-widest">رقم الجلوس</p>
+                            <p className="text-3xl font-black text-rose-400 tracking-widest drop-shadow-md">{seatAllocation.seat_number}</p>
                          </div>
-                         <div className="mt-3 w-[20mm] h-[20mm] bg-white p-1 rounded-lg border-2 border-slate-800 shrink-0">
-                            <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
+                         <div className="mt-3 w-[20mm] h-[20mm] bg-white/5 p-1 rounded-xl border border-white/10 shrink-0 flex items-center justify-center shadow-inner overflow-hidden">
+                            <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-screen" />
                          </div>
                       </div>
                    </div>
                 </div>
 
-                <div className="w-full md:hidden bg-white border-[3px] border-slate-800 rounded-3xl p-5 shadow-2xl flex items-center gap-4 relative z-10">
-                   <div className="w-20 h-20 bg-white p-1 rounded-xl border-2 border-slate-800 shrink-0">
-                      <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
+                <div className="w-full md:hidden bg-[#02040a]/60 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-inner flex items-center gap-4 relative z-10">
+                   <div className="w-16 h-16 bg-white/5 p-1 rounded-xl border border-white/10 shrink-0 shadow-inner overflow-hidden flex items-center justify-center">
+                      <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-screen" />
                    </div>
                    <div className="flex-1 text-right">
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
-                      <h3 className="text-lg font-black text-slate-900 leading-tight">{seatAllocation.exam_committees?.name}</h3>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
+                      <h3 className="text-sm sm:text-base font-black text-white leading-tight drop-shadow-md">{seatAllocation.exam_committees?.name}</h3>
                    </div>
-                   <div className="shrink-0 text-center border-r-2 border-slate-200 pr-4">
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">الجلوس</p>
-                      <p className="text-2xl font-black text-rose-600 tracking-widest">{seatAllocation.seat_number}</p>
+                   <div className="shrink-0 text-center border-r border-white/10 pr-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">الجلوس</p>
+                      <p className="text-xl font-black text-rose-400 tracking-widest drop-shadow-sm">{seatAllocation.seat_number}</p>
                    </div>
                 </div>
              </motion.div>
@@ -359,135 +363,138 @@ export default function StudentDashboard() {
           {isTwelfthGrade && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative z-10 w-full">
               {existingDocRequest ? (
-                <div className="bg-gradient-to-l from-emerald-900/40 to-[#0f1423] border border-emerald-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(16,185,129,0.15)] backdrop-blur-xl">
+                <div className="glass-panel border-emerald-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(16,185,129,0.1)]">
                    <div className="flex items-center gap-5 text-center md:text-right w-full md:w-auto flex-col md:flex-row">
-                      <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-400/50 shadow-inner shrink-0">
-                         <ScrollText className="w-8 h-8 text-emerald-400" />
+                      <div className="w-16 h-16 bg-emerald-500/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-emerald-500/20 shadow-inner shrink-0">
+                         <ScrollText className="w-8 h-8 text-emerald-400 drop-shadow-sm" />
                       </div>
                       <div>
-                         <h3 className="text-xl sm:text-2xl font-black text-white mb-2">تم استلام طلب الوثائق والتصديقات بنجاح! 🎉</h3>
-                         <p className="text-sm font-bold text-emerald-200/80 leading-relaxed max-w-xl">
-                           طلبك الآن قيد المعالجة (الإجمالي: <strong className="text-white">{existingDocRequest.total_amount} د.ك</strong>). 
+                         <h3 className="text-xl sm:text-2xl font-black text-white mb-2 drop-shadow-md">تم استلام طلب الوثائق والتصديقات بنجاح! 🎉</h3>
+                         <p className="text-sm font-bold text-slate-300 leading-relaxed max-w-xl">
+                           طلبك الآن قيد المعالجة (الإجمالي: <strong className="text-emerald-400">{existingDocRequest.total_amount} د.ك</strong>). 
                            {existingDocRequest.payment_status === 'pending' ? ' يرجى التوجه لمكتب شؤون الطلبة لدفع الرسوم واعتماد الطلب.' : ' تم الدفع والمندوب يقوم بتصديق أوراقك من الوزارة.'}
                          </p>
                       </div>
                    </div>
                    <div className="shrink-0 w-full md:w-auto flex justify-center">
-                      <div className={`px-6 py-3 rounded-xl border font-black text-sm shadow-inner ${existingDocRequest.payment_status === 'pending' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'}`}>
+                      <div className={`px-6 py-3 rounded-xl border font-black text-xs sm:text-sm shadow-inner backdrop-blur-md ${existingDocRequest.payment_status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
                          الحالة: {existingDocRequest.payment_status === 'pending' ? 'بانتظار الدفع بالمدرسة ⏳' : 'مدفوع وجاري التصديق ✅'}
                       </div>
                    </div>
                 </div>
               ) : (
-                <div className="bg-gradient-to-br from-[#1e1b4b] to-[#0f1423] border border-fuchsia-500/30 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_40px_rgba(192,38,211,0.15)] relative overflow-hidden">
-                   <div className="absolute top-0 left-0 w-64 h-64 bg-fuchsia-600/20 blur-[100px] pointer-events-none rounded-full"></div>
+                <div className="glass-panel border-fuchsia-500/30 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_0_40px_rgba(192,38,211,0.1)] relative overflow-hidden group">
+                   <div className="absolute top-0 left-0 w-64 h-64 bg-fuchsia-600/10 blur-[100px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110 opacity-50"></div>
                    
                    <div className="flex flex-col md:flex-row items-center gap-6 mb-8 relative z-10 text-center md:text-right border-b border-white/5 pb-8">
-                      <div className="p-4 bg-fuchsia-500/20 rounded-3xl border border-fuchsia-400/50 shadow-inner">
-                         <ScrollText className="w-10 h-10 text-fuchsia-400" />
+                      <div className="p-4 bg-fuchsia-500/10 backdrop-blur-md rounded-3xl border border-fuchsia-500/20 shadow-inner group-hover:scale-110 transition-transform">
+                         <ScrollText className="w-10 h-10 text-fuchsia-400 drop-shadow-md" />
                       </div>
                       <div className="flex-1">
-                         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-fuchsia-500/20 text-fuchsia-300 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-fuchsia-500/30 shadow-inner">خاص بخريجي الثاني عشر 🎓</div>
-                         <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 drop-shadow-md">بوابة طلب الوثائق والتصديقات الرسمية</h2>
-                         <p className="text-sm font-bold text-fuchsia-200/80 leading-relaxed max-w-3xl">
+                         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-fuchsia-500/10 text-fuchsia-300 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-fuchsia-500/20 shadow-inner backdrop-blur-sm">خاص بخريجي الثاني عشر 🎓</div>
+                         <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 drop-shadow-xl">بوابة طلب الوثائق والتصديقات الرسمية</h2>
+                         <p className="text-sm font-bold text-slate-300 leading-relaxed max-w-3xl opacity-90 drop-shadow-sm">
                            مبارك تخرجك! لراحتك وسرعة تقديمك للجامعات، وفرنا لك خدمة استخراج الوثائق وتصديقها من الوزارة عن طريق مندوب المدرسة. 
                          </p>
                       </div>
                    </div>
 
-                   <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 sm:p-5 mb-8 relative z-10 flex items-start sm:items-center gap-4 text-rose-200 shadow-inner">
-                      <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 text-rose-400 animate-pulse" />
-                      <p className="text-xs sm:text-sm font-bold leading-relaxed">
-                        <strong className="text-rose-400 font-black block sm:inline">تنبيه هام للسرعة:</strong> الوزارة تحصل رسوماً مقدارها <strong className="bg-rose-500/30 px-2 py-0.5 rounded text-white border border-rose-500/50">1 دينار كويتي</strong> لكل طابع تصديق (نسخة واحدة). يرجى تعبئة طلبك هنا ثم التوجه فوراً لدفع المبلغ في المدرسة ليتسنى للمندوب الانطلاق وتجهيز أوراقك قبل إغلاق باب التسجيل في الجامعات!
+                   <div className="bg-rose-500/10 backdrop-blur-md border border-rose-500/20 rounded-2xl p-4 sm:p-5 mb-8 relative z-10 flex items-start sm:items-center gap-4 text-rose-200 shadow-inner">
+                      <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 text-rose-400 animate-pulse drop-shadow-md" />
+                      <p className="text-xs sm:text-sm font-bold leading-relaxed opacity-90">
+                        <strong className="text-rose-400 font-black block sm:inline">تنبيه هام للسرعة:</strong> الوزارة تحصل رسوماً مقدارها <strong className="bg-rose-500/20 px-2 py-0.5 rounded text-white border border-rose-500/30 shadow-inner">1 دينار كويتي</strong> لكل طابع تصديق. يرجى تعبئة طلبك هنا ثم التوجه فوراً لدفع المبلغ في المدرسة ليتسنى للمندوب الانطلاق وتجهيز أوراقك قبل إغلاق باب التسجيل في الجامعات!
                       </p>
                    </div>
 
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 relative z-10 mb-8">
-                      <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
+                      {/* Document Item 1 */}
+                      <div className="bg-[#02040a]/40 backdrop-blur-md border border-white/5 rounded-2xl p-5 hover:border-fuchsia-500/30 hover:bg-[#02040a]/60 transition-all shadow-inner flex flex-col gap-4">
                          <div>
-                           <h4 className="font-black text-white text-base">شهادة الثانوية العامة</h4>
+                           <h4 className="font-black text-white text-base drop-shadow-sm">شهادة الثانوية العامة</h4>
                            <p className="text-[10px] text-slate-400 font-bold mt-1">الشهادة الأساسية بالدرجات</p>
                          </div>
                          <div className="space-y-3 mt-auto">
-                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl border border-white/5 shadow-inner">
                                <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
                                <div className="flex items-center gap-3">
-                                 <button onClick={() => handleDocChange('cert_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
-                                 <span className="font-black text-white w-4 text-center">{docRequest.cert_ar}</span>
-                                 <button onClick={() => handleDocChange('cert_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                                 <button onClick={() => handleDocChange('cert_ar', -1)} className="w-7 h-7 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-lg font-black active:scale-90 transition-all shadow-sm">-</button>
+                                 <span className="font-black text-fuchsia-300 w-4 text-center">{docRequest.cert_ar}</span>
+                                 <button onClick={() => handleDocChange('cert_ar', 1)} className="w-7 h-7 bg-fuchsia-500/20 hover:bg-fuchsia-500/40 border border-fuchsia-500/30 text-fuchsia-300 rounded-lg font-black active:scale-90 transition-all shadow-sm">+</button>
                                </div>
                             </div>
-                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl border border-white/5 shadow-inner">
                                <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
                                <div className="flex items-center gap-3">
-                                 <button onClick={() => handleDocChange('cert_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
-                                 <span className="font-black text-white w-4 text-center">{docRequest.cert_en}</span>
-                                 <button onClick={() => handleDocChange('cert_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                                 <button onClick={() => handleDocChange('cert_en', -1)} className="w-7 h-7 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-lg font-black active:scale-90 transition-all shadow-sm">-</button>
+                                 <span className="font-black text-fuchsia-300 w-4 text-center">{docRequest.cert_en}</span>
+                                 <button onClick={() => handleDocChange('cert_en', 1)} className="w-7 h-7 bg-fuchsia-500/20 hover:bg-fuchsia-500/40 border border-fuchsia-500/30 text-fuchsia-300 rounded-lg font-black active:scale-90 transition-all shadow-sm">+</button>
                                </div>
                             </div>
                          </div>
                       </div>
 
-                      <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
+                      {/* Document Item 2 */}
+                      <div className="bg-[#02040a]/40 backdrop-blur-md border border-white/5 rounded-2xl p-5 hover:border-fuchsia-500/30 hover:bg-[#02040a]/60 transition-all shadow-inner flex flex-col gap-4">
                          <div>
-                           <h4 className="font-black text-white text-base">شهادة لمن يهمه الأمر</h4>
+                           <h4 className="font-black text-white text-base drop-shadow-sm">شهادة لمن يهمه الأمر</h4>
                            <p className="text-[10px] text-slate-400 font-bold mt-1">إثبات دراسة وتخرج</p>
                          </div>
                          <div className="space-y-3 mt-auto">
-                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl border border-white/5 shadow-inner">
                                <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
                                <div className="flex items-center gap-3">
-                                 <button onClick={() => handleDocChange('twimc_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
-                                 <span className="font-black text-white w-4 text-center">{docRequest.twimc_ar}</span>
-                                 <button onClick={() => handleDocChange('twimc_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                                 <button onClick={() => handleDocChange('twimc_ar', -1)} className="w-7 h-7 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-lg font-black active:scale-90 transition-all shadow-sm">-</button>
+                                 <span className="font-black text-fuchsia-300 w-4 text-center">{docRequest.twimc_ar}</span>
+                                 <button onClick={() => handleDocChange('twimc_ar', 1)} className="w-7 h-7 bg-fuchsia-500/20 hover:bg-fuchsia-500/40 border border-fuchsia-500/30 text-fuchsia-300 rounded-lg font-black active:scale-90 transition-all shadow-sm">+</button>
                                </div>
                             </div>
-                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl border border-white/5 shadow-inner">
                                <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
                                <div className="flex items-center gap-3">
-                                 <button onClick={() => handleDocChange('twimc_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
-                                 <span className="font-black text-white w-4 text-center">{docRequest.twimc_en}</span>
-                                 <button onClick={() => handleDocChange('twimc_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                                 <button onClick={() => handleDocChange('twimc_en', -1)} className="w-7 h-7 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-lg font-black active:scale-90 transition-all shadow-sm">-</button>
+                                 <span className="font-black text-fuchsia-300 w-4 text-center">{docRequest.twimc_en}</span>
+                                 <button onClick={() => handleDocChange('twimc_en', 1)} className="w-7 h-7 bg-fuchsia-500/20 hover:bg-fuchsia-500/40 border border-fuchsia-500/30 text-fuchsia-300 rounded-lg font-black active:scale-90 transition-all shadow-sm">+</button>
                                </div>
                             </div>
                          </div>
                       </div>
 
-                      <div className="bg-[#02040a]/60 border border-white/10 rounded-2xl p-5 hover:border-fuchsia-500/50 transition-colors shadow-inner flex flex-col gap-4">
+                      {/* Document Item 3 */}
+                      <div className="bg-[#02040a]/40 backdrop-blur-md border border-white/5 rounded-2xl p-5 hover:border-fuchsia-500/30 hover:bg-[#02040a]/60 transition-all shadow-inner flex flex-col gap-4">
                          <div>
-                           <h4 className="font-black text-white text-base">شهادة حسن سيرة وسلوك</h4>
+                           <h4 className="font-black text-white text-base drop-shadow-sm">شهادة حسن سيرة وسلوك</h4>
                            <p className="text-[10px] text-slate-400 font-bold mt-1">مطلوبة للجامعات والبعثات</p>
                          </div>
                          <div className="space-y-3 mt-auto">
-                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl border border-white/5 shadow-inner">
                                <span className="text-xs font-bold text-slate-300">نسخة عربية</span>
                                <div className="flex items-center gap-3">
-                                 <button onClick={() => handleDocChange('conduct_ar', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
-                                 <span className="font-black text-white w-4 text-center">{docRequest.conduct_ar}</span>
-                                 <button onClick={() => handleDocChange('conduct_ar', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                                 <button onClick={() => handleDocChange('conduct_ar', -1)} className="w-7 h-7 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-lg font-black active:scale-90 transition-all shadow-sm">-</button>
+                                 <span className="font-black text-fuchsia-300 w-4 text-center">{docRequest.conduct_ar}</span>
+                                 <button onClick={() => handleDocChange('conduct_ar', 1)} className="w-7 h-7 bg-fuchsia-500/20 hover:bg-fuchsia-500/40 border border-fuchsia-500/30 text-fuchsia-300 rounded-lg font-black active:scale-90 transition-all shadow-sm">+</button>
                                </div>
                             </div>
-                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl border border-white/5 shadow-inner">
                                <span className="text-xs font-bold text-slate-300">نسخة إنجليزية</span>
                                <div className="flex items-center gap-3">
-                                 <button onClick={() => handleDocChange('conduct_en', -1)} className="w-7 h-7 bg-slate-800 text-white rounded-lg font-black hover:bg-slate-700 active:scale-90 transition-all">-</button>
-                                 <span className="font-black text-white w-4 text-center">{docRequest.conduct_en}</span>
-                                 <button onClick={() => handleDocChange('conduct_en', 1)} className="w-7 h-7 bg-fuchsia-600 text-white rounded-lg font-black hover:bg-fuchsia-500 active:scale-90 transition-all shadow-md">+</button>
+                                 <button onClick={() => handleDocChange('conduct_en', -1)} className="w-7 h-7 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-lg font-black active:scale-90 transition-all shadow-sm">-</button>
+                                 <span className="font-black text-fuchsia-300 w-4 text-center">{docRequest.conduct_en}</span>
+                                 <button onClick={() => handleDocChange('conduct_en', 1)} className="w-7 h-7 bg-fuchsia-500/20 hover:bg-fuchsia-500/40 border border-fuchsia-500/30 text-fuchsia-300 rounded-lg font-black active:scale-90 transition-all shadow-sm">+</button>
                                </div>
                             </div>
                          </div>
                       </div>
                    </div>
 
-                   <div className="relative z-10 bg-black/40 border border-white/5 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-center gap-6 shadow-inner">
+                   <div className="relative z-10 bg-[#02040a]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-center gap-6 shadow-inner">
                       <div className="flex items-center gap-4 text-center sm:text-right">
-                         <div className="p-3 bg-fuchsia-500/20 rounded-xl border border-fuchsia-500/30"><Coins className="w-8 h-8 text-fuchsia-400" /></div>
+                         <div className="p-3 bg-fuchsia-500/10 rounded-xl border border-fuchsia-500/20 shadow-inner"><Coins className="w-8 h-8 text-fuchsia-400 drop-shadow-md" /></div>
                          <div>
                            <p className="text-sm font-bold text-slate-400 mb-1">إجمالي رسوم التصديق والطوابع</p>
-                           <p className="text-3xl font-black text-white"><span className="text-fuchsia-400">{totalDocsCost}</span> د.ك</p>
+                           <p className="text-3xl font-black text-white drop-shadow-md"><span className="text-fuchsia-400">{totalDocsCost}</span> د.ك</p>
                          </div>
                       </div>
-                      <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.5)] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+                      <button onClick={submitDocRequest} disabled={totalDocsCost === 0 || isSubmittingDocs} className="w-full sm:w-auto px-10 py-4 bg-fuchsia-600/80 backdrop-blur-md hover:bg-fuchsia-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(192,38,211,0.3)] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 border border-fuchsia-400/50">
                          {isSubmittingDocs ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle2 className="w-5 h-5" /> اعتماد وتقديم الطلب</>}
                       </button>
                    </div>
@@ -497,25 +504,25 @@ export default function StudentDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 قسم الأوسمة (لوحة الشرف) */}
+        {/* 🚀 قسم الأوسمة (لوحة الشرف) - Glass Style */}
         {myBadges.length > 0 && (
           <div className="relative z-10 pt-2 w-full">
-            <h3 className="text-sm sm:text-base font-bold text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm">
-              <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
+            <h3 className="text-sm sm:text-base font-black text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-md">
+              <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف الخاصة بك
             </h3>
             <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
               {myBadges.map((badgeEntry, index) => (
-                <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:bg-[#0f1423] transition-all duration-300 hover:border-amber-500/30 group cursor-default shadow-inner">
+                <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 glass-panel rounded-[2rem] p-5 border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:border-amber-500/30 transition-all duration-300 group cursor-default">
                   <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
-                    <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/30 transition-colors"></div>
+                    <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/20 transition-colors"></div>
                     {badgeEntry.badge?.image_url ? (
-                      <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-2xl relative z-10" />
-                    ) : <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-lg p-2" />}
+                      <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-xl relative z-10" />
+                    ) : <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-md p-2" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
-                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود'}</p>
-                    <p className="text-[9px] text-slate-500 mt-2 bg-[#02040a]/80 w-fit px-2 py-1 rounded-lg border border-white/5">بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}</p>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-300 opacity-90 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود'}</p>
+                    <p className="text-[9px] text-slate-400 mt-2 bg-white/5 w-fit px-2.5 py-1 rounded-lg border border-white/5 shadow-inner font-bold">بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}</p>
                   </div>
                 </div>
               ))}
@@ -523,60 +530,59 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* 🚀 البانر السينمائي (مجلس الصف) */}
+        {/* 🚀 البانر السينمائي (مجلس الصف) - Glass Style */}
         {studentData?.section_id && (
-          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(99,102,241,0.15)] border border-indigo-500/30 backdrop-blur-xl bg-[#0f1423]">
-            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-600/20 to-transparent pointer-events-none z-0"></div>
-            <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-blue-500/10 blur-[80px] pointer-events-none z-0"></div>
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-indigo-500/30 group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
             
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
               <div className="flex flex-col md:flex-row items-center gap-4 sm:gap-6">
-                <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500/20 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-indigo-500/40 shadow-inner shrink-0 relative">
-                  <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400 drop-shadow-lg" />
-                  <div className="absolute -top-2 -right-2 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#0f1423] shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse"></div>
+                <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500/10 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-indigo-500/20 shadow-inner shrink-0 relative group-hover:scale-110 transition-transform duration-500">
+                  <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400 drop-shadow-md" />
+                  <div className="absolute -top-2 -right-2 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#02040a] shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse"></div>
                 </div>
                 <div>
-                  <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-[#02040a]/80 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-indigo-500/30 text-indigo-400 shadow-inner">
+                  <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-indigo-500/20 text-indigo-300 shadow-inner">
                     <Sparkles className="w-3.5 h-3.5" /> مجلس الصف الموحد
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-black tracking-tight mb-1 text-white drop-shadow-md">النقاشات المدرسية الحية</h2>
-                  <p className="text-slate-300 text-xs sm:text-sm font-bold opacity-90 max-w-lg mx-auto md:mx-0">انضم لغرفة نقاش صفك للتواصل مع جميع معلميك وزملائك في مكان واحد، واستقبال إعلانات الفصل الهامة.</p>
+                  <h2 className="text-xl sm:text-3xl font-black tracking-tight mb-2 text-white drop-shadow-lg">النقاشات المدرسية الحية</h2>
+                  <p className="text-slate-300 text-xs sm:text-sm font-bold opacity-90 max-w-xl mx-auto md:mx-0 leading-relaxed drop-shadow-sm">انضم لغرفة نقاش صفك للتواصل مع معلميك وزملائك في مكان واحد، واستقبال إعلانات الفصل الهامة.</p>
                 </div>
               </div>
-              <Link href={`/messages?sectionId=${studentData.section_id}`} className="group relative inline-flex items-center justify-center px-8 py-4 bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-black rounded-2xl sm:rounded-[1.5rem] shadow-[0_0_30px_rgba(79,70,229,0.3)] hover:shadow-[0_0_40px_rgba(79,70,229,0.5)] transition-all hover:scale-105 active:scale-95 border border-indigo-400/50 w-full md:w-auto overflow-hidden shrink-0 z-10">
-                <span className="relative z-10 flex items-center gap-2">دخول المجلس الآن <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" /></span>
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out z-0"></div>
+              <Link href={`/messages?sectionId=${studentData.section_id}`} className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600/80 hover:bg-indigo-500 backdrop-blur-md text-white font-black rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all active:scale-95 border border-indigo-400/50 w-full md:w-auto shrink-0 z-10 text-sm sm:text-base">
+                دخول المجلس الآن <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
               </Link>
             </div>
           </motion.div>
         )}
 
-        {/* 🚀 بطاقة إنذار الغياب الذكية */}
+        {/* 🚀 بطاقة إنذار الغياب الذكية (Glass Style) */}
         <AnimatePresence>
           {warningLevel > 0 && (
             <motion.div 
               initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-              className={`relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] border-2 backdrop-blur-xl p-6 sm:p-8 shadow-lg bg-gradient-to-r ${warningColors}`}
+              className={`relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 shadow-[0_0_40px_rgba(0,0,0,0.5)] ${warningColors}`}
             >
+              <div className="absolute top-0 right-0 w-48 h-48 rounded-full blur-[80px] pointer-events-none mix-blend-screen bg-rose-500/10"></div>
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="flex items-start gap-4 sm:gap-6 w-full md:w-auto flex-1">
-                  <div className={`p-4 rounded-2xl bg-white/10 shrink-0 border border-white/10 shadow-inner ${warningPulse ? 'animate-pulse' : ''}`}>
-                    <WarningIcon className={`w-8 h-8 sm:w-10 sm:h-10 ${warningIconColor}`} />
+                  <div className={`p-4 rounded-2xl bg-white/5 backdrop-blur-md shrink-0 border border-white/10 shadow-inner ${warningPulse ? 'animate-pulse' : ''}`}>
+                    <WarningIcon className={`w-8 h-8 sm:w-10 sm:h-10 ${warningIconColor} drop-shadow-md`} />
                   </div>
                   <div>
-                    <h3 className="text-xl sm:text-2xl font-black mb-2 tracking-tight flex items-center gap-2 drop-shadow-md text-white">
+                    <h3 className="text-xl sm:text-2xl font-black mb-2 tracking-tight flex items-center gap-2 drop-shadow-lg text-white">
                       {warningTitle}
                     </h3>
-                    <p className="text-sm sm:text-base font-bold opacity-90 leading-relaxed max-w-2xl text-white/80">
+                    <p className="text-sm sm:text-base font-bold opacity-90 leading-relaxed max-w-2xl text-slate-200 drop-shadow-sm">
                       {warningMessage}
                     </p>
-                    <button onClick={() => setIsExcuseModalOpen(true)} className="mt-4 px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-sm transition-all border border-white/20 flex items-center gap-2 shadow-inner active:scale-95">
+                    <button onClick={() => setIsExcuseModalOpen(true)} className="mt-4 px-6 py-2.5 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white rounded-xl font-black text-sm transition-all border border-white/20 flex items-center gap-2 shadow-inner active:scale-95">
                       <Stethoscope className="w-4 h-4" /> تقديم عذر طبي لتبرير الغياب
                     </button>
                   </div>
                 </div>
 
-                <div className="w-full md:w-auto min-w-[200px] shrink-0 bg-[#02040a]/60 p-5 rounded-2xl border border-white/10 shadow-inner backdrop-blur-md">
+                <div className="w-full md:w-auto min-w-[200px] shrink-0 bg-[#02040a]/50 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-inner">
                   <div className="flex justify-between items-end mb-3">
                     <span className="text-xs font-bold uppercase opacity-80 text-white">حصص الغياب</span>
                     <span className="text-3xl font-black text-white drop-shadow-md">{absentPeriods} <span className="text-sm opacity-50 font-bold">/ 100</span></span>
@@ -592,111 +598,78 @@ export default function StudentDashboard() {
                     <span className={warningLevel >= 3 ? 'text-rose-400 animate-pulse' : ''}>فصل نهائي</span>
                   </div>
                 </div>
-
               </div>
-              <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none"></div>
-              {warningLevel >= 3 && <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-rose-500/20 blur-3xl animate-pulse pointer-events-none"></div>}
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* ⏳ العداد التنازلي للاختبارات */}
         {(nextOfficialExam) && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-br from-[#131836] via-[#0f1423] to-[#02040a] p-6 sm:p-8 border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)] flex flex-col md:flex-row gap-6 items-center justify-between text-center md:text-right">
-              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-rose-500/20 flex flex-col md:flex-row gap-6 items-center justify-between text-center md:text-right group">
+              <div className="absolute inset-0 bg-rose-600/5 blur-[80px] pointer-events-none mix-blend-screen opacity-50 group-hover:opacity-100 transition-opacity duration-1000"></div>
               
               <div className="relative z-10 w-full flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs sm:text-sm font-black mb-4">
-                      <Timer className="w-5 h-5 animate-pulse" /> الاختبار القادم: {nextOfficialExam.subjects?.name}
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 backdrop-blur-sm border border-rose-500/20 text-rose-300 text-xs sm:text-sm font-black mb-4 shadow-inner">
+                      <Timer className="w-5 h-5 animate-pulse drop-shadow-sm" /> الاختبار القادم: {nextOfficialExam.subjects?.name}
                   </div>
-                  <div className="text-4xl sm:text-5xl font-black text-white drop-shadow-md tracking-widest" dir="rtl">
+                  <div className="text-4xl sm:text-5xl md:text-6xl font-black text-white drop-shadow-xl tracking-widest" dir="rtl">
                       {countdownStr}
                   </div>
-                  <p className="text-sm sm:text-base text-slate-400 mt-3 font-bold bg-[#02040a]/80 px-6 py-2 rounded-full border border-white/5">في {safeFormat(nextOfficialExam.exam_date, 'EEEE d MMMM')} الساعة {nextOfficialExam.start_time.substring(0,5)} صباحاً</p>
+                  <p className="text-xs sm:text-sm text-slate-300 mt-4 font-bold bg-[#02040a]/60 backdrop-blur-md px-6 py-2.5 rounded-full border border-white/10 shadow-inner">في {safeFormat(nextOfficialExam.exam_date, 'EEEE d MMMM')} الساعة {nextOfficialExam.start_time.substring(0,5)} صباحاً</p>
               </div>
             </motion.div>
         )}
 
-        {/* Track Selection (For 10th Grade) */}
-        {isTenthGrade && !hasSelectedTrack && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2.5rem] glass-panel border border-amber-500/30 p-6 sm:p-8 shadow-[0_0_30px_rgba(245,158,11,0.15)] relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-[80px] pointer-events-none"></div>
-            <div className="flex flex-col md:flex-row items-center gap-6 sm:gap-8 relative z-10 text-center md:text-right">
-              <div className="p-4 sm:p-5 bg-amber-500/10 rounded-[2rem] shadow-inner border border-amber-500/20 shrink-0"><Target className="h-10 w-10 sm:h-12 sm:w-12 text-amber-400 animate-pulse" /></div>
-              <div className="flex-1">
-                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white mb-2 sm:mb-3 tracking-tight drop-shadow-md">تحديد المسار الأكاديمي للعام القادم</h2>
-                <p className="text-slate-300 font-bold text-xs sm:text-sm leading-relaxed">يرجى اختيار المسار الأكاديمي (علمي أو أدبي) الذي ترغب في دراسته في الصف الحادي عشر.</p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full md:w-auto shrink-0">
-                <button onClick={() => handleTrackSelection('scientific')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-blue-600 text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:bg-blue-50 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-blue-400/50">المسار العلمي</button>
-                <button onClick={() => handleTrackSelection('literary')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-50 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-emerald-400/50">المسار الأدبي</button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {isTenthGrade && hasSelectedTrack && (
-          <div className="rounded-[2rem] bg-emerald-950/40 border border-emerald-500/30 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm backdrop-blur-xl">
-            <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-right">
-              <div className="p-3 bg-emerald-500/20 rounded-2xl shrink-0 border border-emerald-500/30"><CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-400" /></div>
-              <div>
-                <p className="text-base sm:text-lg font-black text-emerald-400 drop-shadow-sm">تم اعتماد مسارك الأكاديمي</p>
-                <p className="text-xs sm:text-sm font-bold text-slate-300 mt-1">المسار المختار: <span className="font-black bg-[#02040a]/80 px-2.5 py-1 rounded-lg shadow-inner border border-emerald-500/30 text-emerald-400 mx-1">{studentData.next_year_track === 'scientific' ? 'علمي 🔬' : 'أدبي 📚'}</span></p>
-              </div>
-            </div>
-            <p className="text-[9px] sm:text-[10px] text-emerald-400/70 font-black uppercase tracking-widest bg-[#02040a]/80 px-4 py-2 rounded-xl border border-emerald-500/20 shadow-inner w-full sm:w-auto text-center">تم الاختيار في {safeFormat(studentData.track_selection_date, 'd MMMM yyyy')}</p>
-          </div>
-        )}
-
-        {/* 🚀 Quick Actions */}
+        {/* 🚀 Quick Actions (Glass Grid) */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           {[
-            { href: '/dashboard/student/schedule', icon: Calendar, label: 'الجدول الدراسي', color: 'blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-            { href: '/exams', icon: FileText, label: 'الاختبارات', color: 'emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-            { href: '/assignments', icon: BookOpen, label: 'الواجبات', color: 'amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-            { href: '/messages', icon: Bell, label: 'التنبيهات', color: 'purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' }
+            { href: '/dashboard/student/schedule', icon: Calendar, label: 'الجدول الدراسي', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+            { href: '/exams', icon: FileText, label: 'الاختبارات', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+            { href: '/assignments', icon: BookOpen, label: 'الواجبات', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+            { href: '/messages', icon: Bell, label: 'التنبيهات', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' }
           ].map((item, idx) => (
-            <Link key={idx} href={item.href} className="group">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className={`p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] glass-panel transition-all flex flex-col items-center justify-center gap-3 sm:gap-4 group-hover:-translate-y-1 h-full`}>
-                <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-colors duration-500 ${item.bg} border ${item.border} group-hover:scale-110 shadow-inner`}><item.icon className={`h-6 w-6 sm:h-8 sm:w-8 text-${item.color} drop-shadow-md`} /></div>
-                <span className="font-black text-slate-300 group-hover:text-white transition-colors text-xs sm:text-sm text-center">{item.label}</span>
+            <Link key={idx} href={item.href} className="group h-full">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className="p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] glass-panel transition-all flex flex-col items-center justify-center gap-3 sm:gap-4 group-hover:-translate-y-1 h-full hover:border-white/20">
+                <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-500 ${item.bg} backdrop-blur-md border ${item.border} group-hover:scale-110 shadow-inner`}><item.icon className={`h-6 w-6 sm:h-8 sm:w-8 ${item.color} drop-shadow-md`} /></div>
+                <span className="font-black text-slate-300 group-hover:text-white transition-colors text-xs sm:text-sm text-center drop-shadow-sm">{item.label}</span>
               </motion.div>
             </Link>
           ))}
         </div>
 
-        {/* 🚀 Main Grid System */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+        {/* 🚀 Main Grid System (Gemini Rebalance: 7/12 Right, 5/12 Left) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           
-          <div className="lg:col-span-2 space-y-6 lg:space-y-8 w-full">
+          {/* 🚀 العمود الأيمن العريض (7/12) */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-6 lg:space-y-8 w-full">
 
-            {/* 🚀 ودجت المكتبة الرقمية */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            {/* المكتبة الرقمية */}
+            <motion.div variants={itemVariants}>
               <DigitalLibraryWidget userRole="student" />
             </motion.div>
             
-            {/* 🚀 📅 جدول الاختبارات البانورامي */}
+            {/* جدول الاختبارات البانورامي */}
             {examTimetables.length > 0 && (
                 <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
-                      <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
+                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
+                      <div className="p-2 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
                     </h2>
                   </div>
-                  <div className="p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       {examTimetables.map((ex, idx) => {
                           const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
                           return (
-                          <div key={idx} className={`bg-[#0f1423]/60 border border-white/5 p-4 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
+                          <div key={idx} className={`bg-[#02040a]/40 backdrop-blur-md border border-white/5 p-4 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
                               <div>
-                                  <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2">
+                                  <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2 drop-shadow-sm">
                                       {ex.subjects?.name}
-                                      {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                                      {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
                                   </p>
                                   <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
                               </div>
-                              <div className="bg-[#02040a] px-3 py-2 rounded-xl border border-white/5 shadow-inner flex flex-col items-center justify-center shrink-0">
-                                  <span className="text-[10px] text-slate-500 font-bold uppercase">الوقت</span>
+                              <div className="bg-white/5 px-3 py-2 rounded-xl border border-white/10 shadow-inner flex flex-col items-center justify-center shrink-0">
+                                  <span className="text-[10px] text-slate-300 font-bold uppercase">الوقت</span>
                                   <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
                               </div>
                           </div>
@@ -706,19 +679,19 @@ export default function StudentDashboard() {
                 </div>
             )}
 
-            {/* 🚀 Today's Schedule Timeline */}
+            {/* Today's Schedule (Live Pulse) */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
-              <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-[#02040a]/40 relative z-10 gap-4 text-center sm:text-right">
-                <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2.5 sm:p-3 bg-blue-500/10 rounded-xl sm:rounded-2xl border border-blue-500/20 shadow-inner"><Clock className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 drop-shadow-md" /></div> جدول حصص اليوم
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none mix-blend-screen opacity-50"></div>
+              <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-transparent relative z-10 gap-4 text-center sm:text-right">
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
+                  <div className="p-2.5 sm:p-3 bg-blue-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-blue-500/20 shadow-inner"><Clock className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 drop-shadow-sm" /></div> جدول حصص اليوم
                 </h2>
-                <Link href="/dashboard/student/schedule" className="text-xs sm:text-sm font-bold text-blue-400 hover:text-white hover:bg-blue-500/20 transition-colors px-4 sm:px-5 py-2.5 bg-blue-500/10 rounded-xl shadow-sm border border-blue-500/20 shrink-0 w-full sm:w-auto active:scale-95">الجدول الكامل</Link>
+                <Link href="/dashboard/student/schedule" className="text-xs sm:text-sm font-bold text-blue-300 hover:text-white hover:bg-white/10 transition-colors px-4 sm:px-5 py-2.5 bg-white/5 backdrop-blur-md rounded-xl shadow-inner border border-white/10 shrink-0 w-full sm:w-auto active:scale-95">الجدول الكامل</Link>
               </div>
               
               <div className="p-5 sm:p-6 lg:p-8 relative z-10 bg-transparent overflow-x-hidden">
                 {todaysSchedule.length > 0 ? (
-                  <div className="space-y-5 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 sm:before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-blue-500/30 before:via-white/10 before:to-transparent">
+                  <div className="space-y-5 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 sm:before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-blue-500/30 before:via-white/5 before:to-transparent">
                     {todaysSchedule.map((item, i) => {
                       let current = false; let next = false; let isPast = false;
                       if (item.start_time && item.end_time && currentTime) {
@@ -734,20 +707,19 @@ export default function StudentDashboard() {
                       }
                       return (
                         <div key={i} className={cn("relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group", current ? "is-active z-20" : "z-10")}>
-                          <div className={cn("flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500", 
+                          <div className={cn("flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500 backdrop-blur-md", 
                             current ? "bg-gradient-to-br from-blue-400 to-indigo-500 text-white scale-110 sm:scale-125 border-[#02040a] shadow-[0_0_20px_rgba(59,130,246,0.5)]" : 
-                            isPast ? "bg-[#02040a]/40 text-slate-600 border-white/5 opacity-50" :
-                            next ? "bg-[#0f1423] text-blue-400 border-blue-500/50" : "bg-[#02040a] text-slate-500 border-white/10"
+                            isPast ? "bg-[#02040a]/40 text-slate-500 border-white/5 opacity-50" :
+                            next ? "bg-[#02040a]/80 text-blue-400 border-blue-500/30" : "bg-[#02040a]/80 text-slate-400 border-white/10"
                           )}>
                             {current ? <Play className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse ml-0.5 sm:ml-1" /> : isPast ? <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <span className="text-sm sm:text-base font-black">{item.period}</span>}
                           </div>
                           
-                          <div className={cn("w-[calc(100%-3.5rem)] sm:w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 backdrop-blur-md cursor-default relative overflow-hidden", 
-                            current ? "bg-[#0f1423]/90 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.15)] scale-[1.02] ring-1 ring-blue-500/30" : 
-                            isPast ? "bg-[#02040a]/20 border-white/5 opacity-40 grayscale" :
-                            next ? "bg-blue-500/5 border-blue-500/20 shadow-sm" : "bg-[#02040a]/60 border-white/5 shadow-inner hover:border-white/10"
+                          <div className={cn("w-[calc(100%-3.5rem)] sm:w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 backdrop-blur-xl relative overflow-hidden shadow-inner cursor-default", 
+                            current ? "bg-blue-500/10 border-blue-500/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] scale-[1.02] ring-1 ring-blue-500/20" : 
+                            isPast ? "bg-[#02040a]/20 border-white/5 opacity-60 grayscale" :
+                            next ? "bg-blue-500/5 border-blue-500/20" : "bg-[#02040a]/40 border-white/5 hover:border-white/10"
                           )}>
-                            
                             {current && (
                               <span className="absolute top-4 right-4 flex h-3.5 w-3.5">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
@@ -759,19 +731,19 @@ export default function StudentDashboard() {
                             }`}></div>
 
                             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 pr-2">
-                              <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate pl-2", current ? "text-blue-400 drop-shadow-sm" : next ? "text-white" : isPast ? "text-slate-500" : "text-slate-300")}>{item.subjects?.name}</h3>
+                              <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate drop-shadow-md pl-2", current ? "text-blue-400" : next ? "text-white" : isPast ? "text-slate-500" : "text-slate-200")}>{item.subjects?.name}</h3>
                               <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                                {current && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-[9px] sm:text-[10px] font-bold text-blue-400 shadow-inner"><div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> الحصة الآن</span>}
-                                {next && !current && <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[9px] sm:text-[10px] font-bold shadow-inner">الحصة القادمة</span>}
-                                {isPast && <span className="px-2.5 py-1 rounded-full bg-slate-900 text-slate-500 border border-white/5 text-[9px] sm:text-[10px] font-bold shadow-inner flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> انتهت</span>}
-                                <span className={cn("text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-[#02040a] text-blue-400 border-blue-500/20" : isPast ? "bg-transparent text-slate-600 border-slate-800" : "bg-white/5 text-slate-400 border-white/10")}>الحصة {item.period}</span>
+                                {current && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-[9px] sm:text-[10px] font-bold text-blue-300 shadow-inner"><div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> الحصة الآن</span>}
+                                {next && !current && <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[9px] sm:text-[10px] font-bold shadow-inner">الحصة القادمة</span>}
+                                {isPast && <span className="px-2.5 py-1 rounded-full bg-white/5 text-slate-400 border border-white/5 text-[9px] sm:text-[10px] font-bold shadow-inner flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> انتهت</span>}
+                                <span className={cn("text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-blue-500/20 text-blue-300 border-blue-500/20" : isPast ? "bg-transparent text-slate-500 border-slate-800" : "bg-white/5 text-slate-300 border-white/10")}>الحصة {item.period}</span>
                               </div>
                             </div>
                             
                             <div className="flex flex-wrap items-center justify-between pt-3 sm:pt-4 border-t border-white/5 gap-3 pr-2">
-                              <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-blue-100" : isPast ? "text-slate-600" : "text-slate-400")}><GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" /><span className="truncate">أ. {item.teachers?.users?.full_name || 'غير محدد'}</span></p>
+                              <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-blue-100" : isPast ? "text-slate-500" : "text-slate-300")}><GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" /><span className="truncate">أ. {item.teachers?.users?.full_name || 'غير محدد'}</span></p>
                               {item.start_time && item.end_time && (
-                                <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-blue-400 border-blue-500/20" : isPast ? "text-slate-600 border-slate-800" : "text-slate-500 border-white/5")} dir="ltr"><Clock className="w-2.5 h-2.5 sm:w-3 h-3 shrink-0" />{item.start_time.substring(0, 5)} - {item.end_time.substring(0, 5)}</span>
+                                <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/60 backdrop-blur-sm px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-blue-300 border-blue-500/20" : isPast ? "text-slate-600 border-slate-800" : "text-slate-400 border-white/5")} dir="ltr"><Clock className="w-2.5 h-2.5 sm:w-3 h-3 shrink-0" />{item.start_time.substring(0, 5)} - {item.end_time.substring(0, 5)}</span>
                               )}
                             </div>
                           </div>
@@ -780,22 +752,21 @@ export default function StudentDashboard() {
                     })}
                   </div>
                 ) : (
-                  <div className="text-center py-12 sm:py-16 bg-[#02040a]/50 rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 shadow-inner px-4">
+                  <div className="text-center py-12 sm:py-16 bg-[#02040a]/30 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 shadow-inner px-4">
                     <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 mb-3 sm:mb-4 border border-white/5 shadow-inner"><Calendar className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500" /></div>
-                    <h3 className="text-lg sm:text-xl font-black text-white mb-2 drop-shadow-sm">لا توجد حصص اليوم</h3>
+                    <h3 className="text-lg sm:text-xl font-black text-white mb-2 drop-shadow-md">لا توجد حصص اليوم</h3>
                     <p className="text-xs sm:text-sm text-slate-400 font-bold max-w-sm mx-auto">استمتع بيومك! ليس لديك أي حصص مجدولة لهذا اليوم.</p>
                   </div>
                 )}
               </div>
             </div>
-            
 
-            {/* Performance Chart - تم الإصلاح لاعتماد درجات الهوك */}
+            {/* Performance Chart */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none"></div>
+              <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none mix-blend-screen opacity-50"></div>
               <div className="mb-6 sm:mb-8 flex items-center justify-between relative z-10 text-center sm:text-right">
-                <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2.5 sm:p-3 bg-emerald-500/10 rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner"><TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 drop-shadow-md" /></div>
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
+                  <div className="p-2.5 sm:p-3 bg-emerald-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner"><TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 drop-shadow-sm" /></div>
                   تطور المستوى الأكاديمي
                 </h2>
               </div>
@@ -807,14 +778,14 @@ export default function StudentDashboard() {
                         <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#34d399" stopOpacity={0.5}/><stop offset="95%" stopColor="#34d399" stopOpacity={0}/></linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
-                      <XAxis dataKey="displayTitle" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} domain={[0, 100]} dx={-10} width={30} />
-                      <Tooltip contentStyle={{borderRadius: '1rem', border: '1px solid #ffffff10', backgroundColor: '#02040a', color: '#fff', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.8)'}} itemStyle={{color: '#34d399', fontWeight: '900'}} />
-                      <Area type="monotone" dataKey="displayScore" name="الدرجة" stroke="#34d399" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" activeDot={{r: 5, strokeWidth: 0, fill: '#34d399'}} />
+                      <XAxis dataKey="displayTitle" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} domain={[0, 100]} dx={-10} width={30} />
+                      <Tooltip contentStyle={{borderRadius: '1.5rem', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(2,4,10,0.8)', backdropFilter: 'blur(16px)', color: '#fff', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.5)'}} itemStyle={{color: '#34d399', fontWeight: '900'}} />
+                      <Area type="monotone" dataKey="displayScore" name="الدرجة" stroke="#34d399" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" activeDot={{r: 5, strokeWidth: 0, fill: '#34d399', stroke: '#fff'}} />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-[#02040a]/50 rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 p-4 text-center shadow-inner">
+                  <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-[#02040a]/30 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 p-4 text-center shadow-inner">
                     <BarChart2 className="h-10 w-10 sm:h-12 sm:w-12 text-slate-600 mb-3 sm:mb-4" />
                     <p className="font-bold text-xs sm:text-sm text-slate-400 max-w-xs">لا توجد نتائج اختبارات متاحة لعرض الرسم البياني حتى الآن</p>
                   </div>
@@ -822,41 +793,127 @@ export default function StudentDashboard() {
               </div>
             </div>
 
+            {/* Track Selection (For 10th Grade) */}
+            {isTenthGrade && !hasSelectedTrack && (
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2.5rem] glass-panel border-amber-500/30 p-6 sm:p-8 shadow-[0_0_40px_rgba(245,158,11,0.15)] relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-[80px] pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
+                <div className="flex flex-col md:flex-row items-center gap-6 sm:gap-8 relative z-10 text-center md:text-right">
+                  <div className="p-4 sm:p-5 bg-amber-500/10 backdrop-blur-md rounded-[2rem] shadow-inner border border-amber-500/20 shrink-0 group-hover:scale-110 transition-transform duration-500"><Target className="h-10 w-10 sm:h-12 sm:w-12 text-amber-400 animate-pulse drop-shadow-md" /></div>
+                  <div className="flex-1">
+                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white mb-2 sm:mb-3 tracking-tight drop-shadow-lg">تحديد المسار الأكاديمي للعام القادم</h2>
+                    <p className="text-slate-200 font-bold text-xs sm:text-sm leading-relaxed drop-shadow-sm">يرجى اختيار المسار الأكاديمي (علمي أو أدبي) الذي ترغب في دراسته في الصف الحادي عشر.</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full md:w-auto shrink-0">
+                    <button onClick={() => handleTrackSelection('scientific')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-blue-600/90 backdrop-blur-md text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-blue-400/50">المسار العلمي</button>
+                    <button onClick={() => handleTrackSelection('literary')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-emerald-600/90 backdrop-blur-md text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-emerald-400/50">المسار الأدبي</button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {isTenthGrade && hasSelectedTrack && (
+              <div className="rounded-[2rem] glass-panel border-emerald-500/30 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm backdrop-blur-xl">
+                <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-right">
+                  <div className="p-3 bg-emerald-500/10 backdrop-blur-md rounded-2xl shrink-0 border border-emerald-500/20 shadow-inner"><CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-400 drop-shadow-sm" /></div>
+                  <div>
+                    <p className="text-base sm:text-lg font-black text-emerald-400 drop-shadow-md">تم اعتماد مسارك الأكاديمي</p>
+                    <p className="text-xs sm:text-sm font-bold text-slate-300 mt-1">المسار المختار: <span className="font-black bg-[#02040a]/60 backdrop-blur-sm px-2.5 py-1 rounded-lg shadow-inner border border-emerald-500/20 text-emerald-300 mx-1">{studentData.next_year_track === 'scientific' ? 'علمي 🔬' : 'أدبي 📚'}</span></p>
+                  </div>
+                </div>
+                <p className="text-[9px] sm:text-[10px] text-emerald-300 font-black uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto text-center">تم الاختيار في {safeFormat(studentData.track_selection_date, 'd MMMM yyyy')}</p>
+              </div>
+            )}
+
           </div>
 
-          <div className="space-y-6 lg:space-y-8 w-full">
-            <AnnouncementsWidget authRole="student" />
+          {/* 🚀 العمود الأيسر (5/12) - يحتوي المكونات الجانبية الأنيقة */}
+          <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:space-y-8 w-full">
+            
+            {/* Announcements Widget */}
+            <motion.div variants={itemVariants}>
+               <AnnouncementsWidget authRole="student" />
+            </motion.div>
+
+            {/* Recent Assignments */}
+            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+              <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
+                  <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner"><BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" /></div> واجبات مطلوبة
+                </h2>
+              </div>
+              <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
+                {upcomingAssignments.length > 0 ? (
+                  upcomingAssignments.map((assignment) => (
+                    <Link href={`/assignments/${assignment.id}`} key={assignment.id} className="block group mb-2">
+                      <div className="p-4 sm:p-5 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-amber-500/30 hover:bg-white/5 transition-all bg-[#02040a]/40 backdrop-blur-md flex flex-col justify-between h-full shadow-inner">
+                        <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
+                          <p className="font-black text-white text-xs sm:text-sm leading-tight group-hover:text-amber-300 transition-colors line-clamp-2 drop-shadow-md">{assignment.title}</p>
+                          <span className="text-[9px] sm:text-[10px] font-black px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg whitespace-nowrap shrink-0 flex items-center gap-1.5 shadow-inner"><Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> {safeFormat(assignment.due_date, 'd MMM')}</span>
+                        </div>
+                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 bg-white/5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg inline-block w-fit border border-white/10 shadow-inner">{assignment.subject?.name}</p>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-slate-400 font-bold bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 text-xs sm:text-sm m-2 shadow-inner">لا توجد واجبات مطلوبة حالياً</div>
+                )}
+              </div>
+            </div>
+
+            {/* 📚 نماذج الإجابات الرسمية */}
+            {answerKeys.length > 0 && (
+                <div className="glass-panel border-emerald-500/30 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.05)] mt-6 lg:mt-8">
+                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md w-full sm:w-auto">
+                      <div className="p-2 bg-emerald-500/10 backdrop-blur-md rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> نماذج الإجابات
+                    </h2>
+                  </div>
+                  <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
+                      {answerKeys.map(keyObj => (
+                          <a href={keyObj.file_url} target="_blank" rel="noreferrer" key={keyObj.id} className="flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-emerald-500/30 hover:bg-white/5 transition-all mb-2 group shadow-inner bg-[#02040a]/40 backdrop-blur-md">
+                              <div className="flex items-center gap-3 min-w-0">
+                                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 group-hover:bg-emerald-500/80 group-hover:text-slate-900 transition-colors shrink-0">
+                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                      <p className="font-black text-white text-xs sm:text-sm truncate drop-shadow-md">{keyObj.title}</p>
+                                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 mt-1 bg-white/5 px-2 py-0.5 rounded border border-white/10 inline-block shadow-inner">{keyObj.subjects?.name}</p>
+                                  </div>
+                              </div>
+                          </a>
+                      ))}
+                  </div>
+                </div>
+            )}
 
             {/* 🩺 سجل الغياب والأعذار الطبية */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-              <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4">
-                <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
-                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
-                    <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" />
+              <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent gap-4">
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
+                  <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner">
+                    <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" />
                   </div> 
                   سجل الأعذار 
                 </h2>
-                <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 rounded-xl hover:opacity-90 transition-all shadow-md shrink-0 active:scale-95 whitespace-nowrap">
+                <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400/90 to-orange-500/90 backdrop-blur-md px-4 py-2.5 rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] shrink-0 active:scale-95 whitespace-nowrap border border-amber-300/50">
                   <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
                 </button>
               </div>
-
               
               <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3 max-h-[300px] overflow-y-auto custom-scrollbar">
                 {excuses.length > 0 ? (
                   excuses.map(exc => (
-                    <div key={exc.id} className="p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 bg-[#0f1423]/60 flex flex-col gap-2 mb-2 shadow-inner">
+                    <div key={exc.id} className="p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 bg-[#02040a]/40 backdrop-blur-md flex flex-col gap-2 mb-2 shadow-inner hover:bg-white/5 transition-colors">
                       <div className="flex justify-between items-center">
-                        <span className="text-white font-black text-sm">
+                        <span className="text-white font-black text-sm drop-shadow-md">
                           {exc.absent_dates && exc.absent_dates.length > 0 
                             ? `${safeFormat(exc.absent_dates[0], 'dd MMM yyyy')} ${exc.absent_dates.length > 1 ? `(+${exc.absent_dates.length - 1} أيام)` : ''}`
                             : safeFormat(exc.excuse_date, 'dd MMM yyyy')}
                         </span>
-                        <span className={`text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-md border ${
-                          exc.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                          exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                          'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        <span className={`text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-md border shadow-inner ${
+                          exc.status === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
+                          exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
+                          'bg-rose-500/10 text-rose-300 border-rose-500/30'
                         }`}>
                           {exc.status === 'pending' ? 'قيد المراجعة ⏳' : exc.status === 'approved' ? 'عذر مقبول ✓' : 'عذر مرفوض ✕'}
                         </span>
@@ -867,44 +924,18 @@ export default function StudentDashboard() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 text-slate-500 bg-[#02040a]/50 rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لم تقم بتقديم أي أعذار مسبقة</div>
+                  <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لم تقم بتقديم أي أعذار مسبقة</div>
                 )}
               </div>
             </div>
 
-            {/* 📚 نماذج الإجابات الرسمية */}
-            {answerKeys.length > 0 && (
-                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden mt-6 lg:mt-8">
-                  <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
-                      <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" /></div> نماذج الإجابات الرسمية
-                    </h2>
-                  </div>
-                  <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
-                      {answerKeys.map(keyObj => (
-                          <a href={keyObj.file_url} target="_blank" rel="noreferrer" key={keyObj.id} className="flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-emerald-500/30 hover:bg-[#0f1423] transition-all mb-2 group shadow-inner">
-                              <div className="flex items-center gap-3 min-w-0">
-                                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-colors shrink-0">
-                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                                  </div>
-                                  <div className="min-w-0">
-                                      <p className="font-black text-white text-xs sm:text-sm truncate drop-shadow-sm">{keyObj.title}</p>
-                                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1 bg-[#02040a] px-2 py-0.5 rounded border border-white/5 inline-block">{keyObj.subjects?.name}</p>
-                                  </div>
-                              </div>
-                          </a>
-                      ))}
-                  </div>
-                </div>
-            )}
-
             {/* Recent Grades */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-              <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-inner"><Award className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-md" /></div> آخر النتائج
+              <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
+                  <div className="p-2 bg-emerald-500/10 backdrop-blur-md rounded-xl border border-emerald-500/20 shadow-inner"><Award className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> آخر النتائج
                 </h2>
-                <Link href="/student/performance" className="text-[10px] sm:text-xs font-bold text-emerald-400 hover:text-white flex items-center justify-center gap-1 bg-emerald-500/10 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:bg-emerald-500/20 transition-colors border border-emerald-500/20 shrink-0 w-full sm:w-auto active:scale-95">السجل <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" /></Link>
+                <Link href="/student/performance" className="text-[10px] sm:text-xs font-bold text-emerald-300 hover:text-white flex items-center justify-center gap-1 bg-white/5 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:bg-white/10 transition-colors border border-white/10 shrink-0 w-full sm:w-auto active:scale-95 shadow-inner">السجل <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" /></Link>
               </div>
               
               <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
@@ -912,54 +943,28 @@ export default function StudentDashboard() {
                   recentGrades.slice(0,4).map((grade) => {
                     const isLocked = checkIsLocked(grade.exam);
                     return (
-                      <div key={grade.id} className={`flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border transition-all mb-2 ${isLocked ? 'bg-[#02040a]/60 border-white/5 shadow-inner' : 'bg-[#0f1423]/60 border-white/5 hover:border-emerald-500/30 hover:bg-[#0f1423] group'}`}>
+                      <div key={grade.id} className={`flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border transition-all mb-2 ${isLocked ? 'bg-[#02040a]/40 border-white/5 shadow-inner grayscale opacity-80' : 'bg-[#02040a]/60 backdrop-blur-md border-white/5 hover:border-emerald-500/30 hover:bg-white/5 group shadow-inner'}`}>
                         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                          <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner shrink-0 transition-colors ${isLocked ? 'bg-white/5 text-slate-500 border border-white/10' : grade.score >= 50 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:bg-emerald-500 group-hover:text-slate-900' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20 group-hover:bg-rose-500 group-hover:text-white'}`}>
+                          <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner shrink-0 transition-colors ${isLocked ? 'bg-white/5 text-slate-500 border border-white/10' : grade.score >= 50 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:bg-emerald-500/80 group-hover:text-slate-900' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20 group-hover:bg-rose-500/80 group-hover:text-slate-900'}`}>
                             {isLocked ? <Lock className="h-4 w-4 sm:h-5 sm:w-5" /> : <FileText className="h-4 w-4 sm:h-5 sm:w-5" />}
                           </div>
                           <div className="min-w-0 pr-1">
-                            <p className="font-black text-white text-xs sm:text-sm leading-tight mb-1 truncate drop-shadow-sm">{grade.exam?.title}</p>
-                            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 bg-[#02040a] px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg inline-block truncate max-w-full border border-white/5 shadow-inner">{grade.exam?.subject?.name}</p>
+                            <p className="font-black text-white text-xs sm:text-sm leading-tight mb-1 truncate drop-shadow-md">{grade.exam?.title}</p>
+                            <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 bg-white/5 px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg inline-block truncate max-w-full border border-white/10 shadow-inner">{grade.exam?.subject?.name}</p>
                           </div>
                         </div>
                         <div className="text-right flex flex-col items-end justify-center shrink-0 pl-1">
                           {isLocked ? (
-                            <><span className="text-[9px] sm:text-[10px] font-black text-slate-500 bg-white/5 shadow-inner border border-white/10 px-2 py-1 rounded-md flex items-center gap-1 mb-1"><Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> محجوبة</span><p className="text-[8px] sm:text-[9px] text-slate-600 font-bold uppercase tracking-widest">{safeFormat(grade.completed_at, 'd MMM')}</p></>
+                            <><span className="text-[9px] sm:text-[10px] font-black text-slate-400 bg-white/5 shadow-inner border border-white/10 px-2 py-1 rounded-md flex items-center gap-1 mb-1"><Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> محجوبة</span><p className="text-[8px] sm:text-[9px] text-slate-500 font-bold uppercase tracking-widest">{safeFormat(grade.completed_at, 'd MMM')}</p></>
                           ) : (
-                            <><p className={`text-base sm:text-xl font-black flex items-baseline gap-1 drop-shadow-md ${grade.score >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>{grade.score} <span className="text-[9px] sm:text-[10px] font-bold text-slate-500">/ {grade.exam?.max_score || 100}</span></p><p className="text-[8px] sm:text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">{safeFormat(grade.completed_at, 'd MMM')}</p></>
+                            <><p className={`text-base sm:text-xl font-black flex items-baseline gap-1 drop-shadow-lg ${grade.score >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>{grade.score} <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">/ {grade.exam?.max_score || 100}</span></p><p className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">{safeFormat(grade.completed_at, 'd MMM')}</p></>
                           )}
                         </div>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="text-center py-8 text-slate-500 bg-[#02040a]/50 rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لا توجد نتائج اختبارات حالياً</div>
-                )}
-              </div>
-            </div>
-
-            {/* Upcoming Assignments */}
-            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-              <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner"><Target className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" /></div> واجبات مطلوبة
-                </h2>
-              </div>
-              <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
-                {upcomingAssignments.length > 0 ? (
-                  upcomingAssignments.map((assignment) => (
-                    <Link href={`/assignments/${assignment.id}`} key={assignment.id} className="block group mb-2">
-                      <div className="p-4 sm:p-5 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-amber-500/30 hover:bg-[#0f1423] transition-all bg-[#0f1423]/60 flex flex-col justify-between h-full shadow-inner">
-                        <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
-                          <p className="font-black text-white text-xs sm:text-sm leading-tight group-hover:text-amber-400 transition-colors line-clamp-2 drop-shadow-sm">{assignment.title}</p>
-                          <span className="text-[9px] sm:text-[10px] font-black px-2 sm:px-2.5 py-1 sm:py-1.5 bg-[#02040a] text-amber-400 border border-amber-500/20 rounded-lg whitespace-nowrap shrink-0 flex items-center gap-1.5 shadow-inner"><Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> {safeFormat(assignment.due_date, 'd MMM')}</span>
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg inline-block w-fit border border-white/5 shadow-inner">{assignment.subject?.name}</p>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-slate-500 font-bold bg-[#02040a]/50 rounded-[1rem] border border-dashed border-white/10 text-xs sm:text-sm m-2 shadow-inner">لا توجد واجبات مطلوبة حالياً</div>
+                  <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لا توجد نتائج اختبارات حالياً</div>
                 )}
               </div>
             </div>
@@ -968,7 +973,7 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 🚀 بوابة التقييم الإجبارية (تعمل بشكل منفصل وبصمت في الخلفية حتى تنقض!) */}
+      {/* 🚀 بوابة التقييم الإجبارية (تعمل بشكل منفصل وبصمت) */}
       {studentData?.id && (
          <StudentEvaluationGate 
             studentId={studentData.id} 
@@ -976,43 +981,43 @@ export default function StudentDashboard() {
          />
       )}
 
-      {/* 🚀 نافذة العذر الطبي العادي */}
+      {/* 🚀 نافذة العذر الطبي (Glass Modal) */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
             <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/90 backdrop-blur-md z-50" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 p-6 sm:p-8" dir="rtl">
+              <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-50" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 glass-panel rounded-[2.5rem] w-[95%] max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50 p-6 sm:p-8 border-white/10" dir="rtl">
                 
                 <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
                   <div>
-                    <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3"><Stethoscope className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" /> تقديم عذر طبي</Dialog.Title>
-                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-2">يرجى تعبئة تفاصيل الغياب وإرفاق التقرير لاعتماده من الإدارة.</p>
+                    <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3 drop-shadow-md"><Stethoscope className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" /> تقديم عذر طبي</Dialog.Title>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-300 mt-2">يرجى تعبئة تفاصيل الغياب وإرفاق التقرير لاعتماده من الإدارة.</p>
                   </div>
-                  <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
+                  <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90 shadow-inner"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
                 </div>
 
                 <div className="space-y-6">
-                  <div className="space-y-3 bg-[#090b14]/50 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
-                    <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها</label>
+                  <div className="space-y-3 bg-[#02040a]/40 backdrop-blur-sm p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
+                    <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 drop-shadow-sm"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها</label>
                     <div className="flex items-center gap-2">
-                      <input type="date" value={currentDateInput} onChange={(e) => setCurrentDateInput(e.target.value)} className="flex-1 bg-[#131836] border border-white/10 rounded-xl p-3 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50" style={{ colorScheme: 'dark' }} />
-                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-xs sm:text-sm transition-all shadow-sm active:scale-95">إضافة</button>
+                      <input type="date" value={currentDateInput} onChange={(e) => setCurrentDateInput(e.target.value)} className="flex-1 glass-input p-3 text-xs sm:text-sm font-bold" style={{ colorScheme: 'dark' }} />
+                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 backdrop-blur-md text-amber-300 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-xs sm:text-sm transition-all shadow-inner active:scale-95">إضافة</button>
                     </div>
                     {excuseForm.absent_dates.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/5">
                         {excuseForm.absent_dates.map(date => (
-                          <div key={date} className="flex items-center gap-2 bg-[#02040a]/80 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
+                          <div key={date} className="flex items-center gap-2 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
                             <span className="text-[10px] sm:text-xs font-bold text-slate-200" dir="ltr">{date}</span>
-                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300"><Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
+                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300 drop-shadow-sm"><Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">نوع الدوام</label>
-                    <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 appearance-none [&>option]:bg-[#131836]">
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">نوع الدوام</label>
+                    <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full glass-input p-3.5 text-xs sm:text-sm font-bold appearance-none [&>option]:bg-[#0f1423] cursor-pointer">
                       <option value="full_day">غياب يوم كامل</option>
                       <option value="partial_day">غياب جزئي (استئذان حصص)</option>
                     </select>
@@ -1021,10 +1026,10 @@ export default function StudentDashboard() {
                     {excuseForm.duration_type === 'partial_day' && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                         <div className="space-y-2 pt-2">
-                          <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /> حدد الحصص التي غبت عنها</label>
+                          <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 drop-shadow-sm"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /> حدد الحصص التي غبت عنها</label>
                           <div className="flex flex-wrap gap-2">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
-                              <button key={p} type="button" onClick={() => togglePeriod(p)} className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all border", excuseForm.target_periods.includes(p) ? "bg-amber-500 text-slate-900 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]" : "bg-[#090b14] text-slate-400 border-white/10 hover:border-amber-500/50")}>{p}</button>
+                              <button key={p} type="button" onClick={() => togglePeriod(p)} className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all border shadow-inner backdrop-blur-md", excuseForm.target_periods.includes(p) ? "bg-amber-500/80 text-slate-950 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)]" : "bg-white/5 text-slate-300 border-white/10 hover:border-amber-500/40 hover:bg-white/10")}>{p}</button>
                             ))}
                           </div>
                         </div>
@@ -1032,20 +1037,20 @@ export default function StudentDashboard() {
                     )}
                   </AnimatePresence>
                   <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">إرفاق التقرير الطبي (صورة)</label>
-                    <label className={cn("relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingReport ? "border-amber-500/50 bg-amber-500/5" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 bg-[#090b14] hover:border-amber-500/30 hover:bg-white/5")}>
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">إرفاق التقرير الطبي (صورة)</label>
+                    <label className={cn("relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all backdrop-blur-md shadow-inner", isUploadingReport ? "border-amber-500/50 bg-amber-500/10" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/10" : "border-white/10 bg-[#02040a]/40 hover:border-amber-500/30 hover:bg-white/5")}>
                       <input type="file" accept="image/*" className="hidden" onChange={handleReportUpload} disabled={isUploadingReport} />
-                      {isUploadingReport ? <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" /><span className="text-[10px] sm:text-xs font-black">جاري الرفع السحابي...</span></div> : excuseForm.attachment_url ? <div className="flex flex-col items-center gap-2 text-emerald-400"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-black text-center">تم الإرفاق بنجاح</span></div> : <div className="flex flex-col items-center gap-2 text-slate-500"><UploadCloud className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-bold text-center">اضغط لاختيار صورة</span></div>}
+                      {isUploadingReport ? <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" /><span className="text-[10px] sm:text-xs font-black">جاري الرفع السحابي...</span></div> : excuseForm.attachment_url ? <div className="flex flex-col items-center gap-2 text-emerald-400 drop-shadow-sm"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-black text-center">تم الإرفاق بنجاح</span></div> : <div className="flex flex-col items-center gap-2 text-slate-400 drop-shadow-sm"><UploadCloud className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-bold text-center">اضغط لاختيار صورة</span></div>}
                     </label>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات (اختياري)</label>
-                    <textarea value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3 sm:p-4 text-xs sm:text-sm font-bold text-white outline-none focus:border-amber-500/50 h-20 sm:h-24 resize-none custom-scrollbar" />
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">ملاحظات (اختياري)</label>
+                    <textarea value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})} placeholder="اكتب أي تفاصيل إضافية هنا..." className="w-full glass-input p-3 sm:p-4 text-xs sm:text-sm font-bold h-20 sm:h-24 resize-none" />
                   </div>
                 </div>
                 <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/5 flex gap-3">
-                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-slate-900 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2"><Loader2 className={cn("w-5 h-5", isSubmittingExcuse ? "animate-spin" : "hidden")} /> إرسال الطلب</button>
-                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10">إلغاء</button>
+                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500/90 to-orange-500/90 backdrop-blur-md hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95 border border-amber-300"><Loader2 className={cn("w-5 h-5", isSubmittingExcuse ? "animate-spin" : "hidden")} /> إرسال الطلب</button>
+                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10 text-sm sm:text-base active:scale-95 shadow-inner backdrop-blur-sm">إلغاء</button>
                 </div>
               </Dialog.Content>
             </Dialog.Portal>
@@ -1053,12 +1058,6 @@ export default function StudentDashboard() {
         )}
       </AnimatePresence>
 
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-      `}</style>
     </motion.div>
   );
 }
