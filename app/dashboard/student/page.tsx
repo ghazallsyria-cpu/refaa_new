@@ -26,7 +26,6 @@ import * as Dialog from '@radix-ui/react-dialog';
 
 // 🚀 استدعاء رادار التقييم المخفي
 import StudentEvaluationGate from '@/components/StudentEvaluationGate';
-
 import AnnouncementsWidget from '../../../components/AnnouncementsWidget';
 import { useDashboardSystem } from '../../../hooks/useDashboardSystem';
 import { supabase } from '../../../lib/supabase';
@@ -34,7 +33,6 @@ import { useAuth } from '../../../context/auth-context';
 import { cn } from '../../../lib/utils';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
 import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
-
 
 const checkIsLocked = (examData: any) => {
   if (!examData?.exam_date) return false;
@@ -256,7 +254,6 @@ export default function StudentDashboard() {
   const avgScore = unlockedGrades.length > 0 ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length) : 0;
   const avatarUrl = studentData?.users?.avatar_url || studentData?.avatar_url;
   
-  // 🚀 تحسين شفرة הـ QR
   const qrPayload = `raf-id:${studentData?.id}`; 
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=1`;
 
@@ -271,9 +268,9 @@ export default function StudentDashboard() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 font-cairo pt-6" dir="rtl">
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
 
-{studentData?.id && ( 
-   <MemorialShieldDisplay userId={studentData.id} role="student" /> 
-)}
+        {studentData?.id && ( 
+           <MemorialShieldDisplay userId={studentData.id} role="student" /> 
+        )}
         
         {/* 🚀 الهيدر الرئيسي */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-10 text-white shadow-2xl border border-white/10">
@@ -301,7 +298,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* 🚀 الهوية الامتحانية - مع إصلاح الـ QR */}
+        {/* 🚀 الهوية الامتحانية */}
         <AnimatePresence>
           {seatAllocation && (
              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative overflow-hidden rounded-[2.5rem] bg-[#02040a] p-6 sm:p-10 border-[3px] border-[#0f1423] shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-8 group">
@@ -310,7 +307,7 @@ export default function StudentDashboard() {
                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black mb-4">
                      <Ticket className="w-4 h-4" /> بطاقة دخول الاختبار
                    </div>
-                   <h2 className="text-2xl sm:text-4xl font-black text-white mb-4">رقم جلوسك המعتمد: <span className="text-rose-500">{seatAllocation.seat_number}</span></h2>
+                   <h2 className="text-2xl sm:text-4xl font-black text-white mb-4">رقم جلوسك المعتمد: <span className="text-rose-500">{seatAllocation.seat_number}</span></h2>
                    <p className="text-slate-300 font-bold text-sm sm:text-lg">لجنتك: <span className="text-white bg-rose-500/20 px-3 py-1 rounded-xl">{seatAllocation.exam_committees?.name}</span></p>
                    <p className="text-[10px] text-slate-500 mt-4">📍 الموقع: {seatAllocation.exam_committees?.location || 'المبنى الرئيسي'}</p>
                 </div>
@@ -672,6 +669,11 @@ export default function StudentDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
           
           <div className="lg:col-span-2 space-y-6 lg:space-y-8 w-full">
+
+            {/* 🚀 ودجت المكتبة الرقمية */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <DigitalLibraryWidget userRole="student" />
+            </motion.div>
             
             {/* 🚀 📅 جدول الاختبارات البانورامي */}
             {examTimetables.length > 0 && (
@@ -703,11 +705,6 @@ export default function StudentDashboard() {
                   </div>
                 </div>
             )}
-
-
-
-{/* 🚀 ودجت المكتبة الرقمية */} 
-<DigitalLibraryWidget userRole="student" />
 
             {/* 🚀 Today's Schedule Timeline */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
@@ -791,8 +788,7 @@ export default function StudentDashboard() {
                 )}
               </div>
             </div>
-    
-    
+            
 
             {/* Performance Chart - تم الإصلاح لاعتماد درجات الهوك */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden">
