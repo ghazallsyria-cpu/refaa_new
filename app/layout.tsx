@@ -24,6 +24,12 @@ const ibmPlexArabic = IBM_Plex_Sans_Arabic({
 export const metadata: Metadata = {
   title: "مدرسة الرفعة النموذجية | المنصة الرقمية",
   description: "نظام إدارة مدرسي رقمي متكامل وعصري",
+  manifest: "/manifest.json", // 🚀 ربط هوية التطبيق (PWA)
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "مدرسة الرفعة",
+  }, // 🚀 دعم شاشات الآيفون بشكل مثالي
 };
 
 // ==========================================
