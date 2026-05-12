@@ -9,6 +9,9 @@ import { NotificationProvider } from "@/context/notification-context"; // لإد
 import { AuthProvider } from "@/context/auth-context"; // لإدارة جلسات المستخدم وصلاحياته
 import { AppLayout } from "@/components/app-layout"; // هيكل الصفحة (الهيدر، الشريط الجانبي)
 
+// 🚀 استيراد مكون تثبيت التطبيق (PWA)
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+
 // ==========================================
 // 🎨 1. تهيئة الخط الأساسي (Font Initialization)
 // ==========================================
@@ -62,8 +65,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* ==========================================
             🧅 6. شجرة مزودات السياق (Providers Tree)
-            🚀 التحديث المعماري: QueryProvider يجب أن يكون الأب الأكبر
-            ليسمح للـ Auth و الـ Notifications باستخدام الكاش وجلب البيانات
             ========================================== */}
         <QueryProvider>
           <AuthProvider>
@@ -73,6 +74,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 {children}
               </AppLayout>
               
+              {/* 🚀 نافذة تثبيت التطبيق الذكية (ستظهر للمستخدمين غير المثبتين للتطبيق) */}
+              <PWAInstallPrompt />
+
               {/* 🔔 مكان وضع مكون الإشعارات المنبثقة الشامل (Toaster) مستقبلاً */}
               {/* <Toaster position="top-center" /> */}
               
