@@ -707,7 +707,7 @@ export default function StudentDashboard() {
 full">
 
 {/* 🚀 ودجت المكتبة الرقمية */} 
-<DigitalLibraryWidget userRole="teacher" />
+<DigitalLibraryWidget userRole="student" />
 
             {/* 🚀 Today's Schedule Timeline */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
