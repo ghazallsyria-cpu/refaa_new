@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
+import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
 
 
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
@@ -944,6 +945,9 @@ export default function TeacherDashboard() {
 
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="teacher" />
+<div className="xl:col-span-2 space-y-6 lg:space-y-8 w-full">
+    
+
 
             {/* 🔑 خزانة نماذج الإجابات للمعلم */}
             {answerKeys.length > 0 && (
@@ -1209,6 +1213,10 @@ export default function TeacherDashboard() {
           </Dialog.Root>
         )}
       </AnimatePresence>
+            {/* 🚀 ودجت المكتبة الرقمية */}
+    <DigitalLibraryWidget userRole="teacher" />
+
+
 
       {/* 🚀 نافذة (Modal) تقديم اعتذار عن مهمة المراقبة */}
       <AnimatePresence>
