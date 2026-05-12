@@ -38,19 +38,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// 🚀 دالة المتتبع الصامت (Silent Tracker)
-const recordDailyPresence = async (currentUser: SupabaseUser, role: string) => {
+// 🚀 دالة المتتبع الصامت (تعديل: تستقبل الآن الاسم الحقيقي realName)
+const recordDailyPresence = async (currentUser: SupabaseUser, role: string, realName: string) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const now = Date.now();
     
-    // 🛡️ صمام الأمان: منع إرسال الطلبات المتكررة (كل 15 دقيقة كحد أقصى)
     const lastUpdate = localStorage.getItem('last_presence_update');
     if (lastUpdate && (now - parseInt(lastUpdate)) < 15 * 60 * 1000) {
       return; 
     }
 
-    const fullName = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'مستخدم مجهول';
+    // 🚀 نستخدم الاسم الحقيقي المرسل، وإذا لم يوجد نلجأ للحلول البديلة
+    const fullName = realName || currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'مستخدم مجهول';
 
     const { error } = await supabase
       .from('daily_presence')
@@ -76,7 +76,6 @@ const recordDailyPresence = async (currentUser: SupabaseUser, role: string) => {
 
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // 🚀 حارس الإصدار لتنظيف مخلفات التحديثات القديمة
   const APP_VERSION = '1.1.0';
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -84,7 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState<string>('');
   const [mustResetPassword, setMustResetPassword] = useState(false);
   
-  // 🚀 isChecking هو الحارس المطلق: لن يتم عرض أي شيء حتى يصبح false
   const [isChecking, setIsChecking] = useState(true);
   
   const [isAdminByEmail, setIsAdminByEmail] = useState(false);
@@ -105,7 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isHomePage = pathname === '/'; 
   const isPublicPage = isLoginPage || isResetPasswordPage || isHomePage;
   
-  // ظهور زر الطوارئ إذا تأخر السيرفر
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isChecking && !authRole) {
@@ -153,7 +150,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw lastError || new Error("بيانات الدخول غير صحيحة.");
     }
     
-    // جلب الصلاحيات الكاملة مع تسجيل الدخول
     const [userRes, controlRes] = await Promise.all([
       supabase.from('users').select('role, must_reset_password, full_name').eq('id', authResult.user.id).maybeSingle(),
       supabase.from('exam_control_team').select('id').eq('user_id', authResult.user.id).eq('academic_year', '2025-2026').maybeSingle()
@@ -174,8 +170,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('cached_role', userRes.data.role);
     localStorage.setItem('cached_name', name);
 
-    // 🚀 تسجيل الحضور فوراً بعد تسجيل الدخول الناجح
-    recordDailyPresence(authResult.user, userRes.data.role);
+    // 🚀 نمرر الاسم الحقيقي هنا!
+    recordDailyPresence(authResult.user, userRes.data.role, name);
 
     setIsChecking(false);
     
@@ -212,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.removeItem('cached_role');
           localStorage.removeItem('cached_name');
           localStorage.removeItem('school_settings'); 
-          localStorage.removeItem('last_presence_update'); // 🚀 تصفير كاش الحضور مع التحديث
+          localStorage.removeItem('last_presence_update'); 
           
           for (let i = 0; i < localStorage.length; i++) {
              const key = localStorage.key(i);
@@ -221,11 +217,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem('app_version', APP_VERSION);
         }
 
-        // جلب الـ Session
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session?.user) {
-          // جلب إعدادات المنصة للزوار لمعرفة حالة الإغلاق
           const { data: guestSettings } = await supabase.from('platform_settings').select('*').limit(1).maybeSingle();
           if (guestSettings && mounted) setRawSettings(guestSettings);
 
@@ -244,7 +238,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (mounted) setUser(session.user);
 
-        // جلب التفاصيل من السيرفر
         if (fetchedUserId.current !== session.user.id) {
            fetchedUserId.current = session.user.id;
 
@@ -258,14 +251,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
              if (controlRes?.data) setIsControlTeamMember(true);
 
              if (userRes?.data) {
+                const name = userRes.data.full_name || '';
                 setAuthRole(userRes.data.role);
-                setUserName(userRes.data.full_name || '');
+                setUserName(name);
                 setMustResetPassword(userRes.data.must_reset_password || false);
                 localStorage.setItem('cached_role', userRes.data.role);
-                localStorage.setItem('cached_name', userRes.data.full_name || '');
+                localStorage.setItem('cached_name', name);
                 
-                // 🚀 تسجيل الحضور عند إعادة تحميل الصفحة أو التنقل
-                recordDailyPresence(session.user, userRes.data.role);
+                // 🚀 نمرر الاسم الحقيقي هنا!
+                recordDailyPresence(session.user, userRes.data.role, name);
              }
              if (settingsRes?.data) {
                setRawSettings(settingsRes.data);
@@ -275,8 +269,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
            if (mounted) {
               setIsChecking(false);
-              // 🚀 تسجيل الحضور حتى لو كان المستخدم موجوداً مسبقاً (سيتم صده إذا لم تمر 15 دقيقة)
-              if (authRole) recordDailyPresence(session.user, authRole);
+              if (authRole) {
+                 // 🚀 نمرر الاسم المخزن مؤقتاً هنا
+                 const cachedName = localStorage.getItem('cached_name') || '';
+                 recordDailyPresence(session.user, authRole, cachedName);
+              }
            }
         }
       } catch (err) {
@@ -311,9 +308,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false; 
       subscription.unsubscribe(); 
     };
-  }, [isPublicPage, authRole]); // 🚀 أضفنا authRole هنا لضمان عمل المتتبع
+  }, [isPublicPage, authRole]);
 
-  // 🚀 منطق إغلاق المنصة الصارم
   useEffect(() => {
     if (isChecking) return;
 
