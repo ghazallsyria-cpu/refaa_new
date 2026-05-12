@@ -1,21 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter, UploadCloud, TableProperties, ArrowRight, ArrowDown } from 'lucide-react';
-// استخدام مكتبة framer-motion لتوفير ميزة (السحب والإفلات) لترتيب الأسئلة بسلاسة
+import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter, UploadCloud, TableProperties, ArrowRight, ArrowDown, Sparkles } from 'lucide-react';
 import { motion, Reorder } from 'motion/react';
 import ImageUpload from '@/components/ImageUpload';
 import ForumEditorOriginal from '@/components/ForumEditor';
+import { cn } from '@/lib/utils'; // افتراض وجود دالة cn لدمج الكلاسات
 
 // 🪄 الحيلة السحرية لإسكات TypeScript عند استدعاء مكون لا يملك Type Definitions دقيقة
 const ForumEditor = ForumEditorOriginal as any;
 
 // ==========================================
-// 📦 تعريف الخصائص (Props) الممررة للمكون
+// 📦 تعريف الخصائص (Props) המمررة للمكون
 // ==========================================
 interface AssignmentBuilderProps {
-  questions: any[]; // مصفوفة تحتوي على جميع الأسئلة المبنية حتى الآن
-  onChange: (questions: any[]) => void; // دالة تُرسل المصفوفة المحدثة إلى الصفحة الأم (التي تحفظ في قاعدة البيانات)
+  questions: any[]; 
+  onChange: (questions: any[]) => void; 
 }
 
 export default function AssignmentBuilder({ questions, onChange }: AssignmentBuilderProps) {
@@ -24,26 +24,22 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
   // ➕ إضافة سؤال/عنصر جديد للمصفوفة
   // ==========================================
   const addQuestion = (type: string = 'text') => {
-    // 1. إنشاء الهيكل الأساسي للسؤال الجديد
     const newQuestion: any = {
-      id: crypto.randomUUID(), // معرّف فريد
-      text: '', // نص السؤال (سيتم تعبئته بواسطة ForumEditor)
-      type: type, // نوع السؤال
-      points: type === 'section_header' ? 0 : 5, // العناوين لا تملك نقاط، الأسئلة افتراضياً 5
-      isRequired: type !== 'section_header', // العناوين غير إجبارية بطبيعتها
-      media_url: null // رابط الصورة المرفقة (إن وجدت)
+      id: crypto.randomUUID(),
+      text: '', 
+      type: type, 
+      points: type === 'section_header' ? 0 : 5, 
+      isRequired: type !== 'section_header', 
+      media_url: null 
     };
 
-    // 2. تخصيص هيكل البيانات بناءً على "النوع" المختار
     if (type === 'comparison') {
-      // سؤال المقارنة يتطلب أطراف وأوجه للمقارنة
       newQuestion.options = [
         { id: crypto.randomUUID(), content: 'الطرف الأول' },
         { id: crypto.randomUUID(), content: 'الطرف الثاني' },
         { id: crypto.randomUUID(), content: 'وجه المقارنة الأول' }
       ];
     } else if (type === 'data_table') {
-      // جدول البيانات يتطلب أعمدة (Headers) وصفوف (Rows)
       newQuestion.table = {
         headers: ['العنصر', 'C', 'H'],
         rows: [
@@ -52,33 +48,24 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
         ]
       };
     } else if (type === 'multiple_choice' || type === 'checkbox' || type === 'true_false') {
-      // أسئلة الخيارات تتطلب قائمة من الخيارات
       newQuestion.options = [
         { id: crypto.randomUUID(), content: 'الخيار الأول' }
       ];
     }
 
-    // 3. تحديث مصفوفة الأسئلة في الـ State الأم
     onChange([...questions, newQuestion]);
   };
 
-  // ==========================================
-  // 🔄 تحديث تفاصيل سؤال موجود
-  // ==========================================
   const updateQuestion = (id: string, updates: Partial<any>) => {
     onChange(questions.map(q => q.id === id ? { ...q, ...updates } : q));
   };
 
-  // ==========================================
-  // 🗑️ حذف سؤال من الواجب
-  // ==========================================
   const removeQuestion = (id: string) => {
     onChange(questions.filter(q => q.id !== id));
   };
 
   // ==========================================
   // 🎛️ أدوات إدارة الخيارات (Options Management)
-  // لأسئلة (الخيارات المتعددة، المقارنة)
   // ==========================================
   const addOption = (questionId: string, isAspect: boolean = false) => {
     const question = questions.find(q => q.id === questionId);
@@ -95,7 +82,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     const question = questions.find(q => q.id === questionId);
     if (question && question.options) {
       const options = [...question.options];
-      // الحفاظ على التوافق الرجعي (Backward Compatibility) إذا كانت الخيارات نصوصاً وليست Objects
       if (typeof options[index] === 'string') {
         options[index] = { id: crypto.randomUUID(), content: value };
       } else {
@@ -114,7 +100,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
   };
 
   // ==========================================
-  // 📊 أدوات إدارة جداول البيانات (Data Tables Management)
+  // 📊 أدوات إدارة جداول البيانات (Data Tables)
   // ==========================================
   const addTableColumn = (questionId: string) => {
     const question = questions.find(q => q.id === questionId);
@@ -155,7 +141,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
 
   const removeTableColumn = (questionId: string, colIndex: number) => {
     const question = questions.find(q => q.id === questionId);
-    if (question && question.table && question.table.headers.length > 2) { // يجب ألا يقل عن عمودين
+    if (question && question.table && question.table.headers.length > 2) {
       const newHeaders = question.table.headers.filter((_: any, i: number) => i !== colIndex);
       const newRows = question.table.rows.map((row: string[]) => row.filter((_: any, i: number) => i !== colIndex));
       updateQuestion(questionId, { table: { headers: newHeaders, rows: newRows } });
@@ -164,100 +150,101 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
 
   const removeTableRow = (questionId: string, rowIndex: number) => {
     const question = questions.find(q => q.id === questionId);
-    if (question && question.table && question.table.rows.length > 1) { // يجب ألا يقل عن صف واحد
+    if (question && question.table && question.table.rows.length > 1) {
       const newRows = question.table.rows.filter((_: any, i: number) => i !== rowIndex);
       updateQuestion(questionId, { table: { ...question.table, rows: newRows } });
     }
   };
 
   // ==========================================
-  // 🎨 الواجهة المرئية للمصنع (UI Render)
+  // 🎨 الواجهة المرئية للمصنع (Gemini UI)
   // ==========================================
   return (
-    <div className="space-y-8" dir="rtl">
+    <div className="space-y-8 relative z-10" dir="rtl">
       
-      {/* 👑 شريط التحكم العلوي (أزرار إضافة أنواع الأسئلة) */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-[#131836]/60 backdrop-blur-xl p-4 sm:p-6 rounded-[2rem] border border-white/10 shadow-inner">
-        <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-3 drop-shadow-sm">
-          <div className="p-2 bg-indigo-500/20 rounded-xl border border-indigo-500/30">
-            <Type className="h-5 w-5 text-indigo-400" />
+      {/* 👑 شريط التحكم العلوي (Floating Glass Bar) */}
+      <div className="glass-panel p-4 sm:p-6 rounded-[2rem] flex flex-wrap items-center justify-between gap-4 shadow-[0_10px_40px_rgba(0,0,0,0.5)] border-indigo-500/20 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-[40px] pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-150"></div>
+        <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-3 drop-shadow-md relative z-10">
+          <div className="p-2 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/30 shadow-inner">
+            <Sparkles className="h-5 w-5 text-indigo-400 drop-shadow-sm" />
           </div>
-          أسئلة الواجب
+          مختبر بناء الواجبات
         </h3>
         
         {/* أزرار الإضافة السريعة */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <button type="button" onClick={() => addQuestion('section_header')} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500/10 px-4 py-2.5 text-xs sm:text-sm font-black text-amber-400 hover:bg-amber-500 hover:text-slate-900 transition-all border border-amber-500/20 shadow-inner">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto relative z-10">
+          <button type="button" onClick={() => addQuestion('section_header')} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500/10 backdrop-blur-md px-4 py-2.5 text-xs sm:text-sm font-black text-amber-400 hover:bg-amber-500 hover:text-slate-900 transition-all border border-amber-500/20 shadow-inner active:scale-95">
             <Heading className="h-4 w-4" /> عنوان
           </button>
-          <button type="button" onClick={() => addQuestion('data_table')} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-500/10 px-4 py-2.5 text-xs sm:text-sm font-black text-cyan-400 hover:bg-cyan-500 hover:text-slate-900 transition-all border border-cyan-500/20 shadow-inner">
+          <button type="button" onClick={() => addQuestion('data_table')} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-500/10 backdrop-blur-md px-4 py-2.5 text-xs sm:text-sm font-black text-cyan-400 hover:bg-cyan-500 hover:text-slate-900 transition-all border border-cyan-500/20 shadow-inner active:scale-95">
             <TableProperties className="h-4 w-4" /> جدول
           </button>
-          <button type="button" onClick={() => addQuestion('text')} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-2.5 text-xs sm:text-sm font-black text-white hover:opacity-90 transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-400/50">
+          <button type="button" onClick={() => addQuestion('text')} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500/80 to-blue-600/80 backdrop-blur-md px-6 py-2.5 text-xs sm:text-sm font-black text-white hover:from-indigo-500 hover:to-blue-600 transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] border border-indigo-400/50 active:scale-95">
             <Plus className="h-4 w-4" /> سؤال جديد
           </button>
         </div>
       </div>
 
-      {/* 🗂️ منطقة عرض وترتيب الأسئلة (Reorder Group) */}
-      {/* axis="y" يعني أن السحب والإفلات مسموح عمودياً فقط */}
+      {/* 🗂️ منطقة عرض وترتيب الأسئلة (Holographic Cards) */}
       <Reorder.Group axis="y" values={questions} onReorder={onChange} className="space-y-6 sm:space-y-8">
         {questions.map((question, index) => {
           
-          // تحديد هوية السؤال لتلوينه بشكل مختلف
           const isHeader = question.type === 'section_header';
           const isComparison = question.type === 'comparison';
           const isDataTable = question.type === 'data_table';
 
           return (
-            // عنصر واحد قابل للسحب والإفلات
             <Reorder.Item
               key={question.id}
               value={question}
-              className={`p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border shadow-lg relative group transition-all backdrop-blur-md
-                ${isHeader ? 'bg-[#131836]/40 border-amber-500/30' : isDataTable ? 'bg-[#061121]/80 border-cyan-500/20' : 'bg-[#02040a]/60 border-white/5'}
-              `}
+              className={cn(
+                "p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] relative group transition-all duration-500 backdrop-blur-xl border shadow-[0_15px_40px_rgba(0,0,0,0.4)]",
+                isHeader ? "bg-amber-900/10 border-amber-500/30" : isDataTable ? "bg-cyan-900/10 border-cyan-500/30" : "bg-[#0f1423]/40 border-indigo-500/30 hover:border-indigo-400/50"
+              )}
             >
+              {/* 🌌 لمعة الزجاج الداخلية */}
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none rounded-[2rem] sm:rounded-[2.5rem]"></div>
               
-              {/* 🖐️ مقبض السحب (Grip) يظهر عند مرور الماوس */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing bg-[#131836] px-4 py-1.5 rounded-b-xl shadow-md border border-t-0 border-white/10 z-20">
-                <GripVertical className="h-5 w-5 text-slate-400" />
+              {/* 🖐️ مقبض السحب (Holographic Grip) */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all cursor-grab active:cursor-grabbing bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-b-xl shadow-lg border border-t-0 border-white/20 z-20 hover:bg-white/20 flex items-center justify-center">
+                <GripVertical className="h-5 w-5 text-white/70 drop-shadow-md" />
               </div>
 
-              <div className="flex flex-col gap-6 pt-2 sm:pt-4">
+              <div className="flex flex-col gap-6 pt-2 sm:pt-4 relative z-10">
                 <div className="flex flex-col lg:flex-row gap-6 items-start">
                   
                   {/* ==========================================
                       ✍️ منطقة محرر نص السؤال
                       ========================================== */}
                   <div className="flex-1 w-full space-y-4">
-                    <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest block pl-1">نص السؤال {index + 1}</label>
-                    <div className="bg-[#0f1423]/80 p-2 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner">
-                      {/* استدعاء المحرر الغني لكتابة الأسئلة وإدراج المعادلات والصور */}
+                    <label className={cn("text-[10px] sm:text-xs font-black uppercase tracking-widest block pl-1 drop-shadow-sm", isHeader ? "text-amber-400" : isDataTable ? "text-cyan-400" : "text-indigo-400")}>
+                      {isHeader ? 'عنوان القسم' : `نص السؤال ${index + 1}`}
+                    </label>
+                    <div className="bg-black/40 backdrop-blur-md p-2 rounded-xl sm:rounded-2xl border border-white/10 shadow-inner">
                       <ForumEditor 
                         content={question.text || question.content || ''}
                         setContent={(val: any) => updateQuestion(question.id, { text: val, content: val })}
                         canUploadImage={true}
-                        placeholder={isHeader ? "اكتب العنوان..." : "اكتب نص السؤال أو المسألة..."}
+                        placeholder={isHeader ? "اكتب العنوان هنا..." : "اكتب نص السؤال أو المسألة هنا..."}
                       />
                     </div>
                   </div>
 
                   {/* ==========================================
-                      ⚙️ إعدادات نوع السؤال (تختفي في حالة العنوان)
+                      ⚙️ إعدادات نوع السؤال
                       ========================================== */}
                   {!isHeader && (
-                    <div className="w-full lg:w-64 shrink-0 space-y-4 bg-[#090b14]/30 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
+                    <div className="w-full lg:w-64 shrink-0 space-y-4 bg-black/30 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/10 shadow-inner">
                       <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">نوع الإجابة</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 drop-shadow-sm">نوع الإجابة</label>
                         <select
-                          className="block w-full rounded-xl border border-white/10 py-3 px-4 text-white bg-[#0f1423] shadow-inner focus:border-indigo-500/50 outline-none text-xs sm:text-sm font-bold appearance-none cursor-pointer"
+                          className="glass-input appearance-none cursor-pointer w-full py-3.5 px-4 rounded-xl text-xs sm:text-sm font-bold text-indigo-300 focus:border-indigo-500/50 shadow-inner [&>option]:bg-[#0f1423]"
                           value={question.type}
                           onChange={(e) => {
                             const type = e.target.value;
                             const updates: any = { type };
                             
-                            // 💡 السحر البرمجي: حقن هيكل البيانات تلقائياً عند تغيير النوع
                             if ((type === 'multiple_choice' || type === 'checkbox' || type === 'true_false') && (!question.options || question.options.length === 0)) {
                               updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1' }];
                             } else if (type === 'comparison' && (!question.options || question.options.length === 0)) {
@@ -272,7 +259,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                             updateQuestion(question.id, updates);
                           }}
                         >
-                          {/* قائمة الأنواع المتاحة للمدرس */}
                           <option value="text">إجابة نصية قصيرة</option>
                           <option value="paragraph">إجابة نصية (فقرة)</option>
                           <option value="file_upload">إرفاق صورة / ملف</option>
@@ -290,8 +276,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     🎛️ مساحة تحرير (الخيارات المتعددة / المقارنات)
                     ========================================== */}
                 {(question.type === 'multiple_choice' || question.type === 'checkbox' || question.type === 'comparison' || question.type === 'true_false') && (
-                  <div className="bg-[#090b14]/50 p-4 sm:p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4">
+                  <div className="bg-black/30 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4 drop-shadow-sm">
                       {isComparison ? 'أطراف وأوجه المقارنة' : 'إدارة الخيارات'}
                     </label>
                     <div className="space-y-3">
@@ -299,31 +285,27 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                         const optValue = typeof opt === 'string' ? opt : (opt.content || opt.text || '');
                         return (
                           <div key={opt.id || optIdx} className="flex items-center gap-3">
-                            
-                            {/* شارات تمييز خاصة بسؤال المقارنة */}
                             {isComparison && optIdx < 2 && (
-                              <span className="text-[10px] font-black text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20 shrink-0 w-20 text-center">
+                              <span className="text-[10px] font-black text-indigo-300 bg-indigo-500/20 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-indigo-500/30 shrink-0 w-20 text-center shadow-inner">
                                 {optIdx === 0 ? 'الطرف 1' : 'الطرف 2'}
                               </span>
                             )}
                             {isComparison && optIdx >= 2 && (
-                              <span className="text-[10px] font-black text-slate-400 bg-white/5 px-2 py-1 rounded border border-white/10 shrink-0 w-20 text-center">
+                              <span className="text-[10px] font-black text-slate-300 bg-white/5 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-white/10 shrink-0 w-20 text-center shadow-inner">
                                 وجه مقارنة
                               </span>
                             )}
                             
-                            {/* حقل الإدخال للخيار */}
                             <input
                               type="text"
                               value={optValue}
                               onChange={(e) => updateOption(question.id, optIdx, e.target.value)}
-                              className="flex-1 bg-[#131836] border border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold text-white outline-none focus:border-indigo-500/50"
+                              className="glass-input flex-1 py-2.5 px-4 rounded-xl text-sm font-bold text-white transition-all hover:bg-white/5"
                               placeholder={isComparison ? "أدخل النص..." : "اكتب الخيار هنا..."}
                             />
                             
-                            {/* زر حذف الخيار (لا يظهر لأطراف المقارنة الأساسية) */}
                             {(!isComparison || optIdx >= 2) && (
-                              <button type="button" onClick={() => removeOption(question.id, optIdx)} className="p-2.5 bg-rose-500/10 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-colors">
+                              <button type="button" onClick={() => removeOption(question.id, optIdx)} className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm active:scale-95">
                                 <X className="h-4 w-4" />
                               </button>
                             )}
@@ -331,13 +313,12 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                         );
                       })}
                     </div>
-                    {/* زر إضافة خيار إضافي */}
                     <button 
                       type="button" 
                       onClick={() => addOption(question.id, isComparison)} 
-                      className="mt-4 px-4 py-2.5 bg-white/5 text-slate-300 font-bold text-xs rounded-xl hover:bg-white/10 transition-colors flex items-center gap-2 border border-white/10"
+                      className="mt-4 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-2 border border-white/10 shadow-inner active:scale-95"
                     >
-                      <Plus className="h-4 w-4" /> {isComparison ? 'إضافة وجه مقارنة' : 'إضافة خيار جديد'}
+                      <Plus className="h-4 w-4 text-indigo-400" /> {isComparison ? 'إضافة وجه مقارنة' : 'إضافة خيار جديد'}
                     </button>
                   </div>
                 )}
@@ -346,51 +327,48 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     📊 مساحة تحرير (جدول البيانات الديناميكي)
                     ========================================== */}
                 {isDataTable && question.table && (
-                  <div className="p-4 sm:p-6 bg-[#090b14]/50 rounded-[1.5rem] border border-cyan-500/20 shadow-inner overflow-x-auto">
+                  <div className="p-4 sm:p-6 bg-black/40 backdrop-blur-md rounded-[1.5rem] border border-cyan-500/20 shadow-inner overflow-x-auto custom-scrollbar">
                     <div className="flex items-center justify-between mb-4">
-                      <p className="text-[10px] sm:text-xs font-black text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                      <p className="text-[10px] sm:text-xs font-black text-cyan-400 uppercase tracking-widest flex items-center gap-2 drop-shadow-sm">
                         <TableProperties className="h-4 w-4" /> بناء الجدول:
                       </p>
-                      {/* أزرار الإضافة للجدول */}
                       <div className="flex gap-2">
-                         <button type="button" onClick={() => addTableRow(question.id)} className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500 hover:text-slate-900 transition-colors flex items-center gap-1 border border-cyan-500/20"><Plus className="h-3 w-3" /> صف</button>
-                         <button type="button" onClick={() => addTableColumn(question.id)} className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs font-bold hover:bg-cyan-500 hover:text-slate-900 transition-colors flex items-center gap-1 border border-cyan-500/20"><Plus className="h-3 w-3" /> عمود</button>
+                         <button type="button" onClick={() => addTableRow(question.id)} className="px-3 py-1.5 bg-cyan-500/10 text-cyan-300 rounded-lg text-xs font-bold hover:bg-cyan-500 hover:text-slate-900 transition-all flex items-center gap-1 border border-cyan-500/30 shadow-inner active:scale-95"><Plus className="h-3 w-3" /> صف</button>
+                         <button type="button" onClick={() => addTableColumn(question.id)} className="px-3 py-1.5 bg-cyan-500/10 text-cyan-300 rounded-lg text-xs font-bold hover:bg-cyan-500 hover:text-slate-900 transition-all flex items-center gap-1 border border-cyan-500/30 shadow-inner active:scale-95"><Plus className="h-3 w-3" /> عمود</button>
                       </div>
                     </div>
 
-                    <div className="min-w-max border border-white/10 rounded-xl overflow-hidden">
-                      {/* صف العناوين (Headers) */}
-                      <div className="flex bg-[#0f1423] border-b border-white/10">
+                    <div className="min-w-max border border-white/10 rounded-xl overflow-hidden shadow-lg">
+                      {/* صف العناوين */}
+                      <div className="flex bg-[#02040a]/80 backdrop-blur-md border-b border-white/10">
                         {question.table.headers.map((header: string, colIdx: number) => (
-                          <div key={`header-${colIdx}`} className="flex-1 min-w-[120px] border-l border-white/10 last:border-l-0 relative group p-2">
+                          <div key={`header-${colIdx}`} className="flex-1 min-w-[120px] border-l border-white/10 last:border-l-0 relative group p-2 transition-colors hover:bg-white/5">
                             <input
                               type="text" dir="auto"
                               value={header}
                               onChange={(e) => updateTableHeader(question.id, colIdx, e.target.value)}
                               placeholder="عنوان العمود"
-                              className="w-full bg-transparent text-center text-xs font-bold text-cyan-300 focus:outline-none"
+                              className="w-full bg-transparent text-center text-xs font-bold text-cyan-300 focus:outline-none placeholder:text-cyan-800"
                             />
-                            {/* زر حذف العمود (لا يمكن حذف العمود الأول) */}
                             {colIdx > 0 && (
-                              <button type="button" onClick={() => removeTableColumn(question.id, colIdx)} className="absolute top-1 left-1 p-1 bg-rose-500/20 text-rose-400 rounded hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
+                              <button type="button" onClick={() => removeTableColumn(question.id, colIdx)} className="absolute top-1 left-1 p-1 bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-md hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all active:scale-90 shadow-sm"><X className="h-3 w-3" /></button>
                             )}
                           </div>
                         ))}
                       </div>
                       
-                      {/* صفوف الخلايا (Rows) */}
+                      {/* صفوف الخلايا */}
                       {question.table.rows.map((row: string[], rowIdx: number) => (
-                        <div key={`row-${rowIdx}`} className="flex border-b border-white/5 last:border-b-0 bg-[#02040a]/40 relative group hover:bg-[#0f1423]/50 transition-colors">
+                        <div key={`row-${rowIdx}`} className="flex border-b border-white/5 last:border-b-0 bg-[#0f1423]/40 relative group hover:bg-[#0f1423]/80 transition-colors backdrop-blur-sm">
                           {row.map((cell: string, colIdx: number) => (
                             <div key={`cell-${rowIdx}-${colIdx}`} className="flex-1 min-w-[120px] border-l border-white/5 last:border-l-0 p-2">
-                              {/* العمود الأول دائماً يكون عنوان للصف */}
                               {colIdx === 0 ? (
                                 <input
                                   type="text" dir="auto"
                                   value={cell}
                                   onChange={(e) => updateTableCell(question.id, rowIdx, colIdx, e.target.value)}
                                   placeholder="عنوان الصف"
-                                  className="w-full bg-transparent text-center text-xs font-bold text-amber-300/80 focus:outline-none"
+                                  className="w-full bg-transparent text-center text-xs font-bold text-cyan-200 focus:outline-none focus:bg-white/5 rounded-md transition-colors py-1"
                                 />
                               ) : (
                                 <input
@@ -398,14 +376,13 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                                   value={cell}
                                   onChange={(e) => updateTableCell(question.id, rowIdx, colIdx, e.target.value)}
                                   placeholder="..."
-                                  className="w-full bg-[#02040a] border border-white/5 rounded px-2 py-1 text-center text-xs text-white focus:border-cyan-500/50 outline-none"
+                                  className="w-full bg-transparent border border-transparent rounded-lg px-2 py-1 text-center text-xs text-white focus:border-cyan-500/30 focus:bg-[#02040a]/60 outline-none transition-all placeholder:text-slate-700"
                                 />
                               )}
                             </div>
                           ))}
-                          {/* زر حذف الصف (لا يمكن حذف الصف الأول) */}
                           {rowIdx > 0 && (
-                             <button type="button" onClick={() => removeTableRow(question.id, rowIdx)} className="absolute top-1/2 -translate-y-1/2 left-2 p-1.5 bg-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3 w-3" /></button>
+                             <button type="button" onClick={() => removeTableRow(question.id, rowIdx)} className="absolute top-1/2 -translate-y-1/2 left-2 p-1.5 bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all active:scale-90 shadow-sm"><Trash2 className="h-3 w-3" /></button>
                           )}
                         </div>
                       ))}
@@ -414,18 +391,23 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                 )}
 
                 {/* ==========================================
-                    🏁 الشريط السفلي (Footer) للسؤال (تحديد النقاط والحذف)
+                    🏁 الشريط السفلي (النقاط والحذف)
                     ========================================== */}
-                <div className="flex flex-col sm:flex-row items-center justify-between pt-5 sm:pt-6 border-t border-white/5 gap-4 mt-2">
+                <div className="flex flex-col sm:flex-row items-center justify-between pt-5 sm:pt-6 border-t border-white/10 gap-4 mt-2">
                   {!isHeader ? (
-                    <div className="flex items-center gap-4 bg-[#090b14]/50 px-4 py-3 rounded-xl border border-white/5 shadow-inner">
+                    <div className="flex items-center gap-4 bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 shadow-inner">
                       <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black text-slate-400 uppercase">النقاط:</span>
-                        <input type="number" step="any" min="0" className="w-16 rounded-xl border border-white/10 py-1.5 px-2 text-white bg-[#0f1423] outline-none text-xs font-black text-center shadow-inner" value={question.points} onChange={(e) => updateQuestion(question.id, { points: parseFloat(e.target.value) || 0 })} />
+                        <span className="text-[10px] font-black text-slate-400 uppercase drop-shadow-sm">النقاط:</span>
+                        <input 
+                          type="number" step="any" min="0" 
+                          className="glass-input w-16 text-center py-1.5 px-2 font-black text-amber-400 focus:ring-amber-500/30 focus:border-amber-500/50" 
+                          value={question.points} 
+                          onChange={(e) => updateQuestion(question.id, { points: parseFloat(e.target.value) || 0 })} 
+                        />
                       </div>
                     </div>
                   ) : <div></div>}
-                  <button type="button" onClick={() => removeQuestion(question.id)} className="flex items-center gap-2 px-5 py-3 text-rose-400 hover:text-white hover:bg-rose-500 rounded-xl font-black text-xs bg-rose-500/10 border border-rose-500/20 transition-all"><Trash2 className="h-4 w-4" /> حذف المكون</button>
+                  <button type="button" onClick={() => removeQuestion(question.id)} className="flex items-center gap-2 px-5 py-3 text-rose-400 hover:text-white hover:bg-rose-500 rounded-xl font-black text-xs bg-rose-500/10 border border-rose-500/20 transition-all shadow-sm active:scale-95"><Trash2 className="h-4 w-4" /> حذف المكون</button>
                 </div>
               </div>
             </Reorder.Item>
