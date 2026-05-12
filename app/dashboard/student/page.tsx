@@ -1,6 +1,5 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
-/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable */
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -301,7 +300,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* 🚀 ההوية الامتحانية (Glass Modal Style) */}
+        {/* 🚀 الهوية الامتحانية (Glass Modal Style) */}
         <AnimatePresence>
           {seatAllocation && (
              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-rose-500/30 flex flex-col lg:flex-row items-center justify-between gap-8 group">
@@ -618,6 +617,37 @@ export default function StudentDashboard() {
                   <p className="text-xs sm:text-sm text-slate-300 mt-4 font-bold bg-[#02040a]/60 backdrop-blur-md px-6 py-2.5 rounded-full border border-white/10 shadow-inner">في {safeFormat(nextOfficialExam.exam_date, 'EEEE d MMMM')} الساعة {nextOfficialExam.start_time.substring(0,5)} صباحاً</p>
               </div>
             </motion.div>
+        )}
+
+        {/* Track Selection (For 10th Grade) */}
+        {isTenthGrade && !hasSelectedTrack && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2.5rem] glass-panel border-amber-500/30 p-6 sm:p-8 shadow-[0_0_40px_rgba(245,158,11,0.15)] relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-[80px] pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
+            <div className="flex flex-col md:flex-row items-center gap-6 sm:gap-8 relative z-10 text-center md:text-right">
+              <div className="p-4 sm:p-5 bg-amber-500/10 backdrop-blur-md rounded-[2rem] shadow-inner border border-amber-500/20 shrink-0 group-hover:scale-110 transition-transform duration-500"><Target className="h-10 w-10 sm:h-12 sm:w-12 text-amber-400 animate-pulse drop-shadow-md" /></div>
+              <div className="flex-1">
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white mb-2 sm:mb-3 tracking-tight drop-shadow-lg">تحديد المسار الأكاديمي للعام القادم</h2>
+                <p className="text-slate-200 font-bold text-xs sm:text-sm leading-relaxed drop-shadow-sm">يرجى اختيار المسار الأكاديمي (علمي أو أدبي) الذي ترغب في دراسته في الصف الحادي عشر.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full md:w-auto shrink-0">
+                <button onClick={() => handleTrackSelection('scientific')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-blue-600/90 backdrop-blur-md text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-blue-400/50">المسار العلمي</button>
+                <button onClick={() => handleTrackSelection('literary')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-emerald-600/90 backdrop-blur-md text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-emerald-400/50">المسار الأدبي</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {isTenthGrade && hasSelectedTrack && (
+          <div className="rounded-[2rem] glass-panel border-emerald-500/30 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm backdrop-blur-xl">
+            <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-right">
+              <div className="p-3 bg-emerald-500/10 backdrop-blur-md rounded-2xl shrink-0 border border-emerald-500/20 shadow-inner"><CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-400 drop-shadow-sm" /></div>
+              <div>
+                <p className="text-base sm:text-lg font-black text-emerald-400 drop-shadow-md">تم اعتماد مسارك الأكاديمي</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-300 mt-1">المسار المختار: <span className="font-black bg-[#02040a]/60 backdrop-blur-sm px-2.5 py-1 rounded-lg shadow-inner border border-emerald-500/20 text-emerald-300 mx-1">{studentData.next_year_track === 'scientific' ? 'علمي 🔬' : 'أدبي 📚'}</span></p>
+              </div>
+            </div>
+            <p className="text-[9px] sm:text-[10px] text-emerald-300 font-black uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto text-center">تم الاختيار في {safeFormat(studentData.track_selection_date, 'd MMMM yyyy')}</p>
+          </div>
         )}
 
         {/* 🚀 Quick Actions (Glass Grid) */}
