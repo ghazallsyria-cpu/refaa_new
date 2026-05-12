@@ -1,138 +1,137 @@
 // @ts-nocheck
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// إنشاء اتصال بصلاحيات عليا لقراءة الجداول للعامة (Bypass RLS for public display)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY! || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET() {
   try {
-    // 1. توقيت الكويت (UTC+3)
+    // 1️⃣ حساب توقيت الكويت الدقيق (السيرفرات السحابية تعمل بـ UTC)
     const now = new Date();
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const kuwaitTime = new Date(utc + (3 * 3600000));
+    const kwtTime = new Date(utc + (3 * 3600000)); // Kuwait is UTC+3
     
-    const currentHour = kuwaitTime.getHours();
-    const currentMinute = kuwaitTime.getMinutes();
-    const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
-    
-    // يوم الأسبوع (الأحد = 1)
-    const jsDay = kuwaitTime.getDay();
-    const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+    const currentDayOfWeek = kwtTime.getDay() + 1; // الأحد = 1، الاثنين = 2...
+    const currentHour = kwtTime.getHours();
+    const currentMinute = kwtTime.getMinutes();
+    const timeInMinutes = currentHour * 60 + currentMinute;
 
-    // جلب الحصص باستخدام مفتاح الإدارة لتخطي RLS لأن الزائر غير مسجل دخول
-    const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+    // 2️⃣ 🌟 السحر هنا: التحقق من النظام المعتمد في المدرسة (يدوي أم ذكاء اصطناعي)
+    const { data: settings } = await supabase
+      .from('school_settings')
+      .select('active_schedule_system')
+      .eq('id', 1)
+      .maybeSingle();
 
-    if (dbDay === 0 || dbDay > 5) {
-      return NextResponse.json({ status: { type: 'closed', message: 'عطلة نهاية الأسبوع' }, classes: [] });
-    }
-
-    // 2. 🚀 استكشاف النظام الفعال
-    const { data: settings } = await adminSupabase.from('school_settings').select('active_schedule_system').eq('id', 1).maybeSingle();
     const activeSystem = settings?.active_schedule_system || 'manual';
+    
+    // تحديد الجدول واسم العمود بناءً على النظام الفعال
+    const scheduleTable = activeSystem === 'auto' ? 'approved_schedules' : 'schedule';
+    const periodColumn = activeSystem === 'auto' ? 'period_number' : 'period';
 
-    // 3. 🚀 جلب فترات الحصص (الأوقات)
-    let periods: any[] = [];
-    if (activeSystem === 'auto') {
-        const { data } = await adminSupabase.from('auto_class_periods').select('*');
-        periods = data || [];
-    } else {
-        const { data } = await adminSupabase.from('class_periods').select('*');
-        periods = data || [];
+    // 3️⃣ جلب أوقات الحصص الرسمية
+    const { data: periods, error: periodsError } = await supabase
+      .from('periods')
+      .select('*')
+      .order('period_number', { ascending: true });
+
+    if (periodsError || !periods || periods.length === 0) {
+      return NextResponse.json({ 
+        status: { type: 'closed', message: 'نظام الأوقات غير مهيأ' }, classes: [] 
+      });
     }
 
-    if (periods.length === 0) {
-        return NextResponse.json({ status: { type: 'closed', message: 'لا توجد أوقات مسجلة' }, classes: [] });
-    }
+    // 4️⃣ تحديد حالة المدرسة الآن (في حصة أم استراحة أم مغلقة)
+    let activePeriodNum = null;
+    let timeStatus: any = null;
 
-    periods.sort((a, b) => a.period_number - b.period_number);
+    for (let i = 0; i < periods.length; i++) {
+      const p = periods[i];
+      const [startH, startM] = p.start_time.split(':').map(Number);
+      const [endH, endM] = p.end_time.split(':').map(Number);
+      
+      const startMins = startH * 60 + startM;
+      const endMins = endH * 60 + endM;
 
-    // 4. 🚀 تحديد الفترات الفعالة "الآن" بدقة
-    const activePeriods = periods.filter(p => currentTimeStr >= p.start_time.slice(0,5) && currentTimeStr < p.end_time.slice(0,5));
+      // هل نحن داخل وقت هذه الحصة؟
+      if (timeInMinutes >= startMins && timeInMinutes <= endMins) {
+        activePeriodNum = p.period_number;
+        timeStatus = { type: 'class', period: activePeriodNum };
+        break;
+      }
 
-    // 🚀 كاشف الفراغات الذكي (الاستراحات)
-    if (activePeriods.length === 0) {
-        const sortedUnique = [...periods].sort((a, b) => a.start_time.localeCompare(b.start_time));
-        const firstStart = sortedUnique[0].start_time.slice(0, 5);
-        const lastEnd = sortedUnique[sortedUnique.length - 1].end_time.slice(0, 5);
+      // هل نحن في استراحة (بين هذه الحصة والتي تليها)؟
+      if (i < periods.length - 1) {
+        const nextP = periods[i + 1];
+        const [nextStartH, nextStartM] = nextP.start_time.split(':').map(Number);
+        const nextStartMins = nextStartH * 60 + nextStartM;
 
-        let currentStatus: any = { type: 'closed', message: 'المدرسة مغلقة حالياً' };
-
-        if (currentTimeStr < firstStart) {
-             currentStatus = { type: 'closed', message: 'قبل بدء الدوام المدرسي' };
-        } else if (currentTimeStr >= lastEnd) {
-             currentStatus = { type: 'closed', message: 'انتهى الدوام المدرسي' };
-        } else {
-             currentStatus = { type: 'break', name: 'استراحة / فرصة' };
+        if (timeInMinutes > endMins && timeInMinutes < nextStartMins) {
+           timeStatus = { 
+             type: 'break', 
+             name: 'وقت الاستراحة (الفرصة)', 
+             start: p.end_time.substring(0, 5), 
+             end: nextP.start_time.substring(0, 5) 
+           };
+           break;
         }
-
-        return NextResponse.json({ status: currentStatus, classes: [] });
+      }
     }
 
-    const activePeriodNumbers = [...new Set(activePeriods.map(p => p.period_number))];
-    const currentStatus = { type: 'class', period: activePeriodNumbers[0] }; // نأخذ رقم الفترة الأولى للعرض
-
-    // 5. 🚀 جلب الحصص المباشرة من النظام الفعال
-    let schedulesData: any[] = [];
-
-    if (activeSystem === 'auto') {
-        const { data: planData } = await adminSupabase.from('auto_schedule_plans').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle();
-        if (planData) {
-            const { data } = await adminSupabase.from('auto_schedules')
-                .select(`
-                    id, period_number, section_id,
-                    subjects(name), 
-                    sections(name, classes(name)), 
-                    teachers(zoom_link, users(full_name))
-                `)
-                .eq('plan_id', planData.id)
-                .eq('day_of_week', dbDay)
-                .in('period_number', activePeriodNumbers);
-
-            if (data) {
-                // فلترة دقيقة لضمان عدم عرض حصص مرحلة إذا كانت في استراحة
-                schedulesData = data.filter((cls: any) => {
-                    const section: any = Array.isArray(cls.sections) ? cls.sections[0] : cls.sections;
-                    const className = Array.isArray(section?.classes) ? section?.classes[0]?.name : section?.classes?.name;
-                    let stage = 'high';
-                    if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(className || '')) stage = 'middle';
-                    return activePeriods.some(ap => ap.period_number === cls.period_number && ap.stage === stage);
-                }).map((s: any) => ({ ...s, period: s.period_number }));
-            }
-        }
-    } else {
-        const { data } = await adminSupabase.from('schedules')
-            .select(`
-                id, period, 
-                subjects(name), 
-                sections(name, classes(name)), 
-                teachers(zoom_link, users(full_name))
-            `)
-            .eq('day_of_week', dbDay)
-            .in('period', activePeriodNumbers);
-        if (data) schedulesData = data;
+    // إذا لم نكن في حصة أو استراحة (انتهى الدوام أو لم يبدأ)
+    if (!timeStatus) {
+      const firstStart = periods[0].start_time.split(':').map(Number);
+      
+      if (timeInMinutes < (firstStart[0] * 60 + firstStart[1])) {
+        timeStatus = { type: 'closed', message: 'لم يبدأ الدوام المدرسي بعد' };
+      } else {
+        timeStatus = { type: 'closed', message: 'انتهى الدوام المدرسي لهذا اليوم' };
+      }
     }
 
-    const activeClasses = schedulesData.map((s: any) => {
-      const subject: any = Array.isArray(s.subjects) ? s.subjects[0] : s.subjects;
-      const section: any = Array.isArray(s.sections) ? s.sections[0] : s.sections;
-      const tClass: any = Array.isArray(section?.classes) ? section?.classes[0] : section?.classes;
-      const teacher: any = Array.isArray(s.teachers) ? s.teachers[0] : s.teachers;
-      const user: any = Array.isArray(teacher?.users) ? teacher?.users[0] : teacher?.users;
+    // 5️⃣ جلب الحصص النشطة من الجدول الصحيح (حسب مفتاح التحكم)
+    let activeClasses = [];
+    if (activePeriodNum !== null) {
+      const { data: scheduleData, error: scheduleError } = await supabase
+        .from(scheduleTable)
+        .select(`
+          id,
+          subjects (name),
+          sections (name, classes(name)),
+          teachers (zoom_link, users(full_name))
+        `)
+        .eq('day_of_week', currentDayOfWeek)
+        .eq(periodColumn, activePeriodNum);
 
-      return {
-        id: s.id,
-        subject_name: subject?.name || 'مادة عامة',
-        class_name: `${tClass?.name || ''} - ${section?.name || ''}`,
-        teacher_name: user?.full_name || 'معلم',
-        zoom_link: teacher?.zoom_link || null
-      };
+      if (!scheduleError && scheduleData) {
+        activeClasses = scheduleData.map(s => {
+           const classObj = Array.isArray(s.sections?.classes) ? s.sections.classes[0] : s.sections?.classes;
+           const u = Array.isArray(s.teachers?.users) ? s.teachers.users[0] : s.teachers?.users;
+           
+           return {
+             id: s.id,
+             subject_name: s.subjects?.name || 'مادة غير محددة',
+             class_name: `${classObj?.name || ''} - ${s.sections?.name || ''}`,
+             teacher_name: u?.full_name || 'معلم غير محدد',
+             zoom_link: s.teachers?.zoom_link || null
+           };
+        });
+      }
+    }
+
+    // 6️⃣ إرسال البيانات النهائية
+    return NextResponse.json({
+      status: timeStatus,
+      classes: activeClasses
     });
 
-    return NextResponse.json({ status: currentStatus, classes: activeClasses });
-
   } catch (error: any) {
-    console.error('Public Live Status API Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Live status API Error:', error);
+    return NextResponse.json({ 
+      status: { type: 'closed', message: 'خطأ في جلب البيانات' }, classes: [] 
+    }, { status: 500 });
   }
 }
