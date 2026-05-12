@@ -1,12 +1,12 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Radio, Clock, ShieldCheck, Video, Users, 
   BookOpen, Send, Activity, GraduationCap, 
-  MonitorPlay, ShieldAlert, Sparkles, Loader2
+  MonitorPlay, ShieldAlert, Sparkles, Loader2, School
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 
@@ -34,12 +34,10 @@ export default function LiveClassesPublicPage() {
   const [timeStatus, setTimeStatus] = useState<TimeStatus | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
 
-  // إعدادات نافذة الضيوف (Gatekeeper Modal)
   const [selectedClass, setSelectedClass] = useState<ActiveClass | null>(null);
   const [visitorForm, setVisitorForm] = useState({ name: '', role: 'موجه فني' });
   const [isEntering, setIsEntering] = useState(false);
 
-  // 🚀 جلب البيانات من السيرفر
   const fetchLiveStatus = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setIsRefreshing(true);
@@ -52,7 +50,6 @@ export default function LiveClassesPublicPage() {
       setActiveClasses(data.classes || []);
     } catch (error) {
       console.error('Failed to fetch live status:', error);
-      // Fallback state in case API fails
       setTimeStatus({ type: 'closed', message: 'نظام البث غير متاح حالياً' });
     } finally {
       setLoading(false);
@@ -60,7 +57,6 @@ export default function LiveClassesPublicPage() {
     }
   }, []);
 
-  // 🚀 إعداد المؤقتات الحية (الساعة + تحديث البيانات)
   useEffect(() => {
     fetchLiveStatus(false);
     
@@ -71,7 +67,6 @@ export default function LiveClassesPublicPage() {
       setCurrentTime(kwt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }, 1000);
 
-    // تحديث صامت للحصص كل 30 ثانية لضمان ظهور الحصص فور بدئها
     const refreshInterval = setInterval(() => {
       fetchLiveStatus(true);
     }, 30000);
@@ -82,13 +77,12 @@ export default function LiveClassesPublicPage() {
     };
   }, [fetchLiveStatus]);
 
-  // 🚀 حساب الوقت المتبقي بذكاء
   const getRemainingTime = (endTimeStr?: string) => {
     if (!endTimeStr) return 'لحظات...';
     try {
       const now = new Date();
       const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const kwtNow = new Date(utc + (3 * 3600000)); // توقيت الكويت الحالي
+      const kwtNow = new Date(utc + (3 * 3600000)); 
       
       const [h, m] = endTimeStr.split(':').map(Number);
       const endDate = new Date(kwtNow);
@@ -108,14 +102,12 @@ export default function LiveClassesPublicPage() {
     }
   };
 
-  // 🚀 بوابة الدخول والتشريفات
   const handleEnterClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!visitorForm.name.trim() || !selectedClass?.zoom_link) return;
 
     setIsEntering(true);
     try {
-      // إرسال السجل للإدارة
       await fetch('/api/public/log-visitor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,17 +119,95 @@ export default function LiveClassesPublicPage() {
           subjectName: selectedClass.subject_name
         })
       });
-
-      // توجيه الزائر للزووم
       window.location.href = selectedClass.zoom_link;
     } catch (error) {
-      console.error('Logging failed, redirecting anyway:', error);
-      // في حالة فشل التسجيل، لا نمنع الضيف من الدخول للزوم
       window.location.href = selectedClass!.zoom_link!;
     }
   };
 
-  // 🌀 شاشة التحميل (الرادار)
+  // 🚀 خوارزمية الفرز الذكية (تقسيم المراحل والترتيب التصاعدي)
+  const { middleClasses, highClasses, otherClasses } = useMemo(() => {
+    const processed = activeClasses.map(cls => {
+      const nameStr = cls.class_name.toLowerCase();
+      let level = 99; // افتراضي للفصول غير المعروفة
+      
+      // اكتشاف مستوى الصف من اسمه (أرقام أو حروف)
+      if (nameStr.includes('12') || nameStr.includes('ثاني عشر')) level = 12;
+      else if (nameStr.includes('11') || nameStr.includes('حادي')) level = 11;
+      else if (nameStr.includes('10') || nameStr.includes('عاشر')) level = 10;
+      else if (nameStr.includes('9') || nameStr.includes('تاسع')) level = 9;
+      else if (nameStr.includes('8') || nameStr.includes('ثامن')) level = 8;
+      else if (nameStr.includes('7') || nameStr.includes('سابع')) level = 7;
+      else if (nameStr.includes('6') || nameStr.includes('سادس')) level = 6;
+
+      let stage = 'other';
+      if (level >= 6 && level <= 9) stage = 'middle';
+      else if (level >= 10 && level <= 12) stage = 'high';
+
+      return { ...cls, level, stage };
+    });
+
+    // الفرز: أولاً بالصف (السادس قبل السابع)، ثم أبجدياً باسم الشعبة
+    processed.sort((a, b) => a.level - b.level || a.class_name.localeCompare(b.class_name));
+
+    return {
+      middleClasses: processed.filter(c => c.stage === 'middle'),
+      highClasses: processed.filter(c => c.stage === 'high'),
+      otherClasses: processed.filter(c => c.stage === 'other')
+    };
+  }, [activeClasses]);
+
+  // 🃏 مكون فرعي لرسم بطاقة الحصة (لمنع تكرار الكود)
+  const renderClassCard = (cls: any, idx: number) => (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ delay: idx * 0.05, type: 'spring' }}
+      key={cls.id} 
+      className="group bg-[#0F172A]/80 backdrop-blur-xl border border-white/5 hover:border-indigo-500/50 rounded-[2rem] overflow-hidden transition-all duration-500 hover:shadow-[0_20px_40px_rgba(99,102,241,0.15)] hover:-translate-y-2 flex flex-col"
+    >
+      <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-black/40">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
+          </span>
+          <span className="text-[10px] sm:text-xs font-black text-emerald-400 uppercase tracking-widest drop-shadow-sm">بث مباشر</span>
+        </div>
+        <span className="text-[9px] sm:text-[10px] font-black text-indigo-300 bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-500/20 shadow-inner">الحصة {timeStatus?.period}</span>
+      </div>
+      
+      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center relative">
+        <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 blur-2xl rounded-full pointer-events-none group-hover:bg-indigo-500/10 transition-colors"></div>
+        <h4 className="text-lg sm:text-2xl font-black text-white mb-2 group-hover:text-indigo-400 transition-colors leading-tight drop-shadow-md truncate">{cls.subject_name}</h4>
+        
+        <div className="space-y-3 sm:space-y-4 mt-4 sm:mt-6 relative z-10">
+          <div className="flex items-center gap-3 text-slate-300">
+            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 shrink-0"><Users className="w-4 h-4 text-emerald-400" /></div>
+            <span className="text-xs sm:text-sm font-bold truncate">{cls.class_name}</span>
+          </div>
+          <div className="flex items-center gap-3 text-slate-300">
+            <div className="h-8 w-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-[10px] sm:text-xs font-black text-indigo-400 shrink-0">{cls.teacher_name.charAt(0)}</div>
+            <span className="text-xs sm:text-sm font-bold truncate">أ. {cls.teacher_name}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5 bg-black/40 mt-auto border-t border-white/5">
+        {cls.zoom_link ? (
+          <button 
+            onClick={() => setSelectedClass(cls)}
+            className="w-full py-3.5 sm:py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-2 active:scale-95 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
+          >
+            <Video className="w-4 h-4 sm:w-5 sm:h-5" /> دخول قاعة الدرس
+          </button>
+        ) : (
+          <button disabled className="w-full py-3.5 sm:py-4 rounded-xl bg-slate-800 text-slate-500 font-black text-xs sm:text-sm cursor-not-allowed flex items-center justify-center gap-2 border border-white/5 shadow-inner">
+            <Video className="w-4 h-4 sm:w-5 sm:h-5 opacity-50" /> الرابط غير متوفر
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#020617] relative overflow-hidden">
@@ -157,14 +227,12 @@ export default function LiveClassesPublicPage() {
   return (
     <div className="min-h-screen bg-[#020617] font-cairo text-slate-200 selection:bg-indigo-500/30 overflow-hidden relative" dir="rtl">
       
-      {/* 🌌 Architectural Background Effects */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-[-20%] right-[-10%] w-[80vw] h-[80vw] sm:w-[60vw] sm:h-[60vw] rounded-full bg-indigo-900/10 blur-[100px] sm:blur-[150px]" />
         <div className="absolute bottom-[-20%] left-[-10%] w-[80vw] h-[80vw] sm:w-[60vw] sm:h-[60vw] rounded-full bg-violet-900/10 blur-[100px] sm:blur-[150px]" />
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] mix-blend-overlay"></div>
       </div>
 
-      {/* 🏛️ Header Section */}
       <header className="relative z-20 border-b border-white/5 bg-slate-950/60 backdrop-blur-2xl">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-6">
           <div className="flex items-center gap-4 text-center md:text-right">
@@ -198,7 +266,6 @@ export default function LiveClassesPublicPage() {
         </div>
       </header>
 
-      {/* 🚀 Main Content */}
       <main className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
         
         <div className="mb-10 sm:mb-16 text-center max-w-3xl mx-auto">
@@ -231,56 +298,51 @@ export default function LiveClassesPublicPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                  {activeClasses.map((cls, idx) => (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ delay: idx * 0.05, type: 'spring' }}
-                      key={cls.id} 
-                      className="group bg-[#0F172A]/80 backdrop-blur-xl border border-white/5 hover:border-indigo-500/50 rounded-[2rem] overflow-hidden transition-all duration-500 hover:shadow-[0_20px_40px_rgba(99,102,241,0.15)] hover:-translate-y-2 flex flex-col"
-                    >
-                      <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-black/40">
-                        <div className="flex items-center gap-2 sm:gap-3">
-                          <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
-                          </span>
-                          <span className="text-[10px] sm:text-xs font-black text-emerald-400 uppercase tracking-widest drop-shadow-sm">بث مباشر</span>
-                        </div>
-                        <span className="text-[9px] sm:text-[10px] font-black text-indigo-300 bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-500/20 shadow-inner">الحصة {timeStatus.period}</span>
-                      </div>
-                      
-                      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center relative">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 blur-2xl rounded-full pointer-events-none group-hover:bg-indigo-500/10 transition-colors"></div>
-                        <h4 className="text-lg sm:text-2xl font-black text-white mb-2 group-hover:text-indigo-400 transition-colors leading-tight drop-shadow-md truncate">{cls.subject_name}</h4>
-                        
-                        <div className="space-y-3 sm:space-y-4 mt-4 sm:mt-6 relative z-10">
-                          <div className="flex items-center gap-3 text-slate-300">
-                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 shrink-0"><Users className="w-4 h-4 text-emerald-400" /></div>
-                            <span className="text-xs sm:text-sm font-bold truncate">{cls.class_name}</span>
+                <div className="space-y-12">
+                  {/* 🏫 قسم المرحلة المتوسطة */}
+                  {middleClasses.length > 0 && (
+                    <div>
+                       <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
+                          <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center border border-emerald-500/20 shadow-inner">
+                             <School className="w-5 h-5 text-emerald-400" />
                           </div>
-                          <div className="flex items-center gap-3 text-slate-300">
-                            <div className="h-8 w-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-[10px] sm:text-xs font-black text-indigo-400 shrink-0">{cls.teacher_name.charAt(0)}</div>
-                            <span className="text-xs sm:text-sm font-bold truncate">أ. {cls.teacher_name}</span>
-                          </div>
-                        </div>
-                      </div>
+                          فصول المرحلة المتوسطة
+                       </h3>
+                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                          {middleClasses.map((cls, idx) => renderClassCard(cls, idx))}
+                       </div>
+                    </div>
+                  )}
 
-                      <div className="p-4 sm:p-5 bg-black/40 mt-auto border-t border-white/5">
-                        {cls.zoom_link ? (
-                          <button 
-                            onClick={() => setSelectedClass(cls)}
-                            className="w-full py-3.5 sm:py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-2 active:scale-95 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
-                          >
-                            <Video className="w-4 h-4 sm:w-5 sm:h-5" /> دخول قاعة الدرس
-                          </button>
-                        ) : (
-                          <button disabled className="w-full py-3.5 sm:py-4 rounded-xl bg-slate-800 text-slate-500 font-black text-xs sm:text-sm cursor-not-allowed flex items-center justify-center gap-2 border border-white/5 shadow-inner">
-                            <Video className="w-4 h-4 sm:w-5 sm:h-5 opacity-50" /> الرابط غير متوفر
-                          </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
+                  {/* 🎓 قسم المرحلة الثانوية */}
+                  {highClasses.length > 0 && (
+                    <div>
+                       <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
+                          <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center border border-indigo-500/20 shadow-inner">
+                             <GraduationCap className="w-5 h-5 text-indigo-400" />
+                          </div>
+                          فصول المرحلة الثانوية
+                       </h3>
+                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                          {highClasses.map((cls, idx) => renderClassCard(cls, idx))}
+                       </div>
+                    </div>
+                  )}
+
+                  {/* 📂 فصول أخرى (إن وجدت ولم يتم التعرف على مرحلتها) */}
+                  {otherClasses.length > 0 && (
+                    <div>
+                       <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
+                          <div className="w-10 h-10 bg-slate-500/10 rounded-xl flex items-center justify-center border border-slate-500/20 shadow-inner">
+                             <BookOpen className="w-5 h-5 text-slate-400" />
+                          </div>
+                          فصول دراسية أخرى
+                       </h3>
+                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                          {otherClasses.map((cls, idx) => renderClassCard(cls, idx))}
+                       </div>
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
