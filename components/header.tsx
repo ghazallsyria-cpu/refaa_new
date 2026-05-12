@@ -1,6 +1,6 @@
 'use client';
 
-import { User, LogOut, Menu, School } from 'lucide-react';
+import { User, LogOut, Menu, School, Settings, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -9,34 +9,24 @@ import { NotificationsBell } from '@/components/notifications-bell';
 import Link from 'next/link';
 
 export function Header({ 
-  onMenuClick,          // 📌 دالة تفتح/تغلق الشريط الجانبي في الجوال
-  showMenuButton = true,// 📌 هل يظهر زر القائمة؟ (يختفي في شاشات تسجيل الدخول)
-  user,                 // 📌 كائن يحتوي على بيانات المستخدم (ID و Email)
-  authRole,             // 📌 دور المستخدم (مدير، معلم، طالب)
-  userName,             // 📌 اسم المستخدم المعروض (يأتي من قاعدة البيانات)
-  isSidebarCollapsed = false // 📌 هل الشريط الجانبي في حالة الطي (أيقونات فقط)؟
+  onMenuClick,          
+  showMenuButton = true,
+  user,                 
+  authRole,             
+  userName,             
+  isSidebarCollapsed = false 
 }: { 
   onMenuClick?: () => void, showMenuButton?: boolean, user?: any, authRole?: string, userName?: string, isSidebarCollapsed?: boolean
 }) {
   
-  // ==========================================
-  // 🎛️ 1. حالات مكون الهيدر (States)
-  // ==========================================
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false); // التحكم في ظهور قائمة المستخدم (تسجيل الخروج/الإعدادات)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false); 
   const router = useRouter(); 
-  
-  // بيانات المدرسة (الاسم والشعار) مع حالة ابتدائية (Fallback)
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
-  const [imageError, setImageError] = useState(false); // تستخدم للتحويل للاسم النصي في حال فشل تحميل صورة الشعار
+  const [imageError, setImageError] = useState(false); 
 
-  // ==========================================
-  // ⚡ 2. محرك تحميل بيانات المدرسة الذكي (الكاش - LocalStorage)
-  // هذا الكود يمنع إرهاق قاعدة البيانات بطلبات متكررة للشعار مع كل انتقال بين الصفحات
-  // ==========================================
   useEffect(() => {
     const loadSchoolData = async () => {
       try {
-        // أ. البحث في الذاكرة المؤقتة للمتصفح أولاً (للسرعة المطلقة)
         const cachedSettings = localStorage.getItem('school_settings');
         if (cachedSettings) {
           const parsed = JSON.parse(cachedSettings);
@@ -44,14 +34,12 @@ export function Header({
             name: parsed.school_name || 'الرفعة النموذجية', 
             logo_url: parsed.logo_url || '' 
           });
-          return; // الخروج من الدالة لأن البيانات موجودة مسبقاً
+          return; 
         }
 
-        // ب. إذا كانت الذاكرة فارغة، نطلب البيانات من السيرفر (Supabase)
         const { data } = await supabase.from('platform_settings').select('school_name, logo_url').limit(1).maybeSingle();
         if (data) {
           setSchoolData({ name: data.school_name || 'الرفعة النموذجية', logo_url: data.logo_url || '' });
-          // حفظ البيانات في الذاكرة لتجنب طلبها في المرة القادمة
           localStorage.setItem('school_settings', JSON.stringify(data));
         }
       } catch (err) { 
@@ -62,46 +50,51 @@ export function Header({
     loadSchoolData();
   }, []);
 
-  // ==========================================
-  // 🚪 3. دالة الخروج الآمن (Security SignOut)
-  // ==========================================
   const handleSignOut = async () => { 
-    // أ. تسجيل الخروج من جلسة السيرفر
     await supabase.auth.signOut(); 
-    
-    // ب. تنظيف الذاكرة بشكل كامل (حذف الشعار المحفوظ، والبيانات المخبأة) لضمان الأمان
     sessionStorage.clear();
     localStorage.clear();
-    
-    // ج. توجيه إجباري وسريع واقتلاع الجلسة من الراوتر (يمنع المستخدم من العودة عبر زر "الخلف")
     window.location.replace('/login');
   };
   
-  // ==========================================
-  // 🏷️ 4. محول المسميات الوظيفية (Role Mapper)
-  // لتحويل الرتبة البرمجية الإنجليزية إلى مسمى عربي لائق
-  // ==========================================
   const roleMap: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر' };
   const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
 
-  // تحديد مسار الشعار (إما الشعار المرفوع أو الشعار الافتراضي)
+  // 🚀 تحديد اللون التفاعلي للهيدر حسب صلاحية المستخدم (Gemini Smart Colors)
+  const getThemeColors = (role: string | undefined) => {
+    switch (role) {
+      case 'admin':
+      case 'management':
+        return { text: 'text-purple-400', bg: 'from-purple-600 to-indigo-600', ring: 'ring-purple-500/50', glow: 'shadow-[0_0_15px_rgba(168,85,247,0.4)]', hover: 'hover:border-purple-500/40' };
+      case 'teacher':
+        return { text: 'text-emerald-400', bg: 'from-emerald-500 to-teal-500', ring: 'ring-emerald-500/50', glow: 'shadow-[0_0_15px_rgba(16,185,129,0.4)]', hover: 'hover:border-emerald-500/40' };
+      case 'student':
+        return { text: 'text-blue-400', bg: 'from-blue-500 to-cyan-500', ring: 'ring-blue-500/50', glow: 'shadow-[0_0_15px_rgba(59,130,246,0.4)]', hover: 'hover:border-blue-500/40' };
+      default:
+        return { text: 'text-amber-400', bg: 'from-amber-500 to-yellow-500', ring: 'ring-amber-500/50', glow: 'shadow-[0_0_15px_rgba(245,158,11,0.4)]', hover: 'hover:border-amber-500/40' };
+    }
+  };
+
+  const theme = getThemeColors(authRole);
   const finalLogoSrc = schoolData.logo_url || "/images/logo.png";
 
   return (
-    // 🏛️ الحاوية الرئيسية للهيدر (شريط ثابت وشفاف قليلاً Glassmorphism)
-    <header className="relative flex h-20 shrink-0 items-center glass-header px-4 sm:px-6 sticky top-0 z-40" dir="rtl">
+    // 🏛️ الحاوية الرئيسية (Glassmorphism فائق الشفافية)
+    <header className="relative flex h-24 shrink-0 items-center bg-[#02040a]/40 backdrop-blur-2xl px-4 sm:px-8 sticky top-0 z-40 border-b border-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.3)] transition-all duration-500" dir="rtl">
+      
+      {/* شبكة نسيج خفيفة لتعزيز العمق */}
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 pointer-events-none mix-blend-screen"></div>
 
       {/* ==========================================
-          🔘 القسم الأيمن (عند العرض بالعربي يكون يسار الشاشة)
-          يحتوي على زر القائمة (همبرغر) + صورة وبيانات المستخدم
+          🔘 القسم الأيمن (البروفايل والقائمة)
           ========================================== */}
-      <div className="flex items-center gap-3 z-10">
+      <div className="flex items-center gap-4 z-10">
         
         {/* زر فتح وإغلاق الشريط الجانبي (يظهر أساساً في الجوال) */}
         {onMenuClick && showMenuButton && (
           <button
             type="button"
-            className="p-2.5 text-slate-400 hover:text-amber-400 rounded-xl hover:bg-white/5 transition-all flex items-center justify-center active:scale-95 border border-transparent hover:border-amber-500/30"
+            className="p-3 text-slate-300 hover:text-white rounded-2xl bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center active:scale-95 border border-white/10 shadow-inner"
             onClick={onMenuClick}
             title="القائمة"
           >
@@ -109,61 +102,65 @@ export function Header({
           </button>
         )}
 
-        {/* بطاقة بيانات المستخدم المصغرة */}
+        {/* بطاقة بيانات المستخدم المصغرة (Holographic Card) */}
         <div className="relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-2 sm:gap-3 p-1.5 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-amber-500/30 group active:scale-95"
+            className={`flex items-center gap-3 sm:gap-4 p-2 rounded-full sm:rounded-[2rem] bg-white/5 hover:bg-white/10 transition-all border border-white/10 ${theme.hover} group active:scale-95 shadow-inner backdrop-blur-md pr-2 sm:pr-4`}
           >
-            {/* أيقونة المستخدم (Avatar Placeholder) */}
-            <div className="relative">
-              <div className="h-10 w-10 rounded-[0.8rem] bg-gradient-to-br from-amber-500 to-yellow-400 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)] ring-1 ring-white/10 group-hover:ring-amber-300 transition-all">
-                <User className="h-5 w-5 text-slate-950" />
+            {/* أيقونة المستخدم */}
+            <div className="relative shrink-0">
+              <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-[1rem] sm:rounded-[1.2rem] bg-gradient-to-br ${theme.bg} flex items-center justify-center ${theme.glow} ring-2 ${theme.ring} group-hover:scale-110 transition-transform duration-300 overflow-hidden`}>
+                <User className="h-5 w-5 sm:h-6 sm:w-6 text-[#02040a] drop-shadow-md" />
               </div>
-              {/* النقطة الخضراء التي تدل على أن المستخدم نشط (Online) */}
-              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-emerald-500 border-2 border-[#02040a] rounded-full shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
+              <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 bg-emerald-400 border-[3px] border-[#02040a] rounded-full shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
             </div>
             
-            {/* اسم المستخدم والمسمى الوظيفي (يختفي في الشاشات الصغيرة جداً) */}
-            <div className="hidden sm:flex flex-col items-start">
-              <span className="text-sm font-black text-white truncate max-w-[120px] group-hover:text-amber-400 transition-colors drop-shadow-md">
+            {/* اسم المستخدم والمسمى الوظيفي */}
+            <div className="hidden sm:flex flex-col items-start justify-center">
+              <span className="text-sm font-black text-white truncate max-w-[150px] group-hover:text-white transition-colors drop-shadow-md">
                 {userName || (user ? user.email.split('@')[0] : 'المستخدم')}
               </span>
-              <span className="text-[10px] text-slate-400 font-bold tracking-widest">{displayRole}</span>
+              <span className={`text-[10px] ${theme.text} font-bold tracking-widest drop-shadow-sm`}>{displayRole}</span>
             </div>
           </button>
 
-          {/* القائمة المنسدلة (Dropdown) التي تظهر عند الضغط على اسم المستخدم */}
+          {/* القائمة المنسدلة (Futuristic Dropdown) */}
           <AnimatePresence>
             {isDropdownOpen && user && (
               <>
-                {/* طبقة شفافة للإغلاق عند النقر خارج القائمة */}
                 <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)}></div>
                 <motion.div
-                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  initial={{ opacity: 0, y: 20, scale: 0.95, rotateX: 10 }}
+                  animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.95, rotateX: 10 }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                  className="absolute right-0 z-50 mt-3 w-64 origin-top-right rounded-[1.5rem] bg-[#0f1423]/95 backdrop-blur-3xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10"
+                  className="absolute right-0 z-50 mt-4 w-72 origin-top-right rounded-[2rem] bg-[#02040a]/90 backdrop-blur-3xl p-3 shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 flex flex-col gap-2 overflow-hidden"
+                  style={{ perspective: "1000px" }}
                 >
-                  <div className="px-4 py-4 border-b border-white/5 mb-2 bg-[#02040a]/60 rounded-xl">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">حسابك الحالي</p>
-                    <p className="text-sm font-black text-white truncate">{user.email}</p>
+                  <div className={`absolute top-0 right-0 w-32 h-32 ${theme.bg.split(' ')[0].replace('from-', 'bg-')}/20 blur-[50px] rounded-full pointer-events-none mix-blend-screen`}></div>
+                  
+                  <div className="px-5 py-5 border-b border-white/5 bg-white/5 rounded-2xl shadow-inner relative z-10 flex items-center gap-3">
+                    <div className="p-2 bg-[#02040a] rounded-xl border border-white/10 shrink-0"><Sparkles className={`w-5 h-5 ${theme.text}`} /></div>
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">الحساب النشط</p>
+                      <p className="text-xs font-black text-white truncate drop-shadow-sm" dir="ltr">{user.email}</p>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    {/* زر الإعدادات الشخصية */}
+                  
+                  <div className="space-y-1 relative z-10">
                     <button
                       onClick={() => { setIsDropdownOpen(false); router.push('/settings'); }}
-                      className="flex w-full items-center px-4 py-3.5 text-sm text-slate-300 hover:bg-white/5 hover:text-amber-400 rounded-xl transition-colors font-black group"
+                      className="flex w-full items-center px-5 py-4 text-sm text-slate-300 hover:bg-white/10 hover:text-white rounded-xl transition-all font-black group shadow-inner border border-transparent hover:border-white/10"
                     >
-                      <User className="ml-3 h-4 w-4 text-slate-500 group-hover:text-amber-400 transition-colors" /> إعدادات الحساب
+                      <Settings className={`ml-4 h-5 w-5 ${theme.text} opacity-70 group-hover:opacity-100 group-hover:rotate-90 transition-all duration-500`} /> إعدادات الحساب
                     </button>
-                    {/* زر تسجيل الخروج */}
+                    
                     <button
                       onClick={handleSignOut}
-                      className="flex w-full items-center px-4 py-3.5 text-sm text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 rounded-xl transition-colors font-black group"
+                      className="flex w-full items-center px-5 py-4 text-sm text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 rounded-xl transition-all font-black group shadow-inner border border-transparent hover:border-rose-500/20 mt-1"
                     >
-                      <LogOut className="ml-3 h-4 w-4 text-rose-500 group-hover:text-rose-400 transition-colors" /> تسجيل الخروج الآمن
+                      <LogOut className="ml-4 h-5 w-5 text-rose-500 group-hover:scale-110 transition-transform" /> تسجيل الخروج الآمن
                     </button>
                   </div>
                 </motion.div>
@@ -174,24 +171,25 @@ export function Header({
       </div>
 
       {/* ==========================================
-          🏫 القسم الأوسط: الشعار واسم المدرسة
-          استخدمنا (Absolute) لجعله في المنتصف تماماً بغض النظر عن العناصر يميناً ويساراً
+          🏫 القسم الأوسط: الشعار الحي (Alive Logo)
           ========================================== */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <Link href="/" prefetch={false} className="pointer-events-auto group transition-transform hover:scale-105">
-          <div className="relative h-12 w-48 sm:h-14 sm:w-64 md:h-16 md:w-80 flex items-center justify-center">
-            {/* في حال وجود صورة يتم عرضها، وفي حال فشل التحميل نعرض النص مع أيقونة */}
+        <Link href="/" prefetch={false} className="pointer-events-auto group">
+          <div className="relative h-14 w-48 sm:h-16 sm:w-64 flex items-center justify-center">
+            {/* الهالة المضيئة خلف الشعار */}
+            <div className="absolute inset-0 bg-white/5 rounded-full blur-2xl group-hover:bg-white/10 group-hover:blur-3xl transition-all duration-700 pointer-events-none"></div>
+            
             {!imageError ? (
               <img
                 src={finalLogoSrc}
                 alt={schoolData.name}
-                className="max-h-full max-w-full object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]"
-                onError={() => setImageError(true)} // إذا كان رابط الصورة مكسوراً، نغير الحالة
+                className="max-h-full max-w-full object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] group-hover:scale-105 group-hover:drop-shadow-[0_0_25px_rgba(255,255,255,0.4)] transition-all duration-500"
+                onError={() => setImageError(true)} 
               />
             ) : (
-              <div className="flex items-center justify-center gap-2 h-full">
-                <School className="w-6 h-6 text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
-                <span className="text-lg font-black text-white drop-shadow-md">{schoolData.name}</span>
+              <div className="flex items-center justify-center gap-3 h-full bg-white/5 px-6 py-2 rounded-full border border-white/10 shadow-inner backdrop-blur-md group-hover:bg-white/10 transition-colors">
+                <School className="w-6 h-6 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
+                <span className="text-xl font-black text-white drop-shadow-md tracking-tight">{schoolData.name}</span>
               </div>
             )}
           </div>
@@ -199,11 +197,12 @@ export function Header({
       </div>
 
       {/* ==========================================
-          🔔 القسم الأيسر (عند العرض بالعربي يكون يمين الشاشة)
-          يحتوي على جرس الإشعارات الخاص بالمستخدم
+          🔔 القسم الأيسر: الإشعارات
           ========================================== */}
       <div className="flex items-center gap-3 mr-auto z-10">
-        <NotificationsBell />
+        <div className="p-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors shadow-inner backdrop-blur-md">
+          <NotificationsBell />
+        </div>
       </div>
 
     </header>
