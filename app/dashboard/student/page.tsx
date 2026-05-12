@@ -705,9 +705,9 @@ export default function StudentDashboard() {
             )}
 
 full">
-    
-    {/* 🚀 ودجت المكتبة الرقمية */}
-    <DigitalLibraryWidget userRole="student" />
+
+{/* 🚀 ودجت المكتبة الرقمية */} 
+<DigitalLibraryWidget userRole="teacher" />
 
             {/* 🚀 Today's Schedule Timeline */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
@@ -791,6 +791,8 @@ full">
                 )}
               </div>
             </div>
+    
+    
 
             {/* Performance Chart - تم الإصلاح لاعتماد درجات الهوك */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden">
