@@ -1,11 +1,11 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable */
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { 
   Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, 
-  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2, Crown, Wand2, ServerCog, Clock, Save
+  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2, Crown, Wand2, ServerCog, Clock, Save, Globe
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,7 +13,7 @@ import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase'; 
-import { cn } from '@/lib/utils'; // افتراض وجود דاله لدمج الكلاسات
+import { cn } from '@/lib/utils';
 
 // =========================================
 // 🎬 إعدادات الحركات السينمائية
@@ -300,7 +300,6 @@ export default function AdminDashboard() {
   // 🎨 واجهة المستخدم (Bento Grid Layout - Holographic Mode)
   // =========================================
   return (
-    // bg-transparent ليسمح للأجرام السماوية في layout.tsx بالظهور
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-8 pb-12 max-w-[1600px] mx-auto bg-transparent pt-2 sm:pt-6 font-sans" dir="rtl">
       
       {/* 👑 1. الترويسة الترحيبية (Hero Section - Glass) */}
