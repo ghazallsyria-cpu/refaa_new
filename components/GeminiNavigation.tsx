@@ -2,7 +2,7 @@
 /* eslint-disable */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -18,11 +18,11 @@ import {
   UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, 
   MonitorPlay, Target, Wand2, MonitorUp, ShieldCheck, FileKey, 
   ScanLine, FileSignature, UserSearch, CreditCard, ClipboardList, 
-  Globe, ScrollText, Star, Shield, LogOut, Search, ChevronRight, ChevronLeft, ChevronDown
+  Globe, ScrollText, Star, Shield, LogOut, Search, ChevronDown
 } from 'lucide-react';
 
 // ==========================================
-// 🗂️ قاعدة بيانات الروابط 
+// 🗂️ قاعدة بيانات الروابط المركزية
 // ==========================================
 const navigationGroups = [
   {
@@ -115,6 +115,7 @@ const navigationGroups = [
       { name: 'سجل الأداء', href: '/student/performance', icon: Award },
       { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
       { name: 'مصنع الدروع', href: '/admin/memorial-shields', icon: Shield }, 
+      { name: 'إدارة الصلاحيات', href: '/admin/settings/permissions', icon: ShieldCheck }, // 🚀 الرابط الجديد
       { name: 'المستندات', href: '/documents', icon: FolderOpen },
       { name: 'استيراد البيانات', href: '/seed', icon: Database },
       { name: 'تقرير التدقيق', href: '/report', icon: FileText },
@@ -133,24 +134,24 @@ export default function GeminiNavigation() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [staffPermissions, setStaffPermissions] = useState<any>({});
-  const [dynamicRolePermissions, setDynamicRolePermissions] = useState<any>(null); // 🚀 الصلاحيات الديناميكية من DB
+  const [dynamicRolePermissions, setDynamicRolePermissions] = useState<any>(null);
 
   useEffect(() => {
     async function fetchPlatformSettingsAndPerms() {
-      // جلب صلاحيات الكادر (Staff)
+      // 1. جلب صلاحيات الكادر (Staff) إن وجد
       if (userRole === 'staff' && user?.id) {
         const { data: staffData } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
         if (staffData) setStaffPermissions(staffData.permissions || {});
       }
 
-      // 🚀 جلب الصلاحيات الديناميكية للرتب من الإعدادات
+      // 2. جلب الصلاحيات الديناميكية للرتب من قاعدة البيانات
       try {
         const { data: settingsData } = await supabase.from('platform_settings').select('role_permissions').single();
         if (settingsData?.role_permissions) {
           setDynamicRolePermissions(settingsData.role_permissions);
         }
       } catch (err) {
-        console.error("No dynamic permissions found, falling back to strict mode.");
+        console.warn("Dynamic permissions fetch failed, using internal safety logic.");
       }
     }
     fetchPlatformSettingsAndPerms();
@@ -162,50 +163,49 @@ export default function GeminiNavigation() {
   if (!mounted || isChecking || !authRole) return null;
 
   // ==========================================
-  // 🛡️ فلترة الصلاحيات (Hybrid System: DB First -> Strict Fallback)
+  // 🛡️ فلترة الصلاحيات الهجينة (Hybrid RBAC Logic)
   // ==========================================
   const isItemVisible = (item: any) => {
     const r = authRole;
     const n = item.name;
 
-    // 1. روابط لا غنى عنها للجميع (أساسيات النظام)
+    // 1. روابط "العامود الفقري" للنظام (مفتوحة دائماً للجميع)
     if (['الرئيسية (الحرم)', 'لوحة التحكم', 'الرسائل', 'الإعلانات'].includes(n)) return true;
 
-    // 👑 الإدارة والمدير دائماً يرون كل شيء لحل المشاكل
+    // 2. المدير والإدارة دائماً يرون كل شيء (All Access)
     if (r === 'admin' || r === 'management' || isGlobalWatcher) return true;
 
-    // 🚀 2. التحقق مما إذا كان المدير قد خصص الصلاحيات في قاعدة البيانات (Dynamic DB Control)
+    // 3. التحقق من الصلاحيات الديناميكية المسجلة في DB من قبل المدير
     if (dynamicRolePermissions && dynamicRolePermissions[r]) {
-      // إذا كانت الرتبة لها صلاحيات في الـ JSON، نتحقق مما إذا كان اسم الصفحة موجوداً ضمن المسموح
       return dynamicRolePermissions[r].includes(n);
     }
 
-    // 🛡️ 3. إذا لم يقم المدير بضبط الصلاحيات في DB، نعود لـ "جدار الحماية العسكري" الثابت كـ Fallback
+    // 4. (Strict Fallback) في حال عدم وجود إعدادات ديناميكية، نطبق المنطق الداخلي الصارم
     if (r === 'teacher') {
-      const teacherAllowedPages = [
+      const internalTeacherSafety = [
         'ملفي الشخصي (CV)', 'الفصول', 'الحضور والغياب', 'سجل الدرجات', 'الاختبارات والدرجات',
         'الواجبات', 'مراقبة الساحة', 'الجدول الدراسي', 'شاشة العرض المركزية', 'المنتديات'
       ];
-      return teacherAllowedPages.includes(n);
+      return internalTeacherSafety.includes(n);
     }
 
     if (r === 'student') {
-      const studentAllowedPages = [
+      const internalStudentSafety = [
         'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 
         'شاشة العرض المركزية', 'المنتديات'
       ];
-      return studentAllowedPages.includes(n);
+      return internalStudentSafety.includes(n);
     }
 
     if (r === 'parent') {
-      const parentAllowedPages = [
+      const internalParentSafety = [
         'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 'سجل الأداء', 'الحضور والغياب', 
         'شاشة العرض المركزية'
       ];
-      return parentAllowedPages.includes(n);
+      return internalParentSafety.includes(n);
     }
 
-    return false; // إغلاق أمني لأي رابط لم يُذكر
+    return false;
   };
 
   const filteredGroups = navigationGroups.map(group => ({
@@ -213,7 +213,7 @@ export default function GeminiNavigation() {
   })).filter(group => group.items.length > 0);
 
   // ==========================================
-  // ⚡ الروابط السريعة (Quick Links)
+  // ⚡ الروابط السريعة (Quick Links Dock)
   // ==========================================
   const getQuickLinks = () => {
     let dashboardHref = '/';
@@ -244,7 +244,7 @@ export default function GeminiNavigation() {
 
   return (
     <>
-      {/* 💻 1. الكبسولة الطافية (Desktop Capsule) */}
+      {/* 💻 الكبسولة الطافية (Desktop) */}
       <motion.div 
         initial={false} animate={{ width: isExpanded ? 240 : 80 }}
         onHoverStart={() => setIsExpanded(true)} onHoverEnd={() => setIsExpanded(false)}
@@ -288,7 +288,7 @@ export default function GeminiNavigation() {
         </div>
       </motion.div>
 
-      {/* 📱 2. الجزيرة السفلية (Mobile Dock) */}
+      {/* 📱 الجزيرة السفلية (Mobile) */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-40">
         <div className="bg-[#02040a]/80 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-2 flex items-center justify-around shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
           {quickLinks.slice(0, 4).map((link) => {
@@ -308,7 +308,7 @@ export default function GeminiNavigation() {
         </div>
       </div>
 
-      {/* 🌌 3. منصة جيمناي المركزية (Central Hub) */}
+      {/* 🌌 منصة جيمناي المركزية (Central Hub) */}
       <AnimatePresence>
         {isHubOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8" dir="rtl">
