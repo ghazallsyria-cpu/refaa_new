@@ -13,8 +13,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+// 🚀 تم إصلاح استيراد أيقونة الصورة (Image as ImageIcon) لتجنب انهيار الصفحة
 import { 
-  Play, ImageIcon, BookOpen, Sparkles, ArrowLeft, Star, Crown, Compass, 
+  Play, Image as ImageIcon, BookOpen, Sparkles, ArrowLeft, Star, Crown, Compass, 
   Newspaper, Video, BellRing, Megaphone, ArrowUpRight, Quote, Trophy, 
   X, Calendar, User, Shield, Award, GraduationCap, UserCircle, Activity, Target
 } from 'lucide-react';
