@@ -60,7 +60,6 @@ export function Header({
   const roleMap: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر' };
   const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
 
-  // 🚀 تحديد اللون التفاعلي للهيدر حسب صلاحية المستخدم (Gemini Smart Colors)
   const getThemeColors = (role: string | undefined) => {
     switch (role) {
       case 'admin':
@@ -79,25 +78,15 @@ export function Header({
   const finalLogoSrc = schoolData.logo_url || "/images/logo.png";
 
   return (
-    // 🏛️ الحاوية الرئيسية (بدون خلفية صلبة للسماح للصورة بالظهور)
-    <header className="relative w-full h-[100px] sm:h-[110px] shrink-0 border-b border-indigo-500/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 z-40 sticky top-0" dir="rtl">
+    <header className="relative w-full h-[100px] sm:h-[110px] shrink-0 border-b border-indigo-500/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 z-40 sticky top-0 [&_.notification-dropdown]:max-w-[calc(100vw-2rem)] [&_.notification-dropdown]:left-0 [&_.notification-dropdown]:right-auto" dir="rtl">
       
-      {/* ==========================================
-          🌌 هندسة الخلفية (The Background Layers)
-          ========================================== */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-20">
-        
-        {/* الطبقة 1: الصورة المتجاوبة (يمكنك تغيير الرابط هنا لأي صورة تريدها) */}
         <img 
           src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" 
           alt="Header Background" 
           className="absolute inset-0 w-full h-full object-cover object-center opacity-60 mix-blend-screen"
         />
-
-        {/* الطبقة 2: التدرج الداكن والضبابية (لضمان قراءة النصوص ووضوح الشعار) */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#02040a]/70 to-[#02040a]/95 backdrop-blur-[6px]"></div>
-
-        {/* الطبقة 3: أجرام جيمناي النبضية والنسيج (لمسة السحر) */}
         <div className="absolute top-[-50%] left-[-10%] w-[30vw] h-[30vw] min-w-[200px] min-h-[200px] bg-indigo-500/20 rounded-full blur-[80px] mix-blend-screen animate-[pulse_8s_ease-in-out_infinite]"></div>
         <div className="absolute bottom-[-50%] right-[-10%] w-[20vw] h-[20vw] min-w-[150px] min-h-[150px] bg-blue-500/20 rounded-full blur-[60px] mix-blend-screen animate-[pulse_6s_ease-in-out_infinite_alternate]"></div>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay"></div>
@@ -105,14 +94,11 @@ export function Header({
 
       <div className="max-w-[1600px] w-full h-full mx-auto px-4 sm:px-6 lg:px-8 relative flex items-center justify-between">
         
-        {/* ==========================================
-            🔔 القسم الأيمن: الإشعارات والقائمة
-            ========================================== */}
-        <div className="flex items-center gap-3 sm:gap-4 z-20 w-1/3">
+        <div className="flex items-center gap-3 sm:gap-4 z-20 w-1/3 relative">
           {onMenuClick && showMenuButton && (
             <button
               type="button"
-              className="p-2.5 sm:p-3 text-slate-200 hover:text-white rounded-[1rem] sm:rounded-2xl bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center active:scale-95 border border-white/10 shadow-inner backdrop-blur-md"
+              className="p-2.5 sm:p-3 text-slate-200 hover:text-white rounded-[1rem] sm:rounded-2xl bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center active:scale-95 border border-white/10 shadow-inner backdrop-blur-md shrink-0"
               onClick={onMenuClick}
               title="القائمة"
             >
@@ -120,18 +106,15 @@ export function Header({
             </button>
           )}
           
-          <div className="p-1 sm:p-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors shadow-inner backdrop-blur-md relative">
+          {/* 🚀 إجبار الإشعارات على عدم تجاوز الشاشة */}
+          <div className="p-1 sm:p-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors shadow-inner backdrop-blur-md relative shrink-0">
             <NotificationsBell />
           </div>
         </div>
 
-        {/* ==========================================
-            🏫 القسم الأوسط: الشعار الحي (Alive Logo)
-            ========================================== */}
         <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 pointer-events-none z-10 w-1/3 flex justify-center">
           <Link href="/" prefetch={false} className="pointer-events-auto group inline-block">
-            <div className="relative h-14 sm:h-16 w-auto max-w-[180px] sm:max-w-[220px] flex items-center justify-center">
-              {/* الهالة المضيئة خلف الشعار للبروز فوق الصورة */}
+            <div className="relative h-14 sm:h-16 w-auto max-w-[160px] sm:max-w-[220px] flex items-center justify-center">
               <div className="absolute inset-0 bg-white/10 rounded-full blur-xl group-hover:bg-white/20 group-hover:blur-2xl transition-all duration-700 pointer-events-none"></div>
               
               {!imageError ? (
@@ -144,22 +127,18 @@ export function Header({
               ) : (
                 <div className="flex items-center justify-center gap-2 sm:gap-3 h-full bg-[#0f1423]/90 px-4 sm:px-6 py-2 rounded-2xl border border-white/20 shadow-[0_0_20px_rgba(0,0,0,0.5)] backdrop-blur-xl group-hover:bg-[#131836] transition-colors relative z-10">
                   <School className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
-                  <span className="text-sm sm:text-lg lg:text-xl font-black text-white drop-shadow-lg tracking-tight truncate max-w-[120px] sm:max-w-[200px]">{schoolData.name}</span>
+                  <span className="text-sm sm:text-lg lg:text-xl font-black text-white drop-shadow-lg tracking-tight truncate max-w-[100px] sm:max-w-[200px]">{schoolData.name}</span>
                 </div>
               )}
             </div>
           </Link>
         </div>
 
-        {/* ==========================================
-            🔘 القسم الأيسر: البروفايل
-            ========================================== */}
         <div className="flex items-center justify-end z-20 w-1/3 relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className={`flex items-center gap-3 p-1.5 sm:p-2 rounded-full sm:rounded-[2rem] bg-white/10 hover:bg-white/20 transition-all border border-white/20 ${theme.hover} group active:scale-95 shadow-[0_0_20px_rgba(0,0,0,0.3)] backdrop-blur-xl pr-2 sm:pr-4`}
           >
-            {/* اسم المستخدم والمسمى الوظيفي */}
             <div className="hidden lg:flex flex-col items-end justify-center text-left">
               <span className="text-sm font-black text-white truncate max-w-[150px] group-hover:text-indigo-100 transition-colors drop-shadow-md">
                 {userName || (user ? user.email.split('@')[0] : 'المستخدم')}
@@ -167,7 +146,6 @@ export function Header({
               <span className={`text-[10px] ${theme.text} font-bold tracking-widest drop-shadow-sm`}>{displayRole}</span>
             </div>
 
-            {/* أيقونة المستخدم */}
             <div className="relative shrink-0">
               <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-[1rem] sm:rounded-[1.2rem] bg-gradient-to-br ${theme.bg} flex items-center justify-center ${theme.glow} ring-2 ${theme.ring} group-hover:scale-110 transition-transform duration-300 overflow-hidden shadow-inner`}>
                 <User className="h-5 w-5 sm:h-6 sm:w-6 text-[#02040a] drop-shadow-md" />
@@ -176,7 +154,6 @@ export function Header({
             </div>
           </button>
 
-          {/* القائمة المنسدلة (Futuristic Dropdown) */}
           <AnimatePresence>
             {isDropdownOpen && user && (
               <>
@@ -186,7 +163,7 @@ export function Header({
                   animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
                   exit={{ opacity: 0, y: 20, scale: 0.95, rotateX: 10 }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                  className="absolute left-0 top-[110%] z-50 w-72 origin-top-left rounded-[2rem] bg-[#02040a]/95 backdrop-blur-3xl p-3 shadow-[0_30px_60px_rgba(0,0,0,0.9)] border border-indigo-500/30 flex flex-col gap-2 overflow-hidden"
+                  className="absolute left-0 sm:left-auto sm:right-0 top-[110%] z-50 w-[calc(100vw-2rem)] max-w-72 sm:w-72 origin-top sm:origin-top-right rounded-[2rem] bg-[#02040a]/95 backdrop-blur-3xl p-3 shadow-[0_30px_60px_rgba(0,0,0,0.9)] border border-indigo-500/30 flex flex-col gap-2 overflow-hidden"
                   style={{ perspective: "1000px" }}
                 >
                   <div className={`absolute top-0 left-0 w-32 h-32 ${theme.bg.split(' ')[0].replace('from-', 'bg-')}/30 blur-[50px] rounded-full pointer-events-none mix-blend-screen`}></div>
