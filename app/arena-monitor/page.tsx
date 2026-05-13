@@ -502,14 +502,14 @@ export default function ArenaMonitorDashboard() {
         .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
         .katex { direction: ltr !important; text-align: left !important; color: #818cf8 !important; }
         .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
-        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); background: rgba(2,4,10,0.4); }
-        .tiptap-content td, .tiptap-content th { border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; color: #cbd5e1; }
+        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); background: transparent; }
+        .tiptap-content td, .tiptap-content th { border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; color: #e2e8f0; }
         .tiptap-content th { background-color: rgba(255,255,255,0.05) !important; font-weight: 900 !important; color: #fff; }
         .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important; mix-blend-mode: luminosity; border: 1px solid rgba(255,255,255,0.1); }
         .tiptap-content p { margin-bottom: 0.5em !important; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
       `}} />
 
