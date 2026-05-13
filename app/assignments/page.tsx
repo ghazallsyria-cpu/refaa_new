@@ -1,7 +1,12 @@
 // @ts-nocheck
 'use client';
+
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon, Play, Loader2, ShieldAlert } from 'lucide-react';
+import { 
+  Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, 
+  X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, 
+  Image as ImageIcon, Play, Loader2, ShieldAlert, UserCheck
+} from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion'; 
@@ -16,7 +21,7 @@ import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
-import { cn } from '@/lib/utils'; // 🚀 أضفنا دالة دمج الكلاسات
+import { cn } from '@/lib/utils'; 
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -218,6 +223,10 @@ export default function AssignmentsPage() {
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] bg-transparent text-slate-100 font-sans overflow-x-hidden relative pb-32 pt-2 sm:pt-6" dir="rtl">
       
+      {/* 🌌 الإضاءة المحيطية الكونية */}
+      <div className="fixed top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen z-0"></div>
+      <div className="fixed bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] bg-blue-500/10 rounded-full blur-[100px] pointer-events-none mix-blend-screen z-0"></div>
+
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* 🚀 إشعارات جيمناي (Holographic Toasts) */}
@@ -359,19 +368,26 @@ export default function AssignmentsPage() {
             {Object.entries(groupedAssignments).map(([subjectName, subjAssigns], grpIdx) => (
               <motion.div variants={itemVariants} key={subjectName} className="space-y-6">
                 
-                {/* ترويسة المادة */}
-                <div className="flex items-center gap-3 border-b-2 border-indigo-500/30 pb-4 mb-6">
-                  <div className="p-2.5 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/20 shadow-inner">
+                {/* 🚀 ترويسة المادة المضيئة */}
+                <div className="flex items-center gap-3 border-b border-indigo-500/30 pb-4 mb-6 relative">
+                  <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
+                  <div className="p-2.5 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/20 shadow-inner relative z-10">
                     <BookOpen className="w-5 h-5 text-indigo-400 drop-shadow-md" />
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white drop-shadow-md">{subjectName}</h2>
-                  <span className="bg-white/5 border border-white/10 text-slate-300 shadow-inner text-xs font-black px-3 py-1 rounded-full mr-2 backdrop-blur-sm">{subjAssigns.length} مهام</span>
+                  <h2 className="text-2xl sm:text-3xl font-black text-white drop-shadow-md relative z-10">{subjectName}</h2>
+                  <span className="bg-white/5 border border-white/10 text-slate-300 shadow-inner text-xs font-black px-3 py-1 rounded-full mr-auto backdrop-blur-sm relative z-10">{subjAssigns.length} مهام</span>
                 </div>
                 
                 {/* كروت الواجبات التابعة للمادة */}
                 <div className={currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" : "flex flex-col gap-5 sm:gap-6"}>
                   {subjAssigns.map((assignment) => {
                     
+                    // استخراج اسم المعلم بأمان مع Fallback
+                    let teacherName = 'معلم غير محدد';
+                    if (assignment.teacher?.users?.full_name) teacherName = assignment.teacher.users.full_name;
+                    else if (assignment.teacher?.user?.full_name) teacherName = assignment.teacher.user.full_name;
+                    else if (assignment.teacher_name) teacherName = assignment.teacher_name;
+
                     if (currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') {
                       const pendingGradesCount = (assignment.submission_count || 0) - (assignment.graded_count || 0);
                       const needsTeacherGrading = pendingGradesCount > 0;
@@ -383,10 +399,12 @@ export default function AssignmentsPage() {
                       const canEdit = currentRole === 'admin' || currentRole === 'management' || checkTeacherId === user?.id;
 
                       return (
-                        <div key={assignment.id} className="group glass-panel rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 hover:border-indigo-500/40 hover:bg-white/5 transition-all overflow-hidden flex flex-col shadow-inner">
-                          <div className="p-6 sm:p-8 flex-1 relative">
-                            <div className="flex items-start justify-between mb-6 sm:mb-8 gap-2 relative z-10">
-                              <div className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border whitespace-nowrap backdrop-blur-sm ${getStatusColor(assignment.status)}`}>
+                        <div key={assignment.id} className="group glass-panel rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 hover:border-indigo-500/40 hover:bg-white/5 transition-all overflow-hidden flex flex-col shadow-inner relative">
+                          <div className="p-6 sm:p-8 flex-1 relative z-10">
+                            
+                            <div className="flex items-start justify-between mb-6 sm:mb-8 gap-2">
+                              <div className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border whitespace-nowrap backdrop-blur-sm flex items-center gap-1.5 ${getStatusColor(assignment.status)}`}>
+                                {assignment.status === 'published' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>}
                                 {getStatusLabel(assignment.status)}
                               </div>
 
@@ -436,7 +454,7 @@ export default function AssignmentsPage() {
                               يرجى فتح الواجب لرؤية التعليمات التفصيلية للحل والتقييم...
                             </p>
 
-                            <div className="grid grid-cols-2 gap-3 sm:gap-4 relative z-10">
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 relative z-10 mb-4">
                               <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-300 bg-[#02040a]/40 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner group-hover:border-indigo-500/20 transition-colors backdrop-blur-md">
                                 <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-500/20"><BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-400 drop-shadow-sm" /></div>
                                 <span className="truncate">{assignment.subject_name}</span>
@@ -446,9 +464,14 @@ export default function AssignmentsPage() {
                                 <span>{assignment.submission_count || 0} تسليم</span>
                               </div>
                             </div>
+                            
+                            {/* 🚀 شارة اسم المعلم */}
+                            <div className="flex items-center gap-2 text-[10px] sm:text-xs font-bold text-slate-400 bg-white/5 w-fit px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
+                              <UserCheck className="w-3.5 h-3.5 opacity-70" /> {teacherName}
+                            </div>
                           </div>
 
-                          <div className={`px-6 sm:px-8 py-4 sm:py-5 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors ${overdue && assignment.status === 'published' ? 'bg-rose-500/10' : 'bg-[#02040a]/40 backdrop-blur-md group-hover:bg-[#02040a]/60'}`}>
+                          <div className={`px-6 sm:px-8 py-4 sm:py-5 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors relative z-10 ${overdue && assignment.status === 'published' ? 'bg-rose-500/10' : 'bg-[#02040a]/40 backdrop-blur-md group-hover:bg-[#02040a]/60'}`}>
                             <div className={`flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-black ${overdue && assignment.status === 'published' ? 'text-rose-400 drop-shadow-sm' : 'text-slate-400'}`}>
                               <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
                               <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
@@ -505,6 +528,10 @@ export default function AssignmentsPage() {
                                   <span className={cn("flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg shadow-inner border", overdue && !isStudentDone ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 'bg-[#02040a]/40 text-slate-400 border-white/5')}>
                                     <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70"/> 
                                     <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
+                                  </span>
+                                  {/* 🚀 شارة المعلم للطالب */}
+                                  <span className="flex items-center gap-1 sm:gap-1.5 bg-indigo-500/10 text-indigo-300 px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg border border-indigo-500/20 shadow-inner">
+                                    <UserCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70" /> {teacherName}
                                   </span>
                                 </div>
                               </div>
@@ -598,7 +625,7 @@ export default function AssignmentsPage() {
                   </div>
                 </div>
                 <Dialog.Close className="absolute sm:relative top-5 left-5 sm:top-auto sm:left-auto h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center rounded-lg sm:rounded-xl bg-white/5 border border-white/10 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors active:scale-90 shadow-inner">
-                  <X className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" />
+                  <X className="w-4 h-4 sm:h-5 sm:w-5 drop-shadow-sm" />
                 </Dialog.Close>
               </div>
               
@@ -754,7 +781,6 @@ export default function AssignmentsPage() {
                         <h4 className="text-base sm:text-lg font-black text-white drop-shadow-md">بناء الأسئلة التفاعلية للواجب</h4>
                       </div>
                       <div className="relative z-10">
-                        {/* AssignmentBuilder is already dark/glass by default in Gemini Style */}
                         <AssignmentBuilder questions={questions} onChange={setQuestions} />
                       </div>
                     </div>
