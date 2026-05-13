@@ -924,7 +924,7 @@ export default function PracticeArena() {
                           )}
                           {currentQ.model_answer_html && currentQ.model_answer_html.trim() !== '' && currentQ.model_answer_html !== '<p></p>' ? ( <TypewriterReveal htmlContent={currentQ.model_answer_html} /> ) : <p className="text-sm font-bold text-slate-500 italic text-center">لا يوجد شرح تفصيلي متوفر لهذا السؤال.</p>}
                         </div>
-                        <div className="px-6 py-3 bg-[#0f1423]/80 border-t border-white/5 flex justify-center"><span className="text-[9px] sm:text-[10px] font-black text-indigo-500/50 uppercase tracking-widest">Powered by Gemini AI Engine</span></div>
+                        <div className="px-6 py-3 bg-[#0f1423]/80 border-t border-white/5 flex justify-center"><span className="text-[9px] sm:text-[10px] font-black text-indigo-500/50 uppercase tracking-widest">Powered by Gemini EHAB JAMAL GHAZAL</span></div>
                       </motion.div>
                     );
                   })()}
