@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 🗂️ قاعدة بيانات الروابط (نفس منطق السايد بار القديم)
+// 🗂️ قاعدة بيانات الروابط (Gemini Smart Workspaces)
 // ==========================================
 const navigationGroups = [
   {
@@ -88,6 +88,7 @@ const navigationGroups = [
       { name: 'محرك الجدولة', href: '/admin/auto-schedule', icon: Wand2 },
       { name: 'الجدول القديم', href: '/schedule', icon: CalendarDays },
       { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
+      { name: 'الواجبات', href: '/assignments', icon: PenTool }, // 🚀 أضفنا الواجبات الكلاسيكية هنا
       { name: 'الواجبات والتصحيح', href: '/arena-monitor', icon: MonitorPlay },
       { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments-v2', icon: Sparkles },
     ]
@@ -147,7 +148,10 @@ export default function GeminiNavigation() {
     if (item.name === 'الواجبات والتصحيح') return (r === 'teacher' || r === 'admin' || r === 'management');
 
     if (r === 'admin' || r === 'management' || isGlobalWatcher) return true; 
-    if (r === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الواجبات', 'الرسائل'].includes(item.name);
+    
+    // 🚀 تحديث صلاحيات المعلم لتشمل الواجبات الكلاسيكية
+    if (r === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الواجبات', 'الواجبات والتصحيح', 'الرسائل'].includes(item.name);
+    
     if (r === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
     if (r === 'parent') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     return false;
@@ -178,7 +182,8 @@ export default function GeminiNavigation() {
       base.push({ name: 'الطلاب', href: '/admin/student-360', icon: Users, color: 'text-indigo-400' });
     } else if (authRole === 'teacher') {
       base.push({ name: 'الجدول', href: '/dashboard/teacher/schedule', icon: CalendarDays, color: 'text-amber-400' });
-      base.push({ name: 'الواجبات', href: '/ai-assignments-v2', icon: Sparkles, color: 'text-purple-400' });
+      // 🚀 توجيه المعلم للنظام الكلاسيكي السريع
+      base.push({ name: 'الواجبات', href: '/assignments', icon: PenTool, color: 'text-purple-400' });
     } else if (authRole === 'student') {
       base.push({ name: 'الجدول', href: '/dashboard/student/schedule', icon: CalendarDays, color: 'text-amber-400' });
       base.push({ name: 'الاختبارات', href: '/exams', icon: FileText, color: 'text-rose-400' });
