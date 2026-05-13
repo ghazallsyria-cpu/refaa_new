@@ -1,25 +1,32 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
-// 🚀 تغليف النظام بمحرك PWA
+// 🚀 تغليف النظام بمحرك PWA (بإعدادات متوافقة مع App Router)
 const withPWA = withPWAInit({
   dest: "public",
-  cacheOnFrontEndNav: true,
-  aggressiveFrontEndNavCaching: true,
+  
+  // 🛑 إيقاف الكاش الهجومي (لأنه يتعارض كلياً مع App Router في Next 15 ويسبب الحلقة المفرغة)
+  cacheOnFrontEndNav: false,
+  aggressiveFrontEndNavCaching: false,
+  
   reloadOnOnline: true,
-  // تم إزالة swcMinify من هنا لأن Next.js يعالجه تلقائياً
-  disable: process.env.NODE_ENV === "development", // إيقافه في التطوير لمنع مشاكل الكاش
+  disable: process.env.NODE_ENV === "development",
+  
   workboxOptions: {
     disableDevLogs: true,
+    // 🛡️ حماية إضافية: استثناء ملفات السيرفر الديناميكية من الكاش لتجنب خطأ (_async_to_generator)
+    exclude: [
+      /_next\/server\/.*/,
+      /(?:\?|&)rsc=.*/
+    ],
   },
 });
 
 const nextConfig: NextConfig = {
   output: 'standalone',
 
-  generateBuildId: async () => {
-    return `build-${new Date().getTime()}`;
-  },
+  // 🛑 تم إزالة generateBuildId لأنه يدمر مزامنة الـ Service Worker في Netlify
+  // Next.js سيقوم الآن بإنشاء Build ID ثابت وآمن ورياضي تلقائياً!
 
   images: {
     remotePatterns: [
