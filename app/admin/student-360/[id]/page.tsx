@@ -11,11 +11,15 @@ import { cn } from '@/lib/utils';
 import { 
   ArrowRight, User, GraduationCap, Clock, CheckCircle2, AlertCircle, 
   BookOpen, FileText, Medal, Loader2, Activity, Target, ShieldAlert,
-  MessageSquareHeart, Send, ShieldCheck, Database, XCircle, PrinterIcon, Download
+  MessageSquareHeart, Send, ShieldCheck, Database, XCircle, PrinterIcon, Download, Sparkles
 } from 'lucide-react';
 
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
+
+// إعدادات الحركة الموحدة
+const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+const itemVariants = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } } };
 
 export default function Student360Profile({ params }: { params: Promise<{ id: string }> }) {
   const { id: studentId } = use(params);
@@ -38,12 +42,58 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
 
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'week' | 'month'>('all');
 
-  // 1. جلب البيانات الأساسية من الدالة המجمعة (تعمل بنجاح)
+  // 1. جلب البيانات الأساسية بأمان (Failsafe Fetcher)
   const fetchSummary = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('get_student_360_summary', { p_student_id: studentId });
-      if (error) throw error;
-      setSummaryData(data);
+      // استعلام مباشر وسريع لضمان عمل الصفحة حتى لو فشل RPC
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select(`
+          id, national_id,
+          users!students_user_id_fkey(full_name, avatar_url),
+          sections(name, classes(name))
+        `)
+        .eq('id', studentId)
+        .single();
+
+      if (studentError) throw studentError;
+
+      const userInfo = Array.isArray(studentData?.users) ? studentData.users[0] : studentData?.users;
+      const sectionInfo = Array.isArray(studentData?.sections) ? studentData.sections[0] : studentData?.sections;
+      const classInfo = sectionInfo?.classes;
+      const className = Array.isArray(classInfo) ? classInfo[0]?.name : classInfo?.name;
+
+      // جلب ملخص الإحصائيات (يمكنك توسيعها لاحقاً)
+      const { count: absences } = await supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('student_id', studentId).neq('status', 'present');
+      const { count: badges } = await supabase.from('student_badges').select('*', { count: 'exact', head: true }).eq('student_id', studentId);
+      
+      const { data: grades } = await supabase.from('grades').select('score, max_score').eq('student_id', studentId);
+      let avg = 0;
+      if (grades && grades.length > 0) {
+         const totalScore = grades.reduce((acc, g) => acc + (g.score || 0), 0);
+         const totalMax = grades.reduce((acc, g) => acc + (g.max_score || 100), 0);
+         avg = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
+      }
+
+      setSummaryData({
+        basic_info: {
+           full_name: userInfo?.full_name || 'طالب غير معروف',
+           national_id: studentData.national_id || '---',
+           avatar_url: userInfo?.avatar_url || null,
+           class_name: className || '---',
+           section_name: sectionInfo?.name || '---'
+        },
+        academic_summary: {
+           average_score: avg,
+           total_exams_taken: grades?.length || 0
+        },
+        attendance_summary: {
+           total_absences: absences || 0,
+           total_lates: 0 // يتم حسابه لاحقاً
+        },
+        badges_count: badges || 0
+      });
+
     } catch (err) {
       console.error('Error fetching summary:', err);
     } finally {
@@ -57,9 +107,9 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     }
   }, [currentRole, fetchSummary]);
 
-  // 🚀 2. المحرك الجديد الذكي (Bulletproof Fetcher) لحل مشكلة العلاقات المتشابكة
+  // 🚀 2. المحرك الجديد الذكي (Bulletproof Tab Fetcher)
   const loadTabData = async (tab: string) => {
-    if (tabData[tab]) return; // الكاش موجود
+    if (tabData[tab]) return; 
     if (tab === 'overview') return;
 
     setIsTabLoading(true);
@@ -114,7 +164,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
       setTabData(prev => ({ ...prev, [tab]: finalData }));
     } catch (err) {
       console.error(`Error loading ${tab}:`, err);
-      setTabData(prev => ({ ...prev, [tab]: [] })); // تأمين الشاشة من الانهيار
+      setTabData(prev => ({ ...prev, [tab]: [] })); 
     } finally {
       setIsTabLoading(false);
     }
@@ -137,9 +187,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
       
       if (error) throw error;
       
-      // جلب بيانات المعلم لدمجها بالكاش فوراً
       const { data: userData } = await supabase.from('users').select('id, full_name, avatar_url, role').eq('id', user.id).single();
-      
       const completeNote = { ...insertedNote, users: userData };
 
       setTabData(prev => ({
@@ -249,90 +297,94 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   if (!['admin', 'management', 'teacher', 'staff'].includes(currentRole)) return null;
 
   if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="flex flex-col items-center gap-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 to-transparent pointer-events-none"></div>
+      <div className="flex flex-col items-center gap-4 relative z-10">
         <div className="relative">
-           <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600"></div>
-           <User className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-indigo-600 h-8 w-8 animate-pulse" />
+           <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/20 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.5)]"></div>
+           <User className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-indigo-400 h-8 w-8 animate-pulse" />
         </div>
-        <h2 className="text-xl font-black text-indigo-900 animate-pulse tracking-widest">جاري تحميل ملف الطالب الشامل...</h2>
+        <h2 className="text-xl font-black text-indigo-300 animate-pulse tracking-widest drop-shadow-md">جاري تحليل ملف الطالب الشامل...</h2>
       </div>
     </div>
   );
 
-  if (!summaryData?.basic_info) return <div className="p-10 text-center font-bold text-rose-500">حدث خطأ أو أن الطالب غير موجود.</div>;
+  if (!summaryData?.basic_info) return <div className="min-h-screen flex items-center justify-center bg-[#02040a] text-rose-400 font-bold text-xl">لم يتم العثور على بيانات الطالب. تأكد من صحة الرابط.</div>;
 
   const { basic_info, academic_summary, attendance_summary, badges_count } = summaryData;
   const avgScore = Number(academic_summary?.average_score || 0).toFixed(1);
 
   const filterSummaryStats = {
-     absent: groupedAttendance.filter(d => d.dayStatus === 'absent').length,
-     late: groupedAttendance.filter(d => d.dayStatus === 'late').length,
-     excused: groupedAttendance.filter(d => d.dayStatus === 'excused').length,
+      absent: groupedAttendance.filter(d => d.dayStatus === 'absent').length,
+      late: groupedAttendance.filter(d => d.dayStatus === 'late').length,
+      excused: groupedAttendance.filter(d => d.dayStatus === 'excused').length,
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-cairo pb-20 relative overflow-x-hidden" dir="rtl">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-[#02040a] text-slate-200 font-sans pb-20 relative overflow-x-hidden pt-24" dir="rtl">
       
+      {/* 🌌 الإضاءة الخلفية المحيطية بستايل جيمناي */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+         <div className="absolute top-[-20%] right-[-10%] w-[60vw] h-[60vw] max-w-[600px] max-h-[600px] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/30 to-transparent"></div>
+         <div className="absolute bottom-[-20%] left-[-10%] w-[60vw] h-[60vw] max-w-[500px] max-h-[500px] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 to-transparent"></div>
+         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
+      </div>
+
       <AnimatePresence>
         {isPrinting && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[200] flex flex-col items-center justify-center text-white">
-            <Loader2 className="w-16 h-16 animate-spin text-emerald-400 mb-4" />
-            <h2 className="text-xl font-black">جاري تصميم وتوليد السجل الرسمي (PDF)...</h2>
-            <p className="text-sm text-slate-300 mt-2">يرجى الانتظار لحظات...</p>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-[200] flex flex-col items-center justify-center text-white">
+            <Loader2 className="w-16 h-16 animate-spin text-emerald-400 mb-4 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
+            <h2 className="text-xl font-black drop-shadow-md">جاري تصميم وتوليد السجل الرسمي (PDF)...</h2>
+            <p className="text-sm text-slate-400 mt-2">يرجى الانتظار لحظات...</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="absolute top-0 left-0 w-full h-80 bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 overflow-hidden z-0">
-         <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-         <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-indigo-500 rounded-full blur-[100px] opacity-50 pointer-events-none"></div>
-         <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500 rounded-full blur-[100px] opacity-30 pointer-events-none"></div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-8 sm:pt-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-white/80 hover:text-white transition-colors bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md border border-white/20 w-fit active:scale-95">
-          <ArrowRight className="w-4 h-4" /> عودة للخلف
+        <button onClick={() => router.back()} className="mb-6 flex items-center gap-2 text-slate-400 hover:text-white transition-colors bg-white/5 px-4 py-2 rounded-xl backdrop-blur-md border border-white/10 w-fit active:scale-95 shadow-inner">
+          <ArrowRight className="w-4 h-4" /> عودة لمستكشف الطلاب
         </button>
 
-        <div className="bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border border-white p-6 sm:p-8 flex flex-col md:flex-row gap-8 items-center md:items-start justify-between relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-bl-full pointer-events-none"></div>
+        {/* 🚀 1. البطاقة التعريفية (Hero Profile Card) */}
+        <motion.div variants={itemVariants} className="bg-[#0f1423]/80 backdrop-blur-2xl rounded-[2rem] sm:rounded-[3rem] shadow-2xl border border-white/10 p-6 sm:p-10 flex flex-col md:flex-row gap-8 items-center md:items-start justify-between relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none mix-blend-screen"></div>
            
-           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10">
-              <div className="w-28 h-28 sm:w-32 sm:h-32 bg-gradient-to-br from-indigo-100 to-blue-50 rounded-[2rem] shadow-inner border-4 border-white flex items-center justify-center shrink-0 overflow-hidden text-indigo-600 font-black text-4xl">
+           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 sm:gap-8 relative z-10 w-full md:w-auto">
+              <div className="w-28 h-28 sm:w-36 sm:h-36 bg-[#02040a] rounded-[2rem] shadow-inner border border-white/10 flex items-center justify-center shrink-0 overflow-hidden text-indigo-400 font-black text-4xl group">
                  {basic_info.avatar_url ? (
-                    <img src={basic_info.avatar_url} className="w-full h-full object-cover" alt="Student" />
+                    <img src={basic_info.avatar_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 mix-blend-luminosity hover:mix-blend-normal" alt="Student" />
                  ) : (
                     basic_info.full_name.charAt(0)
                  )}
               </div>
-              <div className="text-center md:text-right">
-                 <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2">{basic_info.full_name}</h1>
+              <div className="text-center md:text-right flex flex-col justify-center h-full">
+                 <h1 className="text-2xl sm:text-4xl font-black text-white mb-3 drop-shadow-md">{basic_info.full_name}</h1>
                  <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 sm:gap-3">
-                    <span className="bg-indigo-50 text-indigo-700 font-black text-xs px-3 py-1 rounded-lg border border-indigo-100 shadow-sm flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/> الرقم المدني: {basic_info.national_id}</span>
-                    <span className="bg-blue-50 text-blue-700 font-black text-xs px-3 py-1 rounded-lg border border-blue-100 shadow-sm flex items-center gap-1.5"><GraduationCap className="w-3.5 h-3.5"/> {basic_info.class_name} - {basic_info.section_name}</span>
+                    <span className="bg-indigo-500/10 text-indigo-300 font-black text-[10px] sm:text-xs px-3 py-1.5 rounded-lg border border-indigo-500/30 shadow-inner flex items-center gap-1.5 backdrop-blur-sm"><ShieldCheck className="w-3.5 h-3.5"/> الرقم المدني: {basic_info.national_id}</span>
+                    <span className="bg-blue-500/10 text-blue-300 font-black text-[10px] sm:text-xs px-3 py-1.5 rounded-lg border border-blue-500/30 shadow-inner flex items-center gap-1.5 backdrop-blur-sm"><GraduationCap className="w-3.5 h-3.5"/> {basic_info.class_name} - {basic_info.section_name}</span>
                  </div>
               </div>
            </div>
 
-           <div className="flex gap-4 sm:gap-6 relative z-10">
-              <div className="text-center">
-                 <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 font-black text-xl shadow-sm mb-2">{avgScore}%</div>
-                 <p className="text-[10px] sm:text-xs font-black text-slate-500 uppercase">المعدل العام</p>
+           <div className="flex gap-3 sm:gap-6 relative z-10 shrink-0 w-full md:w-auto justify-center">
+              <div className="text-center glass-panel p-3 sm:p-4 rounded-2xl border-emerald-500/20 min-w-[90px]">
+                 <div className="text-2xl sm:text-3xl text-emerald-400 font-black drop-shadow-md">{avgScore}%</div>
+                 <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1">المعدل العام</p>
               </div>
-              <div className="text-center">
-                 <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 font-black text-xl shadow-sm mb-2">{attendance_summary?.total_absences || 0}</div>
-                 <p className="text-[10px] sm:text-xs font-black text-slate-500 uppercase">أيام الغياب</p>
+              <div className="text-center glass-panel p-3 sm:p-4 rounded-2xl border-rose-500/20 min-w-[90px]">
+                 <div className="text-2xl sm:text-3xl text-rose-400 font-black drop-shadow-md">{attendance_summary?.total_absences || 0}</div>
+                 <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1">أيام الغياب</p>
               </div>
-              <div className="text-center hidden sm:block">
-                 <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 font-black text-xl shadow-sm mb-2"><Medal className="w-6 h-6"/></div>
-                 <p className="text-[10px] sm:text-xs font-black text-slate-500 uppercase">{badges_count} وسام</p>
+              <div className="text-center glass-panel p-3 sm:p-4 rounded-2xl border-amber-500/20 min-w-[90px] hidden sm:block">
+                 <div className="text-2xl sm:text-3xl text-amber-400 font-black drop-shadow-md flex items-center justify-center gap-1"><Medal className="w-5 h-5"/> {badges_count}</div>
+                 <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1">أوسمة الشرف</p>
               </div>
            </div>
-        </div>
+        </motion.div>
 
-        <div className="mt-8 flex overflow-x-auto custom-scrollbar bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+        {/* 🚀 2. أزرار التنقل (Bento Navigation) */}
+        <motion.div variants={itemVariants} className="mt-8 flex overflow-x-auto custom-scrollbar bg-white/5 p-1.5 rounded-2xl border border-white/10 shadow-inner backdrop-blur-md">
            {[
              { id: 'overview', label: 'نظرة عامة', icon: Activity },
              { id: 'grades', label: 'السجل الأكاديمي', icon: FileText },
@@ -344,82 +396,86 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                key={tab.id}
                onClick={() => handleTabChange(tab.id)}
                className={cn(
-                 "flex-1 min-w-[140px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300",
-                 activeTab === tab.id ? "bg-indigo-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-indigo-600"
+                 "flex-1 min-w-[140px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs sm:text-sm transition-all duration-300 active:scale-95",
+                 activeTab === tab.id ? "bg-indigo-600 border border-indigo-500 text-white shadow-md" : "text-slate-400 hover:bg-white/10 hover:text-white border border-transparent"
                )}
              >
                <tab.icon className="w-4 h-4" /> {tab.label}
              </button>
            ))}
-        </div>
+        </motion.div>
 
+        {/* 🚀 3. محتوى التبويبات (Tab Content) */}
         <div className="mt-6">
            <AnimatePresence mode="wait">
               {isTabLoading ? (
-                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center p-20">
-                    <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
+                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center p-20 glass-panel rounded-[2.5rem]">
+                    <Loader2 className="w-10 h-10 animate-spin text-indigo-500 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
                  </motion.div>
               ) : (
                  <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                     
+                    {/* 📊 التبويب الأول: نظرة عامة */}
                     {activeTab === 'overview' && (
                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm col-span-1 md:col-span-2">
-                             <h3 className="font-black text-lg text-slate-800 mb-4 flex items-center gap-2"><Activity className="w-5 h-5 text-indigo-500"/> ملخص النشاط</h3>
+                          <div className="bg-[#0f1423]/80 backdrop-blur-md p-6 sm:p-8 rounded-[2rem] border border-white/10 shadow-lg col-span-1 md:col-span-2">
+                             <h3 className="font-black text-lg sm:text-xl text-white mb-6 flex items-center gap-3 drop-shadow-md"><Activity className="w-6 h-6 text-indigo-400"/> ملخص النشاط</h3>
                              <div className="grid grid-cols-2 gap-4">
-                               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-4">
-                                  <div className="p-3 bg-white shadow-sm rounded-xl text-indigo-600"><FileText className="w-6 h-6"/></div>
+                               <div className="bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 flex items-center gap-4 shadow-inner group hover:border-indigo-500/30 transition-colors">
+                                  <div className="p-3 bg-indigo-500/20 shadow-inner rounded-xl text-indigo-400 border border-indigo-500/30 group-hover:scale-110 transition-transform"><FileText className="w-6 h-6"/></div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-500">إجمالي الاختبارات</p>
-                                    <p className="text-2xl font-black text-slate-800">{academic_summary?.total_exams_taken || 0}</p>
+                                    <p className="text-[10px] sm:text-xs font-bold text-slate-400">إجمالي الاختبارات</p>
+                                    <p className="text-2xl sm:text-3xl font-black text-white drop-shadow-sm">{academic_summary?.total_exams_taken || 0}</p>
                                   </div>
                                </div>
-                               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-4">
-                                  <div className="p-3 bg-white shadow-sm rounded-xl text-rose-500"><Clock className="w-6 h-6"/></div>
+                               <div className="bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 flex items-center gap-4 shadow-inner group hover:border-rose-500/30 transition-colors">
+                                  <div className="p-3 bg-rose-500/20 shadow-inner rounded-xl text-rose-400 border border-rose-500/30 group-hover:scale-110 transition-transform"><Clock className="w-6 h-6"/></div>
                                   <div>
-                                    <p className="text-xs font-bold text-slate-500">تأخير صباحي</p>
-                                    <p className="text-2xl font-black text-slate-800">{attendance_summary?.total_lates || 0}</p>
+                                    <p className="text-[10px] sm:text-xs font-bold text-slate-400">تأخير صباحي</p>
+                                    <p className="text-2xl sm:text-3xl font-black text-white drop-shadow-sm">{attendance_summary?.total_lates || 0}</p>
                                   </div>
                                </div>
                              </div>
                           </div>
                           
-                          <div className="bg-gradient-to-br from-amber-500 to-orange-400 p-6 rounded-[2rem] shadow-md text-white relative overflow-hidden">
-                             <Medal className="absolute -bottom-4 -left-4 w-32 h-32 text-white/20" />
-                             <h3 className="font-black text-lg mb-2 relative z-10">صندوق الأوسمة</h3>
-                             <p className="text-4xl font-black relative z-10 mt-4">{badges_count}</p>
-                             <p className="text-xs font-bold text-amber-100 relative z-10 mt-1">وسام شرف أكاديمي وسلوكي</p>
+                          <div className="bg-gradient-to-br from-amber-600/20 to-orange-500/10 backdrop-blur-md border border-amber-500/30 p-6 sm:p-8 rounded-[2rem] shadow-lg text-white relative overflow-hidden group">
+                             <Medal className="absolute -bottom-4 -left-4 w-32 h-32 text-amber-500/10 group-hover:scale-110 transition-transform duration-700" />
+                             <h3 className="font-black text-lg sm:text-xl text-amber-300 mb-2 relative z-10 flex items-center gap-2"><Sparkles className="w-5 h-5"/> صندوق الأوسمة</h3>
+                             <p className="text-5xl sm:text-6xl font-black relative z-10 mt-6 drop-shadow-md">{badges_count}</p>
+                             <p className="text-[10px] sm:text-xs font-bold text-amber-200/70 relative z-10 mt-2">وسام شرف أكاديمي وسلوكي</p>
                           </div>
                        </div>
                     )}
 
+                    {/* 📚 التبويب الثاني: السجل الأكاديمي */}
                     {activeTab === 'grades' && (
-                       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-                          <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                             <h3 className="font-black text-lg text-slate-800 flex items-center gap-2"><Database className="w-5 h-5 text-indigo-500"/> سجل درجات الاختبارات والمهام</h3>
+                       <div className="bg-[#0f1423]/80 backdrop-blur-md rounded-[2.5rem] border border-white/10 shadow-lg overflow-hidden">
+                          <div className="p-6 sm:p-8 border-b border-white/5 bg-[#02040a]/40 flex items-center gap-3">
+                             <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20"><Database className="w-5 h-5 text-indigo-400"/></div>
+                             <h3 className="font-black text-lg sm:text-xl text-white drop-shadow-md">سجل الدرجات الشامل</h3>
                           </div>
-                          <div className="overflow-x-auto">
-                             <table className="w-full text-right">
+                          <div className="overflow-x-auto custom-scrollbar p-1">
+                             <table className="min-w-full text-right whitespace-nowrap">
                                 <thead>
-                                   <tr className="bg-white text-slate-400 text-xs font-black uppercase tracking-wider border-b border-slate-100">
-                                      <th className="p-4">المادة</th>
-                                      <th className="p-4">التقييم / الاختبار</th>
-                                      <th className="p-4 text-center">الدرجة المكتسبة</th>
-                                      <th className="p-4">التاريخ</th>
+                                   <tr className="bg-white/5 text-slate-300 text-[10px] sm:text-xs font-black uppercase tracking-wider border-b border-white/10">
+                                      <th className="p-5 pl-4 pr-6">المادة</th>
+                                      <th className="p-5 px-4">التقييم / الاختبار</th>
+                                      <th className="p-5 px-4 text-center">الدرجة المكتسبة</th>
+                                      <th className="p-5 px-6">التاريخ</th>
                                    </tr>
                                 </thead>
-                                <tbody className="text-sm font-bold text-slate-700">
+                                <tbody className="text-sm font-bold text-slate-300 divide-y divide-white/5">
                                    {tabData['grades']?.length > 0 ? tabData['grades'].map((g: any) => (
-                                      <tr key={g.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                         <td className="p-4"><span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg border border-indigo-100">{g.subjects?.name || 'غير محدد'}</span></td>
-                                         <td className="p-4">{g.title}</td>
-                                         <td className="p-4 text-center">
-                                            <span className="font-black text-lg text-slate-900">{g.score}</span> <span className="text-xs text-slate-400">/ {g.max_score}</span>
+                                      <tr key={g.id} className="hover:bg-white/5 transition-colors group">
+                                         <td className="p-4 px-6"><span className="bg-indigo-500/10 text-indigo-300 px-3 py-1.5 rounded-lg border border-indigo-500/20 shadow-inner text-xs">{g.subjects?.name || 'غير محدد'}</span></td>
+                                         <td className="p-4 px-4 font-black group-hover:text-white transition-colors">{g.title}</td>
+                                         <td className="p-4 px-4 text-center">
+                                            <span className="font-black text-xl text-emerald-400 drop-shadow-sm">{g.score}</span> <span className="text-[10px] text-slate-500">/ {g.max_score}</span>
                                          </td>
-                                         <td className="p-4 text-xs text-slate-500" dir="ltr">{new Date(g.created_at).toLocaleDateString('en-GB')}</td>
+                                         <td className="p-4 px-6 text-[10px] sm:text-xs text-slate-500" dir="ltr">{new Date(g.created_at).toLocaleDateString('en-GB')}</td>
                                       </tr>
                                    )) : (
-                                      <tr><td colSpan={4} className="p-10 text-center text-slate-400">لا توجد درجات مسجلة حتى الآن.</td></tr>
+                                      <tr><td colSpan={4} className="p-16 text-center text-slate-500 font-bold bg-[#02040a]/20">لا توجد درجات مسجلة حتى الآن.</td></tr>
                                    )}
                                 </tbody>
                              </table>
@@ -427,33 +483,36 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        </div>
                     )}
 
+                    {/* 🎯 التبويب الثالث: الواجبات */}
                     {activeTab === 'assignments' && (
-                       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-4">
+                       <div className="bg-[#0f1423]/80 backdrop-blur-md rounded-[2.5rem] border border-white/10 shadow-lg p-6 sm:p-8 space-y-4">
                           {tabData['assignments']?.length > 0 ? tabData['assignments'].map((a: any) => {
                              const isGraded = a.teacher_feedback?.includes('[تم رصد الدرجة]');
                              return (
-                                <div key={a.id} className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
+                                <div key={a.id} className="flex flex-col md:flex-row items-center justify-between gap-5 p-5 sm:p-6 rounded-[1.5rem] border border-white/5 bg-[#02040a]/40 hover:border-indigo-500/30 transition-all shadow-inner group">
                                    <div className="w-full">
-                                      <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                                         {a.assignments_v2?.is_practice_mode ? <Target className="w-4 h-4 text-amber-500"/> : <FileText className="w-4 h-4 text-indigo-500"/>}
+                                      <h4 className="font-black text-white text-base sm:text-lg flex items-center gap-3 drop-shadow-sm group-hover:text-indigo-100">
+                                         <div className={`p-2 rounded-xl border shadow-inner ${a.assignments_v2?.is_practice_mode ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'}`}>
+                                            {a.assignments_v2?.is_practice_mode ? <Target className="w-4 h-4"/> : <FileText className="w-4 h-4"/>}
+                                         </div>
                                          {a.assignments_v2?.title || 'واجب بدون عنوان'}
                                       </h4>
-                                      <div className="flex items-center gap-4 mt-2">
-                                         {a.teacher_feedback && !isGraded && <p className="text-xs font-bold text-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm inline-block"><MessageSquareHeart className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
-                                         {a.teacher_feedback && isGraded && <p className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 shadow-sm inline-block"><CheckCircle2 className="w-3 h-3 inline mr-1"/> {a.teacher_feedback}</p>}
+                                      <div className="flex items-center gap-3 mt-4">
+                                         {a.teacher_feedback && !isGraded && <p className="text-[10px] sm:text-xs font-bold text-indigo-300 bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/20 shadow-inner flex items-center gap-1.5"><MessageSquareHeart className="w-3.5 h-3.5"/> {a.teacher_feedback}</p>}
+                                         {a.teacher_feedback && isGraded && <p className="text-[10px] sm:text-xs font-bold text-emerald-300 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 shadow-inner flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> {a.teacher_feedback}</p>}
                                       </div>
                                    </div>
                                    <div className="flex items-center gap-4 w-full md:w-auto shrink-0">
                                       {isGraded ? (
-                                         <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl border border-emerald-200 font-black text-sm flex items-center gap-2 w-full justify-center">
-                                            <CheckCircle2 className="w-4 h-4"/> مُصحح وتم الرصد
+                                         <div className="bg-emerald-500/10 text-emerald-400 px-4 sm:px-5 py-2.5 rounded-xl border border-emerald-500/30 font-black text-xs sm:text-sm flex items-center justify-center gap-2 w-full shadow-inner">
+                                            <CheckCircle2 className="w-4 h-4"/> مُصحح
                                          </div>
                                       ) : a.is_completed ? (
-                                         <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200 font-black text-sm flex items-center gap-2 w-full justify-center">
+                                         <div className="bg-amber-500/10 text-amber-400 px-4 sm:px-5 py-2.5 rounded-xl border border-amber-500/30 font-black text-xs sm:text-sm flex items-center justify-center gap-2 w-full shadow-inner">
                                             <Clock className="w-4 h-4"/> بانتظار التصحيح
                                          </div>
                                       ) : (
-                                         <div className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2 w-full justify-center">
+                                         <div className="bg-white/5 text-slate-400 px-4 sm:px-5 py-2.5 rounded-xl border border-white/10 font-black text-xs sm:text-sm flex items-center justify-center w-full shadow-inner">
                                             قيد الإنجاز
                                          </div>
                                       )}
@@ -461,62 +520,76 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                                 </div>
                              )
                           }) : (
-                             <div className="p-10 text-center text-slate-400 font-bold">لا يوجد سجل للواجبات.</div>
+                             <div className="p-16 text-center text-slate-500 font-bold bg-[#02040a]/40 rounded-[1.5rem] border border-white/5">لا يوجد سجل للواجبات.</div>
                           )}
                        </div>
                     )}
 
+                    {/* 🛡️ التبويب الرابع: الغياب والانضباط */}
                     {activeTab === 'attendance' && (
-                       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                          <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
-                             <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 shrink-0"><ShieldAlert className="w-5 h-5 text-rose-500"/> سجل الغياب والانضباط</h3>
+                       <div className="bg-[#0f1423]/80 backdrop-blur-md rounded-[2.5rem] border border-white/10 shadow-lg overflow-hidden flex flex-col">
+                          <div className="p-6 sm:p-8 border-b border-white/5 bg-[#02040a]/40 flex flex-col sm:flex-row justify-between items-center gap-5">
+                             <div className="flex items-center gap-3 w-full sm:w-auto">
+                                <div className="p-2 bg-rose-500/10 rounded-xl border border-rose-500/20"><ShieldAlert className="w-5 h-5 text-rose-400"/></div>
+                                <h3 className="font-black text-lg sm:text-xl text-white drop-shadow-md">سجل الغياب والانضباط</h3>
+                             </div>
                              
                              <div className="flex items-center gap-3 w-full sm:w-auto">
-                                <select 
-                                   value={attendanceFilter} 
-                                   onChange={(e) => setAttendanceFilter(e.target.value as any)}
-                                   className="bg-white border border-slate-200 text-slate-700 text-xs sm:text-sm font-black rounded-xl px-3 py-2.5 outline-none focus:border-indigo-400 shadow-sm cursor-pointer"
-                                >
-                                   <option value="all">كل الأوقات</option>
-                                   <option value="month">آخر شهر</option>
-                                   <option value="week">آخر أسبوع</option>
-                                </select>
+                                <div className="relative">
+                                   <Filter className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                                   <select 
+                                      value={attendanceFilter} 
+                                      onChange={(e) => setAttendanceFilter(e.target.value as any)}
+                                      className="bg-white/5 border border-white/10 text-white text-xs sm:text-sm font-black rounded-xl pr-9 pl-4 py-2.5 outline-none focus:border-indigo-400 shadow-inner cursor-pointer appearance-none [&>option]:bg-[#0f1423]"
+                                   >
+                                      <option value="all">كل الأوقات</option>
+                                      <option value="month">آخر شهر</option>
+                                      <option value="week">آخر أسبوع</option>
+                                   </select>
+                                </div>
 
-                                <button onClick={downloadAttendancePDF} disabled={isPrinting || groupedAttendance.length === 0} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 shrink-0">
-                                  {isPrinting ? <Loader2 className="w-4 h-4 animate-spin"/> : <PrinterIcon className="w-4 h-4"/>}
-                                  تصدير التقرير (PDF)
+                                <button onClick={downloadAttendancePDF} disabled={isPrinting || groupedAttendance.length === 0} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/50 text-white font-black text-xs sm:text-sm rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 shrink-0">
+                                  {isPrinting ? <Loader2 className="w-4 h-4 animate-spin"/> : <PrinterIcon className="w-4 h-4 drop-shadow-sm"/>}
+                                  <span className="hidden sm:inline">تصدير PDF</span>
                                 </button>
                              </div>
                           </div>
                           
-                          <div className="overflow-x-auto">
-                             <table className="w-full text-right">
+                          <div className="overflow-x-auto custom-scrollbar p-1">
+                             <table className="min-w-full text-right whitespace-nowrap">
                                 <thead>
-                                   <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase border-b border-slate-200">
-                                      <th className="p-4">التاريخ</th>
-                                      <th className="p-4">نوع الغياب (يوم / حصص)</th>
-                                      <th className="p-4 text-center">الحالة الإجمالية</th>
+                                   <tr className="bg-white/5 text-slate-300 text-[10px] sm:text-xs font-black uppercase tracking-wider border-b border-white/10">
+                                      <th className="p-5 pl-4 pr-6">التاريخ</th>
+                                      <th className="p-5 px-4">تفاصيل الغياب</th>
+                                      <th className="p-5 px-6 text-center">الحالة الإجمالية</th>
                                    </tr>
                                 </thead>
-                                <tbody className="text-sm font-bold text-slate-700">
+                                <tbody className="text-sm font-bold text-slate-300 divide-y divide-white/5">
                                    {groupedAttendance.length > 0 ? groupedAttendance.map((day: any) => (
-                                      <tr key={day.date} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                         <td className="p-4" dir="ltr">{new Date(day.date).toLocaleDateString('en-GB')}</td>
-                                         <td className="p-4 text-slate-600">
+                                      <tr key={day.date} className="hover:bg-white/5 transition-colors group">
+                                         <td className="p-4 px-6 text-[10px] sm:text-xs text-slate-400 font-black" dir="ltr">{new Date(day.date).toLocaleDateString('en-GB')}</td>
+                                         <td className="p-4 px-4">
                                             {day.isFullDay ? (
-                                               <span className="text-rose-600 font-black flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> {day.periodsDesc}</span>
+                                               <span className="text-rose-400 font-black flex items-center gap-1.5 bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/20 w-fit shadow-inner"><AlertCircle className="w-4 h-4" /> {day.periodsDesc}</span>
                                             ) : (
-                                               <span className="text-amber-600 font-bold">{day.periodsDesc}</span>
+                                               <span className="text-amber-400 font-bold bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20 w-fit shadow-inner block">{day.periodsDesc}</span>
                                             )}
                                          </td>
-                                         <td className="p-4 text-center">
-                                            {day.dayStatus === 'absent' && <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-md text-xs font-black border border-rose-200">غائب</span>}
-                                            {day.dayStatus === 'late' && <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-md text-xs font-black border border-amber-200">تأخير</span>}
-                                            {day.dayStatus === 'excused' && <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-xs font-black border border-blue-200">عذر مقبول</span>}
+                                         <td className="p-4 px-6 text-center">
+                                            <div className="flex justify-center">
+                                               {day.dayStatus === 'absent' && <span className="bg-rose-500/10 text-rose-400 px-4 py-1.5 rounded-xl text-[10px] sm:text-xs font-black border border-rose-500/30 shadow-inner">غائب</span>}
+                                               {day.dayStatus === 'late' && <span className="bg-amber-500/10 text-amber-400 px-4 py-1.5 rounded-xl text-[10px] sm:text-xs font-black border border-amber-500/30 shadow-inner">تأخير</span>}
+                                               {day.dayStatus === 'excused' && <span className="bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-xl text-[10px] sm:text-xs font-black border border-blue-500/30 shadow-inner">عذر مقبول</span>}
+                                            </div>
                                          </td>
                                       </tr>
                                    )) : (
-                                      <tr><td colSpan={3} className="p-10 text-center text-emerald-500 font-black"><CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-400"/>لا توجد غيابات مسجلة في هذه الفترة.</td></tr>
+                                      <tr>
+                                         <td colSpan={3} className="p-16 text-center text-emerald-400 font-black bg-[#02040a]/40">
+                                            <div className="p-3 bg-emerald-500/10 rounded-full w-fit mx-auto mb-3 border border-emerald-500/20 shadow-inner"><CheckCircle2 className="w-8 h-8 text-emerald-400"/></div>
+                                            لا توجد غيابات مسجلة في هذه الفترة. سجل الطالب نظيف!
+                                         </td>
+                                      </tr>
                                    )}
                                 </tbody>
                              </table>
@@ -524,38 +597,43 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
                        </div>
                     )}
 
+                    {/* 📝 التبويب الخامس: الملاحظات السرية */}
                     {activeTab === 'notes' && (
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div className="md:col-span-2 space-y-4">
+                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                          <div className="lg:col-span-2 space-y-4">
                              {tabData['notes']?.length > 0 ? tabData['notes'].map((n: any) => (
-                                <div key={n.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative">
-                                   <div className="flex justify-between items-start mb-3">
-                                      <div className="flex items-center gap-3">
-                                         {n.users?.avatar_url ? <img src={n.users.avatar_url} className="w-8 h-8 rounded-full object-cover"/> : <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-black text-xs text-slate-500">{String(n.users?.full_name).charAt(0)}</div>}
+                                <div key={n.id} className="bg-[#0f1423]/80 backdrop-blur-md p-5 sm:p-6 rounded-[1.5rem] border border-white/10 shadow-lg relative overflow-hidden group hover:border-indigo-500/30 transition-colors">
+                                   <div className="flex justify-between items-start mb-4 border-b border-white/5 pb-4">
+                                      <div className="flex items-center gap-3 sm:gap-4">
+                                         {n.users?.avatar_url ? <img src={n.users.avatar_url} className="w-10 h-10 rounded-xl object-cover shadow-sm border border-white/10"/> : <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-black text-sm text-slate-400 border border-white/10">{String(n.users?.full_name).charAt(0)}</div>}
                                          <div>
-                                            <p className="text-sm font-black text-slate-800">{n.users?.full_name} <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{n.users?.role === 'teacher' ? 'معلم' : 'إدارة'}</span></p>
+                                            <p className="text-sm sm:text-base font-black text-white drop-shadow-sm">{n.users?.full_name} <span className="text-[9px] bg-white/10 border border-white/10 px-2 py-0.5 rounded-md text-slate-300 shadow-inner mr-1.5">{n.users?.role === 'teacher' ? 'معلم' : 'إدارة'}</span></p>
                                          </div>
                                       </div>
-                                      <span className="text-[10px] text-slate-400 font-bold" dir="ltr">{new Date(n.created_at).toLocaleDateString('en-GB')}</span>
+                                      <span className="text-[10px] text-slate-500 font-bold bg-[#02040a]/40 px-2 py-1 rounded-md shadow-inner" dir="ltr">{new Date(n.created_at).toLocaleDateString('en-GB')}</span>
                                    </div>
-                                   <p className="text-sm font-bold text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">{n.content}</p>
+                                   <p className="text-sm font-bold text-slate-300 leading-relaxed bg-[#02040a]/40 p-4 rounded-xl border border-white/5 shadow-inner group-hover:text-white transition-colors">{n.content}</p>
                                 </div>
                              )) : (
-                                <div className="bg-white p-10 rounded-[2rem] border border-slate-200 text-center text-slate-400 font-bold">لا توجد ملاحظات سرية مسجلة لهذا الطالب.</div>
+                                <div className="bg-[#0f1423]/60 backdrop-blur-md p-16 rounded-[2.5rem] border border-white/5 text-center text-slate-500 font-bold flex flex-col items-center shadow-inner">
+                                   <MessageSquareHeart className="w-12 h-12 mb-4 opacity-50"/>
+                                   لا توجد ملاحظات سرية مسجلة لهذا الطالب.
+                                </div>
                              )}
                           </div>
                           
-                          <div className="bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100 h-fit sticky top-6">
-                             <h3 className="font-black text-indigo-900 mb-4 flex items-center gap-2"><MessageSquareHeart className="w-5 h-5"/> إضافة ملاحظة سرية</h3>
+                          <div className="bg-indigo-500/10 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] border border-indigo-500/30 h-fit sticky top-28 shadow-[0_0_30px_rgba(99,102,241,0.15)]">
+                             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 blur-[40px] rounded-full pointer-events-none mix-blend-screen"></div>
+                             <h3 className="font-black text-white mb-5 flex items-center gap-2 drop-shadow-md relative z-10"><div className="p-2 bg-indigo-500/20 rounded-lg shadow-inner"><MessageSquareHeart className="w-5 h-5 text-indigo-300"/></div> إضافة ملاحظة</h3>
                              <textarea 
-                               rows={4} 
+                               rows={5} 
                                value={newNote}
                                onChange={e => setNewNote(e.target.value)}
-                               placeholder="اكتب ملاحظة حول سلوك أو أداء الطالب (لن يراها الطالب، بل الإدارة والمعلمين فقط)..."
-                               className="w-full bg-white border border-indigo-200 rounded-xl p-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 resize-none shadow-sm mb-4"
+                               placeholder="اكتب ملاحظة حول سلوك أو أداء الطالب (سرية للإدارة والمعلمين فقط)..."
+                               className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-4 sm:p-5 text-sm font-bold text-white outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 resize-none shadow-inner mb-5 placeholder:text-slate-600 custom-scrollbar relative z-10"
                              />
-                             <button onClick={handleAddNote} disabled={isSendingNote || !newNote.trim()} className="w-full py-3 bg-indigo-600 text-white font-black rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                {isSendingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Send className="w-5 h-5"/>} حفظ الملاحظة
+                             <button onClick={handleAddNote} disabled={isSendingNote || !newNote.trim()} className="w-full py-3.5 sm:py-4 bg-indigo-600/90 text-white font-black rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.4)] hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50 border border-indigo-400/50 active:scale-95 relative z-10">
+                                {isSendingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Send className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-sm"/>} حفظ التقرير السري
                              </button>
                           </div>
                        </div>
@@ -567,9 +645,8 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
 
       </div>
 
-      {/* 
-        =========================================================
-        🖨️ القالب المخفي لتوليد وثيقة الغياب PDF (مُحسّن)
+      {/* =========================================================
+        🖨️ القالب المخفي لتوليد وثيقة الغياب PDF (مُحسّن وسري)
         =========================================================
       */}
       {groupedAttendance && groupedAttendance.length > 0 && (
@@ -668,10 +745,11 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
       )}
 
       <style dangerouslySetInnerHTML={{__html:`
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
       `}}/>
-    </div>
+    </motion.div>
   );
 }
