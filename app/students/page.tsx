@@ -6,10 +6,11 @@ import {
   Plus, Search, Edit, Trash2, X, Key, Download, 
   UserPlus, Users, AlertCircle, FileSpreadsheet, 
   GraduationCap, ChevronRight, ChevronLeft, BookOpen,
-  UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileText, ClipboardPaste, Award
+  UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileText, ClipboardPaste, Award, Target, Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useUsersSystem } from '@/hooks/useUsersSystem';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/auth-context';
@@ -364,9 +365,13 @@ export default function StudentsPage() {
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="relative min-h-[100dvh] bg-transparent font-sans text-slate-100 selection:bg-indigo-500/30 pb-20 pt-6" dir="rtl">
       
-      <div className="relative z-10 max-w-7xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 blur-[120px] opacity-70" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-violet-500/10 blur-[120px] opacity-70" />
+      </div>
+
+      <div className="relative z-10 max-w-[1600px] mx-auto space-y-8 pb-20 px-4 sm:px-6 lg:px-8 pt-8">
         
-        {/* 🚀 Header */}
         <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 glass-panel p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border-indigo-500/20 shadow-[0_0_40px_rgba(99,102,241,0.1)] relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
           
@@ -393,7 +398,6 @@ export default function StudentsPage() {
           </div>
         </motion.div>
 
-        {/* 🚀 Stats Grid */}
         <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           <div className="glass-panel p-5 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] flex flex-col justify-center items-center text-center gap-2 group relative overflow-hidden">
              <div className="absolute -right-4 -top-4 w-16 h-16 rounded-full bg-blue-500/20 blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none mix-blend-screen"></div>
@@ -417,7 +421,6 @@ export default function StudentsPage() {
           </div>
         </motion.div>
 
-        {/* 🚀 Filters */}
         <motion.div variants={itemVariants} className="glass-panel p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] border-white/10 shadow-inner flex flex-col md:flex-row items-center gap-4 relative z-20">
           <div className="relative flex-1 w-full group">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-slate-400 group-focus-within:text-indigo-400 transition-colors drop-shadow-sm" />
@@ -443,7 +446,6 @@ export default function StudentsPage() {
           </div>
         </motion.div>
 
-        {/* 🚀 Data Table (Desktop) */}
         <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border-white/10 overflow-hidden hidden lg:block">
           <div className="overflow-x-auto custom-scrollbar p-1">
             <table className="min-w-full divide-y divide-white/5 border-collapse">
@@ -522,7 +524,6 @@ export default function StudentsPage() {
           </div>
         </motion.div>
 
-        {/* 🚀 Mobile Cards (Glass) */}
         <motion.div variants={itemVariants} className="lg:hidden grid gap-4">
            {loading ? (
              <div className="py-20 text-center"><Loader2 className="w-10 h-10 border-indigo-500/30 animate-spin mx-auto text-indigo-500 drop-shadow-md" /></div>
@@ -566,7 +567,6 @@ export default function StudentsPage() {
            )}
         </motion.div>
 
-        {/* 🚀 Pagination (Glass) */}
         <AnimatePresence>
           {totalPages > 1 && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between border-t border-white/10 bg-transparent px-4 py-4 sm:px-6 relative z-10">
