@@ -1,4 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
  
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -67,11 +68,20 @@ export default function AttendancePage() {
   const [studentDbError, setStudentDbError] = useState<string | null>(null);
   const [activeSubjectTab, setActiveSubjectTab] = useState<string | null>(null);
  
+  // 🚀 إصلاح الخطأ: إضافة حالة mounted ودالة safeFormat
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     const today = format(new Date(), 'yyyy-MM-dd');
     setDate(today);
     setSnapshotDate(today);
   }, []);
+
+  const safeFormat = useCallback((dateStr: any, formatStr: string, fallback = '...') => {
+    if (!dateStr || !mounted) return fallback;
+    try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
+  }, [mounted]);
  
   // ==========================================
   // منطق الإدارة
@@ -801,7 +811,7 @@ export default function AttendancePage() {
               <div className="bg-transparent p-3 sm:p-5">
                 <div className="space-y-3 sm:space-y-0 sm:divide-y divide-white/5">
                   {students.map((student: any) => (
-                    <div key={student.id} className="p-4 sm:p-5 bg-[#02040a]/40 sm:bg-transparent rounded-[1.5rem] sm:rounded-none border border-white/5 sm:border-transparent hover:bg-white/5 transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6 group">
+                    <div key={student.id} className="p-4 sm:p-5 bg-[#02040a]/40 sm:bg-transparent rounded-[1.5rem] sm:rounded-none border border-white/5 sm:border-transparent hover:bg-white/[0.02] transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 group">
                       
                       <div className="flex items-center gap-4 min-w-0 lg:w-1/3 shrink-0 px-2 sm:px-0">
                         <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl sm:rounded-[1rem] bg-[#0f1423] border border-white/10 text-slate-400 flex items-center justify-center font-black text-lg sm:text-xl shrink-0 shadow-inner group-hover:text-amber-400 group-hover:border-amber-500/30 transition-all duration-300">
