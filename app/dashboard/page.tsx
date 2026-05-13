@@ -5,10 +5,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, 
-  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2, Crown, Wand2, ServerCog, Clock, Save, Globe
+  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2, Crown, Wand2, ServerCog, Clock, Save, Globe, TrendingUp, LineChart
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+// 🚀 استدعاء مكتبات الرسم البياني
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { useAuth } from '@/context/auth-context';
@@ -27,6 +30,19 @@ const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } }
 };
+
+// =========================================
+// 📊 بيانات وهمية لمحرك التفاعل الأسبوعي (يمكن ربطها بقاعدة البيانات لاحقاً)
+// =========================================
+const engagementData = [
+  { name: 'السبت', students: 210, teachers: 50 },
+  { name: 'الأحد', students: 850, teachers: 220 },
+  { name: 'الإثنين', students: 920, teachers: 260 },
+  { name: 'الثلاثاء', students: 880, teachers: 240 },
+  { name: 'الأربعاء', students: 1100, teachers: 310 },
+  { name: 'الخميس', students: 1050, teachers: 290 },
+  { name: 'الجمعة', students: 150, teachers: 30 },
+];
 
 // =========================================
 // ⚙️ 1. مكون التبديل المركزي للجداول (Glass Toggle)
@@ -361,6 +377,64 @@ export default function AdminDashboard() {
         {/* 📚 العمود الأيمن الكبير (النشاطات وتحديد المسار) */}
         <div className="xl:col-span-8 space-y-6 lg:space-y-8 w-full">
           
+          {/* 🚀 إضافة خريطة الأداء (مؤشر التفاعل الرقمي) */}
+          <motion.div variants={itemVariants} className="glass-panel rounded-[2.5rem] p-6 sm:p-8 relative overflow-hidden border-indigo-500/20 group shadow-inner">
+            <div className="absolute -top-20 -left-20 w-64 h-64 bg-cyan-500/10 rounded-full blur-[80px] pointer-events-none mix-blend-screen opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
+            
+            <div className="flex items-center justify-between gap-4 mb-8 relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-cyan-500/10 backdrop-blur-md rounded-2xl border border-cyan-500/20 shadow-inner group-hover:scale-110 transition-transform duration-300">
+                  <LineChart className="w-6 h-6 text-cyan-400 drop-shadow-md" />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white drop-shadow-md">مؤشر التفاعل الرقمي</h2>
+                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">نشاط الطلاب والمعلمين خلال الأيام السبعة الماضية</p>
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-3">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-300"><div className="w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" /> طلاب</span>
+                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-300"><div className="w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]" /> معلمين</span>
+              </div>
+            </div>
+            
+            <div className="h-[250px] sm:h-[300px] w-full relative z-10 ml-[-15px] sm:ml-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={engagementData}>
+                  <defs>
+                    <linearGradient id="colorStudents" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorTeachers" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#fbbf24" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dx={-10} width={40} />
+                  <Tooltip 
+                    contentStyle={{borderRadius: '1.5rem', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(2,4,10,0.8)', backdropFilter: 'blur(16px)', color: '#fff', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.5)'}}
+                    itemStyle={{fontWeight: '900'}}
+                  />
+                  <Area type="monotone" dataKey="students" name="تفاعل الطلاب" stroke="#22d3ee" strokeWidth={3} fillOpacity={1} fill="url(#colorStudents)" activeDot={{r: 5, strokeWidth: 0, fill: '#22d3ee', stroke: '#fff'}} />
+                  <Area type="monotone" dataKey="teachers" name="نشاط المعلمين" stroke="#fbbf24" strokeWidth={3} fillOpacity={1} fill="url(#colorTeachers)" activeDot={{r: 5, strokeWidth: 0, fill: '#fbbf24', stroke: '#fff'}} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="mt-4 flex flex-wrap gap-4 relative z-10 border-t border-white/5 pt-4">
+              <div className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-black text-emerald-400">نمو النشاط هذا الأسبوع: +14%</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                <Activity className="w-4 h-4 text-slate-400" />
+                <span className="text-xs font-black text-slate-300">يوم الذروة: الأربعاء (1,410 تفاعل)</span>
+              </div>
+            </div>
+          </motion.div>
+
           {/* نتائج تحديد المسار (Glass Design) */}
           {trackStats && trackStats.total > 0 && (
             <motion.div variants={itemVariants} className="glass-panel rounded-[2.5rem] p-6 sm:p-8 relative overflow-hidden border-indigo-500/20 group shadow-inner">
