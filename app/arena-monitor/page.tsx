@@ -491,7 +491,7 @@ export default function ArenaMonitorDashboard() {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-transparent"><div className="animate-pulse text-indigo-400 font-black flex flex-col items-center gap-4"><Activity className="w-12 h-12 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]"/> جاري تهيئة الرادار...</div></div>;
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-transparent text-slate-100 py-8 px-4 font-sans relative overflow-x-hidden" dir="rtl">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-transparent text-slate-100 py-8 px-4 font-sans relative overflow-x-hidden pt-24 sm:pt-32" dir="rtl">
       
       {/* 🌌 الإضاءة المحيطية */}
       <div className="fixed top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen z-0"></div>
