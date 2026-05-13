@@ -133,15 +133,27 @@ export default function GeminiNavigation() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [staffPermissions, setStaffPermissions] = useState<any>({});
-  
+  const [dynamicRolePermissions, setDynamicRolePermissions] = useState<any>(null); // 🚀 الصلاحيات الديناميكية من DB
+
   useEffect(() => {
-    async function checkStaffPerms() {
+    async function fetchPlatformSettingsAndPerms() {
+      // جلب صلاحيات الكادر (Staff)
       if (userRole === 'staff' && user?.id) {
-        const { data } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
-        if (data) setStaffPermissions(data.permissions || {});
+        const { data: staffData } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
+        if (staffData) setStaffPermissions(staffData.permissions || {});
+      }
+
+      // 🚀 جلب الصلاحيات الديناميكية للرتب من الإعدادات
+      try {
+        const { data: settingsData } = await supabase.from('platform_settings').select('role_permissions').single();
+        if (settingsData?.role_permissions) {
+          setDynamicRolePermissions(settingsData.role_permissions);
+        }
+      } catch (err) {
+        console.error("No dynamic permissions found, falling back to strict mode.");
       }
     }
-    checkStaffPerms();
+    fetchPlatformSettingsAndPerms();
   }, [userRole, user?.id]);
   
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
@@ -150,60 +162,50 @@ export default function GeminiNavigation() {
   if (!mounted || isChecking || !authRole) return null;
 
   // ==========================================
-  // 🛡️ فلترة الصلاحيات الصارمة (Strict RBAC) للمكون الجديد
+  // 🛡️ فلترة الصلاحيات (Hybrid System: DB First -> Strict Fallback)
   // ==========================================
   const isItemVisible = (item: any) => {
     const r = authRole;
     const n = item.name;
 
-    // 1. روابط عامة ومفتوحة للجميع
-    if (['الرئيسية (الحرم)', 'المنتديات', 'الرسائل', 'الإعلانات', 'لوحة التحكم', 'الجدول الدراسي'].includes(n)) return true;
+    // 1. روابط لا غنى عنها للجميع (أساسيات النظام)
+    if (['الرئيسية (الحرم)', 'لوحة التحكم', 'الرسائل', 'الإعلانات'].includes(n)) return true;
 
-    // 2. 👑 روابط حصرية للمدير والإدارة العليا فقط
-    const adminOnly = [
-      'إدارة الحرم', 'ملف الإدارة', 'الفريق الإداري', 'استيراد البيانات', 'الإعدادات', 
-      'مستكشف الطلاب 360', 'فريق الكنترول', 'كنترول اللجان', 'رادار الكنترول', 
-      'مسار إنجاز الكنترول', 'جداول الاختبارات', 'نماذج الإجابات', 'تقرير غياب الاختبارات', 
-      'وثائق التخرج', 'استوديو الهويات', 'العمليات المركزية', 'محرك الجدولة الذكي', 
-      'الواجبات بالذكاء الاصطناعي', 'تقييم الطلاب للمُعلمين', 'مصنع الدروع', 
-      'متابعة المعلمين', 'تقرير المعلمين', 'تقييم المعلمين (الإدارة)', 'أوقات الحصص', 
-      'إدارة المنتديات', 'هيدر المنتديات', 'تقرير التدقيق', 
-      'أولياء الأمور', 'تعيينات المعلمين', 'المعلمين', 'الهيكل الأكاديمي',
-      'مراجعة الأعذار', 'قرارات الخصم', 'شاشة العرض المركزية'
-    ];
-    if (adminOnly.includes(n)) return (r === 'admin' || r === 'management' || isGlobalWatcher);
+    // 👑 الإدارة والمدير دائماً يرون كل شيء لحل المشاكل
+    if (r === 'admin' || r === 'management' || isGlobalWatcher) return true;
 
-    // 3. 👨‍🏫 روابط مشتركة (إدارة + معلم) 
-    const teacherAndAdmin = [
-      'الطلاب', 'الفصول', 'المواد الدراسية', 'الحضور والغياب', 'الرادار الرقمي', 
-      'رصد الغياب الآلي', 'إنذارات الغياب', 'رادار المراقب', 'مراقبة الساحة', 'الغلاف الرقمي',
-      'سجل البوابة', 'التقارير', 'المستندات', 'إدارة الأوسمة'
-    ];
-    if (teacherAndAdmin.includes(n)) return (r === 'admin' || r === 'management' || r === 'teacher' || isGlobalWatcher);
+    // 🚀 2. التحقق مما إذا كان المدير قد خصص الصلاحيات في قاعدة البيانات (Dynamic DB Control)
+    if (dynamicRolePermissions && dynamicRolePermissions[r]) {
+      // إذا كانت الرتبة لها صلاحيات في الـ JSON، نتحقق مما إذا كان اسم الصفحة موجوداً ضمن المسموح
+      return dynamicRolePermissions[r].includes(n);
+    }
 
-    // 4. روابط مخصصة للمعلم فقط
-    if (n === 'ملفي الشخصي (CV)') return (r === 'teacher');
-
-    // 5. 👨‍🏫 روابط للمعلم (تم إزالة الواجبات بالذكاء الاصطناعي من هنا)
+    // 🛡️ 3. إذا لم يقم المدير بضبط الصلاحيات في DB، نعود لـ "جدار الحماية العسكري" الثابت كـ Fallback
     if (r === 'teacher') {
       const teacherAllowedPages = [
-        'لوحة التحكم', 'الرئيسية (الحرم)', 'ملفي الشخصي (CV)', 
-        'الفصول', 'الحضور والغياب', 'سجل الدرجات', 'الاختبارات والدرجات',
-        'الواجبات', 'مراقبة الساحة',
-        'الجدول الدراسي', 'شاشة العرض المركزية', 
-        'الرسائل', 'المنتديات'
+        'ملفي الشخصي (CV)', 'الفصول', 'الحضور والغياب', 'سجل الدرجات', 'الاختبارات والدرجات',
+        'الواجبات', 'مراقبة الساحة', 'الجدول الدراسي', 'شاشة العرض المركزية', 'المنتديات'
       ];
       return teacherAllowedPages.includes(n);
     }
 
-    // 6. روابط للطلاب والمعلمين معاً
-    const studentAndTeacher = ['الواجبات', 'الاختبارات والدرجات', 'سجل الدرجات'];
-    if (studentAndTeacher.includes(n)) return (r === 'admin' || r === 'management' || r === 'teacher' || r === 'student' || r === 'parent');
+    if (r === 'student') {
+      const studentAllowedPages = [
+        'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 
+        'شاشة العرض المركزية', 'المنتديات'
+      ];
+      return studentAllowedPages.includes(n);
+    }
 
-    // 7. 👨‍🎓 روابط مخصصة للطالب/ولي الأمر فقط
-    if (['ساحة التدريب', 'سجل الأداء'].includes(n)) return (r === 'student' || r === 'parent');
+    if (r === 'parent') {
+      const parentAllowedPages = [
+        'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 'سجل الأداء', 'الحضور والغياب', 
+        'شاشة العرض المركزية'
+      ];
+      return parentAllowedPages.includes(n);
+    }
 
-    return false;
+    return false; // إغلاق أمني لأي رابط لم يُذكر
   };
 
   const filteredGroups = navigationGroups.map(group => ({
@@ -211,7 +213,7 @@ export default function GeminiNavigation() {
   })).filter(group => group.items.length > 0);
 
   // ==========================================
-  // ⚡ الروابط السريعة (Quick Links Dock & Capsule)
+  // ⚡ الروابط السريعة (Quick Links)
   // ==========================================
   const getQuickLinks = () => {
     let dashboardHref = '/';
