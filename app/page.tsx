@@ -1,11 +1,11 @@
 // @ts-nocheck
 /**
  * ============================================================================
- * 🏗️ التوثيق الهندسي (Gemini Style Edition - In-App Console HUD)
+ * 🏗️ التوثيق الهندسي (Gemini Style Edition - Crash Proof)
  * ============================================================================
  * @file        app/page.tsx
- * @version     7.0.0 (Alive UI - Crash Tracker)
- * @description الواجهة الرئيسية مع رادار تتبع الأخطاء المدمج للموبايل.
+ * @version     7.1.0 (Alive UI - Holographic Bento Campus)
+ * @description الواجهة الرئيسية للحرم الرقمي مع واجهات زجاجية وتصميم شبكي.
  * ============================================================================
  */
 
@@ -13,10 +13,11 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+// 🚀 تم إضافة AlertTriangle هنا لإنهاء مشكلة الانهيار
 import { 
   Play, Image as ImageIcon, BookOpen, Sparkles, ArrowLeft, Star, Crown, Compass, 
   Newspaper, Video, BellRing, Megaphone, ArrowUpRight, Quote, Trophy, 
-  X, Calendar, User, Shield, Award, GraduationCap, UserCircle, Activity, Target
+  X, Calendar, User, Shield, Award, GraduationCap, UserCircle, Activity, Target, AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
@@ -62,7 +63,6 @@ export default function DigitalCampusPage() {
     window.addEventListener('error', handleGlobalError);
     window.addEventListener('unhandledrejection', handlePromiseRejection);
 
-    // Override console.error
     const originalError = console.error;
     console.error = (...args) => {
       setHasCrashed(true);
@@ -176,7 +176,6 @@ export default function DigitalCampusPage() {
 
   const displayedMemorials = activeMemorialTab === 'students' ? studentMemorials : teacherMemorials;
 
-  // شاشة التحميل الآمنة لمنع Hydration Error
   if (!mounted || isChecking || fetching) {
     return (
       <div className="h-[100dvh] bg-[#02040a] flex items-center justify-center relative overflow-hidden">
