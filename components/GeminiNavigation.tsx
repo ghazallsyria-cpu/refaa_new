@@ -18,7 +18,7 @@ import {
   UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, 
   MonitorPlay, Target, Wand2, MonitorUp, ShieldCheck, FileKey, 
   ScanLine, FileSignature, UserSearch, CreditCard, ClipboardList, 
-  Globe, ScrollText, Star, Shield, LogOut, Search
+  Globe, ScrollText, Star, Shield, LogOut, Search, ChevronRight, ChevronLeft, ChevronDown
 } from 'lucide-react';
 
 // ==========================================
@@ -133,7 +133,6 @@ export default function GeminiNavigation() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [staffPermissions, setStaffPermissions] = useState<any>({});
-  
   useEffect(() => {
     async function checkStaffPerms() {
       if (userRole === 'staff' && user?.id) {
@@ -143,54 +142,57 @@ export default function GeminiNavigation() {
     }
     checkStaffPerms();
   }, [userRole, user?.id]);
-  
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
 
   useEffect(() => { setMounted(true); }, []);
   if (!mounted || isChecking || !authRole) return null;
 
   // ==========================================
-  // 🛡️ فلترة الصلاحيات الصارمة (Strict RBAC) للمكون الجديد
+  // 🛡️ فلترة الصلاحيات الصارمة عسكرياً (Strict RBAC)
   // ==========================================
   const isItemVisible = (item: any) => {
     const r = authRole;
     const n = item.name;
 
-    // 1. روابط عامة ومفتوحة للجميع
-    if (['الرئيسية (الحرم)', 'المنتديات', 'الرسائل', 'الإعلانات', 'لوحة التحكم', 'الجدول الدراسي'].includes(n)) return true;
+    // 1. 👑 المدير والإدارة: يرى كل شيء 
+    if (r === 'admin' || r === 'management' || isGlobalWatcher) return true;
 
-    // 2. 👑 روابط حصرية للمدير والإدارة العليا فقط
-    const adminOnly = [
-      'إدارة الحرم', 'ملف الإدارة', 'الفريق الإداري', 'استيراد البيانات', 'الإعدادات', 
-      'مستكشف الطلاب 360', 'فريق الكنترول', 'كنترول اللجان', 'رادار الكنترول', 
-      'مسار إنجاز الكنترول', 'جداول الاختبارات', 'نماذج الإجابات', 'تقرير غياب الاختبارات', 
-      'وثائق التخرج', 'استوديو الهويات', 'العمليات المركزية', 'محرك الجدولة الذكي', 
-      'الواجبات بالذكاء الاصطناعي', 'تقييم الطلاب للمُعلمين', 'مصنع الدروع', 
-      'متابعة المعلمين', 'تقرير المعلمين', 'تقييم المعلمين (الإدارة)', 'أوقات الحصص', 
-      'إدارة المنتديات', 'هيدر المنتديات', 'تقرير التدقيق', 
-      'أولياء الأمور', 'تعيينات المعلمين', 'المعلمين', 'الهيكل الأكاديمي',
-      'مراجعة الأعذار', 'قرارات الخصم', 'شاشة العرض المركزية'
-    ];
-    if (adminOnly.includes(n)) return (r === 'admin' || r === 'management' || isGlobalWatcher);
+    // 2. 👨‍🏫 المعلم (Teacher): تم إزالة كافة صلاحيات الإدارة التي ظهرت بالخطأ
+    if (r === 'teacher') {
+      const teacherAllowedPages = [
+        'لوحة التحكم', 'الرئيسية (الحرم)', 'ملفي الشخصي (CV)', 
+        'الفصول', // قد يحتاجها لجدوله
+        'الحضور والغياب', 'سجل الدرجات', 'الاختبارات والدرجات',
+        'الواجبات', 'مراقبة الساحة', 'الواجبات بالذكاء الاصطناعي',
+        'الجدول الدراسي', 'شاشة العرض المركزية', 
+        'الرسائل', 'المنتديات'
+      ];
+      return teacherAllowedPages.includes(n);
+    }
 
-    // 3. 👨‍🏫 روابط مشتركة (إدارة + معلم) 
-    const teacherAndAdmin = [
-      'الطلاب', 'الفصول', 'المواد الدراسية', 'الحضور والغياب', 'الرادار الرقمي', 
-      'رصد الغياب الآلي', 'إنذارات الغياب', 'رادار المراقب', 'مراقبة الساحة', 'الغلاف الرقمي',
-      'سجل البوابة', 'التقارير', 'المستندات', 'إدارة الأوسمة'
-    ];
-    if (teacherAndAdmin.includes(n)) return (r === 'admin' || r === 'management' || r === 'teacher' || isGlobalWatcher);
+    // 3. 👨‍🎓 الطالب (Student): مقيد بصفحاته الخاصة فقط
+    if (r === 'student') {
+      const studentAllowedPages = [
+        'لوحة التحكم', 'الرئيسية (الحرم)', 
+        'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 
+        'ساحة التدريب', 'سجل الأداء', 'شاشة العرض المركزية',
+        'الرسائل', 'المنتديات'
+      ];
+      return studentAllowedPages.includes(n);
+    }
 
-    // 4. روابط مخصصة للمعلم فقط
-    if (n === 'ملفي الشخصي (CV)') return (r === 'teacher');
+    // 4. 👨‍👩‍👦 ولي الأمر (Parent)
+    if (r === 'parent') {
+      const parentAllowedPages = [
+        'لوحة التحكم', 'الرئيسية (الحرم)', 
+        'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 
+        'سجل الأداء', 'الحضور والغياب', 'شاشة العرض المركزية',
+        'الرسائل'
+      ];
+      return parentAllowedPages.includes(n);
+    }
 
-    // 5. روابط للطلاب والمعلمين معاً
-    const studentAndTeacher = ['الواجبات', 'الاختبارات والدرجات', 'سجل الدرجات'];
-    if (studentAndTeacher.includes(n)) return (r === 'admin' || r === 'management' || r === 'teacher' || r === 'student' || r === 'parent');
-
-    // 6. 👨‍🎓 روابط مخصصة للطالب/ولي الأمر فقط
-    if (['ساحة التدريب', 'سجل الأداء'].includes(n)) return (r === 'student' || r === 'parent');
-
+    // الإغلاق الأمني: أي رابط غير مذكور يتم إخفاؤه تماماً
     return false;
   };
 
@@ -218,10 +220,10 @@ export default function GeminiNavigation() {
       base.push({ name: 'الرادار', href: '/admin/live-monitor', icon: Activity, color: 'text-rose-400' });
       base.push({ name: 'الطلاب', href: '/admin/student-360', icon: Users, color: 'text-indigo-400' });
     } else if (authRole === 'teacher') {
-      base.push({ name: 'الجدول', href: '/dashboard/teacher/schedule', icon: CalendarDays, color: 'text-amber-400' });
+      base.push({ name: 'الجدول', href: '/schedule', icon: CalendarDays, color: 'text-amber-400' });
       base.push({ name: 'الواجبات', href: '/assignments', icon: PenTool, color: 'text-purple-400' });
     } else if (authRole === 'student') {
-      base.push({ name: 'الجدول', href: '/dashboard/student/schedule', icon: CalendarDays, color: 'text-amber-400' });
+      base.push({ name: 'الجدول', href: '/schedule', icon: CalendarDays, color: 'text-amber-400' });
       base.push({ name: 'الاختبارات', href: '/exams', icon: FileText, color: 'text-rose-400' });
     }
     return base;
