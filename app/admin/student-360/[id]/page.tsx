@@ -8,12 +8,12 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-// 🚀 تم إضافة جميع الأيقونات المفقودة هنا (Filter, X, Calendar, Star, ArrowUpRight, Trophy, UserCircle)
+// 🚀 تم إضافة الأيقونات المفقودة (Award, Shield, Crown) لحل مشكلة الانهيار
 import { 
   ArrowRight, User, GraduationCap, Clock, CheckCircle2, AlertCircle, 
   BookOpen, FileText, Medal, Loader2, Activity, Target, ShieldAlert,
   MessageSquareHeart, Send, ShieldCheck, Database, XCircle, PrinterIcon, Download, Sparkles,
-  Filter, X, Calendar, Star, ArrowUpRight, Trophy, UserCircle
+  Filter, X, Calendar, Star, ArrowUpRight, Trophy, UserCircle, Award, Shield, Crown
 } from 'lucide-react';
 
 import html2canvas from 'html2canvas-pro';
@@ -306,7 +306,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   if (!['admin', 'management', 'teacher', 'staff'].includes(currentRole)) return null;
 
   if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-[#02040a] relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 to-transparent pointer-events-none"></div>
       <div className="flex flex-col items-center gap-4 relative z-10">
         <div className="relative">
@@ -318,7 +318,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
     </div>
   );
 
-  if (!summaryData?.basic_info) return <div className="min-h-screen flex items-center justify-center bg-[#02040a] text-rose-400 font-bold text-xl">لم يتم العثور على بيانات الطالب. تأكد من صحة الرابط.</div>;
+  if (!summaryData?.basic_info) return <div className="min-h-[100dvh] flex items-center justify-center bg-[#02040a] text-rose-400 font-bold text-xl">لم يتم العثور على بيانات الطالب. تأكد من صحة الرابط.</div>;
 
   const { basic_info, academic_summary, attendance_summary, badges_count } = summaryData;
   const avgScore = Number(academic_summary?.average_score || 0).toFixed(1);
@@ -330,7 +330,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   };
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-[#02040a] text-slate-200 font-sans pb-20 relative overflow-x-hidden pt-24" dir="rtl">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] bg-[#02040a] text-slate-200 font-sans pb-20 relative overflow-x-hidden pt-24" dir="rtl">
       
       {/* 🌌 الإضاءة الخلفية المحيطية بستايل جيمناي */}
       <div className="fixed inset-0 pointer-events-none z-0">
