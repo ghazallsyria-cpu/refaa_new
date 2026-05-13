@@ -88,7 +88,7 @@ const navigationGroups = [
       { name: 'محرك الجدولة', href: '/admin/auto-schedule', icon: Wand2 },
       { name: 'الجدول القديم', href: '/schedule', icon: CalendarDays },
       { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
-      { name: 'الواجبات', href: '/assignments', icon: PenTool }, // 🚀 أضفنا الواجبات الكلاسيكية هنا
+      { name: 'الواجبات', href: '/assignments', icon: PenTool }, 
       { name: 'الواجبات والتصحيح', href: '/arena-monitor', icon: MonitorPlay },
       { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments-v2', icon: Sparkles },
     ]
@@ -149,7 +149,6 @@ export default function GeminiNavigation() {
 
     if (r === 'admin' || r === 'management' || isGlobalWatcher) return true; 
     
-    // 🚀 تحديث صلاحيات المعلم لتشمل الواجبات الكلاسيكية
     if (r === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الواجبات', 'الواجبات والتصحيح', 'الرسائل'].includes(item.name);
     
     if (r === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
@@ -170,7 +169,8 @@ export default function GeminiNavigation() {
     else if (authRole === 'teacher') dashboardHref = '/dashboard/teacher'; 
     else if (authRole === 'parent') dashboardHref = '/dashboard/parent'; 
     else if (userRole === 'staff') dashboardHref = '/dashboard/staff'; 
-    else if (authRole === 'admin' || authRole === 'management') dashboardHref = '/admin/dashboard';
+    // 🚀 التعديل هنا: توجيه المدير إلى مسار `/dashboard` الصحيح بدلاً من `/admin/dashboard`
+    else if (authRole === 'admin' || authRole === 'management') dashboardHref = '/dashboard';
 
     const base = [
       { name: 'الرئيسية', href: dashboardHref, icon: LayoutDashboard, color: 'text-blue-400' },
@@ -182,7 +182,6 @@ export default function GeminiNavigation() {
       base.push({ name: 'الطلاب', href: '/admin/student-360', icon: Users, color: 'text-indigo-400' });
     } else if (authRole === 'teacher') {
       base.push({ name: 'الجدول', href: '/dashboard/teacher/schedule', icon: CalendarDays, color: 'text-amber-400' });
-      // 🚀 توجيه المعلم للنظام الكلاسيكي السريع
       base.push({ name: 'الواجبات', href: '/assignments', icon: PenTool, color: 'text-purple-400' });
     } else if (authRole === 'student') {
       base.push({ name: 'الجدول', href: '/dashboard/student/schedule', icon: CalendarDays, color: 'text-amber-400' });
@@ -203,7 +202,6 @@ export default function GeminiNavigation() {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="hidden md:flex fixed top-6 bottom-6 right-6 z-40 flex-col bg-[#02040a]/60 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden"
       >
-        {/* 🔮 زر نواة جيمناي (يفتح النافذة المركزية) */}
         <div className="p-4 shrink-0 flex items-center justify-center border-b border-white/5 relative z-10 bg-[#0f1423]/40">
           <button onClick={() => setIsHubOpen(true)} className="w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br from-indigo-500/20 to-purple-600/20 border border-indigo-400/30 cursor-pointer shadow-inner relative group hover:scale-110 transition-all duration-300">
             <LayoutGrid className="w-6 h-6 text-indigo-400 group-hover:rotate-90 transition-transform duration-500" />
@@ -211,7 +209,6 @@ export default function GeminiNavigation() {
           </button>
         </div>
 
-        {/* 🧭 الروابط السريعة */}
         <div className="flex-1 overflow-y-auto custom-scrollbar py-6 flex flex-col gap-3 px-3 relative z-10">
           {quickLinks.map((link) => {
             const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
@@ -259,7 +256,6 @@ export default function GeminiNavigation() {
               </Link>
             );
           })}
-          {/* الزر المركزي لفتح كل القوائم في الجوال */}
           <button onClick={() => setIsHubOpen(true)} className="relative flex flex-col items-center justify-center w-14 h-14 rounded-2xl group bg-indigo-500/20 border border-indigo-500/30 shadow-inner">
             <LayoutGrid className="w-6 h-6 text-indigo-400 group-hover:scale-110 transition-transform" />
             <span className="text-[8px] font-black mt-1 text-indigo-300">الكل</span>
@@ -273,23 +269,19 @@ export default function GeminiNavigation() {
       <AnimatePresence>
         {isHubOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8" dir="rtl">
-            {/* الخلفية الزجاجية المموهة التي تغطي الشاشة بالكامل */}
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}
               className="absolute inset-0 bg-[#02040a]/70 backdrop-blur-2xl" 
               onClick={() => setIsHubOpen(false)} 
             />
 
-            {/* بطاقة المهام الرئيسية (Mega Menu) */}
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="relative w-full max-w-[1400px] h-[90vh] bg-[#0f1423]/60 border border-white/10 rounded-[3rem] shadow-[0_0_60px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col"
             >
-              {/* إضاءة خلفية للنافذة */}
               <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 blur-[100px] rounded-full mix-blend-screen pointer-events-none"></div>
               <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/10 blur-[100px] rounded-full mix-blend-screen pointer-events-none"></div>
 
-              {/* 👑 هيدر النافذة (شريط البحث والإغلاق) */}
               <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between gap-6 relative z-10 bg-[#02040a]/40">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-indigo-500/20 rounded-2xl border border-indigo-500/30 shadow-inner">
@@ -316,11 +308,9 @@ export default function GeminiNavigation() {
                 </div>
               </div>
 
-              {/* 🧩 شبكة المجلدات والأنظمة (Grid Layout) */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-8 relative z-10">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {filteredGroups.map((group, idx) => {
-                    // فلترة الروابط داخل المجلد حسب البحث
                     const searchedItems = group.items.filter(item => item.name.includes(searchQuery));
                     if (searchedItems.length === 0) return null;
 
@@ -336,12 +326,14 @@ export default function GeminiNavigation() {
                         <div className="flex flex-col gap-1.5 flex-1">
                           {searchedItems.map((item) => {
                             let itemHref = item.href;
+                            
+                            // 🚀 التعديل الهام هنا لتوجيه المدير إلى '/dashboard' من داخل القوائم الفرعية
                             if (item.name === 'لوحة التحكم') {
                                if (authRole === 'student') itemHref = '/dashboard/student'; 
                                else if (authRole === 'teacher') itemHref = '/dashboard/teacher'; 
                                else if (authRole === 'parent') itemHref = '/dashboard/parent'; 
                                else if (userRole === 'staff') itemHref = '/dashboard/staff'; 
-                               else if (authRole === 'admin' || authRole === 'management') itemHref = '/admin/dashboard';
+                               else if (authRole === 'admin' || authRole === 'management') itemHref = '/dashboard';
                             } else if (item.name === 'ملفي الشخصي (CV)') { 
                                itemHref = `/teachers/${user?.id || user?.user_id}`; 
                             }
