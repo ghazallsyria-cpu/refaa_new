@@ -488,10 +488,10 @@ export default function ArenaMonitorDashboard() {
   }, [displayedStudents]);
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center font-cairo font-black text-white">غير مصرح لك بالدخول.</div>;
-  if (loading) return <div className="min-h-[100dvh] flex items-center justify-center bg-transparent"><div className="animate-pulse text-indigo-400 font-black flex flex-col items-center gap-4"><Activity className="w-12 h-12 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]"/> جاري تهيئة الرادار...</div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-transparent"><div className="animate-pulse text-indigo-400 font-black flex flex-col items-center gap-4"><Activity className="w-12 h-12 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]"/> جاري تهيئة الرادار...</div></div>;
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] bg-transparent text-slate-100 py-8 px-4 font-sans relative overflow-x-hidden" dir="rtl">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-transparent text-slate-100 py-8 px-4 font-sans relative overflow-x-hidden" dir="rtl">
       
       {/* 🌌 الإضاءة المحيطية */}
       <div className="fixed top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen z-0"></div>
@@ -509,7 +509,7 @@ export default function ArenaMonitorDashboard() {
         .tiptap-content p { margin-bottom: 0.5em !important; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
       `}} />
 
@@ -844,12 +844,12 @@ export default function ArenaMonitorDashboard() {
                                 <span className={`text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-xl mb-4 inline-flex items-center gap-2 border shadow-inner ${isEssay ? 'text-indigo-300 bg-indigo-500/10 border-indigo-500/30' : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30'}`}>
                                    {isEssay ? <><PenTool className="w-3.5 h-3.5"/> سؤال مقالي (يتطلب تصحيح) - {idx + 1}</> : <><Settings2 className="w-3.5 h-3.5"/> سؤال آلي التقييم - {idx + 1}</>}
                                 </span>
-                                <div className="font-bold text-white prose prose-sm max-w-none break-words tiptap-content drop-shadow-sm" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html).__html }} />
+                                <div className="font-bold text-white prose prose-sm max-w-none break-words tiptap-content drop-shadow-sm" dangerouslySetInnerHTML={renderHTMLWithMath(q.content_html)} />
                               </div>
                               
                               <div className={`p-5 sm:p-6 rounded-2xl sm:rounded-[1.5rem] border shadow-inner relative ${isEssay ? 'bg-[#0f1423] border-indigo-500/30' : 'bg-white/5 border-white/10'}`}>
                                 <div className="absolute top-0 right-6 -mt-3 bg-[#0f1423] px-3 py-0.5 rounded-md border border-white/10 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">إجابة الطالب</div>
-                                <div className="font-bold text-slate-300 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(studentText).__html }} />
+                                <div className="font-bold text-slate-300 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={renderHTMLWithMath(studentText)} />
                               </div>
                             </div>
                             
@@ -857,7 +857,7 @@ export default function ArenaMonitorDashboard() {
                             <div className={`xl:w-[400px] shrink-0 p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border flex flex-col h-full shadow-inner ${isEssay ? 'bg-indigo-500/5 border-indigo-500/20' : 'bg-white/5 border-white/5'}`}>
                               <div className="mb-6 flex-1 min-h-[150px]">
                                  <p className={`text-[10px] sm:text-xs font-black mb-3 flex items-center gap-1.5 drop-shadow-sm ${isEssay ? 'text-indigo-400' : 'text-slate-400'}`}><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
-                                 <div className="font-bold text-slate-300 text-xs sm:text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-[#02040a]/40 p-4 sm:p-5 rounded-2xl border border-white/5 break-words shadow-inner" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html || 'غير متوفرة').__html }} />
+                                 <div className="font-bold text-slate-300 text-xs sm:text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-[#02040a]/40 p-4 sm:p-5 rounded-2xl border border-white/5 break-words shadow-inner" dangerouslySetInnerHTML={renderHTMLWithMath(q.model_answer_html || 'غير متوفرة')} />
                               </div>
                               
                               <div className={`mt-auto border-t pt-5 sm:pt-6 ${isEssay ? 'border-indigo-500/20' : 'border-white/10'}`}>
@@ -901,6 +901,6 @@ export default function ArenaMonitorDashboard() {
         )}
       </AnimatePresence>
 
-    </div>
+    </motion.div>
   );
 }
