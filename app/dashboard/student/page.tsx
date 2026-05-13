@@ -815,14 +815,14 @@ export default function StudentDashboard() {
                      <div className="absolute top-1/3 left-1/4 w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-[bounce_3s_infinite] opacity-50"></div>
                      <div className="absolute top-1/4 right-1/3 w-3 h-3 bg-blue-400 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-[bounce_4s_infinite] opacity-50 delay-1000"></div>
 
-                     {/* المحتوى النصي المضيء */}
-                     <div className="relative z-10 flex flex-col items-center text-center bg-[#02040a]/60 backdrop-blur-md px-8 py-6 rounded-3xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] group-hover:border-emerald-500/30 transition-all duration-500">
+{/* المحتوى النصي المضيء */}
+                     <div className="relative z-10 flex flex-col items-center text-center bg-[#02040a]/80 backdrop-blur-md px-8 py-6 rounded-3xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] group-hover:border-emerald-500/30 transition-all duration-500">
                         <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 shadow-inner group-hover:scale-110 transition-transform duration-500">
                            <Sparkles className="w-8 h-8 text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
                         </div>
-                        <h3 className="text-xl font-black text-white mb-2 tracking-tight drop-shadow-md">نستعد لرصد تألقك! 🚀</h3>
-                        <p className="text-sm font-bold text-slate-400 max-w-xs leading-relaxed">
-                          الرادار الذكي ينتظر أول درجاتك في الاختبارات ليرسم لك هولوجرام التفوق والتقدم.
+                        <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight drop-shadow-md">نستعد لرصد تألقك الشامل! 🚀</h3>
+                        <p className="text-sm font-bold text-slate-400 max-w-md leading-relaxed">
+                          الرادار الذكي متصل الآن.. بانتظار التزامك <span className="text-emerald-400">بالحضور</span>، وإنجازك <span className="text-amber-400">للواجبات</span>، وتفوقك في <span className="text-indigo-400">الاختبارات</span> ليرسم هولوجرام نجاحك السنوي!
                         </p>
                      </div>
                   </div>
