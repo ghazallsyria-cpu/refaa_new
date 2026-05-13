@@ -4,7 +4,7 @@
  * 🏗️ التوثيق الهندسي (Gemini Style Edition - Bento Grid Layout)
  * ============================================================================
  * @file        app/page.tsx
- * @version     6.0.0 (Alive UI - Holographic Bento Campus)
+ * @version     6.1.0 (Alive UI - Crash Proof & Holographic Bento)
  * @description الواجهة الرئيسية للحرم الرقمي مع واجهات زجاجية وتصميم شبكي.
  * ============================================================================
  */
@@ -13,7 +13,6 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-// 🚀 تم إصلاح استيراد أيقونة الصورة (Image as ImageIcon) لتجنب انهيار الصفحة
 import { 
   Play, Image as ImageIcon, BookOpen, Sparkles, ArrowLeft, Star, Crown, Compass, 
   Newspaper, Video, BellRing, Megaphone, ArrowUpRight, Quote, Trophy, 
@@ -44,6 +43,8 @@ const shieldThemes = {
 };
 
 export default function DigitalCampusPage() {
+  console.log('[رادار جيمناي 🚀] بدء تحميل المكون الأساسي للصفحة');
+
   const { user, authRole, isChecking } = useAuth() as any;
   const { scrollYProgress } = useScroll();
   
@@ -68,6 +69,7 @@ export default function DigitalCampusPage() {
   const [activeArticle, setActiveArticle] = useState<any | null>(null); 
 
   useEffect(() => {
+    console.log('[رادار ايهاب غزال 🚀] تشغيل UseEffect لجلب البيانات من Supabase');
     const fetchCampusContent = async () => {
       try {
         const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes] = await Promise.all([
@@ -79,13 +81,15 @@ export default function DigitalCampusPage() {
           supabase.from('school_ribbon').select('image_url').eq('id', 1).maybeSingle()
         ]);
 
+        console.log('[رادار جيمناي 🚀] تم جلب البيانات الأساسية، جاري جلب الدروع');
+
         const { data: stdShields } = await supabase.from('student_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, students(users(full_name, avatar_url), sections(name, classes(name)))').order('created_at', { ascending: false }).limit(4);
         const { data: tchShields } = await supabase.from('teacher_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, teachers(users(full_name, avatar_url), teacher_subjects(subjects(name)))').order('created_at', { ascending: false }).limit(4);
 
         if (stdShields) {
            setStudentMemorials(stdShields.map(s => {
               const u = Array.isArray(s.students?.users) ? s.students.users[0] : s.students?.users;
-              const sec = s.students?.sections;
+              const sec = Array.isArray(s.students?.sections) ? s.students?.sections[0] : s.students?.sections;
               const cName = Array.isArray(sec?.classes) ? sec.classes[0]?.name : sec?.classes?.name;
               return { ...s, role: 'student', personName: u?.full_name || 'طالب', avatar: u?.avatar_url, info: `${cName || ''} - ${sec?.name || ''}` };
            }));
@@ -106,8 +110,14 @@ export default function DigitalCampusPage() {
         if (tickerRes.data) setTickers(tickerRes.data);
         if (heroRes.data && heroRes.data.length > 0) setHeroSlides(heroRes.data);
         if (ribbonRes.data?.image_url) setHangingRibbonUrl(ribbonRes.data.image_url);
-      } catch (e) { console.error("Content fetch failed", e); } 
-      finally { setFetching(false); }
+        
+        console.log('[رادار جيمناي 🚀] تمت تهيئة جميع البيانات بنجاح');
+      } catch (e) { 
+        console.error("[رادار جيمناي ❌] خطأ أثناء جلب البيانات:", e); 
+      } 
+      finally { 
+        setFetching(false); 
+      }
     };
     fetchCampusContent();
   }, []);
@@ -118,7 +128,9 @@ export default function DigitalCampusPage() {
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
-  const breakingNews = tickers.length > 0 ? tickers.map(t => `✨ ${t.content}`).join('   |   ') : null;
+  console.log('[رادار جيمناي 🚀] معالجة المتغيرات الديناميكية (Portal & News)');
+
+  const breakingNews = (tickers && tickers.length > 0) ? tickers.map(t => `✨ ${t.content}`).join('   |   ') : null;
 
   const portal = (() => {
     if (!user) return { href: '/login', text: 'الدخول للمنصة', icon: ArrowLeft };
@@ -126,8 +138,11 @@ export default function DigitalCampusPage() {
     return { href: routes[authRole] || '/dashboard', text: authRole === 'student' ? 'الدخول لحقيبتي' : authRole === 'teacher' ? 'قاعة المعلمين' : 'مركز القيادة', icon: ArrowLeft };
   })();
 
+  // 🚀 تحويل المكون إلى متغير بحرف كبير ليتعرف عليه React بأمان (Crash Fix)
+  const PortalIcon = portal.icon;
+
   const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
-  const SlideIcon = ICON_MAP[currentSlideData.icon_name] || Sparkles;
+  const SlideIcon = ICON_MAP[currentSlideData?.icon_name] || Sparkles;
 
   const pinnedArticle = magazineItems.find(item => item.is_pinned) || magazineItems[0];
   const sideArticles = magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 3);
@@ -135,6 +150,7 @@ export default function DigitalCampusPage() {
   const displayedMemorials = activeMemorialTab === 'students' ? studentMemorials : teacherMemorials;
 
   if (isChecking || fetching) {
+    console.log('[رادار جيمناي 🚀] عرض شاشة التحميل (Loading State)');
     return (
       <div className="h-[100dvh] bg-[#02040a] flex items-center justify-center relative overflow-hidden">
          <motion.div animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="relative z-10 flex flex-col items-center gap-4">
@@ -144,6 +160,8 @@ export default function DigitalCampusPage() {
       </div>
     );
   }
+
+  console.log('[رادار جيمناي 🚀] البدء في رسم واجهة المستخدم (Rendering UI)');
 
   return (
     <div className="min-h-[100dvh] bg-transparent text-slate-200 font-sans overflow-x-hidden selection:bg-indigo-500/30 relative pb-20 sm:pb-32 pt-2 sm:pt-6" dir="rtl">
@@ -193,18 +211,18 @@ export default function DigitalCampusPage() {
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-125"></div>
               
               <AnimatePresence mode="wait">
-                <motion.div key={currentSlideData.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.5 }} className="relative z-10">
-                  {currentSlideData.badge_text && (
+                <motion.div key={currentSlideData?.id || 'default'} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.5 }} className="relative z-10">
+                  {currentSlideData?.badge_text && (
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 sm:px-5 sm:py-2 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] sm:text-sm font-black mb-6 sm:mb-8 shadow-inner backdrop-blur-md">
                       <SlideIcon className="w-4 h-4 text-emerald-400 drop-shadow-sm" /> {currentSlideData.badge_text}
                     </div>
                   )}
                   
-                  <h1 className={`text-4xl sm:text-6xl md:text-7xl lg:text-[6rem] font-black tracking-tighter mb-4 sm:mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-l ${currentSlideData.color_gradient || 'from-indigo-300 via-white to-blue-300'} drop-shadow-lg`}>
-                    {currentSlideData.title}
+                  <h1 className={`text-4xl sm:text-6xl md:text-7xl lg:text-[6rem] font-black tracking-tighter mb-4 sm:mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-l ${currentSlideData?.color_gradient || 'from-indigo-300 via-white to-blue-300'} drop-shadow-lg`}>
+                    {currentSlideData?.title}
                   </h1>
                   
-                  {currentSlideData.description && (
+                  {currentSlideData?.description && (
                     <p className="text-slate-300 text-sm sm:text-lg md:text-xl font-bold max-w-3xl leading-relaxed sm:leading-loose mb-8 sm:mb-10 drop-shadow-sm opacity-90">
                       {currentSlideData.description}
                     </p>
@@ -215,7 +233,7 @@ export default function DigitalCampusPage() {
                     <Link href={portal.href} className="group/btn relative inline-flex items-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 bg-indigo-600/90 backdrop-blur-md text-white border border-indigo-400/50 rounded-2xl sm:rounded-[1.5rem] font-black text-xs sm:text-sm transition-all hover:bg-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)] active:scale-95">
                        <span>{portal.text}</span>
                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-white/20 text-white rounded-xl flex items-center justify-center group-hover/btn:-translate-x-1 transition-transform shadow-inner">
-                         <portal.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 rotate-180 drop-shadow-sm" />
+                         <PortalIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 rotate-180 drop-shadow-sm" />
                        </div>
                     </Link>
                     {!user && (
@@ -260,7 +278,7 @@ export default function DigitalCampusPage() {
         </div>
 
         {/* 📣 2. الإعلانات السريعة (Holographic Banner) */}
-        {announcements.length > 0 && (
+        {announcements && announcements.length > 0 && (
           <motion.div variants={itemVariants} className="glass-panel p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-rose-500/20 shadow-inner relative overflow-hidden">
             <div className="absolute top-0 right-0 w-48 h-48 bg-rose-500/10 blur-[60px] rounded-full pointer-events-none mix-blend-screen"></div>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10 border-b border-white/5 pb-5 mb-5">
@@ -275,7 +293,7 @@ export default function DigitalCampusPage() {
                   <div>
                     <div className="flex justify-between items-center mb-3 sm:mb-4">
                       <span className="text-[9px] sm:text-[10px] font-black text-rose-300 bg-rose-500/20 px-2.5 py-1 rounded-md border border-rose-500/30 shadow-inner">{ann.tag || 'إعلان'}</span>
-                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 flex items-center gap-1.5"><Calendar className="w-3 h-3 opacity-70" /> {new Date(ann.created_at).toLocaleDateString('ar-SA')}</span>
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 flex items-center gap-1.5"><Calendar className="w-3 h-3 opacity-70" /> {ann.created_at ? new Date(ann.created_at).toLocaleDateString('ar-SA') : ''}</span>
                     </div>
                     <h3 className="text-sm sm:text-base font-black text-white leading-relaxed drop-shadow-sm group-hover:text-rose-100 transition-colors">{ann.title}</h3>
                   </div>
@@ -286,7 +304,7 @@ export default function DigitalCampusPage() {
         )}
 
         {/* 🎬 3. الاستوديو البصري (Bento Gallery) */}
-        {studioItems.length > 0 && (
+        {studioItems && studioItems.length > 0 && (
           <div className="space-y-5 sm:space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                <div className="flex items-center gap-3 sm:gap-4">
@@ -331,7 +349,7 @@ export default function DigitalCampusPage() {
         )}
 
         {/* 📰 4. المركز الإخباري (Bento Articles) */}
-        {magazineItems.length > 0 && (
+        {magazineItems && magazineItems.length > 0 && (
           <div className="space-y-5 sm:space-y-6 pt-10 sm:pt-14 border-t border-white/5">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div className="flex items-center gap-3 sm:gap-4">
@@ -371,20 +389,22 @@ export default function DigitalCampusPage() {
               )}
 
               {/* الأخبار الجانبية العمودية */}
-              <div className="lg:col-span-4 flex flex-col gap-4 sm:gap-6">
-                {sideArticles.map((article, idx) => (
-                  <motion.div onClick={() => setActiveArticle(article)} key={article.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.1 }} className="flex-1 group cursor-pointer relative rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden glass-panel p-1.5 min-h-[160px] sm:min-h-[200px] flex flex-col shadow-md border-white/10">
-                     <div className="relative w-full h-full rounded-[1.25rem] sm:rounded-[1.75rem] overflow-hidden bg-[#0f1423]">
-                        <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover z-0 group-hover:scale-105 transition-transform duration-700 mix-blend-luminosity hover:mix-blend-normal" />
-                        <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#02040a]/90 via-[#02040a]/40 to-transparent"></div>
-                        <div className="relative z-20 p-5 sm:p-6 flex flex-col justify-end h-full">
-                          <span className="text-emerald-400 text-[9px] sm:text-[10px] font-black mb-2 flex items-center gap-1.5 drop-shadow-md bg-[#02040a]/40 w-fit px-2 py-1 rounded-md border border-white/5 backdrop-blur-sm"><User className="w-3 h-3 opacity-70" /> {article.author_name}</span>
-                          <h3 className="text-sm sm:text-base lg:text-lg font-black text-white leading-snug drop-shadow-md line-clamp-3">{article.title}</h3>
-                        </div>
-                     </div>
-                  </motion.div>
-                ))}
-              </div>
+              {sideArticles && sideArticles.length > 0 && (
+                <div className="lg:col-span-4 flex flex-col gap-4 sm:gap-6">
+                  {sideArticles.map((article, idx) => (
+                    <motion.div onClick={() => setActiveArticle(article)} key={article.id} initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: idx * 0.1 }} className="flex-1 group cursor-pointer relative rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden glass-panel p-1.5 min-h-[160px] sm:min-h-[200px] flex flex-col shadow-md border-white/10">
+                       <div className="relative w-full h-full rounded-[1.25rem] sm:rounded-[1.75rem] overflow-hidden bg-[#0f1423]">
+                          <img src={article.cover_image} alt={article.title} className="absolute inset-0 w-full h-full object-cover z-0 group-hover:scale-105 transition-transform duration-700 mix-blend-luminosity hover:mix-blend-normal" />
+                          <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#02040a]/90 via-[#02040a]/40 to-transparent"></div>
+                          <div className="relative z-20 p-5 sm:p-6 flex flex-col justify-end h-full">
+                            <span className="text-emerald-400 text-[9px] sm:text-[10px] font-black mb-2 flex items-center gap-1.5 drop-shadow-md bg-[#02040a]/40 w-fit px-2 py-1 rounded-md border border-white/5 backdrop-blur-sm"><User className="w-3 h-3 opacity-70" /> {article.author_name}</span>
+                            <h3 className="text-sm sm:text-base lg:text-lg font-black text-white leading-snug drop-shadow-md line-clamp-3">{article.title}</h3>
+                          </div>
+                       </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -416,12 +436,12 @@ export default function DigitalCampusPage() {
                 <div className="absolute right-0 top-0 bottom-0 w-8 sm:w-24 bg-gradient-to-l from-[#090b14] to-transparent z-10 pointer-events-none"></div>
                 
                 <div className="flex overflow-x-auto gap-4 sm:gap-6 px-4 sm:px-[10vw] pb-10 pt-4 snap-x snap-mandatory custom-scrollbar min-h-[350px]">
-                   {displayedMemorials.length > 0 ? displayedMemorials.map((memorial, i) => {
-                      const theme = shieldThemes[memorial.shield_type as keyof typeof shieldThemes] || shieldThemes.gold;
-                      const isExternal = !!memorial.external_shield_url;
+                   {displayedMemorials && displayedMemorials.length > 0 ? displayedMemorials.map((memorial, i) => {
+                      const theme = shieldThemes[memorial?.shield_type as keyof typeof shieldThemes] || shieldThemes.gold;
+                      const isExternal = !!memorial?.external_shield_url;
 
                       return (
-                        <motion.div key={memorial.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="snap-center shrink-0 w-[220px] sm:w-[260px] group cursor-pointer relative z-0 hover:z-20">
+                        <motion.div key={memorial?.id || i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="snap-center shrink-0 w-[220px] sm:w-[260px] group cursor-pointer relative z-0 hover:z-20">
                            {isExternal ? (
                               <div className="relative rounded-[2rem] overflow-hidden glass-panel border-white/10 shadow-lg transition-transform duration-500 group-hover:-translate-y-4 p-2 bg-[#02040a]/40">
                                  <img src={memorial.external_shield_url} crossOrigin="anonymous" className="w-full h-auto rounded-[1.5rem] object-contain mix-blend-luminosity hover:mix-blend-normal transition-all" alt="Shield" />
@@ -499,7 +519,7 @@ export default function DigitalCampusPage() {
               
               <div className="px-5 sm:px-10 pb-10 sm:pb-12 pt-4 sm:pt-6 overflow-y-auto custom-scrollbar relative z-10 bg-transparent flex-1">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-5 sm:mb-8 border-b border-white/5 pb-4 sm:pb-5">
-                  <span className="text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner flex items-center gap-1.5 text-[10px] sm:text-xs font-black drop-shadow-sm"><Calendar className="w-3.5 h-3.5 opacity-70" /> {new Date(activeArticle.created_at).toLocaleDateString('ar-SA')}</span>
+                  <span className="text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner flex items-center gap-1.5 text-[10px] sm:text-xs font-black drop-shadow-sm"><Calendar className="w-3.5 h-3.5 opacity-70" /> {activeArticle.created_at ? new Date(activeArticle.created_at).toLocaleDateString('ar-SA') : ''}</span>
                   <span className="text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 shadow-inner flex items-center gap-1.5 text-[10px] sm:text-xs font-black drop-shadow-sm"><User className="w-3.5 h-3.5 opacity-70" /> {activeArticle.author_name}</span>
                 </div>
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white mb-6 sm:mb-8 leading-tight sm:leading-tight tracking-tight drop-shadow-lg">{activeArticle.title}</h2>
