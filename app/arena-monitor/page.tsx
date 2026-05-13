@@ -297,7 +297,14 @@ export default function ArenaMonitorDashboard() {
       const { data: questions } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', selectedAssignment.id).order('order_index', { ascending: true });
       setAssignmentQuestions(questions || []);
 
-      const { data: answers } = await supabase.from('student_answers_v2').select('*').eq('assignment_id', selectedAssignment.id).eq('student_id', student.user_id);
+      // 🚀 تحسين استعلام الإجابات ليشمل الاحتمالين (Auth ID أو Student ID)
+      const validIds = [student.user_id, student.student_id, student.id].filter(Boolean);
+      
+      const { data: answers } = await supabase.from('student_answers_v2')
+        .select('*')
+        .eq('assignment_id', selectedAssignment.id)
+        .in('student_id', validIds);
+        
       setStudentAnswers(answers || []);
 
       const initialGrades: Record<string, number> = {};
@@ -491,7 +498,7 @@ export default function ArenaMonitorDashboard() {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-transparent"><div className="animate-pulse text-indigo-400 font-black flex flex-col items-center gap-4"><Activity className="w-12 h-12 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]"/> جاري تهيئة الرادار...</div></div>;
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-transparent text-slate-100 py-8 px-4 font-sans relative overflow-x-hidden pt-24 sm:pt-32" dir="rtl">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-transparent text-slate-100 py-8 px-4 font-sans relative overflow-x-hidden" dir="rtl">
       
       {/* 🌌 الإضاءة المحيطية */}
       <div className="fixed top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen z-0"></div>
@@ -502,14 +509,14 @@ export default function ArenaMonitorDashboard() {
         .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
         .katex { direction: ltr !important; text-align: left !important; color: #818cf8 !important; }
         .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
-        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); background: transparent; }
-        .tiptap-content td, .tiptap-content th { border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; color: #e2e8f0; }
+        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); background: rgba(2,4,10,0.4); }
+        .tiptap-content td, .tiptap-content th { border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; color: #cbd5e1; }
         .tiptap-content th { background-color: rgba(255,255,255,0.05) !important; font-weight: 900 !important; color: #fff; }
         .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important; mix-blend-mode: luminosity; border: 1px solid rgba(255,255,255,0.1); }
         .tiptap-content p { margin-bottom: 0.5em !important; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
       `}} />
 
@@ -716,7 +723,8 @@ export default function ArenaMonitorDashboard() {
                           </td>
 
                           <td className="p-4 px-6 align-middle">
-                            <div className="flex items-center justify-center gap-2 sm:gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {/* 🚀 إزالة opacity-0 لتكون الأزرار واضحة دائماً في الموبايل */}
+                            <div className="flex items-center justify-center gap-2 sm:gap-3 transition-opacity">
                               {student.has_started && (
                                 <button 
                                   onClick={() => handleResetStudentProgress(student.student_id, student.student_name)}
@@ -831,7 +839,25 @@ export default function ArenaMonitorDashboard() {
                     <div className="relative z-10 space-y-6 sm:space-y-8 max-w-6xl mx-auto">
                       {assignmentQuestions.map((q, idx) => {
                         const studentAnsObj = studentAnswers.find(a => a.question_id === q.id);
-                        const studentText = studentAnsObj?.text_answer || studentAnsObj?.answer_text || 'لم يقم الطالب بالإجابة على هذا السؤال.';
+                        
+                        // 🚀 معالجة ذكية للإجابات لاستخراج النصوص أو الخيارات المتعددة JSON
+                        let studentText = 'لم يقم الطالب بالإجابة على هذا السؤال.';
+                        if (studentAnsObj) {
+                          if (studentAnsObj.answer_text && studentAnsObj.answer_text.trim() !== '') {
+                            studentText = studentAnsObj.answer_text;
+                          } else if (studentAnsObj.selected_options) {
+                            let opts = studentAnsObj.selected_options;
+                            if (typeof opts === 'string') {
+                               try { opts = JSON.parse(opts); } catch (e) {}
+                            }
+                            if (Array.isArray(opts) && opts.length > 0) {
+                               studentText = opts.join('، ');
+                            } else if (typeof opts === 'string' && opts.trim() !== '') {
+                               studentText = opts;
+                            }
+                          }
+                        }
+
                         const maxPts = q.points || 1;
                         const isEssay = q.question_type === 'essay';
                         
@@ -844,12 +870,12 @@ export default function ArenaMonitorDashboard() {
                                 <span className={`text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-xl mb-4 inline-flex items-center gap-2 border shadow-inner ${isEssay ? 'text-indigo-300 bg-indigo-500/10 border-indigo-500/30' : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30'}`}>
                                    {isEssay ? <><PenTool className="w-3.5 h-3.5"/> سؤال مقالي (يتطلب تصحيح) - {idx + 1}</> : <><Settings2 className="w-3.5 h-3.5"/> سؤال آلي التقييم - {idx + 1}</>}
                                 </span>
-                                <div className="font-bold text-white prose prose-sm max-w-none break-words tiptap-content drop-shadow-sm" dangerouslySetInnerHTML={renderHTMLWithMath(q.content_html)} />
+                                <div className="font-bold text-white prose prose-sm max-w-none break-words tiptap-content drop-shadow-sm" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html).__html }} />
                               </div>
                               
                               <div className={`p-5 sm:p-6 rounded-2xl sm:rounded-[1.5rem] border shadow-inner relative ${isEssay ? 'bg-[#0f1423] border-indigo-500/30' : 'bg-white/5 border-white/10'}`}>
                                 <div className="absolute top-0 right-6 -mt-3 bg-[#0f1423] px-3 py-0.5 rounded-md border border-white/10 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">إجابة الطالب</div>
-                                <div className="font-bold text-slate-300 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={renderHTMLWithMath(studentText)} />
+                                <div className="font-bold text-slate-300 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(studentText).__html }} />
                               </div>
                             </div>
                             
@@ -857,7 +883,7 @@ export default function ArenaMonitorDashboard() {
                             <div className={`xl:w-[400px] shrink-0 p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border flex flex-col h-full shadow-inner ${isEssay ? 'bg-indigo-500/5 border-indigo-500/20' : 'bg-white/5 border-white/5'}`}>
                               <div className="mb-6 flex-1 min-h-[150px]">
                                  <p className={`text-[10px] sm:text-xs font-black mb-3 flex items-center gap-1.5 drop-shadow-sm ${isEssay ? 'text-indigo-400' : 'text-slate-400'}`}><BrainCircuit className="w-4 h-4"/> الإجابة النموذجية كمرجع:</p>
-                                 <div className="font-bold text-slate-300 text-xs sm:text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-[#02040a]/40 p-4 sm:p-5 rounded-2xl border border-white/5 break-words shadow-inner" dangerouslySetInnerHTML={renderHTMLWithMath(q.model_answer_html || 'غير متوفرة')} />
+                                 <div className="font-bold text-slate-300 text-xs sm:text-sm max-h-48 overflow-y-auto custom-scrollbar prose prose-sm max-w-none tiptap-content bg-[#02040a]/40 p-4 sm:p-5 rounded-2xl border border-white/5 break-words shadow-inner" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html || 'غير متوفرة').__html }} />
                               </div>
                               
                               <div className={`mt-auto border-t pt-5 sm:pt-6 ${isEssay ? 'border-indigo-500/20' : 'border-white/10'}`}>
