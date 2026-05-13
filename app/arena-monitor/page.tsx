@@ -792,7 +792,7 @@ export default function ArenaMonitorDashboard() {
                        <button className="flex-1 py-3.5 sm:py-4 bg-white/5 text-slate-300 border border-white/10 font-black rounded-xl hover:bg-white/10 transition-all active:scale-95 text-xs sm:text-sm shadow-inner">إلغاء</button>
                     </Dialog.Close>
                     <button onClick={saveFeedback} disabled={savingFeedback} className="flex-[2] py-3.5 sm:py-4 bg-indigo-600/90 backdrop-blur-md text-white font-black rounded-xl hover:bg-indigo-500 active:scale-95 transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)] flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-50 border border-indigo-400/50">
-                      {savingFeedback ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-md" />} حفظ وإرسال للطالب
+                      {savingFeedback ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-md" />} حفظ وإرسال للطالب
                     </button>
                   </div>
                 </Dialog.Content>
@@ -844,12 +844,12 @@ export default function ArenaMonitorDashboard() {
                                 <span className={`text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-xl mb-4 inline-flex items-center gap-2 border shadow-inner ${isEssay ? 'text-indigo-300 bg-indigo-500/10 border-indigo-500/30' : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30'}`}>
                                    {isEssay ? <><PenTool className="w-3.5 h-3.5"/> سؤال مقالي (يتطلب تصحيح) - {idx + 1}</> : <><Settings2 className="w-3.5 h-3.5"/> سؤال آلي التقييم - {idx + 1}</>}
                                 </span>
-                                <div className="font-bold text-white prose prose-sm max-w-none break-words tiptap-content drop-shadow-sm" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }} />
+                                <div className="font-bold text-white prose prose-sm max-w-none break-words tiptap-content drop-shadow-sm" dangerouslySetInnerHTML={renderHTMLWithMath(q.content_html)} />
                               </div>
                               
                               <div className={`p-5 sm:p-6 rounded-2xl sm:rounded-[1.5rem] border shadow-inner relative ${isEssay ? 'bg-[#0f1423] border-indigo-500/30' : 'bg-white/5 border-white/10'}`}>
                                 <div className="absolute top-0 right-6 -mt-3 bg-[#0f1423] px-3 py-0.5 rounded-md border border-white/10 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">إجابة الطالب</div>
-                                <div className="font-bold text-slate-300 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(studentText) }} />
+                                <div className="font-bold text-slate-300 prose prose-sm max-w-none tiptap-content overflow-x-auto custom-scrollbar break-words" dangerouslySetInnerHTML={renderHTMLWithMath(studentText)} />
                               </div>
                             </div>
                             
