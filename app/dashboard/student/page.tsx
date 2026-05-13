@@ -765,15 +765,19 @@ export default function StudentDashboard() {
               </div>
             </motion.div>
 
-            {/* Performance Chart */}
-            <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none mix-blend-screen opacity-50"></div>
-              <div className="mb-6 sm:mb-8 flex items-center justify-between relative z-10 text-center sm:text-right">
+{/* Performance Chart */}
+            <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none mix-blend-screen opacity-50 group-hover:scale-150 transition-transform duration-1000"></div>
+              
+              <div className="mb-6 sm:mb-8 flex items-center justify-between relative z-10 text-center sm:text-right border-b border-white/5 pb-6">
                 <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
-                  <div className="p-2.5 sm:p-3 bg-emerald-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner"><TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 drop-shadow-sm" /></div>
+                  <div className="p-2.5 sm:p-3 bg-emerald-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner group-hover:scale-110 transition-transform">
+                     <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 drop-shadow-sm" />
+                  </div>
                   تطور المستوى الأكاديمي
                 </h2>
               </div>
+              
               <div className="h-[250px] sm:h-[300px] lg:h-[350px] w-full relative z-10 ml-[-15px] sm:ml-0">
                 {recentGrades.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -789,9 +793,38 @@ export default function StudentDashboard() {
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-[#02040a]/30 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 p-4 text-center shadow-inner">
-                    <BarChart2 className="h-10 w-10 sm:h-12 sm:w-12 text-slate-600 mb-3 sm:mb-4" />
-                    <p className="font-bold text-xs sm:text-sm text-slate-400 max-w-xs">لا توجد نتائج اختبارات متاحة لعرض الرسم البياني حتى الآن</p>
+                  // 🚀 الهولوجرام الساحر (Gemini Empty State Hologram) 🚀
+                  <div className="relative w-full h-full rounded-[2rem] overflow-hidden flex flex-col items-center justify-center p-6 border border-white/5 bg-[#02040a]/40 backdrop-blur-sm shadow-inner group cursor-default">
+                     {/* شبكة بيانية خلفية وهمية (Grid) */}
+                     <div className="absolute inset-0 w-full h-full" style={{ backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+                     
+                     {/* منحنى بياني وهمي يتحرك بنعومة (Holographic Wave) */}
+                     <div className="absolute bottom-0 w-full h-[60%] opacity-20 pointer-events-none">
+                        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+                           <path d="M0,100 C20,80 40,30 60,60 C80,90 90,40 100,50 L100,100 Z" fill="url(#ghostGradient)" className="animate-[pulse_4s_ease-in-out_infinite]" />
+                           <defs>
+                              <linearGradient id="ghostGradient" x1="0" y1="0" x2="0" y2="1">
+                                 <stop offset="0%" stopColor="#34d399" stopOpacity="0.8" />
+                                 <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
+                              </linearGradient>
+                           </defs>
+                        </svg>
+                     </div>
+                     
+                     {/* الدوائر التفاعلية (Floating Orbs) */}
+                     <div className="absolute top-1/3 left-1/4 w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-[bounce_3s_infinite] opacity-50"></div>
+                     <div className="absolute top-1/4 right-1/3 w-3 h-3 bg-blue-400 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-[bounce_4s_infinite] opacity-50 delay-1000"></div>
+
+                     {/* المحتوى النصي المضيء */}
+                     <div className="relative z-10 flex flex-col items-center text-center bg-[#02040a]/60 backdrop-blur-md px-8 py-6 rounded-3xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] group-hover:border-emerald-500/30 transition-all duration-500">
+                        <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 shadow-inner group-hover:scale-110 transition-transform duration-500">
+                           <Sparkles className="w-8 h-8 text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
+                        </div>
+                        <h3 className="text-xl font-black text-white mb-2 tracking-tight drop-shadow-md">نستعد لرصد تألقك! 🚀</h3>
+                        <p className="text-sm font-bold text-slate-400 max-w-xs leading-relaxed">
+                          الرادار الذكي ينتظر أول درجاتك في الاختبارات ليرسم لك هولوجرام التفوق والتقدم.
+                        </p>
+                     </div>
                   </div>
                 )}
               </div>
