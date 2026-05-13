@@ -41,20 +41,20 @@ export default function TeacherDashboard() {
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
 
-  // 🚀 حالات المنظومة الامتحانية
+  // حالات المنظومة الامتحانية
   const [invigilationDuties, setInvigilationDuties] = useState<any[]>([]);
   const [headDuties, setHeadDuties] = useState<any[]>([]);
   const [controlTeamRole, setControlTeamRole] = useState<any>(null);
   const [finalExamsTimetable, setFinalExamsTimetable] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
-  // 🚀 حالات الاعتذار
+  // حالات الاعتذار
   const [isDutyExcuseModalOpen, setIsDutyExcuseModalOpen] = useState(false);
   const [selectedDutyId, setSelectedDutyId] = useState('');
   const [dutyExcuseText, setDutyExcuseText] = useState('');
   const [isProcessingDuty, setIsProcessingDuty] = useState(false);
 
-  // 🚀 حالات الاعتذار الطبي (الأساسي)
+  // حالات الاعتذار الطبي
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -84,6 +84,8 @@ export default function TeacherDashboard() {
   const [mounted, setMounted] = useState(false);
   
   const { fetchTeacherDashboardData } = useDashboardSystem();
+  
+  // 🛡️ قفل الجلب لمنع الحلقة المفرغة (Infinite Loop)
   const isFetchedRef = useRef(false);
 
   useEffect(() => {
@@ -117,137 +119,147 @@ export default function TeacherDashboard() {
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
   };
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id || isFetchedRef.current) return;
-    isFetchedRef.current = true;
-    setLoading(true);
+  // 🛡️ هندسة جلب البيانات الجديدة المنيعة
+  useEffect(() => {
+    if (isChecking || !user || isFetchedRef.current) return;
+    if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') return;
 
-    try {
-      const data = await fetchTeacherDashboardData();
+    const loadDashboardData = async () => {
+      // نغلق القفل فوراً ولا نعيد فتحه أبداً لتجنب أي تكرار لا نهائي
+      isFetchedRef.current = true;
       
-      if (data) {
-        setTeacherData(data.teacher);
-        setSections(data.sections || []);
-        setRecentExams(data.recentExams || []);
-        setRecentAssignments(data.recentAssignments || []);
-        setSchedule(data.schedule || []);
-        setPeriods(data.periods || []);
-        setMessages(data.messages || []);
-        setStats(prev => ({ ...prev, ...data.stats }));
-        if (data.assignmentStats) setAssignmentStats(data.assignmentStats);
+      try {
+        setLoading(true);
+        const data = await fetchTeacherDashboardData();
+        
+        if (data) {
+          setTeacherData(data.teacher);
+          setSections(data.sections || []);
+          setRecentExams(data.recentExams || []);
+          setRecentAssignments(data.recentAssignments || []);
+          setSchedule(data.schedule || []);
+          setPeriods(data.periods || []);
+          setMessages(data.messages || []);
+          setStats(prev => ({ ...prev, ...data.stats }));
+          if (data.assignmentStats) setAssignmentStats(data.assignmentStats);
 
-        if (data.teacher?.id) {
-            const { data: absences } = await supabase
-              .from('attendance_records')
-              .select('student_id, students(users(full_name)), sections(name, classes(name))')
-              .eq('teacher_id', data.teacher.id)
-              .eq('status', 'absent');
+          if (data.teacher?.id) {
+              // جلب الغيابات المنذرة
+              const { data: absences } = await supabase
+                .from('attendance_records')
+                .select('student_id, students(users(full_name)), sections(name, classes(name))')
+                .eq('teacher_id', data.teacher.id)
+                .eq('status', 'absent');
 
-            if (absences) {
-              const studentAbsences = new Map();
-              absences.forEach((a: any) => {
-                const sid = a.student_id;
-                if (!studentAbsences.has(sid)) {
-                  const stuObj = Array.isArray(a.students) ? a.students[0] : a.students;
-                  const userObj = Array.isArray(stuObj?.users) ? stuObj.users[0] : stuObj?.users;
-                  const secObj = Array.isArray(a.sections) ? a.sections[0] : a.sections;
-                  const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
-                  
-                  studentAbsences.set(sid, {
-                    id: sid, name: userObj?.full_name || 'طالب غير معروف',
-                    className: `${classObj?.name || ''} - ${secObj?.name || ''}`, count: 0
+              if (absences) {
+                const studentAbsences = new Map();
+                absences.forEach((a: any) => {
+                  const sid = a.student_id;
+                  if (!studentAbsences.has(sid)) {
+                    const stuObj = Array.isArray(a.students) ? a.students[0] : a.students;
+                    const userObj = Array.isArray(stuObj?.users) ? stuObj.users[0] : stuObj?.users;
+                    const secObj = Array.isArray(a.sections) ? a.sections[0] : a.sections;
+                    const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
+                    
+                    studentAbsences.set(sid, {
+                      id: sid, name: userObj?.full_name || 'طالب غير معروف',
+                      className: `${classObj?.name || ''} - ${secObj?.name || ''}`, count: 0
+                    });
+                  }
+                  studentAbsences.get(sid).count++;
+                });
+                setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
+              }
+
+              // جلب المنظومة الامتحانية
+              try {
+                 const currentYear = '2025-2026';
+                 const currentSemester = 'الفصل الدراسي الثاني';
+                 
+                 let mySubjectIds: string[] = [];
+                 const { data: myAssignments } = await supabase.from('teacher_assignments').select('subject_id').eq('teacher_id', data.teacher.id);
+                 if (myAssignments) mySubjectIds = [...mySubjectIds, ...myAssignments.map((a: any) => a.subject_id)];
+                 if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
+                 mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); 
+
+                 const [invigRes, finalExamsRes, headRes, controlRes] = await Promise.all([
+                    supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_committees(name, location, capacity)').eq('teacher_id', data.teacher.id),
+                    supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5),
+                    supabase.from('exam_committee_heads').select('committees_range, exam_timetables(exam_date, subjects(name), class_level)').eq('head_teacher_id', data.teacher.id),
+                    supabase.from('exam_control_team').select('role_name').eq('user_id', user.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle()
+                 ]);
+
+                 if (invigRes.data) setInvigilationDuties(invigRes.data);
+                 if (finalExamsRes.data) setFinalExamsTimetable(finalExamsRes.data);
+                 if (headRes.data) setHeadDuties(headRes.data);
+                 if (controlRes.data) setControlTeamRole(controlRes.data);
+
+                 if (mySubjectIds.length > 0) {
+                     const { data: keysRes } = await supabase.from('exam_answer_keys')
+                       .select('*, subjects(name)')
+                       .eq('is_published', true).eq('academic_year', currentYear).eq('semester', currentSemester)
+                       .in('subject_id', mySubjectIds).order('created_at', { ascending: false }).limit(5);
+                     if (keysRes) setAnswerKeys(keysRes);
+                 } else {
+                     setAnswerKeys([]);
+                 }
+              } catch (examErr) { console.error("Error fetching exam system data:", examErr); }
+
+              // حالة تسجيل الحضور
+              const now = new Date();
+              if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
+                const todayStr = format(now, 'yyyy-MM-dd');
+                const currentDayOfWeek = now.getDay() + 1; 
+                const todaysScheduleData = data.schedule.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
+                
+                if (todaysScheduleData.length === 0) {
+                  setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
+                } else {
+                  const todaySectionIds = Array.from(new Set(todaysScheduleData.map((s: any) => s.section_id)));
+                  const [ { data: recordsData }, { data: sessionsData } ] = await Promise.all([
+                    supabase.from('attendance_records').select('period, section_id').eq('date', todayStr).in('section_id', todaySectionIds),
+                    supabase.from('attendance_sessions').select('period_number, section_id').eq('date', todayStr).eq('status', 'submitted').in('section_id', todaySectionIds)
+                  ]);
+
+                  const recordedKeys = new Set([
+                    ...(recordsData || []).map(r => `${r.section_id}-${Number(r.period)}`),
+                    ...(sessionsData || []).map(r => `${r.section_id}-${Number(r.period_number)}`)
+                  ]);
+
+                  const missed: number[] = [];
+                  let totalRecorded = 0;
+
+                  todaysScheduleData.forEach((slot: any) => {
+                    const pNum = Number(slot.period);
+                    const sId = slot.section_id;
+                    const key = `${sId}-${pNum}`;
+
+                    if (recordedKeys.has(key)) { totalRecorded++; } 
+                    else if (slot.end_time) {
+                      const [h, m] = slot.end_time.split(':').map(Number);
+                      const endTime = new Date(now); endTime.setHours(h, m, 0, 0);
+                      if (now > endTime && !missed.includes(pNum)) missed.push(pNum);
+                    }
+                  });
+
+                  setAttendanceStatus({
+                    isActive: true, missedPeriods: missed.sort((a, b) => a - b),
+                    completed: missed.length === 0 && totalRecorded >= todaysScheduleData.length,
+                    totalToday: todaysScheduleData.length
                   });
                 }
-                studentAbsences.get(sid).count++;
-              });
-              setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
-            }
-
-            try {
-               const currentYear = '2025-2026';
-               const currentSemester = 'الفصل الدراسي الثاني';
-               
-               let mySubjectIds: string[] = [];
-               const { data: myAssignments } = await supabase.from('teacher_assignments').select('subject_id').eq('teacher_id', data.teacher.id);
-               if (myAssignments) mySubjectIds = [...mySubjectIds, ...myAssignments.map((a: any) => a.subject_id)];
-               if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
-               mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); 
-
-               const [invigRes, finalExamsRes, headRes, controlRes] = await Promise.all([
-                  supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_committees(name, location, capacity)').eq('teacher_id', data.teacher.id),
-                  supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5),
-                  supabase.from('exam_committee_heads').select('committees_range, exam_timetables(exam_date, subjects(name), class_level)').eq('head_teacher_id', data.teacher.id),
-                  supabase.from('exam_control_team').select('role_name').eq('user_id', user.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle()
-               ]);
-
-               if (invigRes.data) setInvigilationDuties(invigRes.data);
-               if (finalExamsRes.data) setFinalExamsTimetable(finalExamsRes.data);
-               if (headRes.data) setHeadDuties(headRes.data);
-               if (controlRes.data) setControlTeamRole(controlRes.data);
-
-               if (mySubjectIds.length > 0) {
-                   const { data: keysRes } = await supabase.from('exam_answer_keys')
-                     .select('*, subjects(name)')
-                     .eq('is_published', true).eq('academic_year', currentYear).eq('semester', currentSemester)
-                     .in('subject_id', mySubjectIds).order('created_at', { ascending: false }).limit(5);
-                   if (keysRes) setAnswerKeys(keysRes);
-               } else {
-                   setAnswerKeys([]);
-               }
-            } catch (examErr) { console.error("Error fetching exam system data:", examErr); }
-
-            const now = new Date();
-            if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
-              const todayStr = format(now, 'yyyy-MM-dd');
-              const currentDayOfWeek = now.getDay() + 1; 
-              const todaysScheduleData = data.schedule.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
-              
-              if (todaysScheduleData.length === 0) {
-                setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
-              } else {
-                const todaySectionIds = Array.from(new Set(todaysScheduleData.map((s: any) => s.section_id)));
-                const [ { data: recordsData }, { data: sessionsData } ] = await Promise.all([
-                  supabase.from('attendance_records').select('period, section_id').eq('date', todayStr).in('section_id', todaySectionIds),
-                  supabase.from('attendance_sessions').select('period_number, section_id').eq('date', todayStr).eq('status', 'submitted').in('section_id', todaySectionIds)
-                ]);
-
-                const recordedKeys = new Set([
-                  ...(recordsData || []).map(r => `${r.section_id}-${Number(r.period)}`),
-                  ...(sessionsData || []).map(r => `${r.section_id}-${Number(r.period_number)}`)
-                ]);
-
-                const missed: number[] = [];
-                let totalRecorded = 0;
-
-                todaysScheduleData.forEach((slot: any) => {
-                  const pNum = Number(slot.period);
-                  const sId = slot.section_id;
-                  const key = `${sId}-${pNum}`;
-
-                  if (recordedKeys.has(key)) { totalRecorded++; } 
-                  else if (slot.end_time) {
-                    const [h, m] = slot.end_time.split(':').map(Number);
-                    const endTime = new Date(now); endTime.setHours(h, m, 0, 0);
-                    if (now > endTime && !missed.includes(pNum)) missed.push(pNum);
-                  }
-                });
-
-                setAttendanceStatus({
-                  isActive: true, missedPeriods: missed.sort((a, b) => a - b),
-                  completed: missed.length === 0 && totalRecorded >= todaysScheduleData.length,
-                  totalToday: todaysScheduleData.length
-                });
               }
-            }
+          }
         }
+      } catch (error) { 
+        console.error('Error fetching dashboard data:', error); 
+      } finally { 
+        if (mounted) setLoading(false); 
       }
-    } catch (error) { console.error('Error:', error); isFetchedRef.current = false; } 
-    finally { setLoading(false); }
-  }, [fetchTeacherDashboardData, user?.id]);
+    };
 
-  useEffect(() => {
-    if (!isChecking && (authRole === 'teacher' || authRole === 'admin' || authRole === 'management')) fetchData();
-  }, [fetchData, isChecking, authRole]);
+    loadDashboardData();
+  }, [isChecking, user, authRole, mounted]); 
 
   const signDuty = async (id: string) => {
     if (!confirm('هل أنت متأكد من توقيعك إلكترونياً لاستلام مهام هذه اللجنة؟')) return;
@@ -329,7 +341,7 @@ export default function TeacherDashboard() {
       alert('تم تقديم العذر بنجاح!');
       setIsExcuseModalOpen(false);
       setExcuseForm({ absent_dates: [format(new Date(), 'yyyy-MM-dd')], duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' });
-      fetchData();
+      window.location.reload(); // تحديث الصفحة لرؤية الحالة الجديدة
     } catch (error: any) { alert('حدث خطأ أثناء التقديم: ' + error.message); } finally { setIsSubmittingExcuse(false); }
   };
 
@@ -384,22 +396,20 @@ export default function TeacherDashboard() {
   }
 
   const avatarUrl = teacherData?.users?.avatar_url;
-  const qrPayloadControl = `raf-control:${user.id}`;
+  const qrPayloadControl = `raf-control:${user?.id}`;
   const qrCodeUrlControl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayloadControl)}&margin=0`;
-  const qrPayloadInvig = `raf-id:${user.id}`;
+  const qrPayloadInvig = `raf-id:${user?.id}`;
   const qrCodeUrlInvig = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayloadInvig)}&margin=0`;
 
   return (
-    // 🚀 التعديل الأهم: bg-transparent لكي تتنفس الخلفية الكونية
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] relative bg-transparent text-slate-100 overflow-x-hidden font-sans pt-2 sm:pt-6" dir="rtl">
-      <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto relative z-10">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-sans pt-2 sm:pt-6" dir="rtl">
+      <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
 
-        {/* 🚀 مكان زراعة الدرع التذكاري الجديد */}
         {teacherData?.id && (
            <MemorialShieldDisplay userId={teacherData.id} role="teacher" />
         )}
 
-        {/* 🚀 هرم القيادة: 1. بانر أعضاء الكنترول */}
+        {/* هرم القيادة: 1. بانر أعضاء الكنترول */}
         <AnimatePresence>
           {controlTeamRole && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.5, type: 'spring' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 md:p-10 border-purple-500/30 group">
@@ -427,7 +437,7 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 هرم القيادة: 2. بانر رؤساء اللجان */}
+        {/* هرم القيادة: 2. بانر رؤساء اللجان */}
         <AnimatePresence>
           {headDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, type: 'spring' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 md:p-10 border-amber-500/30 group">
@@ -461,7 +471,7 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 هرم القيادة: 3. بانر تكليف المراقبة */}
+        {/* هرم القيادة: 3. بانر تكليف المراقبة */}
         <AnimatePresence>
           {invigilationDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 md:p-10 border-emerald-500/30 group">
@@ -539,7 +549,7 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 نظام التنبيهات الزجاجي (Attendance Status) */}
+        {/* نظام التنبيهات الزجاجي (Attendance Status) */}
         <AnimatePresence>
           {attendanceStatus.isActive && attendanceStatus.totalToday > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="w-full">
@@ -626,14 +636,15 @@ export default function TeacherDashboard() {
               <Link href="/attendance" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/5 backdrop-blur-md px-6 py-4 text-sm font-black text-white hover:bg-white/10 transition-all border border-white/10 active:scale-95 shadow-inner w-full sm:w-auto">
                 <UserCheck className="h-5 w-5 text-amber-400 drop-shadow-sm" /> رصد الحضور
               </Link>
-        <Link href="/assignments" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500/80 to-yellow-500/80 backdrop-blur-md px-6 py-4 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:from-amber-500 hover:to-yellow-500 transition-all active:scale-95 border border-amber-400/50 w-full sm:w-auto">
-  <BookOpen className="h-5 w-5" /> إدارة الواجبات
-</Link>
+              {/* 🚀 الزر الذي يعتمد النظام الكلاسيكي (بدون ذكاء اصطناعي) */}
+              <Link href="/assignments" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500/80 to-yellow-500/80 backdrop-blur-md px-6 py-4 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:from-amber-500 hover:to-yellow-500 transition-all active:scale-95 border border-amber-400/50 w-full sm:w-auto">
+                <BookOpen className="h-5 w-5" /> إدارة الواجبات
+              </Link>
             </div>
           </div>
         </motion.div>
 
-        {/* 🚀 نظام الإنذار المبكر للمعلم (زجاجي) */}
+        {/* نظام الإنذار المبكر للمعلم (زجاجي) */}
         <AnimatePresence>
           {atRiskStudents.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-rose-500/20">
@@ -684,7 +695,7 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 Stats Grid (Holographic Orbs) */}
+        {/* Stats Grid (Holographic Orbs) */}
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
           {[
             { label: 'إجمالي الطلاب', value: stats.totalStudents, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
@@ -706,13 +717,11 @@ export default function TeacherDashboard() {
           ))}
         </div>
 
-        {/* 🚀 Main Grids (الشبكة الرئيسية المعدلة لـ Gemini Style) */}
+        {/* Main Grids (Gemini Rebalance) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           
-          {/* 🚀 العمود الأيمن العريض (7/12) - يحتوي المكونات التي تحتاج مساحة */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6 lg:space-y-8 w-full">
             
-            {/* المكتبة الرقمية المستقلة */}
             <motion.div variants={itemVariants}>
               <DigitalLibraryWidget userRole="teacher" />
             </motion.div>
@@ -865,10 +874,9 @@ export default function TeacherDashboard() {
 
           </div>
 
-          {/* 🚀 العمود الأيسر (5/12) - يحتوي المكونات الجانبية الأنيقة */}
+          {/* 🚀 العمود الأيسر (5/12) */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:space-y-8 w-full">
             
-            {/* Announcements Widget */}
             <motion.div variants={itemVariants}>
                <AnnouncementsWidget authRole="teacher" />
             </motion.div>
@@ -907,7 +915,7 @@ export default function TeacherDashboard() {
               </div>
             </motion.div>
 
-            {/* 🔑 خزانة نماذج الإجابات للمعلم */}
+            {/* 🔑 خزانة نماذج الإجابات */}
             {answerKeys.length > 0 && (
                 <motion.div variants={itemVariants} className="glass-panel border-emerald-500/30 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.05)] p-0">
                   <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full pointer-events-none mix-blend-screen"></div>
@@ -969,8 +977,8 @@ export default function TeacherDashboard() {
                     );
                   })
                 ) : (
-                  <div className="p-8 sm:p-12 text-center text-slate-400 text-xs sm:text-sm flex flex-col items-center bg-[#02040a]/30 m-4 rounded-[1.5rem] sm:rounded-2xl border border-dashed border-white/10 shadow-inner backdrop-blur-sm">
-                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-white/5 flex items-center justify-center mb-2 sm:mb-3 border border-white/5 shadow-inner"><CheckCircle2 className="h-5 w-5 sm:h-7 sm:w-7 text-slate-500" /></div>
+                  <div className="p-8 sm:p-12 text-center text-slate-400 text-xs sm:text-sm flex flex-col items-center bg-[#02040a]/30 backdrop-blur-sm m-4 rounded-[1.5rem] sm:rounded-2xl border border-dashed border-white/10 shadow-inner">
+                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-white/5 flex items-center justify-center mb-2 sm:mb-3 border border-white/5 shadow-inner"><CheckCircle2 className="h-5 w-5 sm:h-7 sm:w-7 text-slate-600" /></div>
                     <span className="font-bold">صندوق الوارد فارغ</span>
                   </div>
                 )}
@@ -1002,7 +1010,6 @@ export default function TeacherDashboard() {
 
                 <div className="space-y-6">
                   
-                  {/* اختيار التواريخ المتعددة للغياب */}
                   <div className="space-y-3 bg-[#02040a]/40 backdrop-blur-sm p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
                     <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 drop-shadow-sm">
                       <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها
@@ -1037,12 +1044,11 @@ export default function TeacherDashboard() {
                   <div className="space-y-2">
                     <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">نوع الدوام</label>
                     <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full glass-input p-3.5 text-xs sm:text-sm font-bold appearance-none [&>option]:bg-[#0f1423] cursor-pointer">
-                      <option value="full_day">غياب يوم كامل (لكل الأيام المحددة)</option>
+                      <option value="full_day">غياب يوم كامل</option>
                       <option value="partial_day">غياب جزئي (استئذان حصص)</option>
                     </select>
                   </div>
 
-                  {/* اختيار الحصص */}
                   <AnimatePresence>
                     {excuseForm.duration_type === 'partial_day' && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -1063,7 +1069,6 @@ export default function TeacherDashboard() {
                     )}
                   </AnimatePresence>
 
-                  {/* رفع المرفق */}
                   <div className="space-y-2">
                     <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">إرفاق التقرير الطبي (صورة)</label>
                     <label className={cn("relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all backdrop-blur-md shadow-inner", isUploadingReport ? "border-amber-500/50 bg-amber-500/10" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/10" : "border-white/10 bg-[#02040a]/40 hover:border-amber-500/30 hover:bg-white/5")}>
@@ -1078,7 +1083,6 @@ export default function TeacherDashboard() {
                     </label>
                   </div>
 
-                  {/* تفاصيل إضافية */}
                   <div className="space-y-2">
                     <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">ملاحظات للإدارة (اختياري)</label>
                     <textarea 
