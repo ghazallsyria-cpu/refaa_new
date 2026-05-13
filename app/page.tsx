@@ -1,11 +1,11 @@
 // @ts-nocheck
 /**
  * ============================================================================
- * 🏗️ التوثيق الهندسي (Gemini Style Edition - Crash Proof)
+ * 🏗️ التوثيق الهندسي (Gemini Style Edition - In-App Console HUD)
  * ============================================================================
  * @file        app/page.tsx
- * @version     6.5.0 (Alive UI - Holographic Bento Campus)
- * @description الواجهة الرئيسية للحرم الرقمي مع واجهات زجاجية وتصميم شبكي.
+ * @version     7.0.0 (Alive UI - Crash Tracker)
+ * @description الواجهة الرئيسية مع رادار تتبع الأخطاء المدمج للموبايل.
  * ============================================================================
  */
 
@@ -30,7 +30,7 @@ const DEFAULT_SLIDE = {
   icon_name: 'Sparkles',
   badge_text: 'نظام إدارة التعلم الذكي 2026',
   title: 'مدرسة الرفعة',
-  description: 'بيئة تعليمية متكاملة تجمع بين أصالة التربية وحداثة التكنولوجيا. تواصل، تعلم، واكتشف إمكانياتك في حرمنا الرقمي المتقدم.',
+  description: 'بيئة تعليمية متكاملة تجمع بين أصالة التربية وحداثة التكنولوجيا.',
   color_gradient: 'from-indigo-300 via-white to-blue-300',
   type: 'welcome'
 };
@@ -43,7 +43,41 @@ const shieldThemes = {
 };
 
 export default function DigitalCampusPage() {
-  const [mounted, setMounted] = useState(false); // 🚀 الحماية الأساسية ضد انهيار الـ Hydration
+  // ==========================================
+  // 🚀 أداة تتبع الأخطاء الحية (In-App Console HUD) للموبايل
+  // ==========================================
+  const [logs, setLogs] = useState<string[]>([]);
+  const [hasCrashed, setHasCrashed] = useState(false);
+
+  useEffect(() => {
+    const handleGlobalError = (event: ErrorEvent) => {
+      setHasCrashed(true);
+      setLogs(prev => [`❌ CRASH: ${event.message} at ${event.filename}:${event.lineno}`, ...prev]);
+    };
+    const handlePromiseRejection = (event: PromiseRejectionEvent) => {
+      setHasCrashed(true);
+      setLogs(prev => [`⚠️ PROMISE FAIL: ${event.reason?.message || event.reason}`, ...prev]);
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handlePromiseRejection);
+
+    // Override console.error
+    const originalError = console.error;
+    console.error = (...args) => {
+      setHasCrashed(true);
+      setLogs(prev => [`🔴 React Error: ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ')}`, ...prev]);
+      originalError(...args);
+    };
+
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handlePromiseRejection);
+      console.error = originalError;
+    };
+  }, []);
+
+  const [mounted, setMounted] = useState(false);
   const { user, authRole, isChecking } = useAuth() as any;
   const { scrollYProgress } = useScroll();
   
@@ -68,7 +102,7 @@ export default function DigitalCampusPage() {
   const [activeArticle, setActiveArticle] = useState<any | null>(null); 
 
   useEffect(() => {
-    setMounted(true); // التأكد من تحميل الصفحة بالمتصفح أولاً
+    setMounted(true); 
     const fetchCampusContent = async () => {
       try {
         const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes] = await Promise.all([
@@ -83,33 +117,36 @@ export default function DigitalCampusPage() {
         const { data: stdShields } = await supabase.from('student_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, students(users(full_name, avatar_url), sections(name, classes(name)))').order('created_at', { ascending: false }).limit(4);
         const { data: tchShields } = await supabase.from('teacher_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, teachers(users(full_name, avatar_url), teacher_subjects(subjects(name)))').order('created_at', { ascending: false }).limit(4);
 
-        if (stdShields) {
+        if (stdShields && Array.isArray(stdShields)) {
            setStudentMemorials(stdShields.map(s => {
-              const u = Array.isArray(s.students?.users) ? s.students.users[0] : s.students?.users;
-              const sec = Array.isArray(s.students?.sections) ? s.students?.sections[0] : s.students?.sections;
+              const u = Array.isArray(s?.students?.users) ? s.students.users[0] : s?.students?.users;
+              const sec = Array.isArray(s?.students?.sections) ? s.students.sections[0] : s?.students?.sections;
               const cName = Array.isArray(sec?.classes) ? sec.classes[0]?.name : sec?.classes?.name;
               return { ...s, role: 'student', personName: u?.full_name || 'طالب', avatar: u?.avatar_url, info: `${cName || ''} - ${sec?.name || ''}` };
            }));
         }
         
-        if (tchShields) {
+        if (tchShields && Array.isArray(tchShields)) {
            setTeacherMemorials(tchShields.map(t => {
-              const u = Array.isArray(t.teachers?.users) ? t.teachers.users[0] : t.teachers?.users;
-              const subjArray = t.teachers?.teacher_subjects;
-              const subj = Array.isArray(subjArray) ? subjArray.map((ts:any)=>ts.subjects?.name).join('، ') : '';
+              const u = Array.isArray(t?.teachers?.users) ? t.teachers.users[0] : t?.teachers?.users;
+              const subjArray = t?.teachers?.teacher_subjects;
+              const subj = Array.isArray(subjArray) ? subjArray.map((ts:any)=>ts?.subjects?.name).join('، ') : '';
               return { ...t, role: 'teacher', personName: u?.full_name || 'معلم', avatar: u?.avatar_url, info: subj || 'الهيئة التعليمية' };
            }));
         }
 
-        if (studioRes.data) setStudioItems(studioRes.data);
-        if (magazineRes.data) setMagazineItems(magazineRes.data);
-        if (annRes.data) setAnnouncements(annRes.data);
-        if (tickerRes.data) setTickers(tickerRes.data);
-        if (heroRes.data && heroRes.data.length > 0) setHeroSlides(heroRes.data);
-        if (ribbonRes.data?.image_url) setHangingRibbonUrl(ribbonRes.data.image_url);
-      } catch (e) { 
-         console.error("Content fetch failed", e); 
-      } finally { 
+        if (studioRes?.data) setStudioItems(studioRes.data);
+        if (magazineRes?.data) setMagazineItems(magazineRes.data);
+        if (annRes?.data) setAnnouncements(annRes.data);
+        if (tickerRes?.data) setTickers(tickerRes.data);
+        if (heroRes?.data && heroRes.data.length > 0) setHeroSlides(heroRes.data);
+        if (ribbonRes?.data?.image_url) setHangingRibbonUrl(ribbonRes.data.image_url);
+        
+      } catch (e: any) { 
+         setHasCrashed(true);
+         setLogs(prev => [`❌ FETCH ERROR: ${e.message}`, ...prev]);
+      } 
+      finally { 
          setFetching(false); 
       }
     };
@@ -122,19 +159,7 @@ export default function DigitalCampusPage() {
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
-  // 🚀 إيقاف أي ريندر حتى يكتمل الـ Mount لمنع أخطاء Hydration
-  if (!mounted || isChecking || fetching) {
-    return (
-      <div className="h-[100dvh] bg-[#02040a] flex items-center justify-center relative overflow-hidden">
-         <motion.div animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="relative z-10 flex flex-col items-center gap-4">
-            <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_40px_rgba(99,102,241,0.5)]"></div>
-            <p className="text-indigo-400 font-black tracking-widest text-sm uppercase drop-shadow-md">تهيئة الحرم الرقمي...</p>
-         </motion.div>
-      </div>
-    );
-  }
-
-  const breakingNews = (tickers && tickers.length > 0) ? tickers.map(t => `✨ ${t.content}`).join('   |   ') : null;
+  const breakingNews = (tickers && tickers.length > 0) ? tickers.map(t => `✨ ${t?.content || ''}`).join('   |   ') : null;
 
   const portal = (() => {
     if (!user) return { href: '/login', text: 'الدخول للمنصة', icon: ArrowLeft };
@@ -146,14 +171,41 @@ export default function DigitalCampusPage() {
   const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
   const SlideIcon = ICON_MAP[currentSlideData?.icon_name] || Sparkles;
 
-  const pinnedArticle = magazineItems.length > 0 ? (magazineItems.find(item => item.is_pinned) || magazineItems[0]) : null;
-  const sideArticles = magazineItems.length > 0 ? magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 3) : [];
+  const pinnedArticle = magazineItems.length > 0 ? (magazineItems.find(item => item?.is_pinned) || magazineItems[0]) : null;
+  const sideArticles = magazineItems.length > 0 ? magazineItems.filter(item => item?.id !== pinnedArticle?.id).slice(0, 3) : [];
 
   const displayedMemorials = activeMemorialTab === 'students' ? studentMemorials : teacherMemorials;
+
+  // شاشة التحميل الآمنة لمنع Hydration Error
+  if (!mounted || isChecking || fetching) {
+    return (
+      <div className="h-[100dvh] bg-[#02040a] flex items-center justify-center relative overflow-hidden">
+         <motion.div animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="relative z-10 flex flex-col items-center gap-4">
+            <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_40px_rgba(99,102,241,0.5)]"></div>
+            <p className="text-indigo-400 font-black tracking-widest text-sm uppercase drop-shadow-md">تهيئة الحرم الرقمي...</p>
+         </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-transparent text-slate-200 font-sans overflow-x-hidden selection:bg-indigo-500/30 relative pb-20 sm:pb-32 pt-2 sm:pt-6" dir="rtl">
       
+      {/* 🚀 وحدة الكونسول الطافية تظهر فقط في حالة الانهيار */}
+      {hasCrashed && (
+        <div className="fixed top-0 left-0 w-full h-[50vh] bg-black/95 z-[999999] border-b-4 border-rose-600 p-4 overflow-y-auto flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.8)]" dir="ltr">
+          <div className="flex justify-between items-center mb-4 border-b border-white/20 pb-2 shrink-0">
+            <span className="text-rose-500 font-bold flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> SYSTEM CRASH LOG</span>
+            <button onClick={() => setHasCrashed(false)} className="bg-white/20 px-3 py-1 rounded text-white text-xs">Close / تجاهل</button>
+          </div>
+          <div className="flex-1 overflow-y-auto text-[11px] font-mono text-emerald-400 space-y-2">
+            {logs.length === 0 ? <p className="text-slate-500">Waiting for error details...</p> : logs.map((log, i) => (
+              <div key={i} className="bg-white/5 p-2 rounded break-words whitespace-pre-wrap">{log}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 🌌 الإضاءة الخلفية المحيطية (Gemini Ambiance) */}
       <div className="fixed top-[-10%] right-[-5%] w-[50vw] h-[50vw] min-w-[300px] min-h-[300px] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none mix-blend-screen z-0 animate-[pulse_12s_ease-in-out_infinite]"></div>
       <div className="fixed bottom-[-10%] left-[-5%] w-[40vw] h-[40vw] min-w-[200px] min-h-[200px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen z-0 animate-[pulse_10s_ease-in-out_infinite_alternate]"></div>
@@ -207,7 +259,7 @@ export default function DigitalCampusPage() {
                   )}
                   
                   <h1 className={`text-4xl sm:text-6xl md:text-7xl lg:text-[6rem] font-black tracking-tighter mb-4 sm:mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-l ${currentSlideData?.color_gradient || 'from-indigo-300 via-white to-blue-300'} drop-shadow-lg`}>
-                    {currentSlideData?.title}
+                    {currentSlideData?.title || 'مدرسة الرفعة'}
                   </h1>
                   
                   {currentSlideData?.description && (
@@ -441,15 +493,15 @@ export default function DigitalCampusPage() {
                                  
                                  <div className="relative h-full w-full bg-[#02040a]/90 backdrop-blur-xl border border-white/10 rounded-t-full rounded-b-[2.4rem] p-5 sm:p-6 flex flex-col items-center text-center overflow-hidden z-10 shadow-inner">
                                     <div className="mt-4 mb-4 p-2.5 sm:p-3 rounded-full bg-white/5 border border-white/10 shadow-inner flex items-center justify-center backdrop-blur-sm">
-                                       {memorial.custom_logo_url ? <img src={memorial.custom_logo_url} crossOrigin="anonymous" className="w-8 h-8 sm:w-10 sm:h-10 object-contain drop-shadow-md" /> : theme.icon}
+                                       {memorial?.custom_logo_url ? <img src={memorial.custom_logo_url} crossOrigin="anonymous" className="w-8 h-8 sm:w-10 sm:h-10 object-contain drop-shadow-md" /> : theme.icon}
                                     </div>
                                     <h3 className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-500 mb-2 border-b border-white/10 pb-1.5 w-full">الرفعة النموذجية</h3>
-                                    <h2 className={cn("text-base sm:text-lg font-black leading-tight mb-4 drop-shadow-md min-h-[40px] flex items-center justify-center", theme.textPrimary)}>{memorial.title}</h2>
+                                    <h2 className={cn("text-base sm:text-lg font-black leading-tight mb-4 drop-shadow-md min-h-[40px] flex items-center justify-center", theme.textPrimary)}>{memorial?.title}</h2>
                                     <div className={cn("w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 shadow-inner mx-auto mb-3", theme.border)}>
-                                       {memorial.avatar ? <img src={memorial.avatar} crossOrigin="anonymous" className="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all"/> : <UserCircle className="w-full h-full text-slate-600 p-1 bg-[#0f1423]"/>}
+                                       {memorial?.avatar ? <img src={memorial.avatar} crossOrigin="anonymous" className="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all"/> : <UserCircle className="w-full h-full text-slate-600 p-1 bg-[#0f1423]"/>}
                                     </div>
-                                    <p className={cn("text-sm sm:text-base font-black truncate w-full drop-shadow-sm", theme.textPrimary)}>{memorial.personName}</p>
-                                    <p className={cn("text-[9px] sm:text-[10px] font-bold mt-1.5 px-2 py-1 rounded-md border border-white/10 bg-white/5 shadow-inner", theme.textSecondary)}>{memorial.info}</p>
+                                    <p className={cn("text-sm sm:text-base font-black truncate w-full drop-shadow-sm", theme.textPrimary)}>{memorial?.personName}</p>
+                                    <p className={cn("text-[9px] sm:text-[10px] font-bold mt-1.5 px-2 py-1 rounded-md border border-white/10 bg-white/5 shadow-inner", theme.textSecondary)}>{memorial?.info}</p>
                                  </div>
                               </div>
                            )}
@@ -488,9 +540,9 @@ export default function DigitalCampusPage() {
             <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", damping: 25 }} className="w-full max-w-6xl glass-panel rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.9)] border-white/10 relative flex flex-col" onClick={e => e.stopPropagation()}>
               <button onClick={() => setActiveMedia(null)} className="absolute top-4 left-4 sm:top-6 sm:left-6 z-50 w-10 h-10 sm:w-12 sm:h-12 bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-xl flex items-center justify-center backdrop-blur-md transition-colors border border-white/10 shadow-inner active:scale-90"><X className="w-5 h-5" /></button>
               <div className="relative w-full flex-1 bg-[#0f1423]/60 flex items-center justify-center min-h-[40vh] max-h-[70vh] sm:max-h-[85vh] p-2 sm:p-4 shadow-inner">
-                {activeMedia.media_type === 'video' ? (<video src={activeMedia.media_url} controls autoPlay className="w-full h-full object-contain rounded-[1.5rem] sm:rounded-[2.5rem] shadow-md border border-white/5" />) : (<img src={activeMedia.media_url} alt={activeMedia.title} className="w-full h-full object-contain rounded-[1.5rem] sm:rounded-[2.5rem] shadow-md border border-white/5" />)}
+                {activeMedia?.media_type === 'video' ? (<video src={activeMedia.media_url} controls autoPlay className="w-full h-full object-contain rounded-[1.5rem] sm:rounded-[2.5rem] shadow-md border border-white/5" />) : (<img src={activeMedia?.media_url} alt={activeMedia?.title} className="w-full h-full object-contain rounded-[1.5rem] sm:rounded-[2.5rem] shadow-md border border-white/5" />)}
               </div>
-              <div className="p-5 sm:p-6 bg-[#02040a]/80 backdrop-blur-md border-t border-white/5 relative z-10"><h3 className="text-white font-black text-base sm:text-2xl drop-shadow-md text-center sm:text-right">{activeMedia.title}</h3></div>
+              <div className="p-5 sm:p-6 bg-[#02040a]/80 backdrop-blur-md border-t border-white/5 relative z-10"><h3 className="text-white font-black text-base sm:text-2xl drop-shadow-md text-center sm:text-right">{activeMedia?.title}</h3></div>
             </motion.div>
           </motion.div>
         )}
@@ -501,18 +553,18 @@ export default function DigitalCampusPage() {
               
               <div className="relative h-48 sm:h-[350px] shrink-0 bg-[#0f1423] rounded-t-[2rem] sm:rounded-t-[2.5rem] overflow-hidden m-1.5 sm:m-2">
                 <button onClick={() => setActiveArticle(null)} className="absolute top-4 left-4 sm:top-5 sm:left-5 z-50 w-10 h-10 sm:w-12 sm:h-12 bg-[#02040a]/60 hover:bg-rose-500/80 text-slate-300 hover:text-white rounded-xl flex items-center justify-center backdrop-blur-md transition-colors border border-white/10 shadow-inner active:scale-90"><X className="w-5 h-5" /></button>
-                <img src={activeArticle.cover_image} alt={activeArticle.title} className="absolute inset-0 w-full h-full object-cover rounded-[1.25rem] sm:rounded-[2rem] mix-blend-luminosity hover:mix-blend-normal transition-all duration-700" />
+                <img src={activeArticle?.cover_image} alt={activeArticle?.title} className="absolute inset-0 w-full h-full object-cover rounded-[1.25rem] sm:rounded-[2rem] mix-blend-luminosity hover:mix-blend-normal transition-all duration-700" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-transparent to-transparent pointer-events-none"></div>
               </div>
               
               <div className="px-5 sm:px-10 pb-10 sm:pb-12 pt-4 sm:pt-6 overflow-y-auto custom-scrollbar relative z-10 bg-transparent flex-1">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-5 sm:mb-8 border-b border-white/5 pb-4 sm:pb-5">
-                  <span className="text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner flex items-center gap-1.5 text-[10px] sm:text-xs font-black drop-shadow-sm"><Calendar className="w-3.5 h-3.5 opacity-70" /> {activeArticle.created_at ? new Date(activeArticle.created_at).toLocaleDateString('ar-SA') : ''}</span>
-                  <span className="text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 shadow-inner flex items-center gap-1.5 text-[10px] sm:text-xs font-black drop-shadow-sm"><User className="w-3.5 h-3.5 opacity-70" /> {activeArticle.author_name}</span>
+                  <span className="text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner flex items-center gap-1.5 text-[10px] sm:text-xs font-black drop-shadow-sm"><Calendar className="w-3.5 h-3.5 opacity-70" /> {activeArticle?.created_at ? new Date(activeArticle.created_at).toLocaleDateString('ar-SA') : ''}</span>
+                  <span className="text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 shadow-inner flex items-center gap-1.5 text-[10px] sm:text-xs font-black drop-shadow-sm"><User className="w-3.5 h-3.5 opacity-70" /> {activeArticle?.author_name}</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white mb-6 sm:mb-8 leading-tight sm:leading-tight tracking-tight drop-shadow-lg">{activeArticle.title}</h2>
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white mb-6 sm:mb-8 leading-tight sm:leading-tight tracking-tight drop-shadow-lg">{activeArticle?.title}</h2>
                 <div className="prose prose-invert prose-sm sm:prose-base max-w-none text-slate-300 font-bold leading-relaxed">
-                  <div className="text-sm sm:text-base lg:text-lg text-indigo-100 font-black mb-6 sm:mb-8 p-5 sm:p-6 bg-indigo-500/10 rounded-2xl sm:rounded-3xl border border-indigo-500/20 border-r-4 border-r-indigo-500 shadow-inner drop-shadow-md leading-relaxed">{activeArticle.excerpt}</div>
+                  <div className="text-sm sm:text-base lg:text-lg text-indigo-100 font-black mb-6 sm:mb-8 p-5 sm:p-6 bg-indigo-500/10 rounded-2xl sm:rounded-3xl border border-indigo-500/20 border-r-4 border-r-indigo-500 shadow-inner drop-shadow-md leading-relaxed">{activeArticle?.excerpt}</div>
                 </div>
               </div>
             </motion.div>
