@@ -626,9 +626,9 @@ export default function TeacherDashboard() {
               <Link href="/attendance" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/5 backdrop-blur-md px-6 py-4 text-sm font-black text-white hover:bg-white/10 transition-all border border-white/10 active:scale-95 shadow-inner w-full sm:w-auto">
                 <UserCheck className="h-5 w-5 text-amber-400 drop-shadow-sm" /> رصد الحضور
               </Link>
-              <Link href="/ai-assignments-v2" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500/80 to-yellow-500/80 backdrop-blur-md px-6 py-4 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:from-amber-500 hover:to-yellow-500 transition-all active:scale-95 border border-amber-400/50 w-full sm:w-auto">
-                <Plus className="h-5 w-5" /> بناء وتوزيع واجب
-              </Link>
+        <Link href="/assignments" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500/80 to-yellow-500/80 backdrop-blur-md px-6 py-4 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:from-amber-500 hover:to-yellow-500 transition-all active:scale-95 border border-amber-400/50 w-full sm:w-auto">
+  <BookOpen className="h-5 w-5" /> إدارة الواجبات
+</Link>
             </div>
           </div>
         </motion.div>
