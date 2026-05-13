@@ -28,13 +28,13 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import imageCompression from 'browser-image-compression';
 
-// 🚀 تنظيف رابط الـ PDF من أي إضافات تسبب مشكلة الصفر بايت
+// 🚀 تنظيف رابط الـ PDF
 const cleanPdfUrl = (url: string) => {
   if (!url) return '';
   return url.replace(/\/fl_attachment\//g, '/').replace(/fl_attachment,/g, '');
 };
 
-// محرك تنسيق المعادلات
+// 🚀 محرك تنسيق المعادلات (مُعدل للثيم المظلم Gemini Style)
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    let html = String(content)
@@ -45,18 +45,18 @@ const renderContentWithMath = (content: string) => {
      .replace(/\\\$/g, '$');
    
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
-       return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+       return `<span class="math-tex text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-1 rounded-md font-mono font-black mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-inner" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-white/10 rounded-xl overflow-hidden shadow-inner bg-[#02040a]/40 backdrop-blur-sm"');
    html = html.replace(/<\/table>/g, '</table></div>');
-   html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
-   html = html.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
+   html = html.replace(/<th/g, '<th class="bg-indigo-500/10 p-4 border border-white/10 font-black text-indigo-300 text-sm drop-shadow-sm"');
+   html = html.replace(/<td/g, '<td class="p-4 border border-white/10 bg-transparent text-slate-300 font-bold"');
    return { __html: html };
 };
 
 // =========================================================================
-// المكون الداخلي: تسليم المشاريع العلمية
+// المكون الداخلي: تسليم المشاريع العلمية (Holographic Design)
 // =========================================================================
 interface ProjectSubmissionProps {
   initialData?: { text: string; images: string[] };
@@ -114,41 +114,42 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
   };
 
   return (
-    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm mt-5">
-      <div className="space-y-6">
+    <div className="bg-[#02040a]/40 backdrop-blur-md p-6 rounded-[2rem] border border-white/5 shadow-inner mt-5 relative overflow-hidden group">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[40px] rounded-full pointer-events-none mix-blend-screen"></div>
+      <div className="space-y-6 relative z-10">
         <div>
-          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-indigo-500" /> وصف المشروع (اختياري)
+          <label className="text-sm font-black text-indigo-300 mb-3 flex items-center gap-2 drop-shadow-sm">
+            <FileText className="w-5 h-5 text-indigo-400" /> وصف المشروع (اختياري)
           </label>
           <textarea
-            disabled={readOnly} rows={4} value={text} onChange={handleTextChange} placeholder="اكتب تفاصيل بحثك..."
-            className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 rounded-xl p-4 text-slate-800 font-bold outline-none resize-none shadow-inner transition-all disabled:opacity-70"
+            disabled={readOnly} rows={4} value={text} onChange={handleTextChange} placeholder="اكتب تفاصيل بحثك هنا..."
+            className="w-full bg-white/5 border border-white/10 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/30 rounded-2xl p-4 text-white font-bold outline-none resize-none shadow-inner transition-all disabled:opacity-50 placeholder:text-slate-500 custom-scrollbar"
           />
         </div>
         <div>
-          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
-            <ImageIcon className="w-5 h-5 text-indigo-500" /> مرفقات المشروع المرئية (حد أقصى 8 صور)
+          <label className="text-sm font-black text-indigo-300 mb-3 flex items-center gap-2 drop-shadow-sm">
+            <ImageIcon className="w-5 h-5 text-indigo-400" /> مرفقات المشروع المرئية (حد أقصى 8 صور)
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
             {images.map((img, idx) => (
-              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm group bg-slate-50">
-                <img src={img} alt={`مرفق ${idx + 1}`} className="w-full h-full object-cover" />
+              <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-white/10 shadow-inner group/img bg-[#0f1423]">
+                <img src={img} alt={`مرفق ${idx + 1}`} className="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all duration-500" />
                 {!readOnly && (
-                  <button type="button" onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600 shadow-md">
+                  <button type="button" onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-rose-500/80 backdrop-blur-md text-white rounded-lg opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-rose-600 shadow-md border border-rose-400/50 active:scale-90">
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
             ))}
             {!readOnly && images.length < 8 && (
-              <label className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all ${isUploading ? "border-indigo-300 bg-indigo-50" : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
+              <label className={`aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all shadow-inner ${isUploading ? "border-indigo-500/50 bg-indigo-500/10" : "border-white/10 bg-white/5 hover:border-indigo-400/50 hover:bg-white/10"}`}>
                 <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} disabled={isUploading} />
-                {isUploading ? <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /> : <><UploadCloud className="w-8 h-8 text-slate-400 mb-2" /><span className="text-xs font-bold text-slate-500 text-center px-2">إضافة صور<br/>({8 - images.length} متبقية)</span></>}
+                {isUploading ? <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" /> : <><UploadCloud className="w-8 h-8 text-slate-400 mb-2 drop-shadow-sm" /><span className="text-xs font-bold text-slate-400 text-center px-2">إضافة صور<br/>({8 - images.length} متبقية)</span></>}
               </label>
             )}
           </div>
-          <p className="text-xs font-bold text-emerald-600 bg-emerald-50 p-3 rounded-xl border border-emerald-100 inline-flex items-center gap-2 w-full shadow-sm">
-            <CheckCircle2 className="w-4 h-4 shrink-0" /> النظام يدعم ضغط الصور تلقائياً للحفاظ على الباقة.
+          <p className="text-[10px] sm:text-xs font-black text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 inline-flex items-center gap-2 w-full shadow-inner backdrop-blur-sm">
+            <CheckCircle2 className="w-4 h-4 shrink-0" /> النظام يدعم ضغط الصور تلقائياً للحفاظ على الباقة والتخزين السحابي.
           </p>
         </div>
       </div>
@@ -403,56 +404,44 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     } catch (error: any) { showNotification('error', error.message || 'خطأ أثناء الحفظ'); } finally { setIsSubmittingEdit(false); }
   };
 
-const handleDeleteAssignmentAction = async () => {
-    setIsDeletingSubmission(true); // نستخدم حالة التحميل الموجودة لتجميد الزر
+  const handleDeleteAssignmentAction = async () => {
+    setIsDeletingSubmission(true); 
     try {
       showNotification('success', 'جاري فحص المرفقات ومسحها من السحابة...');
       
       const urlsToDelete: string[] = [];
 
-      // 1. جمع رابط المرفق الرئيسي للواجب
       if (assignment?.file_url) {
         urlsToDelete.push(assignment.file_url);
       }
 
-      // 2. جمع روابط الصور المرفقة داخل الأسئلة التفاعلية (إن وجدت)
       questions.forEach((q: any) => {
         if (q.media_url) {
           urlsToDelete.push(q.media_url);
         }
       });
 
-      // 3. جمع روابط المرفقات التي رفعها الطلاب في إجاباتهم (إن وجدت)
       submissions.forEach((sub: any) => {
         if (sub.file_url) {
           urlsToDelete.push(sub.file_url);
         }
-        // إذا كان هناك صور داخل نظام تسليم المشاريع الجديد
         if (sub.content && sub.content.includes('cloudinary')) {
           try {
-             // محاولة استخراج أي روابط كلاوديناري من داخل إجابة الطالب (JSON)
              const parsedAns = JSON.parse(sub.content);
              if (parsedAns.images && Array.isArray(parsedAns.images)) {
                 urlsToDelete.push(...parsedAns.images);
              }
-          } catch(e) {
-             // تجاهل الخطأ إذا لم يكن المحتوى بصيغة JSON
-          }
+          } catch(e) {}
         }
       });
 
-      // 4. إرسال أمر الحذف إلى Cloudinary لكل الروابط المجمعة
-      // ملاحظة: يُفضل استخدام Promise.all لحذفها دفعة واحدة وتسريع العملية
       if (urlsToDelete.length > 0) {
-        // تصفية الروابط لضمان أنها تابعة لكلاوديناري فقط
         const validCloudinaryUrls = urlsToDelete.filter(url => url.includes('cloudinary.com'));
         await Promise.all(validCloudinaryUrls.map(url => deleteFromCloudinary(url)));
       }
 
-      // 5. أخيراً، حذف الواجب من قاعدة البيانات (وهو سيقوم بحذف الأسئلة والتسليمات تلقائياً إذا كان الـ Cascade مفعلاً في Supabase)
       await deleteAssignment(assignmentId);
       
-      // تنظيف الكاش والعودة للصفحة الرئيسية
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
       router.push('/assignments');
       
@@ -463,22 +452,19 @@ const handleDeleteAssignmentAction = async () => {
     }
   };
 
-const handleDeleteSubmissionAction = async () => {
+  const handleDeleteSubmissionAction = async () => {
     if (!submissionToDelete) return;
     setIsDeletingSubmission(true);
     try {
-      // 1. البحث عن التسليم المراد حذفه لجلب الروابط الخاصة به
       const subToDel = submissions.find(s => s.id === submissionToDelete);
       
       if (subToDel) {
         const urlsToDelete: string[] = [];
         
-        // استخراج المرفق الأساسي للطالب
         if (subToDel.file_url && subToDel.file_url.includes('cloudinary.com')) {
           urlsToDelete.push(subToDel.file_url);
         }
 
-        // استخراج صور المشروع العلمي (الميزة الجديدة) إن وجدت
         if (subToDel.content && subToDel.content.includes('cloudinary')) {
           try {
              const parsedAns = JSON.parse((subToDel as any).content);
@@ -488,13 +474,11 @@ const handleDeleteSubmissionAction = async () => {
           } catch(e) {}
         }
 
-        // 2. حذف الملفات من Cloudinary
         if (urlsToDelete.length > 0) {
            await Promise.all(urlsToDelete.map(url => deleteFromCloudinary(url)));
         }
       }
 
-      // 3. حذف التسليم من قاعدة البيانات
       await deleteSubmission(submissionToDelete);
       
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
@@ -510,9 +494,9 @@ const handleDeleteSubmissionAction = async () => {
 
   const copyAssignmentLink = () => { navigator.clipboard.writeText(window.location.href); showNotification('success', 'تم نسخ رابط الواجب'); };
 
-  if (!mounted || authLoading) return (<div className="flex h-screen items-center justify-center bg-slate-50 font-cairo text-slate-800"><div className="flex flex-col items-center gap-4"><Loader2 className="w-14 h-14 text-indigo-600 animate-spin" /><p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق من الصلاحيات...</p></div></div>);
-  if (loading && !assignment) return (<div className="flex h-screen items-center justify-center bg-slate-50 font-cairo text-slate-800"><div className="flex flex-col items-center gap-4"><Loader2 className="w-14 h-14 text-indigo-600 animate-spin" /><p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب بيانات الواجب...</p></div></div>);
-  if (!assignment && !loading) return (<div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-800 font-cairo px-4"><div className="bg-white p-10 rounded-[3rem] border border-slate-200 text-center shadow-lg max-w-md w-full"><AlertCircle className="w-16 h-16 text-rose-600 mx-auto mb-4" /><h3 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">الواجب غير موجود</h3><p className="text-slate-500 font-bold">ربما تم حذفه أو أن الرابط غير صحيح.</p><Link href="/assignments" className="mt-8 inline-block px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold transition-all border border-indigo-200">العودة للواجبات</Link></div></div>);
+  if (!mounted || authLoading) return (<div className="flex h-[100dvh] items-center justify-center bg-transparent font-sans text-slate-100"><div className="flex flex-col items-center gap-4"><Loader2 className="w-14 h-14 text-indigo-500 animate-spin drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" /><p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري التحقق من الهوية...</p></div></div>);
+  if (loading && !assignment) return (<div className="flex h-[100dvh] items-center justify-center bg-transparent font-sans text-slate-100"><div className="flex flex-col items-center gap-4"><Loader2 className="w-14 h-14 text-indigo-500 animate-spin drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" /><p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري سحب بيانات الواجب...</p></div></div>);
+  if (!assignment && !loading) return (<div className="min-h-[100dvh] bg-transparent flex flex-col items-center justify-center text-slate-100 font-sans px-4"><div className="glass-panel p-10 rounded-[3rem] border border-rose-500/30 text-center shadow-[0_0_50px_rgba(225,29,72,0.15)] max-w-md w-full relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 blur-[40px] rounded-full pointer-events-none mix-blend-screen"></div><AlertCircle className="w-16 h-16 text-rose-500 mx-auto mb-4 drop-shadow-md relative z-10" /><h3 className="text-3xl font-black text-white mb-2 tracking-tight relative z-10">الواجب غير موجود</h3><p className="text-slate-400 font-bold relative z-10">ربما تم حذفه أو أن الرابط غير صحيح.</p><Link href="/assignments" className="mt-8 inline-flex px-6 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black transition-all border border-white/10 shadow-inner relative z-10">العودة للواجبات</Link></div></div>);
 
   const dueDateObj = new Date(assignment?.due_date || '');
   const isOverdue = dueDateObj < new Date();
@@ -532,85 +516,112 @@ const handleDeleteSubmissionAction = async () => {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
+    <div className="min-h-[100dvh] bg-transparent text-slate-200 font-sans pb-24 relative overflow-x-hidden pt-6" dir="rtl">
       
+      {/* 🌌 الإضاءة المحيطية الكونية (Gemini Space) */}
+      <div className="fixed top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen z-0 animate-[pulse_10s_ease-in-out_infinite]"></div>
+      <div className="fixed bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] bg-blue-500/10 rounded-full blur-[100px] pointer-events-none mix-blend-screen z-0 animate-[pulse_8s_ease-in-out_infinite_alternate]"></div>
+
+      {/* Tiptap overrides for dark theme */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
+        .katex { direction: ltr !important; text-align: left !important; color: #818cf8 !important; }
+        .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
+        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); background: rgba(2,4,10,0.4); }
+        .tiptap-content td, .tiptap-content th { border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; color: #cbd5e1; }
+        .tiptap-content th { background-color: rgba(255,255,255,0.05) !important; font-weight: 900 !important; color: #fff; }
+        .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important; mix-blend-mode: luminosity; border: 1px solid rgba(255,255,255,0.1); }
+        .tiptap-content p { margin-bottom: 0.5em !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
+      `}} />
+
       <div className="space-y-8 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-8">
+        
+        {/* 🚀 إشعارات جيمناي (Holographic Toasts) */}
         <AnimatePresence>
           {notification && (
-            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] px-8 py-4 rounded-3xl shadow-xl flex items-center gap-4 transition-all bg-white border ${notification.type === 'success' ? 'text-emerald-700 border-emerald-200' : 'text-rose-700 border-rose-200'}`}>
-              <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${notification.type === 'success' ? 'bg-emerald-50' : 'bg-rose-50'}`}>{notification.type === 'success' ? <CheckCircle2 className="h-6 w-6 text-emerald-600" /> : <AlertCircle className="h-6 w-6 text-rose-600" />}</div>
-              <div className="font-black tracking-tight text-lg">{notification.message}</div>
-              <button onClick={() => setNotification(null)} className="p-1 hover:bg-slate-100 rounded-lg transition-colors mr-4 text-slate-400"><X className="h-5 w-5" /></button>
+            <motion.div initial={{ opacity: 0, y: -20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.95 }} className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] px-8 py-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex items-center gap-4 transition-all backdrop-blur-3xl border w-[90%] sm:w-auto ${notification.type === 'success' ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-100' : 'bg-rose-950/80 border-rose-500/50 text-rose-100'}`}>
+              <div className={`h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${notification.type === 'success' ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-rose-500/20 border border-rose-500/30'}`}>{notification.type === 'success' ? <CheckCircle2 className="h-6 w-6 text-emerald-400 drop-shadow-md" /> : <AlertCircle className="h-6 w-6 text-rose-400 drop-shadow-md" />}</div>
+              <div className="font-black tracking-tight text-lg drop-shadow-md">{notification.message}</div>
+              <button onClick={() => setNotification(null)} className="p-1 hover:bg-white/10 rounded-lg transition-colors mr-4 text-slate-400 shrink-0"><X className="h-5 w-5" /></button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <Link href="/assignments" className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 transition-all"><ArrowRight className="h-6 w-6" /></Link>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight leading-tight">{assignment?.title}</h1>
-                {isOverdue ? <span className="px-3 py-1 bg-rose-50 text-rose-600 border border-rose-200 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm">منتهي</span> : <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm">نشط</span>}
+        {/* 🚀 Header Hero (Glass) */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 glass-panel p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-indigo-500/20 shadow-[0_0_40px_rgba(99,102,241,0.1)] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[60px] rounded-full pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-125"></div>
+          
+          <div className="flex items-center gap-4 relative z-10 w-full md:w-auto">
+            <Link href="/assignments" className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white/5 shadow-inner border border-white/10 text-slate-400 hover:text-indigo-400 hover:bg-white/10 transition-all hover:border-indigo-500/30 shrink-0 active:scale-90"><ArrowRight className="h-6 w-6 drop-shadow-sm" /></Link>
+            <div className="min-w-0 pr-1">
+              <div className="flex flex-wrap items-center gap-3 mb-1">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight drop-shadow-md truncate">{assignment?.title}</h1>
+                {isOverdue ? <span className="px-3 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-full text-[10px] font-black uppercase tracking-wider shadow-inner backdrop-blur-sm shrink-0">منتهي</span> : <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-black uppercase tracking-wider shadow-inner backdrop-blur-sm shrink-0">نشط</span>}
               </div>
-              <p className="text-slate-500 font-bold mt-2">{(assignment as any)?.subject_name || (assignment as any)?.subject?.name} - {fullSectionName}</p>
+              <p className="text-slate-400 font-bold mt-2 text-xs sm:text-sm drop-shadow-sm">{(assignment as any)?.subject_name || (assignment as any)?.subject?.name} - {fullSectionName}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <button onClick={copyAssignmentLink} className="h-12 flex-1 md:flex-none px-4 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm font-black text-sm"><Share2 className="h-4 w-4" /> <span className="hidden sm:inline">مشاركة</span></button>
+          <div className="flex items-center gap-3 w-full md:w-auto relative z-10 shrink-0">
+            <button onClick={copyAssignmentLink} className="h-12 flex-1 md:flex-none px-4 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-indigo-300 hover:bg-white/10 hover:border-indigo-500/30 transition-all flex items-center justify-center gap-2 shadow-inner font-black text-sm active:scale-95"><Share2 className="h-4 w-4 drop-shadow-sm" /> <span className="hidden sm:inline">مشاركة</span></button>
             {canEdit && (
               <>
-                <button onClick={() => setIsEditModalOpen(true)} className="h-12 flex-1 md:flex-none px-6 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-all flex items-center justify-center gap-2 font-black shadow-sm"><Edit2 className="h-4 w-4" /> <span className="hidden sm:inline">تعديل سريع</span></button>
-                <button onClick={() => setIsDeleteModalOpen(true)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-all shadow-sm shrink-0"><Trash2 className="h-5 w-5" /></button>
+                <button onClick={() => setIsEditModalOpen(true)} className="h-12 flex-1 md:flex-none px-6 rounded-2xl bg-indigo-600/90 backdrop-blur-md text-white hover:bg-indigo-500 border border-indigo-400/50 transition-all flex items-center justify-center gap-2 font-black shadow-[0_0_20px_rgba(99,102,241,0.4)] active:scale-95"><Edit2 className="h-4 w-4 drop-shadow-sm" /> <span className="hidden sm:inline">تعديل سريع</span></button>
+                <button onClick={() => setIsDeleteModalOpen(true)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-all shadow-inner shrink-0 active:scale-90 hover:text-rose-300"><Trash2 className="h-5 w-5 drop-shadow-sm" /></button>
               </>
             )}
           </div>
         </div>
 
-        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden relative">
-          <div className="p-8 relative z-10">
-            <div className="flex flex-wrap items-center gap-4 mb-8">
-              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black border shadow-sm ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
-                <Clock className="h-5 w-5" /> <span dir="ltr">آخر موعد: {format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
+        {/* 🚀 Assignment Info Panel */}
+        <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden relative group">
+          <div className="absolute top-0 left-0 w-64 h-64 bg-blue-500/5 blur-[80px] rounded-full pointer-events-none mix-blend-screen group-hover:bg-blue-500/10 transition-colors duration-1000"></div>
+          
+          <div className="p-6 sm:p-8 relative z-10">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-8">
+              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black border shadow-inner backdrop-blur-sm ${isOverdue ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'}`}>
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" /> <span dir="ltr">آخر موعد: {format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 text-slate-600 border border-slate-200 text-xs sm:text-sm font-black shadow-sm">
-                <User className="h-5 w-5 text-slate-500" /> <span>أ. {(assignment as any)?.teacher_name || (assignment as any)?.teacher?.user?.full_name || (assignment as any)?.teacher?.users?.full_name}</span>
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl sm:rounded-2xl bg-white/5 text-slate-300 border border-white/10 text-[10px] sm:text-xs font-black shadow-inner backdrop-blur-sm">
+                <User className="h-4 w-4 sm:h-5 sm:w-5 text-slate-400 drop-shadow-sm" /> <span>أ. {(assignment as any)?.teacher_name || (assignment as any)?.teacher?.user?.full_name || (assignment as any)?.teacher?.users?.full_name}</span>
               </div>
             </div>
 
             <div className="mb-8">
-              <h3 className="text-xl font-black text-slate-900 mb-4">وصف الواجب</h3>
-              {assignment?.description ? <div className="prose max-w-none text-slate-700 leading-relaxed text-base sm:text-lg font-medium" dangerouslySetInnerHTML={renderContentWithMath(assignment.description)} /> : <p className="text-slate-500 font-bold bg-slate-50 p-4 rounded-xl border border-dashed border-slate-300 text-center">لا يوجد وصف إضافي.</p>}
+              <h3 className="text-lg sm:text-xl font-black text-white mb-4 drop-shadow-md">وصف الواجب</h3>
+              {assignment?.description ? <div className="prose prose-slate max-w-none text-slate-300 leading-relaxed text-sm sm:text-base font-bold tiptap-content drop-shadow-sm" dangerouslySetInnerHTML={renderContentWithMath(assignment.description)} /> : <p className="text-slate-500 font-bold bg-[#02040a]/40 p-4 rounded-xl border border-dashed border-white/10 text-center shadow-inner">لا يوجد وصف إضافي.</p>}
             </div>
 
             {assignment?.file_url && (
-              <div className="mt-8">
-                <h3 className="text-xl font-black text-slate-900 mb-4 flex items-center gap-2"><FileText className="h-5 w-5 text-indigo-600" /> المرفقات</h3>
+              <div className="mt-8 pt-8 border-t border-white/5">
+                <h3 className="text-lg sm:text-xl font-black text-white mb-4 flex items-center gap-2 drop-shadow-md"><FileText className="h-5 w-5 text-indigo-400" /> المرفقات</h3>
                 {assignment.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || (assignment.file_url.includes('cloudinary.com/image') && !assignment.file_url.includes('.pdf')) ? (
-                  <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm flex items-center justify-center p-2"><img src={cleanPdfUrl(assignment.file_url)} alt="مرفق الواجب" className="max-h-[500px] w-auto object-contain rounded-xl" /></div>
+                  <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-[#02040a]/40 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 overflow-hidden shadow-inner flex items-center justify-center p-2"><img src={cleanPdfUrl(assignment.file_url)} alt="مرفق الواجب" className="max-h-[500px] w-auto object-contain rounded-xl mix-blend-luminosity hover:mix-blend-normal transition-all duration-500" /></div>
                 ) : (
-                  <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-                    <div className="flex items-center gap-4">
-                      <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-indigo-50"><FileText className="h-7 w-7 text-indigo-600" /></div>
-                      <div><h4 className="font-black text-slate-900">ملف مرفق (PDF)</h4><p className="text-sm text-slate-500">اختر العرض أو التحميل المباشر</p></div>
+                  <div className="p-5 sm:p-6 rounded-[1.5rem] bg-indigo-500/10 border border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-inner backdrop-blur-sm">
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                      <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-[1rem] bg-[#0f1423] flex items-center justify-center shadow-inner border border-white/5 shrink-0"><FileText className="h-6 w-6 sm:h-7 sm:w-7 text-indigo-400 drop-shadow-sm" /></div>
+                      <div className="min-w-0 pr-1"><h4 className="font-black text-white drop-shadow-md text-sm sm:text-base truncate">ملف مرفق (PDF)</h4><p className="text-[10px] sm:text-xs text-slate-400 font-bold mt-0.5">اختر العرض أو التحميل المباشر</p></div>
                     </div>
-                    {/* 🚀 أزرار العارض الذكي والتحميل الآمن */}
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    {/* 🚀 أزرار العارض الذكي والتحميل الآمن (Glass) */}
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
                         <a 
                           href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(assignment.file_url))}&embedded=true`}
                           target="_blank" rel="noopener noreferrer"
-                          className="flex-1 sm:flex-none h-12 px-6 rounded-2xl bg-white text-indigo-700 font-black hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 shadow-sm border border-indigo-200 active:scale-95"
+                          className="flex-1 sm:flex-none h-10 sm:h-12 px-5 sm:px-6 rounded-xl sm:rounded-2xl bg-white/5 text-indigo-300 font-black hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2 shadow-inner border border-white/10 active:scale-95 text-xs sm:text-sm"
                         >
-                          <Eye className="h-5 w-5" /> عرض الملف
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" /> عرض الملف
                         </a>
                         <a 
                           href={cleanPdfUrl(assignment.file_url)}
                           target="_blank" rel="noopener noreferrer" download
-                          className="flex-1 sm:flex-none h-12 px-6 rounded-2xl bg-indigo-600 text-white font-black hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-md border border-indigo-500 active:scale-95"
+                          className="flex-1 sm:flex-none h-10 sm:h-12 px-5 sm:px-6 rounded-xl sm:rounded-2xl bg-indigo-600/90 backdrop-blur-md text-white font-black hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-400/50 active:scale-95 text-xs sm:text-sm"
                         >
-                          <Download className="h-5 w-5" /> تحميل الملف
+                          <Download className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" /> تحميل
                         </a>
                     </div>
                   </div>
@@ -620,45 +631,50 @@ const handleDeleteSubmissionAction = async () => {
           </div>
         </div>
 
-        {/* 🚀 قسم الطالب والمراجعة التفصيلية */}
+        {/* 🚀 قسم الطالب والمراجعة التفصيلية (Holographic Edition) */}
         {currentRole === 'student' && (
-          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden relative">
-            <div className="p-8 border-b border-slate-100 bg-slate-50 relative z-10">
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-3">
-                <div className={`p-3 rounded-2xl shadow-sm border ${isGraded ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                  {isGraded ? <Trophy className="h-6 w-6" /> : <Upload className="h-6 w-6" />}
+          <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-500 to-indigo-500 opacity-80"></div>
+            
+            <div className="p-6 sm:p-8 border-b border-white/5 bg-[#02040a]/60 backdrop-blur-md relative z-10">
+              <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-3 drop-shadow-md">
+                <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-inner border ${isGraded ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'}`}>
+                  {isGraded ? <Trophy className="h-5 w-5 sm:h-6 sm:w-6 drop-shadow-sm" /> : <Upload className="h-5 w-5 sm:h-6 sm:w-6 drop-shadow-sm" />}
                 </div>
                 {isGraded ? 'نتيجة الواجب والتغذية الراجعة' : 'تسليم الإجابة'}
               </h2>
             </div>
             
-            <div className="p-6 sm:p-8 relative z-10 bg-transparent">
+            <div className="p-5 sm:p-8 relative z-10 bg-transparent">
               {isGraded && (
-                <div className="mb-10 p-8 rounded-3xl bg-emerald-50 border border-emerald-200 shadow-sm relative overflow-hidden">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
-                     <div>
-                       <h3 className="text-xl sm:text-2xl font-black text-emerald-700 flex items-center gap-2 mb-2"><CheckCircle2 className="w-8 h-8" /> تم التقييم بنجاح!</h3>
-                       <p className="text-slate-600 font-bold">لقد قام معلمك بمراجعة الواجب. يمكنك الاطلاع على ملاحظاته التفصيلية بالأسفل.</p>
+                <div className="mb-8 sm:mb-10 p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] bg-emerald-500/10 border border-emerald-500/20 shadow-inner relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[40px] rounded-full pointer-events-none mix-blend-screen group-hover:scale-150 transition-transform duration-700"></div>
+                  
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 sm:gap-6 relative z-10">
+                     <div className="w-full sm:w-auto">
+                       <h3 className="text-lg sm:text-2xl font-black text-emerald-400 flex items-center gap-2 mb-2 drop-shadow-md"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 drop-shadow-sm" /> تم التقييم بنجاح!</h3>
+                       <p className="text-slate-300 font-bold text-xs sm:text-sm leading-relaxed drop-shadow-sm opacity-90">لقد قام معلمك بمراجعة الواجب. يمكنك الاطلاع على ملاحظاته التفصيلية بالأسفل.</p>
                      </div>
-                     <div className="shrink-0 flex flex-col items-center bg-white px-8 py-5 rounded-2xl shadow-sm border border-emerald-100 w-full sm:w-auto">
-                       <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">الدرجة النهائية</span>
-                       <div className="text-4xl font-black text-slate-900">{mySubmission?.grade} <span className="text-lg text-slate-400">/ {questions.reduce((acc: number, q: any) => acc + (Number(q.points)||0), 0) || 100}</span></div>
+                     <div className="shrink-0 flex flex-col items-center bg-[#0f1423]/80 backdrop-blur-sm px-6 sm:px-8 py-4 sm:py-5 rounded-xl sm:rounded-2xl shadow-inner border border-white/5 w-full sm:w-auto">
+                       <span className="text-[9px] sm:text-[10px] font-black text-emerald-500/80 uppercase tracking-widest mb-1">الدرجة النهائية</span>
+                       <div className="text-3xl sm:text-4xl font-black text-white drop-shadow-lg">{mySubmission?.grade} <span className="text-sm sm:text-lg text-slate-500">/ {questions.reduce((acc: number, q: any) => acc + (Number(q.points)||0), 0) || 100}</span></div>
                      </div>
                   </div>
+                  
                   {mySubmission?.feedback && (
-                    <div className="mt-6 p-5 bg-white rounded-2xl border border-emerald-100 shadow-sm">
-                      <p className="text-xs font-black text-emerald-600 mb-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4"/> ملاحظة المعلم العامة:</p>
-                      <p className="text-slate-800 leading-relaxed font-bold text-base sm:text-lg">{mySubmission.feedback}</p>
+                    <div className="mt-5 sm:mt-6 p-4 sm:p-5 bg-[#02040a]/60 backdrop-blur-md rounded-xl sm:rounded-2xl border border-emerald-500/30 shadow-inner">
+                      <p className="text-[10px] sm:text-xs font-black text-emerald-400 mb-2 flex items-center gap-1.5 drop-shadow-sm"><MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4"/> ملاحظة المعلم العامة:</p>
+                      <p className="text-slate-200 leading-relaxed font-bold text-sm sm:text-base drop-shadow-sm">{mySubmission.feedback}</p>
                     </div>
                   )}
                 </div>
               )}
 
               {isGraded && questions.length > 0 ? (
-                <div className="space-y-6">
-                  <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-6 flex items-center gap-2 px-2"><Target className="h-6 w-6 text-indigo-600" /> المراجعة التفصيلية لأسئلة الواجب</h3>
+                <div className="space-y-6 sm:space-y-8">
+                  <h3 className="text-lg sm:text-xl font-black text-white mb-5 sm:mb-6 flex items-center gap-2 px-2 drop-shadow-md border-r-4 border-indigo-500 pr-3"><Target className="h-5 w-5 sm:h-6 w-6 text-indigo-400 drop-shadow-sm" /> المراجعة التفصيلية لأسئلة الواجب</h3>
                   
-                  <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-6 sm:gap-8">
                     {questions.map((q: any, idx: number) => {
                       const studentAns = myAnswers[q.id];
                       const answerDetails = fullAnswersMap[q.id]; 
@@ -671,21 +687,22 @@ const handleDeleteSubmissionAction = async () => {
                       
                       if (isHeader) {
                         return (
-                          <div key={q.id} className="mt-8 mb-4">
-                            <div className="bg-indigo-50 rounded-3xl p-6 sm:p-8 border-l-4 border-indigo-500 shadow-sm">
-                              <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2 bg-indigo-100 rounded-xl">
-                                  <AlignLeft className="w-5 h-5 text-indigo-600" />
+                          <div key={q.id} className="mt-6 mb-2 sm:mt-8 sm:mb-4">
+                            <div className="bg-indigo-500/10 backdrop-blur-md rounded-[1.5rem] sm:rounded-[2rem] p-6 sm:p-8 border border-indigo-500/20 shadow-inner relative overflow-hidden group">
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 blur-[60px] rounded-full pointer-events-none mix-blend-screen group-hover:scale-150 transition-transform duration-700"></div>
+                              <div className="flex items-center gap-3 mb-4 relative z-10">
+                                <div className="p-2 bg-indigo-500/20 rounded-xl border border-indigo-500/40 shadow-inner">
+                                  <AlignLeft className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-300 drop-shadow-sm" />
                                 </div>
-                                <h4 className="text-sm font-black text-indigo-800 uppercase tracking-widest">سياق السؤال / اقرأ بتمعن</h4>
+                                <h4 className="text-xs sm:text-sm font-black text-indigo-400 uppercase tracking-widest drop-shadow-sm">سياق السؤال / اقرأ بتمعن</h4>
                               </div>
                               <div 
-                                className="prose max-w-none text-xl sm:text-2xl font-black text-slate-900 leading-relaxed" 
+                                className="prose max-w-none text-lg sm:text-xl lg:text-2xl font-black text-white leading-relaxed relative z-10 tiptap-content drop-shadow-md" 
                                 dangerouslySetInnerHTML={renderContentWithMath(q.content || (q as any).text || '')} 
                               />
                               {q.media_url && (
-                                <div className="mt-6 rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white p-2 text-center">
-                                  <img src={cleanPdfUrl(q.media_url)} className="w-auto max-h-80 mx-auto rounded-xl object-contain inline-block" alt="مرفق تمهيدي" />
+                                <div className="mt-5 sm:mt-6 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shadow-inner bg-[#02040a]/60 p-2 text-center relative z-10">
+                                  <img src={cleanPdfUrl(q.media_url)} className="w-auto max-h-64 sm:max-h-80 mx-auto rounded-lg sm:rounded-xl object-contain inline-block mix-blend-luminosity hover:mix-blend-normal transition-all duration-500" alt="مرفق تمهيدي" />
                                 </div>
                               )}
                             </div>
@@ -704,45 +721,45 @@ const handleDeleteSubmissionAction = async () => {
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
 
                       return (
-                        <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200 border-dashed' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
-                          <div className="p-6 sm:p-8 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
-                            <div className="flex gap-4 items-start w-full min-w-0">
-                              <div className={`shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-[1.25rem] flex items-center justify-center font-black text-xl sm:text-2xl shadow-sm border ${isUnanswered ? 'bg-white text-slate-500 border-slate-200' : isCorrect ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>
+                        <div key={q.id} className={`glass-panel rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden shadow-lg transition-all hover:shadow-[0_0_30px_rgba(0,0,0,0.4)] ${isUnanswered ? 'border-slate-500/30 bg-[#0f1423]/40 grayscale' : isCorrect ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
+                          <div className="p-5 sm:p-6 lg:p-8 bg-[#02040a]/40 border-b border-white/5 flex flex-col sm:flex-row sm:items-start justify-between gap-5 sm:gap-6 backdrop-blur-md">
+                            <div className="flex gap-3 sm:gap-4 items-start w-full min-w-0">
+                              <div className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-[1rem] sm:rounded-[1.25rem] flex items-center justify-center font-black text-lg sm:text-xl lg:text-2xl shadow-inner border ${isUnanswered ? 'bg-[#02040a] text-slate-500 border-white/5' : isCorrect ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
                                   {idx + 1}
                               </div>
-                              <div className="pt-1 sm:pt-2 w-full min-w-0">
+                              <div className="pt-1 w-full min-w-0">
                                 <div 
-                                  className="prose max-w-none font-black text-lg sm:text-xl text-slate-800 leading-relaxed overflow-hidden" 
+                                  className="prose max-w-none font-black text-base sm:text-lg lg:text-xl text-white leading-relaxed overflow-hidden tiptap-content drop-shadow-md" 
                                   dangerouslySetInnerHTML={renderContentWithMath((q as any).text || q.content || '')} 
                                 />
                                 {q.media_url && (
-                                  <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-white p-2 inline-block">
-                                    <img src={cleanPdfUrl(q.media_url)} className="max-h-48 w-auto rounded-lg object-contain" alt="مرفق توضيحي" />
+                                  <div className="mt-3 sm:mt-4 rounded-xl overflow-hidden border border-white/10 shadow-inner bg-[#0f1423] p-1.5 sm:p-2 inline-block">
+                                    <img src={cleanPdfUrl(q.media_url)} className="max-h-40 sm:max-h-48 w-auto rounded-lg object-contain mix-blend-luminosity hover:mix-blend-normal transition-all duration-300" alt="مرفق توضيحي" />
                                   </div>
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl font-black text-sm sm:text-base border border-slate-200 shrink-0 self-start sm:self-auto shadow-sm">
-                              <Award className={`w-5 h-5 ${isCorrect ? 'text-emerald-500' : 'text-slate-400'}`} />
-                              <span className={isCorrect ? 'text-emerald-600 text-lg' : 'text-slate-700 text-lg'}>{answerDetails?.points_earned || 0}</span>
-                              <span className="text-slate-400">/</span>
+                            <div className="flex items-center gap-2 bg-[#0f1423]/80 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm border border-white/5 shrink-0 self-start sm:self-auto shadow-inner backdrop-blur-sm">
+                              <Award className={`w-4 h-4 sm:w-5 sm:h-5 drop-shadow-sm ${isCorrect ? 'text-emerald-400' : 'text-slate-500'}`} />
+                              <span className={isCorrect ? 'text-emerald-300 text-base sm:text-lg drop-shadow-sm' : 'text-slate-400 text-base sm:text-lg'}>{answerDetails?.points_earned || 0}</span>
+                              <span className="text-slate-600">/</span>
                               <span className="text-slate-500">{Number(q.points) || 0} نقطة</span>
                             </div>
                           </div>
 
-                          <div className="p-6 sm:p-8">
+                          <div className="p-5 sm:p-6 lg:p-8 bg-transparent">
                             {isComparison ? (
-                              <div className={`rounded-[1.5rem] border overflow-hidden shadow-sm ${isUnanswered ? 'border-slate-200 bg-slate-50' : isCorrect ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50'}`}>
-                                <div className="table-responsive-wrapper">
-                                  <table className="w-full text-right border-collapse min-w-[600px] m-0">
+                              <div className={`rounded-[1.25rem] sm:rounded-[1.5rem] border overflow-hidden shadow-inner backdrop-blur-md ${isUnanswered ? 'border-white/5 bg-white/5' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
+                                <div className="table-responsive-wrapper m-0 pb-0">
+                                  <table className="w-full text-right border-collapse min-w-[600px] m-0 bg-transparent shadow-none border-0">
                                     <thead>
-                                      <tr className={isUnanswered ? 'bg-slate-100' : isCorrect ? 'bg-emerald-100/50' : 'bg-rose-100/50'}>
-                                        <th className="p-5 border-b border-l border-slate-200 font-black text-slate-700 text-sm w-1/3">وجه المقارنة</th>
-                                        <th className="p-5 border-b border-l border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
-                                        <th className="p-5 border-b border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
+                                      <tr className={isUnanswered ? 'bg-[#02040a]/60' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
+                                        <th className="p-4 sm:p-5 border-b border-l border-white/10 font-black text-slate-300 text-xs sm:text-sm w-1/3">وجه المقارنة</th>
+                                        <th className="p-4 sm:p-5 border-b border-l border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
+                                        <th className="p-4 sm:p-5 border-b border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
                                       </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody className="bg-[#0f1423]/40">
                                       {safeOptions.slice(2).map((opt: any, rIdx: number) => {
                                         const aspect = opt.content || opt || '';
                                         let parsedAns: any[] = [];
@@ -751,10 +768,10 @@ const handleDeleteSubmissionAction = async () => {
                                           else if (Array.isArray(studentAns)) parsedAns = studentAns;
                                         } catch(e){}
                                         return (
-                                          <tr key={rIdx} className="hover:bg-slate-50 transition-colors border-b border-slate-200 last:border-0">
-                                            <td className="p-5 border-l border-slate-200 font-bold text-slate-800 bg-white align-middle"><div dangerouslySetInnerHTML={renderContentWithMath(aspect)} /></td>
-                                            <td className="p-5 border-l border-slate-200 font-bold text-slate-900 align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
-                                            <td className="p-5 font-bold text-slate-900 align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
+                                          <tr key={rIdx} className="hover:bg-white/5 transition-colors border-b border-white/5 last:border-0">
+                                            <td className="p-4 sm:p-5 border-l border-white/10 font-bold text-slate-300 bg-transparent align-middle text-xs sm:text-sm"><div dangerouslySetInnerHTML={renderContentWithMath(aspect)} /></td>
+                                            <td className="p-4 sm:p-5 border-l border-white/10 font-bold text-white align-middle whitespace-pre-wrap text-center bg-transparent text-xs sm:text-sm">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-600 font-normal">فارغ</span>}</td>
+                                            <td className="p-4 sm:p-5 font-bold text-white align-middle whitespace-pre-wrap text-center bg-transparent text-xs sm:text-sm">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-600 font-normal">فارغ</span>}</td>
                                           </tr>
                                         );
                                       })}
@@ -763,15 +780,15 @@ const handleDeleteSubmissionAction = async () => {
                                 </div>
                               </div>
                             ) : q.type === 'file_upload' && !isUnanswered ? (
-                              <div className="mt-2 p-2 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 inline-block shadow-sm">
+                              <div className="mt-2 p-2 sm:p-3 bg-[#0f1423]/60 rounded-xl sm:rounded-2xl border border-white/5 inline-block shadow-inner backdrop-blur-sm">
                                 {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || (String(studentAnswerText).includes('cloudinary') && !String(studentAnswerText).includes('.pdf')) ? (
-                                   <img src={cleanPdfUrl(String(studentAnswerText))} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-slate-200 bg-white p-1" />
+                                   <img src={cleanPdfUrl(String(studentAnswerText))} alt="إجابة الطالب المرفقة" className="max-h-48 sm:max-h-80 w-auto object-contain rounded-lg sm:rounded-xl border border-white/10 bg-[#02040a]/40 p-1 mix-blend-luminosity hover:mix-blend-normal transition-all duration-300" />
                                 ) : (
-                                   <div className="flex items-center gap-2">
-                                     <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(String(studentAnswerText)))}&embedded=true`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-xs sm:text-sm px-3 py-2 bg-white rounded-xl border border-indigo-200 shadow-sm">
+                                   <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                                     <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(String(studentAnswerText)))}&embedded=true`} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto flex items-center justify-center gap-2 text-indigo-300 font-black hover:text-indigo-200 text-xs sm:text-sm px-4 py-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/30 shadow-inner active:scale-95 transition-all">
                                        <Eye className="w-4 h-4" /> عرض الملف
                                      </a>
-                                     <a href={cleanPdfUrl(String(studentAnswerText))} target="_blank" rel="noopener noreferrer" download className="flex items-center gap-2 text-white font-black text-xs sm:text-sm px-3 py-2 bg-indigo-600 rounded-xl border border-indigo-700 shadow-sm hover:bg-indigo-700 transition-colors">
+                                     <a href={cleanPdfUrl(String(studentAnswerText))} target="_blank" rel="noopener noreferrer" download className="w-full sm:w-auto flex items-center justify-center gap-2 text-white font-black text-xs sm:text-sm px-4 py-2.5 bg-indigo-600/90 backdrop-blur-md rounded-xl border border-indigo-400/50 shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:bg-indigo-500 active:scale-95 transition-all">
                                        <Download className="w-4 h-4" /> تحميل
                                      </a>
                                    </div>
@@ -784,12 +801,12 @@ const handleDeleteSubmissionAction = async () => {
                                   onChange={() => {}}
                                />
                             ) : (
-                              <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border mb-3 sm:mb-4 shadow-sm ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed text-slate-500 italic' : isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
-                                <div className="text-xs sm:text-sm font-black mb-3 flex items-center gap-2">
-                                  {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
-                                  <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابتك المسجلة:</span>
+                              <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border mb-3 sm:mb-4 shadow-inner backdrop-blur-sm ${isUnanswered ? 'bg-white/5 border-white/10 border-dashed text-slate-500 italic' : isCorrect ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-300'}`}>
+                                <div className="text-[10px] sm:text-xs font-black mb-3 flex items-center gap-2 opacity-80">
+                                  {isUnanswered ? <MinusCircle className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" /> : isCorrect ? <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 drop-shadow-sm"/> : <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 drop-shadow-sm"/>}
+                                  <span className="uppercase tracking-widest">إجابتك المسجلة:</span>
                                 </div>
-                                <div className={`text-base sm:text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'italic' : ''}`}>
+                                <div className={`text-sm sm:text-base lg:text-lg font-bold whitespace-pre-wrap leading-relaxed tiptap-content drop-shadow-sm ${isUnanswered ? 'italic opacity-60' : 'text-white'}`}>
                                     {isUnanswered ? 'لم يتم تقديم إجابة.' : <div dangerouslySetInnerHTML={renderContentWithMath(typeof studentAnswerText === 'object' && studentAnswerText !== null ? JSON.stringify(studentAnswerText) : String(studentAnswerText))} />}
                                 </div>
                               </div>
@@ -797,10 +814,10 @@ const handleDeleteSubmissionAction = async () => {
 
                             {/* التغذية الراجعة */}
                             {answerDetails?.feedback && (
-                              <div className="mt-5 p-5 rounded-2xl bg-indigo-50 border border-indigo-200 relative overflow-hidden shadow-sm">
-                                <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500"></div>
-                                <div className="text-xs font-black text-indigo-600 mb-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4"/> تعليق المدرس على الإجابة:</div>
-                                <p className="text-base sm:text-lg font-bold text-slate-800 leading-relaxed pl-2">{answerDetails.feedback}</p>
+                              <div className="mt-5 sm:mt-6 p-4 sm:p-5 rounded-xl sm:rounded-2xl bg-indigo-500/10 border border-indigo-500/20 relative overflow-hidden shadow-inner backdrop-blur-md">
+                                <div className="absolute right-0 top-0 w-1 sm:w-1.5 h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)]"></div>
+                                <div className="text-[10px] sm:text-xs font-black text-indigo-400 mb-2 flex items-center gap-1.5 uppercase tracking-widest drop-shadow-sm"><MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4"/> تعليق المدرس على الإجابة:</div>
+                                <p className="text-sm sm:text-base lg:text-lg font-bold text-white leading-relaxed pl-2 sm:pl-3 drop-shadow-sm">{answerDetails.feedback}</p>
                               </div>
                             )}
                           </div>
@@ -811,26 +828,29 @@ const handleDeleteSubmissionAction = async () => {
 
                   {/* المرفقات والنصوص الإضافية */}
                   {(mySubmission?.content || mySubmission?.file_url) && (
-                    <div className="mt-10 p-6 sm:p-8 rounded-[2rem] bg-slate-50 border border-slate-200 shadow-sm">
-                      <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-6 flex items-center gap-2"><FileText className="h-6 w-6 text-indigo-600" /> مرفقات ونصوص إضافية مُرسلة</h3>
+                    <div className="mt-8 sm:mt-12 p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] bg-[#02040a]/40 backdrop-blur-md border border-white/10 shadow-inner relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/10 blur-[60px] rounded-full pointer-events-none mix-blend-screen"></div>
+                      <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-white mb-6 flex items-center gap-3 drop-shadow-md relative z-10"><FileText className="h-6 w-6 sm:h-7 sm:w-7 text-indigo-400 drop-shadow-sm" /> مرفقات ونصوص إضافية مُرسلة</h3>
+                      
                       {mySubmission?.content && (
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 mb-4 shadow-sm">
-                          <p className="text-slate-700 whitespace-pre-wrap font-bold text-base sm:text-lg leading-relaxed">{mySubmission.content}</p>
+                        <div className="bg-white/5 p-5 sm:p-6 rounded-[1.5rem] border border-white/10 mb-5 sm:mb-6 shadow-inner relative z-10 backdrop-blur-sm">
+                          <p className="text-slate-200 whitespace-pre-wrap font-bold text-sm sm:text-base lg:text-lg leading-relaxed drop-shadow-sm">{mySubmission.content}</p>
                         </div>
                       )}
+                      
                       {mySubmission?.file_url && (
-                        <div className="relative w-full min-h-[300px] bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-4 shadow-sm">
+                        <div className="relative w-full min-h-[250px] sm:min-h-[300px] bg-[#0f1423]/80 rounded-[1.5rem] sm:rounded-[2rem] border border-white/5 overflow-hidden flex items-center justify-center p-3 sm:p-4 shadow-inner relative z-10">
                           {mySubmission.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) || (mySubmission.file_url.includes('cloudinary.com/image') && !mySubmission.file_url.includes('.pdf')) ? (
-                            <img src={cleanPdfUrl(mySubmission.file_url)} alt="إجابة إضافية" className="max-h-[500px] w-auto object-contain rounded-xl" />
+                            <img src={cleanPdfUrl(mySubmission.file_url)} alt="إجابة إضافية" className="max-h-[400px] sm:max-h-[500px] w-auto object-contain rounded-xl sm:rounded-2xl mix-blend-luminosity hover:mix-blend-normal transition-all duration-500 border border-white/5" />
                           ) : (
-                             <div className="flex flex-col items-center gap-4 bg-indigo-50 p-6 rounded-2xl border border-indigo-100 w-full max-w-sm">
-                                <FileText className="w-12 h-12 text-indigo-500" />
-                                <p className="font-black text-indigo-900">ملف إضافي للطالب</p>
-                                <div className="flex items-center gap-2 w-full mt-2">
-                                  <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(mySubmission.file_url))}&embedded=true`} target="_blank" rel="noopener noreferrer" className="flex-1 flex justify-center items-center gap-2 text-indigo-700 font-black text-sm px-4 py-3 bg-white rounded-xl border border-indigo-200 shadow-sm active:scale-95 transition-all">
+                             <div className="flex flex-col items-center gap-4 bg-indigo-500/10 backdrop-blur-md p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-indigo-500/20 w-full max-w-sm shadow-inner">
+                                <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-indigo-400 drop-shadow-md" />
+                                <p className="font-black text-white drop-shadow-sm text-sm sm:text-base">ملف إضافي</p>
+                                <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 w-full mt-3 sm:mt-4">
+                                  <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(mySubmission.file_url))}&embedded=true`} target="_blank" rel="noopener noreferrer" className="w-full flex justify-center items-center gap-2 text-indigo-300 font-black text-xs sm:text-sm px-4 py-3 sm:py-3.5 bg-indigo-500/10 rounded-xl border border-indigo-500/30 shadow-inner active:scale-95 transition-all hover:bg-indigo-500/20">
                                     <Eye className="w-4 h-4" /> عرض
                                   </a>
-                                  <a href={cleanPdfUrl(mySubmission.file_url)} target="_blank" rel="noopener noreferrer" download className="flex-1 flex justify-center items-center gap-2 text-white font-black text-sm px-4 py-3 bg-indigo-600 rounded-xl border border-indigo-700 shadow-sm hover:bg-indigo-700 active:scale-95 transition-all">
+                                  <a href={cleanPdfUrl(mySubmission.file_url)} target="_blank" rel="noopener noreferrer" download className="w-full flex justify-center items-center gap-2 text-white font-black text-xs sm:text-sm px-4 py-3 sm:py-3.5 bg-indigo-600/90 backdrop-blur-md rounded-xl border border-indigo-400/50 shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:bg-indigo-500 active:scale-95 transition-all">
                                     <Download className="w-4 h-4" /> تحميل
                                   </a>
                                 </div>
@@ -842,7 +862,7 @@ const handleDeleteSubmissionAction = async () => {
                   )}
                 </div>
               ) : questions.length > 0 ? (
-                <div className="light-theme-override">
+                <div>
                   <AssignmentForm 
                     questions={sanitizedQuestions} 
                     onSubmit={handleSubmitAnswers} 
@@ -851,9 +871,9 @@ const handleDeleteSubmissionAction = async () => {
                     initialAnswers={myAnswers}
                     readOnly={!!mySubmission}
                   >
-                    <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-sm mt-8">
-                      <label className="block text-sm sm:text-base font-black text-slate-900 mb-4">نص الإجابة الإضافي (اختياري)</label>
-                      <div className="mb-6 rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                    <div className="glass-panel p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-white/10 shadow-inner mt-8">
+                      <label className="block text-sm sm:text-base font-black text-white mb-4 drop-shadow-md">نص الإجابة الإضافي (اختياري)</label>
+                      <div className="mb-6 sm:mb-8 rounded-2xl overflow-hidden border border-white/10 shadow-inner bg-[#02040a]/40 backdrop-blur-md">
                         <ForumEditor 
                            content={content} 
                            setContent={(val: any) => setContent(val)} 
@@ -863,9 +883,9 @@ const handleDeleteSubmissionAction = async () => {
                         />
                       </div>
 
-                      <label className="block text-sm sm:text-base font-black text-slate-900 mb-4">ملف الإجابة (ارفع صورة الحل هنا)</label>
+                      <label className="block text-sm sm:text-base font-black text-white mb-4 drop-shadow-md">ملف الإجابة (ارفع صورة الحل هنا)</label>
                       {!mySubmission ? (
-                        <div className="bg-slate-50 p-2 rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="bg-white/5 p-2 sm:p-3 rounded-2xl sm:rounded-[1.5rem] border border-white/10 shadow-inner backdrop-blur-sm">
                           <ImageUpload
                             initialImageUrl={fileUrl}
                             onUploadSuccess={(url) => setFileUrl(url || '')}
@@ -874,8 +894,8 @@ const handleDeleteSubmissionAction = async () => {
                         </div>
                       ) : (
                         fileUrl && (
-                          <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center shadow-sm">
-                            <img src={cleanPdfUrl(fileUrl)} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
+                          <div className="relative w-full h-48 sm:h-64 mt-2 sm:mt-3 bg-[#02040a]/40 backdrop-blur-md rounded-2xl sm:rounded-[1.5rem] border border-white/10 overflow-hidden flex items-center justify-center shadow-inner p-2">
+                            <img src={cleanPdfUrl(fileUrl)} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl mix-blend-luminosity hover:mix-blend-normal transition-all duration-300" />
                           </div>
                         )
                       )}
@@ -883,11 +903,11 @@ const handleDeleteSubmissionAction = async () => {
                   </AssignmentForm>
                 </div>
               ) : (
-                <form onSubmit={(e) => { e.preventDefault(); handleSubmitAnswers({}); }} className="space-y-8">
-                  <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmitAnswers({}); }} className="space-y-6 sm:space-y-8">
+                  <div className="glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] border-white/10 shadow-inner">
                     <div>
-                      <label className="block text-sm sm:text-base font-black text-slate-900 mb-4">نص الإجابة (اختياري إذا كان هناك ملف)</label>
-                      <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                      <label className="block text-sm sm:text-base font-black text-white mb-4 drop-shadow-md">نص الإجابة (اختياري إذا كان هناك ملف)</label>
+                      <div className="rounded-2xl overflow-hidden border border-white/10 shadow-inner bg-[#02040a]/40 backdrop-blur-md">
                         <ForumEditor 
                            content={content} 
                            setContent={(val: any) => setContent(val)} 
@@ -898,10 +918,10 @@ const handleDeleteSubmissionAction = async () => {
                       </div>
                     </div>
                     
-                    <div className="mt-8">
-                      <label className="block text-sm sm:text-base font-black text-slate-900 mb-4">صورة الواجب (إجباري إذا لم تكتب نصاً)</label>
+                    <div className="mt-8 sm:mt-10">
+                      <label className="block text-sm sm:text-base font-black text-white mb-4 drop-shadow-md">صورة الواجب (إجباري إذا لم تكتب نصاً)</label>
                       {!mySubmission ? (
-                        <div className="bg-slate-50 p-2 rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="bg-white/5 p-2 sm:p-3 rounded-2xl sm:rounded-[1.5rem] border border-white/10 shadow-inner backdrop-blur-sm">
                           <ImageUpload
                             initialImageUrl={fileUrl}
                             onUploadSuccess={(url) => setFileUrl(url || '')}
@@ -910,8 +930,8 @@ const handleDeleteSubmissionAction = async () => {
                         </div>
                       ) : (
                         fileUrl && (
-                          <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center shadow-sm">
-                            <img src={cleanPdfUrl(fileUrl)} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
+                          <div className="relative w-full h-48 sm:h-64 mt-2 sm:mt-3 bg-[#02040a]/40 backdrop-blur-md rounded-2xl sm:rounded-[1.5rem] border border-white/10 overflow-hidden flex items-center justify-center shadow-inner p-2">
+                            <img src={cleanPdfUrl(fileUrl)} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl mix-blend-luminosity hover:mix-blend-normal transition-all duration-300" />
                           </div>
                         )
                       )}
@@ -919,16 +939,16 @@ const handleDeleteSubmissionAction = async () => {
                   </div>
 
                   {!mySubmission && (
-                    <div className="pt-4">
+                    <div className="pt-2 sm:pt-4">
                       <button
                         type="submit"
                         disabled={isSubmitting || (!content && !fileUrl)}
-                        className="w-full flex justify-center items-center gap-3 rounded-2xl bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-md hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-500"
+                        className="w-full flex justify-center items-center gap-2 sm:gap-3 rounded-2xl sm:rounded-[1.5rem] bg-indigo-600/90 backdrop-blur-md px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-black text-white shadow-[0_0_30px_rgba(99,102,241,0.4)] hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-400/50"
                       >
                         {isSubmitting ? (
-                          <div className="h-6 w-6 border-[3px] border-white border-t-transparent rounded-full animate-spin"></div>
+                          <div className="h-5 w-5 sm:h-6 sm:w-6 border-[3px] border-white/30 border-t-white rounded-full animate-spin"></div>
                         ) : (
-                          <Send className="h-6 w-6" />
+                          <Send className="h-5 w-5 sm:h-6 sm:w-6 drop-shadow-md" />
                         )}
                         إرسال وتأكيد التسليم
                       </button>
@@ -940,34 +960,34 @@ const handleDeleteSubmissionAction = async () => {
           </div>
         )}
         
-        {/* واجهة المعلم / الإدارة للتصحيح */}
+        {/* 🚀 واجهة المعلم / الإدارة للتصحيح (Holographic Admin Panel) */}
         {['teacher', 'admin', 'management'].includes(currentRole || '') && (
-          <div className="space-y-8">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
-              <div className="flex items-center gap-1 p-1.5 bg-white rounded-2xl w-fit border border-slate-200 shadow-sm">
+          <div className="space-y-6 sm:space-y-8 relative z-10">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-[#02040a]/60 backdrop-blur-md rounded-xl sm:rounded-2xl w-full sm:w-fit border border-white/10 shadow-inner">
                 <button 
                   onClick={() => setActiveTab('submissions')}
-                  className={`px-6 py-3 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'submissions' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+                  className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${activeTab === 'submissions' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-inner' : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
-                  <Users className="h-4 w-4" />
+                  <Users className="h-4 w-4 drop-shadow-sm" />
                   التسليمات
                 </button>
                 <button 
                   onClick={() => setActiveTab('preview')}
-                  className={`px-6 py-3 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'preview' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+                  className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${activeTab === 'preview' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-inner' : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
-                  <Eye className="h-4 w-4" />
-                  معاينة الطالب
+                  <Eye className="h-4 w-4 drop-shadow-sm" />
+                  معاينة كطالب
                 </button>
               </div>
               
               {activeTab === 'submissions' && uniqueSections.length > 0 && (
-                <div className="relative w-full sm:w-64 z-20">
-                   <Filter className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-indigo-500" />
+                <div className="relative w-full sm:w-64">
+                   <Filter className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-indigo-400 pointer-events-none drop-shadow-sm" />
                    <select 
                       value={selectedSection}
                       onChange={(e) => setSelectedSection(e.target.value)}
-                      className="w-full pl-4 pr-12 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-sm appearance-none cursor-pointer transition-all"
+                      className="w-full pl-4 pr-10 py-3 sm:py-3.5 bg-[#02040a]/60 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-white outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/30 shadow-inner appearance-none cursor-pointer transition-all [&>option]:bg-[#0f1423]"
                    >
                       <option value="الكل">عرض جميع الفصول</option>
                       {uniqueSections.map(sec => (
@@ -979,67 +999,72 @@ const handleDeleteSubmissionAction = async () => {
             </div>
 
             {activeTab === 'submissions' ? (
-              <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl pointer-events-none"></div>
-                <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-3">
-                    <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl shadow-sm border border-indigo-200">
-                      <Users className="h-6 w-6" />
+              <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none mix-blend-screen"></div>
+                
+                <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 relative z-10">
+                  <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-3 drop-shadow-md">
+                    <div className="p-2.5 sm:p-3 bg-indigo-500/10 text-indigo-400 rounded-xl sm:rounded-2xl shadow-inner border border-indigo-500/20">
+                      <Users className="h-5 w-5 sm:h-6 sm:w-6 drop-shadow-sm" />
                     </div>
                     تسليمات الطلاب
                   </h2>
-                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                    <button onClick={exportToExcel} className="flex-1 md:flex-none items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl font-black border border-emerald-200 transition-all flex">
-                      <FileSpreadsheet className="h-4 w-4" /> Excel
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
+                    <button onClick={exportToExcel} className="flex-1 md:flex-none items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-xl font-black border border-emerald-500/30 transition-all flex text-xs sm:text-sm shadow-inner active:scale-95 backdrop-blur-sm">
+                      <FileSpreadsheet className="h-4 w-4 drop-shadow-sm" /> Excel
                     </button>
-                    <button onClick={exportToPDF} className="flex-1 md:flex-none items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl font-black border border-rose-200 transition-all flex">
-                      <Download className="h-4 w-4" /> PDF
+                    <button onClick={exportToPDF} className="flex-1 md:flex-none items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-xl font-black border border-rose-500/30 transition-all flex text-xs sm:text-sm shadow-inner active:scale-95 backdrop-blur-sm">
+                      <Download className="h-4 w-4 drop-shadow-sm" /> PDF
                     </button>
-                    <div className="flex-1 md:flex-none text-center px-4 py-2.5 bg-white rounded-xl shadow-sm border border-slate-200 text-sm font-black text-slate-700">
+                    <div className="w-full md:w-auto text-center px-4 sm:px-5 py-2.5 sm:py-3 bg-white/5 rounded-xl shadow-inner border border-white/10 text-xs sm:text-sm font-black text-slate-300 backdrop-blur-sm mt-2 md:mt-0">
                       الإجمالي: {filteredSubmissions.length}
                     </div>
                   </div>
                 </div>
                 
-                <div className="p-0 relative z-10">
+                <div className="p-0 relative z-10 bg-transparent">
                   {filteredSubmissions.length === 0 ? (
-                    <div className="text-center py-20 bg-slate-50">
-                      <div className="h-20 w-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-200 shadow-sm">
-                        <FileText className="h-10 w-10 text-slate-400" />
+                    <div className="text-center py-16 sm:py-24 bg-[#02040a]/20">
+                      <div className="h-16 w-16 sm:h-20 sm:w-20 bg-[#0f1423] rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5 shadow-inner">
+                        <FileText className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500 drop-shadow-sm" />
                       </div>
-                      <p className="text-slate-500 font-bold text-lg">لا توجد تسليمات متاحة في هذا التصنيف.</p>
+                      <p className="text-slate-400 font-bold text-sm sm:text-lg drop-shadow-sm">لا توجد تسليمات متاحة في هذا التصنيف.</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-white/5">
                       {filteredSubmissions.map((sub) => {
                          const st = sub.student as any;
                          const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
 
                          return (
-                           <div key={sub.id} className="p-6 hover:bg-slate-50 transition-colors group">
-                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                               <div className="flex items-center gap-4 min-w-0">
-                                 <div className="h-14 w-14 rounded-2xl bg-slate-50 flex items-center justify-center text-indigo-600 border border-slate-200 shadow-sm shrink-0 font-black text-xl">
+                           <div key={sub.id} className="p-4 sm:p-5 lg:p-6 hover:bg-white/5 transition-colors group bg-transparent">
+                             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 lg:gap-6">
+                               
+                               <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                 <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-[#0f1423] flex items-center justify-center text-indigo-400 border border-white/5 shadow-inner shrink-0 font-black text-lg sm:text-xl group-hover:border-indigo-500/30 group-hover:scale-105 transition-all">
                                    {st?.users?.full_name?.charAt(0) || st?.user?.full_name?.charAt(0) || 'ط'}
                                  </div>
                                  <div className="min-w-0 pr-1">
-                                   <h3 className="font-black text-slate-900 text-base sm:text-lg truncate group-hover:text-indigo-600 transition-colors">{st?.users?.full_name || st?.user?.full_name || 'طالب غير معروف'}</h3>
-                                   <p className="text-xs sm:text-sm font-bold text-slate-500 mt-1 flex items-center gap-1.5">
-                                     <Clock className="h-3.5 w-3.5" />
-                                     <span dir="ltr">{new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
-                                   </p>
-                                   <p className="text-[10px] font-black text-indigo-700 mt-1.5 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 inline-block truncate max-w-full">
-                                      {getStudentSectionName(st)}
-                                   </p>
+                                   <h3 className="font-black text-white text-sm sm:text-base lg:text-lg truncate group-hover:text-indigo-300 transition-colors drop-shadow-md">{st?.users?.full_name || st?.user?.full_name || 'طالب غير معروف'}</h3>
+                                   <div className="flex flex-wrap items-center gap-2 mt-1 sm:mt-1.5">
+                                      <p className="text-[10px] sm:text-xs font-bold text-slate-400 flex items-center gap-1.5 drop-shadow-sm">
+                                        <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 opacity-70" />
+                                        <span dir="ltr">{new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
+                                      </p>
+                                      <span className="text-[9px] sm:text-[10px] font-black text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 truncate max-w-[120px] sm:max-w-xs shadow-inner">
+                                         {getStudentSectionName(st)}
+                                      </span>
+                                   </div>
                                  </div>
                                </div>
-                               <div className="flex items-center gap-3 justify-end border-t md:border-0 pt-4 md:pt-0 mt-2 md:mt-0 border-slate-100 w-full md:w-auto shrink-0">
+
+                               <div className="flex items-center justify-end gap-2 sm:gap-3 border-t lg:border-0 pt-3 lg:pt-0 border-white/5 w-full lg:w-auto shrink-0 mt-2 lg:mt-0">
                                  {isGraded ? (
-                                   <div className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 shadow-sm">
-                                     <CheckCircle2 className="w-4 h-4" /> الدرجة: {sub.grade}
+                                   <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black flex items-center gap-1.5 sm:gap-2 shadow-inner backdrop-blur-sm">
+                                     <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 drop-shadow-sm" /> الدرجة: <span className="text-sm sm:text-base">{sub.grade}</span>
                                    </div>
                                  ) : (
-                                   <span className="px-4 py-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl text-xs sm:text-sm font-black animate-pulse shadow-sm">
+                                   <span className="px-3 sm:px-4 py-1.5 sm:py-2 bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black animate-pulse shadow-inner backdrop-blur-sm">
                                      بانتظار التقييم
                                    </span>
                                  )}
@@ -1047,20 +1072,21 @@ const handleDeleteSubmissionAction = async () => {
                                  {canEdit && (
                                    <button
                                      onClick={() => setSubmissionToDelete(sub.id)}
-                                     className="h-11 w-11 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all shadow-sm border border-rose-200 active:scale-95 shrink-0"
+                                     className="h-9 w-9 sm:h-10 sm:w-10 lg:h-11 lg:w-11 flex items-center justify-center rounded-lg sm:rounded-xl bg-white/5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/30 transition-all shadow-inner border border-white/10 active:scale-95 shrink-0"
                                      title="حذف هذا التسليم لإتاحة الفرصة للطالب"
                                    >
-                                     <Trash2 className="h-5 w-5" />
+                                     <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" />
                                    </button>
                                  )}
 
                                  <Link 
                                    href={`/assignments/${assignmentId}/submissions/${sub.id}`}
-                                   className="h-11 px-4 sm:px-6 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-black hover:bg-indigo-700 transition-all flex items-center justify-center shadow-md border border-indigo-500 active:scale-95 flex-1 md:flex-none"
+                                   className="h-9 sm:h-10 lg:h-11 px-4 sm:px-5 lg:px-6 rounded-lg sm:rounded-xl bg-indigo-600/90 backdrop-blur-md text-white text-[10px] sm:text-xs lg:text-sm font-black hover:bg-indigo-500 transition-all flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.3)] border border-indigo-400/50 active:scale-95 flex-1 lg:flex-none"
                                  >
                                    تصحيح وتقييم
                                  </Link>
                                </div>
+
                              </div>
                            </div>
                          );
@@ -1070,13 +1096,13 @@ const handleDeleteSubmissionAction = async () => {
                 </div>
               </div>
             ) : (
-              <div className="max-w-3xl mx-auto">
-                <div className="mb-8 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-bold flex items-center gap-3 shadow-sm">
-                  <AlertCircle className="h-6 w-6 shrink-0" />
-                  هذه معاينة لما يراه الطالب في صفحة التسليم. لن يتم حفظ أي إجابات تقوم بإدخالها هنا.
+              <div className="max-w-4xl mx-auto">
+                <div className="mb-6 sm:mb-8 p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs sm:text-sm font-black flex items-center gap-2 sm:gap-3 shadow-inner backdrop-blur-sm">
+                  <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 drop-shadow-md" />
+                  <span className="leading-relaxed drop-shadow-sm">هذه معاينة لما يراه الطالب في صفحة التسليم. لن يتم حفظ أي إجابات تقوم بإدخالها هنا.</span>
                 </div>
                 {questions.length > 0 ? (
-                  <div id="assignment-form-container" className="light-theme-override">
+                  <div id="assignment-form-container">
                     <AssignmentForm 
                       questions={sanitizedQuestions} 
                       onSubmit={() => showNotification('success', 'هذه معاينة فقط، لم يتم حفظ الإجابة')} 
@@ -1084,13 +1110,13 @@ const handleDeleteSubmissionAction = async () => {
                     />
                   </div>
                 ) : (
-                  <div className="bg-white p-12 rounded-[2.5rem] border border-slate-200 text-center shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl pointer-events-none"></div>
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-200 shadow-sm relative z-10">
-                      <FileText className="h-10 w-10 text-slate-400" />
+                  <div className="glass-panel p-10 sm:p-14 rounded-[2rem] sm:rounded-[3rem] border border-white/10 text-center shadow-inner relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none mix-blend-screen group-hover:scale-150 transition-transform duration-700"></div>
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#0f1423] rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-5 sm:mb-6 border border-white/5 shadow-inner relative z-10 group-hover:scale-110 transition-transform duration-300">
+                      <FileText className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500 drop-shadow-md" />
                     </div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-2 relative z-10">لا توجد أسئلة تفاعلية</h3>
-                    <p className="text-slate-500 font-bold relative z-10">هذا الواجب يعتمد على رفع ملف من قِبل الطالب. يمكنك إضافة أسئلة من خلال التعديل.</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mb-2 relative z-10 drop-shadow-md">لا توجد أسئلة تفاعلية</h3>
+                    <p className="text-slate-400 font-bold text-xs sm:text-sm relative z-10">هذا الواجب يعتمد على رفع ملف من قِبل الطالب. يمكنك إضافة أسئلة من خلال التعديل.</p>
                   </div>
                 )}
               </div>
@@ -1099,116 +1125,126 @@ const handleDeleteSubmissionAction = async () => {
         )}
       </div>
 
+      {/* 🚀 النوافذ المنبثقة (Glass Modals) */}
+      
+      {/* نافذة الحذف الشامل */}
       <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-[90%] sm:w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 p-6 sm:p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
-            <div className="h-14 w-14 sm:h-16 sm:w-16 bg-rose-50 border border-rose-200 rounded-2xl sm:rounded-3xl flex items-center justify-center mb-5 sm:mb-6 shadow-sm mx-auto sm:mx-0">
-              <Trash2 className="h-6 w-6 sm:h-8 sm:w-8 text-rose-600" />
+          <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-[90%] sm:w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] glass-panel border border-rose-500/30 p-6 sm:p-8 shadow-[0_0_60px_rgba(225,29,72,0.2)] focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 blur-[40px] rounded-full pointer-events-none mix-blend-screen"></div>
+            <div className="h-14 w-14 sm:h-16 sm:w-16 bg-rose-500/10 border border-rose-500/20 rounded-2xl sm:rounded-3xl flex items-center justify-center mb-5 sm:mb-6 shadow-inner mx-auto sm:mx-0 backdrop-blur-sm relative z-10">
+              <Trash2 className="h-6 w-6 sm:h-8 sm:w-8 text-rose-400 drop-shadow-md" />
             </div>
-            <Dialog.Title className="text-xl sm:text-2xl font-black text-slate-900 mb-2 tracking-tight text-center sm:text-right">
+            <Dialog.Title className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight text-center sm:text-right drop-shadow-md relative z-10">
               تأكيد الحذف الشامل
             </Dialog.Title>
-            <p className="text-slate-500 font-bold mb-6 sm:mb-8 leading-relaxed text-sm sm:text-base text-center sm:text-right px-2 sm:px-0">هل أنت متأكد من رغبتك في حذف هذا الواجب نهائياً؟ سيتم مسح الواجب، والمرفقات، وجميع إجابات وتقييمات الطلاب المرتبطة به نهائياً ولن تتمكن من التراجع.</p>
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <p className="text-slate-400 font-bold mb-6 sm:mb-8 leading-relaxed text-sm sm:text-base text-center sm:text-right px-2 sm:px-0 relative z-10">هل أنت متأكد من رغبتك في حذف هذا الواجب نهائياً؟ سيتم مسح الواجب، والمرفقات، وجميع إجابات وتقييمات الطلاب المرتبطة به نهائياً ولن تتمكن من التراجع.</p>
+            <div className="flex flex-col sm:flex-row justify-end gap-3 relative z-10">
               <Dialog.Close asChild>
-                <button className="flex-1 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-600 hover:bg-slate-100 transition-all active:scale-95 shadow-sm">
+                <button className="flex-1 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-300 hover:bg-white/10 hover:text-white transition-all active:scale-95 shadow-inner backdrop-blur-sm">
                   إلغاء
                 </button>
               </Dialog.Close>
               <button
                 onClick={handleDeleteAssignmentAction}
-                disabled={loading}
-                className="flex-1 rounded-xl sm:rounded-2xl bg-rose-600 border border-rose-500 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white hover:bg-rose-700 transition-all active:scale-95 disabled:opacity-50 shadow-md"
+                disabled={loading || isDeletingSubmission}
+                className="flex-1 rounded-xl sm:rounded-2xl bg-rose-600/90 backdrop-blur-md border border-rose-400/50 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white hover:bg-rose-500 transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(225,29,72,0.4)] flex items-center justify-center gap-2"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : 'تأكيد الحذف نهائياً'}
+                {(loading || isDeletingSubmission) ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin mx-auto"/> : 'تأكيد الحذف نهائياً'}
               </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* نافذة إلغاء تسليم طالب */}
       <Dialog.Root open={!!submissionToDelete} onOpenChange={(open) => !open && setSubmissionToDelete(null)}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-[90%] sm:w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 p-6 sm:p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
-            <div className="h-14 w-14 sm:h-16 sm:w-16 bg-amber-50 border border-amber-200 rounded-2xl sm:rounded-3xl flex items-center justify-center mb-5 sm:mb-6 shadow-sm mx-auto sm:mx-0">
-              <AlertTriangle className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600" />
+          <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-[90%] sm:w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] glass-panel border border-amber-500/30 p-6 sm:p-8 shadow-[0_0_60px_rgba(245,158,11,0.15)] focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[40px] rounded-full pointer-events-none mix-blend-screen"></div>
+            <div className="h-14 w-14 sm:h-16 sm:w-16 bg-amber-500/10 border border-amber-500/20 rounded-2xl sm:rounded-3xl flex items-center justify-center mb-5 sm:mb-6 shadow-inner mx-auto sm:mx-0 backdrop-blur-sm relative z-10">
+              <AlertTriangle className="h-6 w-6 sm:h-8 sm:w-8 text-amber-400 drop-shadow-md" />
             </div>
-            <Dialog.Title className="text-xl sm:text-2xl font-black text-slate-900 mb-2 tracking-tight text-center sm:text-right">
+            <Dialog.Title className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight text-center sm:text-right drop-shadow-md relative z-10">
               إلغاء تسليم الطالب
             </Dialog.Title>
-            <p className="text-slate-500 font-bold mb-6 sm:mb-8 leading-relaxed text-sm sm:text-base text-center sm:text-right px-2 sm:px-0">هل أنت متأكد أنك تريد حذف هذا التسليم وإجاباته؟ سيُسمح للطالب بإعادة تسليم الواجب من جديد إذا لم ينتهِ الوقت.</p>
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <p className="text-slate-400 font-bold mb-6 sm:mb-8 leading-relaxed text-sm sm:text-base text-center sm:text-right px-2 sm:px-0 relative z-10">هل أنت متأكد أنك تريد حذف هذا التسليم وإجاباته؟ سيُسمح للطالب بإعادة تسليم الواجب من جديد إذا لم ينتهِ الوقت.</p>
+            <div className="flex flex-col sm:flex-row justify-end gap-3 relative z-10">
               <Dialog.Close asChild>
-                <button className="flex-1 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-600 hover:bg-slate-100 transition-all active:scale-95 shadow-sm">
+                <button className="flex-1 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-300 hover:bg-white/10 hover:text-white transition-all active:scale-95 shadow-inner backdrop-blur-sm">
                   إلغاء
                 </button>
               </Dialog.Close>
               <button 
                 onClick={handleDeleteSubmissionAction} 
                 disabled={isDeletingSubmission} 
-                className="flex-1 rounded-xl sm:rounded-2xl bg-amber-500 border border-amber-500 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white hover:bg-amber-600 transition-all active:scale-95 disabled:opacity-50 shadow-md"
+                className="flex-1 rounded-xl sm:rounded-2xl bg-amber-500/90 backdrop-blur-md border border-amber-400/50 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-[#02040a] hover:bg-amber-400 transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2"
               >
-                {isDeletingSubmission ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : 'تأكيد الإلغاء'}
+                {isDeletingSubmission ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin mx-auto"/> : 'تأكيد الإلغاء'}
               </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* نافذة التعديل السريع (الوقت) */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-[95%] sm:w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 p-6 sm:p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 custom-scrollbar" dir="rtl">
-            <div className="flex items-center justify-between mb-6 sm:mb-8 pb-5 sm:pb-6 border-b border-slate-100">
+          <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-[95%] sm:w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] glass-panel border border-indigo-500/30 p-6 sm:p-8 shadow-[0_0_60px_rgba(99,102,241,0.2)] focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 custom-scrollbar" dir="rtl">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[60px] rounded-full pointer-events-none mix-blend-screen"></div>
+            
+            <div className="flex items-center justify-between mb-6 sm:mb-8 pb-5 sm:pb-6 border-b border-white/5 relative z-10">
               <div className="flex items-center gap-3 sm:gap-4">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-indigo-50 border border-indigo-100 shadow-sm flex items-center justify-center shrink-0">
-                  <Clock className="h-6 w-6 sm:h-7 sm:w-7 text-indigo-600" />
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-indigo-500/10 border border-indigo-500/20 shadow-inner flex items-center justify-center shrink-0 backdrop-blur-sm">
+                  <Clock className="h-6 w-6 sm:h-7 sm:w-7 text-indigo-400 drop-shadow-md" />
                 </div>
                 <div>
-                  <Dialog.Title className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">تعديل سريع للوقت</Dialog.Title>
-                  <p className="text-xs sm:text-sm text-slate-500 font-bold mt-1">تعديل عنوان الواجب وتمديد وقت التسليم فقط</p>
+                  <Dialog.Title className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-md">تعديل سريع للوقت</Dialog.Title>
+                  <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">تعديل عنوان الواجب وتمديد وقت التسليم فقط</p>
                 </div>
               </div>
-              <Dialog.Close className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center rounded-lg sm:rounded-xl bg-slate-50 border border-slate-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors shadow-sm active:scale-90">
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              <Dialog.Close className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center rounded-lg sm:rounded-xl bg-white/5 border border-white/10 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors shadow-inner active:scale-90 backdrop-blur-sm">
+                <X className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" />
               </Dialog.Close>
             </div>
             
-            <form onSubmit={handleUpdateAssignment} className="space-y-6">
+            <form onSubmit={handleUpdateAssignment} className="space-y-6 relative z-10">
               <div className="space-y-5">
-                <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">عنوان الواجب <span className="text-rose-500">*</span></label>
+                <div className="bg-[#02040a]/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
+                  <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 drop-shadow-sm">عنوان الواجب <span className="text-rose-500">*</span></label>
                   <input 
                     type="text" 
                     required 
-                    className="block w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3.5 sm:py-4 px-4 sm:px-5 text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs sm:text-sm transition-all font-bold outline-none" 
+                    className="block w-full rounded-xl sm:rounded-2xl border border-white/10 py-3.5 sm:py-4 px-4 sm:px-5 text-white bg-white/5 focus:bg-white/10 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 text-xs sm:text-sm transition-all font-bold outline-none shadow-inner" 
                     value={editData.title || ''} 
                     onChange={(e) => setEditData({...editData, title: e.target.value})} 
                   />
                 </div>
-                <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">تاريخ ووقت التسليم الجديد <span className="text-rose-500">*</span></label>
+                <div className="bg-[#02040a]/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
+                  <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 drop-shadow-sm">تاريخ ووقت التسليم الجديد <span className="text-rose-500">*</span></label>
                   <input 
                     type="datetime-local" 
                     required 
                     dir="ltr" 
-                    className="block w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3.5 sm:py-4 px-4 sm:px-5 text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-[10px] sm:text-xs transition-all font-bold text-left outline-none" 
+                    className="block w-full rounded-xl sm:rounded-2xl border border-white/10 py-3.5 sm:py-4 px-4 sm:px-5 text-white bg-white/5 focus:bg-white/10 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 text-[10px] sm:text-xs transition-all font-bold text-left outline-none shadow-inner" 
+                    style={{ colorScheme: 'dark' }}
                     value={editData.due_date ? new Date(new Date(editData.due_date).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''} 
                     onChange={(e) => setEditData({...editData, due_date: e.target.value})} 
                   />
                 </div>
               </div>
 
-              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-5 sm:pt-6 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-5 sm:pt-6 border-t border-white/5">
                 <Dialog.Close asChild>
-                  <button type="button" className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-600 hover:bg-slate-100 transition-all active:scale-95 shadow-sm">
+                  <button type="button" className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-300 hover:bg-white/10 hover:text-white transition-all active:scale-95 shadow-inner backdrop-blur-sm">
                     إلغاء
                   </button>
                 </Dialog.Close>
-                <button type="submit" disabled={isSubmittingEdit} className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-indigo-600 border border-indigo-600 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 shadow-md">
-                  {isSubmittingEdit ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin mx-auto"/> : 'حفظ التمديد'}
+                <button type="submit" disabled={isSubmittingEdit} className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-indigo-600/90 backdrop-blur-md border border-indigo-400/50 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(99,102,241,0.4)] flex items-center justify-center gap-2">
+                  {isSubmittingEdit ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin mx-auto"/> : <><CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-sm" /> حفظ التمديد</>}
                 </button>
               </div>
             </form>
@@ -1216,50 +1252,53 @@ const handleDeleteSubmissionAction = async () => {
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* نافذة التعديل الشامل للواجب */}
       <Dialog.Root open={isFullEditModalOpen} onOpenChange={setIsFullEditModalOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
+          <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
           <Dialog.Content 
             onInteractOutside={(e) => e.preventDefault()} 
             onEscapeKeyDown={(e) => e.preventDefault()}
-            className="fixed left-[50%] top-[50%] z-50 w-[95%] sm:w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 p-5 sm:p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 custom-scrollbar" 
+            className="fixed left-[50%] top-[50%] z-50 w-[95%] sm:w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] rounded-[2rem] sm:rounded-[2.5rem] glass-panel border border-amber-500/30 p-5 sm:p-8 shadow-[0_0_60px_rgba(245,158,11,0.15)] focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 custom-scrollbar" 
             dir="rtl"
           >
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 pb-5 sm:pb-6 border-b border-slate-100 gap-4">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 blur-[80px] rounded-full pointer-events-none mix-blend-screen"></div>
+            
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 pb-5 sm:pb-6 border-b border-white/5 gap-4 relative z-10">
               <div className="flex items-center gap-3 sm:gap-4">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-amber-50 border border-amber-200 shadow-sm flex items-center justify-center shrink-0">
-                  <Edit2 className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600" />
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-amber-500/10 border border-amber-500/20 shadow-inner flex items-center justify-center shrink-0 backdrop-blur-md">
+                  <Edit2 className="h-6 w-6 sm:h-7 sm:w-7 text-amber-400 drop-shadow-md" />
                 </div>
                 <div>
-                  <Dialog.Title className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  <Dialog.Title className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-md">
                     تعديل شامل للواجب
                   </Dialog.Title>
-                  <p className="text-xs sm:text-sm text-slate-500 font-bold mt-1">يمكنك تعديل المرفقات، الوصف، والأسئلة التفاعلية</p>
+                  <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">يمكنك تعديل المرفقات، الوصف، والأسئلة التفاعلية</p>
                 </div>
               </div>
-              <Dialog.Close className="absolute sm:relative top-5 left-5 sm:top-auto sm:left-auto h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center rounded-lg sm:rounded-xl bg-slate-50 border border-slate-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors shadow-sm active:scale-90">
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              <Dialog.Close className="absolute sm:relative top-5 left-5 sm:top-auto sm:left-auto h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center rounded-lg sm:rounded-xl bg-white/5 border border-white/10 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors shadow-inner active:scale-90 backdrop-blur-sm">
+                <X className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" />
               </Dialog.Close>
             </div>
             
-            <form onSubmit={handleSaveFullEdit} className="space-y-6 sm:space-y-10">
+            <form onSubmit={handleSaveFullEdit} className="space-y-6 sm:space-y-10 relative z-10">
               <div className="space-y-6 sm:space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
                   <div className="space-y-5 sm:space-y-6">
-                    <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
-                      <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">عنوان الواجب <span className="text-rose-500">*</span></label>
+                    <div className="bg-[#02040a]/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 drop-shadow-sm">عنوان الواجب <span className="text-rose-500">*</span></label>
                       <input 
                         type="text" 
                         required
-                        className="block w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3.5 sm:py-4 px-4 sm:px-5 text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs sm:text-sm transition-all font-bold outline-none"
+                        className="block w-full rounded-xl sm:rounded-2xl border border-white/10 py-3.5 sm:py-4 px-4 sm:px-5 text-white bg-white/5 focus:bg-white/10 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 text-xs sm:text-sm transition-all font-bold outline-none shadow-inner"
                         value={editData.title || ''}
                         onChange={(e) => setEditData({...editData, title: e.target.value})}
                       />
                     </div>
                   
-                    <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
-                      <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">الوصف والتعليمات</label>
-                      <div className="bg-white p-2 rounded-xl sm:rounded-2xl border border-slate-200 flex flex-col min-h-[300px]">
+                    <div className="bg-[#02040a]/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner flex flex-col min-h-[300px]">
+                      <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 drop-shadow-sm">الوصف والتعليمات</label>
+                      <div className="bg-transparent rounded-xl sm:rounded-2xl border-none flex-1 flex flex-col overflow-visible">
                         <ForumEditor 
                           content={editDescription}
                           setContent={setEditDescription}
@@ -1268,33 +1307,35 @@ const handleDeleteSubmissionAction = async () => {
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
-                      <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">تاريخ التسليم <span className="text-rose-500">*</span></label>
+                    <div className="bg-[#02040a]/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 drop-shadow-sm">تاريخ التسليم <span className="text-rose-500">*</span></label>
                       <input 
                         type="datetime-local" 
                         required
-                        className="block w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3.5 sm:py-4 px-3 sm:px-4 text-slate-900 bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-[10px] sm:text-xs transition-all font-bold text-left outline-none"
+                        className="block w-full rounded-xl sm:rounded-2xl border border-white/10 py-3.5 sm:py-4 px-3 sm:px-4 text-white bg-white/5 focus:bg-white/10 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 text-[10px] sm:text-xs transition-all font-bold text-left outline-none shadow-inner"
+                        style={{ colorScheme: 'dark' }}
                         dir="ltr"
                         value={editData.due_date || ''}
                         onChange={(e) => setEditData({...editData, due_date: e.target.value})}
                       />
                     </div>
 
-                    <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
-                      <label className="flex items-center gap-2 text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-                        <Users className="w-4 h-4 text-indigo-500" />
+                    <div className="bg-[#02040a]/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="flex items-center gap-2 text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-4 drop-shadow-sm">
+                        <Users className="w-4 h-4 text-indigo-400" />
                         الشعب المستهدفة <span className="text-rose-500">*</span>
                       </label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 max-h-52 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
                         {sections.map((s: any) => {
                           const classObj = s.classes || s.class;
                           const cName = Array.isArray(classObj) ? classObj[0]?.name : classObj?.name;
+                          const isChecked = editSectionIds.includes(s.id);
                           return (
-                            <label key={s.id} className={`flex items-center gap-2 sm:gap-3 cursor-pointer group p-2.5 sm:p-3 rounded-xl border transition-all shadow-sm ${editSectionIds.includes(s.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-100'}`}>
+                            <label key={s.id} className={`flex items-center gap-2 sm:gap-3 cursor-pointer group p-2.5 sm:p-3 rounded-xl border transition-all shadow-inner ${isChecked ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/5 border-white/10 text-slate-400 hover:border-indigo-500/30 hover:bg-white/10'}`}>
                               <input
                                 type="checkbox"
                                 className="hidden"
-                                checked={editSectionIds.includes(s.id)}
+                                checked={isChecked}
                                 onChange={(e) => {
                                   const newSectionIds = e.target.checked
                                     ? [...editSectionIds, s.id]
@@ -1302,8 +1343,8 @@ const handleDeleteSubmissionAction = async () => {
                                   setEditSectionIds(newSectionIds);
                                 }}
                               />
-                              <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-[0.4rem] border flex items-center justify-center shrink-0 transition-colors ${editSectionIds.includes(s.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'}`}>
-                                 {editSectionIds.includes(s.id) && <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" />}
+                              <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-[0.4rem] border flex items-center justify-center shrink-0 transition-colors shadow-inner ${isChecked ? 'bg-indigo-500 border-indigo-400' : 'border-white/20 bg-[#02040a]'}`}>
+                                 {isChecked && <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white drop-shadow-md" />}
                               </div>
                               <span className="text-xs sm:text-sm font-bold truncate">
                                 {cName ? `${cName} - ${s.name}` : s.name}
@@ -1314,12 +1355,12 @@ const handleDeleteSubmissionAction = async () => {
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
-                      <label className="flex items-center gap-2 text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-3 sm:mb-4">
-                        <ImageIcon className="w-4 h-4 text-indigo-500" />
+                    <div className="bg-[#02040a]/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="flex items-center gap-2 text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-3 sm:mb-4 drop-shadow-sm">
+                        <ImageIcon className="w-4 h-4 text-indigo-400" />
                         المرفق الحالي / تعديل
                       </label>
-                      <div className="bg-white rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-slate-200 shadow-sm">
+                      <div className="bg-white/5 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-white/10 shadow-inner">
                         <ImageUpload
                           initialImageUrl={editFileUrl}
                           onUploadSuccess={(url) => setEditFileUrl(url || '')}
@@ -1330,13 +1371,12 @@ const handleDeleteSubmissionAction = async () => {
                   </div>
 
                   {/* Right Column: Question Builder */}
-                  <div className="bg-slate-50 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 lg:p-8 border border-slate-200 shadow-sm relative overflow-hidden h-fit">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-[60px] pointer-events-none"></div>
-                    <div className="flex items-center gap-2 sm:gap-3 mb-5 sm:mb-6 relative z-10">
-                      <div className="p-2 bg-indigo-100 border border-indigo-200 rounded-lg sm:rounded-xl shadow-sm shrink-0">
-                         <Layout className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600" />
+                  <div className="bg-transparent rounded-[1.5rem] sm:rounded-[2rem] p-0 border-none relative overflow-visible h-fit">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-5 sm:mb-6 relative z-10 bg-[#02040a]/40 backdrop-blur-md p-4 rounded-2xl border border-white/5 shadow-inner">
+                      <div className="p-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg sm:rounded-xl shadow-inner shrink-0">
+                         <Layout className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400 drop-shadow-md" />
                       </div>
-                      <h4 className="text-base sm:text-lg font-black text-slate-900">بناء الأسئلة التفاعلية</h4>
+                      <h4 className="text-base sm:text-lg font-black text-white drop-shadow-md">بناء الأسئلة التفاعلية</h4>
                     </div>
                     <div className="relative z-10">
                       <AssignmentBuilder questions={editQuestions} onChange={setEditQuestions} />
@@ -1345,11 +1385,11 @@ const handleDeleteSubmissionAction = async () => {
                 </div>
               </div>
 
-              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4 pt-6 sm:pt-8 border-t border-slate-200">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 sm:pt-8 border-t border-white/5 relative z-10">
                 <Dialog.Close asChild>
                   <button
                     type="button"
-                    className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-600 hover:bg-slate-100 transition-all active:scale-95 shadow-sm"
+                    className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-300 hover:bg-white/10 hover:text-white transition-all active:scale-95 shadow-inner"
                   >
                     إلغاء الأمر
                   </button>
@@ -1357,12 +1397,12 @@ const handleDeleteSubmissionAction = async () => {
                 <button
                   type="submit"
                   disabled={isSubmittingEdit}
-                  className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-indigo-600 border border-indigo-600 px-6 sm:px-10 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-indigo-600/90 backdrop-blur-md border border-indigo-400/50 px-6 sm:px-10 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(99,102,241,0.4)]"
                 >
                   {isSubmittingEdit ? (
-                    <><div className="h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> جاري الحفظ...</>
+                    <><Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> جاري الحفظ...</>
                   ) : (
-                    <><CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" /> اعتماد التعديلات الشاملة</>
+                    <><CheckCircle2 className="w-4 h-4 sm:h-5 sm:w-5 drop-shadow-md" /> اعتماد التعديلات الشاملة</>
                   )}
                 </button>
               </div>
@@ -1371,35 +1411,6 @@ const handleDeleteSubmissionAction = async () => {
         </Dialog.Portal>
       </Dialog.Root>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar-light::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scrollbar-light::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
-        .custom-scrollbar-light::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
-        .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .table-responsive-wrapper {
-          width: 100%;
-          max-width: 100vw;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 8px;
-          margin-bottom: 1rem;
-          display: block;
-        }
-        
-        .table-responsive-wrapper table {
-          width: 100% !important;
-          min-width: 600px !important;
-          border-collapse: collapse !important;
-          table-layout: auto !important;
-        }
-
-        .table-responsive-wrapper th, .table-responsive-wrapper td {
-          white-space: normal !important;
-          word-wrap: break-word !important;
-          padding: 1rem !important;
-        }
-      `}} />
     </div>
   );
 }
