@@ -34,6 +34,10 @@ import { cn } from '../../../lib/utils';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
 import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
 
+// 🚀 هذا هو الجزء الذي نسيناه في النسخة السابقة (متغيرات الحركة)
+const containerVariants: any = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+const itemVariants: any = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } } };
+
 const checkIsLocked = (examData: any) => {
   if (!examData?.exam_date) return false;
   try {
@@ -79,7 +83,6 @@ export default function StudentDashboard() {
   const [existingDocRequest, setExistingDocRequest] = useState<any>(null);
   const [isSubmittingDocs, setIsSubmittingDocs] = useState(false);
 
-  // 🛡️ قفل الجلب لمنع الحلقة المفرغة (Infinite Loop Shield)
   const isFetchingRef = useRef(false);
 
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -97,13 +100,10 @@ export default function StudentDashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // 🛡️ هندسة جلب البيانات المنيعة ضد الانهيار
   useEffect(() => {
-    // 1. الخروج فوراً إذا كنا في مرحلة التحقق، أو لم يكتمل الـ mount، أو تم الجلب مسبقاً
     if (isChecking || !user || authRole !== 'student' || !mounted || isFetchingRef.current) return;
 
     const loadDashboardData = async () => {
-      // 2. إغلاق القفل بقوة لمنع أي إعادة تشغيل
       isFetchingRef.current = true;
       
       try {
@@ -185,7 +185,6 @@ export default function StudentDashboard() {
         console.error('Error fetching dashboard data:', error); 
       } finally { 
         if (mounted) setLoading(false); 
-        // ❌ لا نرجع القفل إلى false أبداً لمنع الحلقة المفرغة!
       }
     };
 
@@ -274,7 +273,7 @@ export default function StudentDashboard() {
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 font-sans pt-2 sm:pt-6" dir="rtl">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen relative bg-transparent text-slate-100 pb-32 font-sans pt-2 sm:pt-6" dir="rtl">
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto relative z-10">
 
         {studentData?.id && ( 
@@ -282,7 +281,7 @@ export default function StudentDashboard() {
         )}
         
         {/* 🚀 الهيدر الرئيسي للطالب (Holographic Blue Glass) */}
-        <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-blue-500/30 group">
+        <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-blue-500/30 group">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110 opacity-50"></div>
           <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
             <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-right">
@@ -308,9 +307,9 @@ export default function StudentDashboard() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* 🚀 ההوية الامتحانية (Glass Modal Style) */}
+        {/* 🚀 الهوية الامتحانية */}
         <AnimatePresence>
           {seatAllocation && (
              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-rose-500/30 flex flex-col lg:flex-row items-center justify-between gap-8 group">
@@ -324,7 +323,6 @@ export default function StudentDashboard() {
                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-4">📍 الموقع: {seatAllocation.exam_committees?.location || 'المبنى الرئيسي'}</p>
                 </div>
                 
-                {/* البطاقة ثلاثية الأبعاد (هولوجرامية) */}
                 <div className="shrink-0 perspective-1000 hidden md:block">
                    <div className="w-[65mm] min-h-[100mm] pb-4 border-[2px] border-white/10 rounded-[2rem] relative flex flex-col items-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-[#02040a]/80 backdrop-blur-2xl group-hover:scale-105 group-hover:border-rose-500/30 transition-all duration-500 overflow-hidden">
                       <div className="w-full h-[25mm] bg-rose-600/20 backdrop-blur-md pt-3 border-b border-rose-500/30 shrink-0">
@@ -538,7 +536,7 @@ export default function StudentDashboard() {
 
         {/* 🚀 البانر السينمائي (مجلس الصف) - Glass Style */}
         {studentData?.section_id && (
-          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-indigo-500/30 group">
+          <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-indigo-500/30 group">
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
             
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
@@ -611,7 +609,7 @@ export default function StudentDashboard() {
 
         {/* ⏳ العداد التنازلي للاختبارات */}
         {(nextOfficialExam) && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-rose-500/20 flex flex-col md:flex-row gap-6 items-center justify-between text-center md:text-right group">
+            <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-rose-500/20 flex flex-col md:flex-row gap-6 items-center justify-between text-center md:text-right group">
               <div className="absolute inset-0 bg-rose-600/5 blur-[80px] pointer-events-none mix-blend-screen opacity-50 group-hover:opacity-100 transition-opacity duration-1000"></div>
               
               <div className="relative z-10 w-full flex flex-col items-center justify-center text-center">
@@ -626,39 +624,8 @@ export default function StudentDashboard() {
             </motion.div>
         )}
 
-        {/* Track Selection (For 10th Grade) */}
-        {isTenthGrade && !hasSelectedTrack && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2.5rem] glass-panel border-amber-500/30 p-6 sm:p-8 shadow-[0_0_40px_rgba(245,158,11,0.15)] relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-[80px] pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
-            <div className="flex flex-col md:flex-row items-center gap-6 sm:gap-8 relative z-10 text-center md:text-right">
-              <div className="p-4 sm:p-5 bg-amber-500/10 backdrop-blur-md rounded-[2rem] shadow-inner border border-amber-500/20 shrink-0 group-hover:scale-110 transition-transform duration-500"><Target className="h-10 w-10 sm:h-12 sm:w-12 text-amber-400 animate-pulse drop-shadow-md" /></div>
-              <div className="flex-1">
-                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white mb-2 sm:mb-3 tracking-tight drop-shadow-lg">تحديد المسار الأكاديمي للعام القادم</h2>
-                <p className="text-slate-200 font-bold text-xs sm:text-sm leading-relaxed drop-shadow-sm">يرجى اختيار المسار الأكاديمي (علمي أو أدبي) الذي ترغب في دراسته في الصف الحادي عشر.</p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full md:w-auto shrink-0">
-                <button onClick={() => handleTrackSelection('scientific')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-blue-600/90 backdrop-blur-md text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:bg-blue-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-blue-400/50">المسار العلمي</button>
-                <button onClick={() => handleTrackSelection('literary')} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-emerald-600/90 backdrop-blur-md text-white rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-500 transition-all hover:scale-105 active:scale-95 w-full sm:w-auto border border-emerald-400/50">المسار الأدبي</button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {isTenthGrade && hasSelectedTrack && (
-          <div className="rounded-[2rem] glass-panel border-emerald-500/30 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm backdrop-blur-xl">
-            <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-right">
-              <div className="p-3 bg-emerald-500/10 backdrop-blur-md rounded-2xl shrink-0 border border-emerald-500/20 shadow-inner"><CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-400 drop-shadow-sm" /></div>
-              <div>
-                <p className="text-base sm:text-lg font-black text-emerald-400 drop-shadow-md">تم اعتماد مسارك الأكاديمي</p>
-                <p className="text-xs sm:text-sm font-bold text-slate-300 mt-1">المسار المختار: <span className="font-black bg-[#02040a]/60 backdrop-blur-sm px-2.5 py-1 rounded-lg shadow-inner border border-emerald-500/20 text-emerald-300 mx-1">{studentData.next_year_track === 'scientific' ? 'علمي 🔬' : 'أدبي 📚'}</span></p>
-              </div>
-            </div>
-            <p className="text-[9px] sm:text-[10px] text-emerald-300 font-black uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto text-center">تم الاختيار في {safeFormat(studentData.track_selection_date, 'd MMMM yyyy')}</p>
-          </div>
-        )}
-
         {/* 🚀 Quick Actions (Glass Grid) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+        <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           {[
             { href: '/dashboard/student/schedule', icon: Calendar, label: 'الجدول الدراسي', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
             { href: '/exams', icon: FileText, label: 'الاختبارات', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
@@ -666,13 +633,13 @@ export default function StudentDashboard() {
             { href: '/messages', icon: Bell, label: 'التنبيهات', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' }
           ].map((item, idx) => (
             <Link key={idx} href={item.href} className="group h-full">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className="p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] glass-panel transition-all flex flex-col items-center justify-center gap-3 sm:gap-4 group-hover:-translate-y-1 h-full hover:border-white/20">
+              <div className="p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] glass-panel transition-all flex flex-col items-center justify-center gap-3 sm:gap-4 group-hover:-translate-y-1 h-full hover:border-white/20">
                 <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-500 ${item.bg} backdrop-blur-md border ${item.border} group-hover:scale-110 shadow-inner`}><item.icon className={`h-6 w-6 sm:h-8 sm:w-8 ${item.color} drop-shadow-md`} /></div>
                 <span className="font-black text-slate-300 group-hover:text-white transition-colors text-xs sm:text-sm text-center drop-shadow-sm">{item.label}</span>
-              </motion.div>
+              </div>
             </Link>
           ))}
-        </div>
+        </motion.div>
 
         {/* 🚀 Main Grid System (Gemini Rebalance: 7/12 Right, 5/12 Left) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
@@ -687,7 +654,7 @@ export default function StudentDashboard() {
             
             {/* جدول الاختبارات البانورامي */}
             {examTimetables.length > 0 && (
-                <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+                <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
                   <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
                     <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
                       <div className="p-2 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
@@ -713,11 +680,11 @@ export default function StudentDashboard() {
                           );
                       })}
                   </div>
-                </div>
+                </motion.div>
             )}
 
             {/* Today's Schedule (Live Pulse) */}
-            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+            <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none mix-blend-screen opacity-50"></div>
               <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-transparent relative z-10 gap-4 text-center sm:text-right">
                 <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
@@ -796,10 +763,10 @@ export default function StudentDashboard() {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
 
             {/* Performance Chart */}
-            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden">
+            <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none mix-blend-screen opacity-50"></div>
               <div className="mb-6 sm:mb-8 flex items-center justify-between relative z-10 text-center sm:text-right">
                 <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
@@ -828,11 +795,11 @@ export default function StudentDashboard() {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
 
             {/* Track Selection (For 10th Grade) */}
             {isTenthGrade && !hasSelectedTrack && (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2.5rem] glass-panel border-amber-500/30 p-6 sm:p-8 shadow-[0_0_40px_rgba(245,158,11,0.15)] relative overflow-hidden group">
+              <motion.div variants={itemVariants} className="rounded-[2.5rem] glass-panel border-amber-500/30 p-6 sm:p-8 shadow-[0_0_40px_rgba(245,158,11,0.15)] relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-[80px] pointer-events-none mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
                 <div className="flex flex-col md:flex-row items-center gap-6 sm:gap-8 relative z-10 text-center md:text-right">
                   <div className="p-4 sm:p-5 bg-amber-500/10 backdrop-blur-md rounded-[2rem] shadow-inner border border-amber-500/20 shrink-0 group-hover:scale-110 transition-transform duration-500"><Target className="h-10 w-10 sm:h-12 sm:w-12 text-amber-400 animate-pulse drop-shadow-md" /></div>
@@ -849,7 +816,7 @@ export default function StudentDashboard() {
             )}
 
             {isTenthGrade && hasSelectedTrack && (
-              <div className="rounded-[2rem] glass-panel border-emerald-500/30 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm backdrop-blur-xl">
+              <motion.div variants={itemVariants} className="rounded-[2rem] glass-panel border-emerald-500/30 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm backdrop-blur-xl">
                 <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-right">
                   <div className="p-3 bg-emerald-500/10 backdrop-blur-md rounded-2xl shrink-0 border border-emerald-500/20 shadow-inner"><CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-400 drop-shadow-sm" /></div>
                   <div>
@@ -858,7 +825,7 @@ export default function StudentDashboard() {
                   </div>
                 </div>
                 <p className="text-[9px] sm:text-[10px] text-emerald-300 font-black uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto text-center">تم الاختيار في {safeFormat(studentData.track_selection_date, 'd MMMM yyyy')}</p>
-              </div>
+              </motion.div>
             )}
 
           </div>
@@ -871,7 +838,7 @@ export default function StudentDashboard() {
             </motion.div>
 
             {/* Recent Assignments */}
-            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+            <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
                   <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner"><BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" /></div> واجبات مطلوبة
@@ -894,11 +861,11 @@ export default function StudentDashboard() {
                   <div className="text-center py-8 text-slate-400 font-bold bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 text-xs sm:text-sm m-2 shadow-inner">لا توجد واجبات مطلوبة حالياً</div>
                 )}
               </div>
-            </div>
+            </motion.div>
 
             {/* 📚 نماذج الإجابات الرسمية */}
             {answerKeys.length > 0 && (
-                <div className="glass-panel border-emerald-500/30 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.05)] mt-6 lg:mt-8">
+                <motion.div variants={itemVariants} className="glass-panel border-emerald-500/30 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.05)] mt-6 lg:mt-8">
                   <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
                     <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md w-full sm:w-auto">
                       <div className="p-2 bg-emerald-500/10 backdrop-blur-md rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> نماذج الإجابات
@@ -919,11 +886,11 @@ export default function StudentDashboard() {
                           </a>
                       ))}
                   </div>
-                </div>
+                </motion.div>
             )}
 
             {/* 🩺 سجل الغياب والأعذار الطبية */}
-            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
+            <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
               <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent gap-4">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
                   <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner">
@@ -963,10 +930,10 @@ export default function StudentDashboard() {
                   <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لم تقم بتقديم أي أعذار مسبقة</div>
                 )}
               </div>
-            </div>
+            </motion.div>
 
             {/* Recent Grades */}
-            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+            <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
                   <div className="p-2 bg-emerald-500/10 backdrop-blur-md rounded-xl border border-emerald-500/20 shadow-inner"><Award className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> آخر النتائج
@@ -1003,13 +970,13 @@ export default function StudentDashboard() {
                   <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لا توجد نتائج اختبارات حالياً</div>
                 )}
               </div>
-            </div>
+            </motion.div>
 
           </div>
         </div>
       </div>
 
-      {/* 🚀 بوابة التقييم الإجبارية (تعمل بشكل منفصل وبصمت) */}
+      {/* 🚀 بوابة التقييم الإجبارية */}
       {studentData?.id && (
          <StudentEvaluationGate 
             studentId={studentData.id} 
