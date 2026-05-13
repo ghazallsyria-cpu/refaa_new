@@ -8,10 +8,12 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+// 🚀 تم إضافة جميع الأيقونات المفقودة هنا (Filter, X, Calendar, Star, ArrowUpRight, Trophy, UserCircle)
 import { 
   ArrowRight, User, GraduationCap, Clock, CheckCircle2, AlertCircle, 
   BookOpen, FileText, Medal, Loader2, Activity, Target, ShieldAlert,
-  MessageSquareHeart, Send, ShieldCheck, Database, XCircle, PrinterIcon, Download, Sparkles
+  MessageSquareHeart, Send, ShieldCheck, Database, XCircle, PrinterIcon, Download, Sparkles,
+  Filter, X, Calendar, Star, ArrowUpRight, Trophy, UserCircle
 } from 'lucide-react';
 
 import html2canvas from 'html2canvas-pro';
@@ -20,6 +22,13 @@ import { jsPDF } from 'jspdf';
 // إعدادات الحركة الموحدة
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } } };
+
+const shieldThemes = {
+  gold: { border: 'from-amber-400/40 via-amber-500/20 to-amber-700/40', glow: 'bg-amber-500/10', textPrimary: 'text-amber-300', textSecondary: 'text-amber-400/70', icon: <Award className="w-8 h-8 text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.8)]" /> },
+  silver: { border: 'from-slate-300/40 via-slate-100/20 to-slate-400/40', glow: 'bg-slate-400/10', textPrimary: 'text-slate-200', textSecondary: 'text-slate-400/70', icon: <Shield className="w-8 h-8 text-slate-300 drop-shadow-[0_0_15px_rgba(203,213,225,0.8)]" /> },
+  diamond: { border: 'from-cyan-400/40 via-blue-500/20 to-indigo-600/40', glow: 'bg-cyan-500/10', textPrimary: 'text-cyan-300', textSecondary: 'text-cyan-400/70', icon: <Sparkles className="w-8 h-8 text-cyan-400 drop-shadow-[0_0_15px_rgba(34,211,238,0.8)]" /> },
+  royal: { border: 'from-amber-600/40 via-yellow-500/20 to-yellow-700/40', glow: 'bg-amber-900/20', textPrimary: 'text-amber-400', textSecondary: 'text-amber-500/60', icon: <Crown className="w-8 h-8 text-amber-500 drop-shadow-[0_0_15px_rgba(245,158,11,0.8)]" /> },
+};
 
 export default function Student360Profile({ params }: { params: Promise<{ id: string }> }) {
   const { id: studentId } = use(params);
@@ -63,7 +72,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
       const classInfo = sectionInfo?.classes;
       const className = Array.isArray(classInfo) ? classInfo[0]?.name : classInfo?.name;
 
-      // جلب ملخص الإحصائيات (يمكنك توسيعها لاحقاً)
+      // جلب ملخص الإحصائيات
       const { count: absences } = await supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('student_id', studentId).neq('status', 'present');
       const { count: badges } = await supabase.from('student_badges').select('*', { count: 'exact', head: true }).eq('student_id', studentId);
       
@@ -89,7 +98,7 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
         },
         attendance_summary: {
            total_absences: absences || 0,
-           total_lates: 0 // يتم حسابه لاحقاً
+           total_lates: 0
         },
         badges_count: badges || 0
       });
