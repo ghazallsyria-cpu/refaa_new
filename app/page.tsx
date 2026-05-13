@@ -1,10 +1,10 @@
 // @ts-nocheck
 /**
  * ============================================================================
- * 🏗️ التوثيق الهندسي (Gemini Style Edition - Bento Grid Layout)
+ * 🏗️ التوثيق الهندسي (Gemini Style Edition - Crash Proof)
  * ============================================================================
  * @file        app/page.tsx
- * @version     6.1.0 (Alive UI - Crash Proof & Holographic Bento)
+ * @version     6.5.0 (Alive UI - Holographic Bento Campus)
  * @description الواجهة الرئيسية للحرم الرقمي مع واجهات زجاجية وتصميم شبكي.
  * ============================================================================
  */
@@ -43,8 +43,7 @@ const shieldThemes = {
 };
 
 export default function DigitalCampusPage() {
-  console.log('[رادار جيمناي 🚀] بدء تحميل المكون الأساسي للصفحة');
-
+  const [mounted, setMounted] = useState(false); // 🚀 الحماية الأساسية ضد انهيار الـ Hydration
   const { user, authRole, isChecking } = useAuth() as any;
   const { scrollYProgress } = useScroll();
   
@@ -69,7 +68,7 @@ export default function DigitalCampusPage() {
   const [activeArticle, setActiveArticle] = useState<any | null>(null); 
 
   useEffect(() => {
-    console.log('[رادار ايهاب غزال 🚀] تشغيل UseEffect لجلب البيانات من Supabase');
+    setMounted(true); // التأكد من تحميل الصفحة بالمتصفح أولاً
     const fetchCampusContent = async () => {
       try {
         const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes] = await Promise.all([
@@ -80,8 +79,6 @@ export default function DigitalCampusPage() {
           supabase.from('forum_hero_slides').select('*').eq('is_active', true).order('sort_order', { ascending: false }).order('created_at', { ascending: false }),
           supabase.from('school_ribbon').select('image_url').eq('id', 1).maybeSingle()
         ]);
-
-        console.log('[رادار جيمناي 🚀] تم جلب البيانات الأساسية، جاري جلب الدروع');
 
         const { data: stdShields } = await supabase.from('student_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, students(users(full_name, avatar_url), sections(name, classes(name)))').order('created_at', { ascending: false }).limit(4);
         const { data: tchShields } = await supabase.from('teacher_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, teachers(users(full_name, avatar_url), teacher_subjects(subjects(name)))').order('created_at', { ascending: false }).limit(4);
@@ -110,13 +107,10 @@ export default function DigitalCampusPage() {
         if (tickerRes.data) setTickers(tickerRes.data);
         if (heroRes.data && heroRes.data.length > 0) setHeroSlides(heroRes.data);
         if (ribbonRes.data?.image_url) setHangingRibbonUrl(ribbonRes.data.image_url);
-        
-        console.log('[رادار جيمناي 🚀] تمت تهيئة جميع البيانات بنجاح');
       } catch (e) { 
-        console.error("[رادار جيمناي ❌] خطأ أثناء جلب البيانات:", e); 
-      } 
-      finally { 
-        setFetching(false); 
+         console.error("Content fetch failed", e); 
+      } finally { 
+         setFetching(false); 
       }
     };
     fetchCampusContent();
@@ -128,29 +122,8 @@ export default function DigitalCampusPage() {
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
-  console.log('[رادار جيمناي 🚀] معالجة المتغيرات الديناميكية (Portal & News)');
-
-  const breakingNews = (tickers && tickers.length > 0) ? tickers.map(t => `✨ ${t.content}`).join('   |   ') : null;
-
-  const portal = (() => {
-    if (!user) return { href: '/login', text: 'الدخول للمنصة', icon: ArrowLeft };
-    const routes: any = { admin: '/dashboard', management: '/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', parent: '/dashboard/parent' };
-    return { href: routes[authRole] || '/dashboard', text: authRole === 'student' ? 'الدخول لحقيبتي' : authRole === 'teacher' ? 'قاعة المعلمين' : 'مركز القيادة', icon: ArrowLeft };
-  })();
-
-  // 🚀 تحويل المكون إلى متغير بحرف كبير ليتعرف عليه React بأمان (Crash Fix)
-  const PortalIcon = portal.icon;
-
-  const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
-  const SlideIcon = ICON_MAP[currentSlideData?.icon_name] || Sparkles;
-
-  const pinnedArticle = magazineItems.find(item => item.is_pinned) || magazineItems[0];
-  const sideArticles = magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 3);
-
-  const displayedMemorials = activeMemorialTab === 'students' ? studentMemorials : teacherMemorials;
-
-  if (isChecking || fetching) {
-    console.log('[رادار جيمناي 🚀] عرض شاشة التحميل (Loading State)');
+  // 🚀 إيقاف أي ريندر حتى يكتمل الـ Mount لمنع أخطاء Hydration
+  if (!mounted || isChecking || fetching) {
     return (
       <div className="h-[100dvh] bg-[#02040a] flex items-center justify-center relative overflow-hidden">
          <motion.div animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="relative z-10 flex flex-col items-center gap-4">
@@ -161,7 +134,22 @@ export default function DigitalCampusPage() {
     );
   }
 
-  console.log('[رادار جيمناي 🚀] البدء في رسم واجهة المستخدم (Rendering UI)');
+  const breakingNews = (tickers && tickers.length > 0) ? tickers.map(t => `✨ ${t.content}`).join('   |   ') : null;
+
+  const portal = (() => {
+    if (!user) return { href: '/login', text: 'الدخول للمنصة', icon: ArrowLeft };
+    const routes: any = { admin: '/dashboard', management: '/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', parent: '/dashboard/parent' };
+    return { href: routes[authRole] || '/dashboard', text: authRole === 'student' ? 'الدخول لحقيبتي' : authRole === 'teacher' ? 'قاعة المعلمين' : 'مركز القيادة', icon: ArrowLeft };
+  })();
+
+  const PortalIcon = portal.icon;
+  const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
+  const SlideIcon = ICON_MAP[currentSlideData?.icon_name] || Sparkles;
+
+  const pinnedArticle = magazineItems.length > 0 ? (magazineItems.find(item => item.is_pinned) || magazineItems[0]) : null;
+  const sideArticles = magazineItems.length > 0 ? magazineItems.filter(item => item.id !== pinnedArticle?.id).slice(0, 3) : [];
+
+  const displayedMemorials = activeMemorialTab === 'students' ? studentMemorials : teacherMemorials;
 
   return (
     <div className="min-h-[100dvh] bg-transparent text-slate-200 font-sans overflow-x-hidden selection:bg-indigo-500/30 relative pb-20 sm:pb-32 pt-2 sm:pt-6" dir="rtl">
@@ -246,7 +234,7 @@ export default function DigitalCampusPage() {
               </AnimatePresence>
 
               {/* مؤشرات السلايدر */}
-              {heroSlides.length > 1 && (
+              {heroSlides && heroSlides.length > 1 && (
                 <div className="absolute bottom-6 sm:bottom-8 right-6 sm:right-8 flex gap-2 z-30">
                   {heroSlides.map((_, i) => (
                     <button key={i} onClick={() => setCurrentSlide(i)} className={`h-1.5 sm:h-2 rounded-full transition-all duration-500 shadow-inner ${currentSlide === i ? 'w-6 sm:w-8 bg-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.8)]' : 'w-2 bg-white/20 hover:bg-white/40'}`} />
