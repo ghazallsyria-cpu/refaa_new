@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
   MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw, FileText, CheckSquare, BrainCircuit, AlertTriangle, UserMinus, Filter, ChevronDown, RotateCcw, Database,
-  Settings2, PenTool, Award // 🚀 أضفنا Award هنا
+  Settings2, PenTool, Award
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { cn } from '@/lib/utils';
-import * as Dialog from '@radix-ui/react-dialog'; // 🚀 أضفنا استيراد Dialog هنا
+import * as Dialog from '@radix-ui/react-dialog';
 
 // إعدادات الحركة
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
@@ -500,16 +500,16 @@ export default function ArenaMonitorDashboard() {
       {/* Tiptap overrides for dark theme */}
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
-        .katex { direction: ltr !important; text-align: left !important; }
+        .katex { direction: ltr !important; text-align: left !important; color: #818cf8 !important; }
         .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
-        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); background: transparent; }
-        .tiptap-content td, .tiptap-content th { border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; color: #e2e8f0; }
+        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); background: rgba(2,4,10,0.4); }
+        .tiptap-content td, .tiptap-content th { border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; color: #cbd5e1; }
         .tiptap-content th { background-color: rgba(255,255,255,0.05) !important; font-weight: 900 !important; color: #fff; }
-        .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important; mix-blend-mode: luminosity; }
+        .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important; mix-blend-mode: luminosity; border: 1px solid rgba(255,255,255,0.1); }
         .tiptap-content p { margin-bottom: 0.5em !important; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
       `}} />
 
@@ -792,7 +792,7 @@ export default function ArenaMonitorDashboard() {
                        <button className="flex-1 py-3.5 sm:py-4 bg-white/5 text-slate-300 border border-white/10 font-black rounded-xl hover:bg-white/10 transition-all active:scale-95 text-xs sm:text-sm shadow-inner">إلغاء</button>
                     </Dialog.Close>
                     <button onClick={saveFeedback} disabled={savingFeedback} className="flex-[2] py-3.5 sm:py-4 bg-indigo-600/90 backdrop-blur-md text-white font-black rounded-xl hover:bg-indigo-500 active:scale-95 transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)] flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-50 border border-indigo-400/50">
-                      {savingFeedback ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 drop-shadow-md" />} حفظ وإرسال للطالب
+                      {savingFeedback ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-md" />} حفظ وإرسال للطالب
                     </button>
                   </div>
                 </Dialog.Content>
