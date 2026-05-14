@@ -33,7 +33,7 @@ import confetti from 'canvas-confetti';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { supabase } from '@/lib/supabase';
-import { cn } from '@/lib/utils'; // 🚀 أضفنا دالة الدمج
+import { cn } from '@/lib/utils'; 
 
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
@@ -424,6 +424,9 @@ export default function PracticeArena() {
   
   const [essayAnswers, setEssayAnswers] = useState<Record<string, string>>({});
   
+  // 🚀 إضافة State جديد لحفظ الإجابات الآلية
+  const [mcqAnswers, setMcqAnswers] = useState<Record<string, any>>({});
+
   const [attempts, setAttempts] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
   const [shake, setShake] = useState(false);
@@ -463,6 +466,7 @@ export default function PracticeArena() {
              setStreak(parsedLocal.streak || 0);
              setFailedQuestionIds(new Set(parsedLocal.failedQuestionIds || []));
              if (parsedLocal.essayAnswers) setEssayAnswers(parsedLocal.essayAnswers);
+             if (parsedLocal.mcqAnswers) setMcqAnswers(parsedLocal.mcqAnswers);
           } else if (progressData) {
             if (progressData.is_completed) {
               setIsFinished(true); 
@@ -483,30 +487,52 @@ export default function PracticeArena() {
   useEffect(() => {
     if (loading || isFinished || !user || isPreviewMode) return; 
     const localSaveKey = `arena_save_${user.id}_${id}`;
-    const saveData = { currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds), essayAnswers };
+    const saveData = { currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds), essayAnswers, mcqAnswers };
     localStorage.setItem(localSaveKey, JSON.stringify(saveData));
-  }, [currentIndex, score, streak, failedQuestionIds, essayAnswers, loading, isFinished, isPreviewMode]);
+  }, [currentIndex, score, streak, failedQuestionIds, essayAnswers, mcqAnswers, loading, isFinished, isPreviewMode]);
 
   const isOfficial = assignment && assignment.is_practice_mode === false && mode === 'normal';
 
+  // 🚀 دالة الحفظ المعدلة لترحيل جميع الإجابات (آلية ومقالية) لقاعدة البيانات
   const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
     if (!user || isPreviewMode) return; 
     try {
+      // 1. حفظ التقدم الكلي
       await supabase.from('student_progress_v2').upsert({
         student_id: user.id, assignment_id: id, current_index: newIndex, correct_score: newScore.correct,
         wrong_score: newScore.wrong, is_completed: finished, updated_at: new Date().toISOString()
       }, { onConflict: 'student_id, assignment_id' });
 
-      if (finished && isOfficial && Object.keys(essayAnswers).length > 0) {
-        const answersToInsert = Object.entries(essayAnswers).map(([qId, text]) => ({
-          student_id: user.id,
-          assignment_id: id,
-          question_id: qId,
-          answer_text: text,
-          is_graded: false
-        }));
+      // 2. إذا انتهى وكان رسمياً، احفظ كل الإجابات (الآلية والمقالية) في الجدول المستقل ليقرأه الرادار
+      if (finished && isOfficial) {
+        const answersToInsert = [];
+
+        // إدراج الأسئلة المقالية
+        Object.entries(essayAnswers).forEach(([qId, text]) => {
+          answersToInsert.push({
+            student_id: user.id,
+            assignment_id: id,
+            question_id: qId,
+            answer_text: text,
+            is_graded: false
+          });
+        });
+
+        // إدراج الأسئلة الآلية (خيارات متعددة)
+        Object.entries(mcqAnswers).forEach(([qId, answerData]) => {
+          answersToInsert.push({
+            student_id: user.id,
+            assignment_id: id,
+            question_id: qId,
+            answer_text: answerData.selectedText || 'تم الاختيار',
+            points_earned: answerData.isCorrect ? answerData.points : 0,
+            is_graded: true // آلياً تعتبر مصححة
+          });
+        });
         
-        await supabase.from('student_answers_v2').upsert(answersToInsert, { onConflict: 'student_id, assignment_id, question_id' }).catch(err => console.log('Error saving to v2 table:', err));
+        if (answersToInsert.length > 0) {
+          await supabase.from('student_answers_v2').upsert(answersToInsert, { onConflict: 'student_id, assignment_id, question_id' }).catch(err => console.log('Error saving to v2 table:', err));
+        }
       }
 
       if (finished) localStorage.removeItem(`arena_save_${user.id}_${id}`);
@@ -561,6 +587,16 @@ export default function PracticeArena() {
   const handleOptionClick = (opt: any) => {
     if (isOfficial) {
       setSelectedOptionId(opt.id);
+      // 🚀 تخزين الخيار المحدد في الـ State ليتم إرساله للرادار لاحقاً
+      setMcqAnswers(prev => ({
+        ...prev,
+        [currentQ.id]: {
+          selectedId: opt.id,
+          selectedText: opt.content,
+          isCorrect: opt.is_correct,
+          points: currentQ.points || 1
+        }
+      }));
       return;
     }
 
