@@ -2,10 +2,11 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ScrollText, Loader2, CheckCircle2, Search, X, Coins, ShieldCheck, Filter, PrinterIcon, Edit3, Save, Trash2, PlusCircle, UserPlus, GraduationCap } from 'lucide-react';
+import { ScrollText, Loader2, CheckCircle2, Search, X, Coins, ShieldCheck, Filter, PrinterIcon, Edit3, Save, Trash2, PlusCircle, UserPlus, GraduationCap, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 export default function GraduationDocsAdmin() {
   const { authRole, userRole } = useAuth() as any;
@@ -80,12 +81,16 @@ export default function GraduationDocsAdmin() {
     return classLvl ? `الصف ${classLvl} - ${secName}` : secName || 'صف غير محدد';
   };
 
-  // 🚀 استخراج الفصول الفريدة من الطلاب للقائمة المنسدلة
+  // 🚀 استخراج فصول الثاني عشر فقط (الصف 12) للقائمة المنسدلة
   const availableSectionsForDropdown = useMemo(() => {
     const map = new Map();
     allStudents.forEach(s => {
       const sData = Array.isArray(s.sections) ? s.sections[0] : s.sections;
-      if (sData?.id) {
+      const cData = Array.isArray(sData?.classes) ? sData?.classes[0] : sData?.classes;
+      const level = Number(cData?.level);
+      const is12th = level === 12 || String(cData?.name).includes('12') || String(cData?.name).includes('ثاني عشر');
+
+      if (sData?.id && is12th) {
         if (!map.has(sData.id)) {
           map.set(sData.id, { id: sData.id, name: getFullClassName(s) });
         }
@@ -94,7 +99,7 @@ export default function GraduationDocsAdmin() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [allStudents]);
 
-  // 🚀 فلترة الطلاب بناءً على الفصل المختار
+  // فلترة الطلاب بناءً على الفصل المختار
   const studentsInSelectedSection = useMemo(() => {
     if (!newReqSection) return [];
     return allStudents.filter(s => {
@@ -148,12 +153,18 @@ export default function GraduationDocsAdmin() {
     setEditForm(prev => ({ ...prev, [field]: Math.max(0, prev[field as keyof typeof prev] + delta) }));
   };
 
-  const currentEditTotal = Object.values(editForm).reduce((a, b) => a + b, 0);
+  // 🚀 حساب المجموع الكلي للوثائق (للتأكد أن الطلب ليس فارغاً)
+  const totalDocsCount = Object.values(editForm).reduce((a, b) => a + b, 0);
+  
+  // 🚀 الحسبة المالية الجديدة: (الشهادة + السلوك) فقط. لمن يهمه الأمر = مجاني!
+  const currentEditTotal = editForm.cert_ar + editForm.cert_en + editForm.conduct_ar + editForm.conduct_en;
 
   const saveEdit = async () => {
     if (isCreatingNew && !selectedStudentId) { alert('يجب اختيار الطالب أولاً لربط الطلب بحسابه.'); return; }
-    if (currentEditTotal === 0 && isCreatingNew) { alert('لا يمكن إنشاء طلب فارغ.'); return; }
-    if (currentEditTotal === 0 && !isCreatingNew) { alert('لا يمكن أن يكون الطلب فارغاً. استخدم زر الحذف إذا أردت إلغاء الطلب.'); return; }
+    
+    // التحقق من أن عدد الوثائق أكبر من صفر بدلاً من المبلغ (لأن المبلغ قد يكون صفراً إذا اختار لمن يهمه الأمر فقط)
+    if (totalDocsCount === 0 && isCreatingNew) { alert('لا يمكن إنشاء طلب فارغ.'); return; }
+    if (totalDocsCount === 0 && !isCreatingNew) { alert('لا يمكن أن يكون الطلب فارغاً من الوثائق. استخدم زر الحذف إذا أردت إلغاء الطلب.'); return; }
     
     setIsSavingEdit(true);
     try {
@@ -244,11 +255,11 @@ export default function GraduationDocsAdmin() {
                </div>
                
                <button onClick={() => openEditModal()} className="w-full sm:w-auto bg-fuchsia-600 hover:bg-fuchsia-500 text-white px-6 py-3 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-md print:hidden active:scale-95">
-                 <PlusCircle className="w-5 h-5" /> إصدار طلب (نقدي)
+                 <PlusCircle className="w-5 h-5" /> إصدار طلب (الآن)
                </button>
 
                <button onClick={() => window.print()} className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-md print:hidden active:scale-95">
-                 <PrinterIcon className="w-5 h-5" /> طباعة الكشف
+                 <PrinterIcon className="w-5 h-5" /> طباعة المعتمدين فقط
                </button>
             </div>
           </div>
@@ -287,7 +298,7 @@ export default function GraduationDocsAdmin() {
                   {filteredRequests.map(req => {
                     const studentFullName = Array.isArray(req.students?.users) ? req.students.users[0]?.full_name : req.students?.users?.full_name;
                     return (
-                    <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={req.id} className={cn("hover:bg-slate-50 transition-colors", req.payment_status !== 'paid' && 'print:hidden')}>
                       <td className="p-4 font-black text-slate-800">{studentFullName || 'طالب غير معروف'}</td>
                       <td className="p-4 font-bold text-slate-500 text-xs">{getFullClassName(req.students)}</td>
                       <td className="p-4 text-center font-black text-slate-700 bg-blue-50/30 border-x border-white">{req.cert_ar} / {req.cert_en}</td>
@@ -343,7 +354,7 @@ export default function GraduationDocsAdmin() {
                           {isCreatingNew ? <PlusCircle className="w-5 h-5"/> : <Edit3 className="w-5 h-5"/>}
                        </div>
                        <div>
-                         <h2 className="text-lg font-black text-slate-800 leading-tight">{isCreatingNew ? 'إصدار طلب وثائق (إداري)' : 'تعديل طلب الوثائق'}</h2>
+                         <h2 className="text-lg font-black text-slate-800 leading-tight">{isCreatingNew ? 'إصدار طلب وثائق لطلاب الثاني عشر' : 'تعديل طلب الوثائق'}</h2>
                          {!isCreatingNew && <p className="text-[10px] font-bold text-slate-500 mt-1">الطالب: <span className="text-fuchsia-600 font-black">{Array.isArray(editingRequest.students?.users) ? editingRequest.students?.users[0]?.full_name : editingRequest.students?.users?.full_name}</span></p>}
                        </div>
                     </div>
@@ -352,25 +363,23 @@ export default function GraduationDocsAdmin() {
 
                  <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
                     
-                    {/* 🚀 القوائم المنسدلة لاختيار الطالب (بدون بحث متعب) */}
+                    {/* 🚀 القوائم المنسدلة لاختيار الطالب (الثاني عشر فقط) */}
                     {isCreatingNew && (
                       <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl shadow-inner space-y-4">
                          <label className="text-sm font-black text-indigo-800 flex items-center gap-2 mb-2"><GraduationCap className="w-5 h-5"/> تحديد مسار الطالب:</label>
                          
                          <div className="flex flex-col sm:flex-row gap-4">
-                            {/* قائمة الفصل */}
                             <select 
                               value={newReqSection} 
                               onChange={(e) => { setNewReqSection(e.target.value); setSelectedStudentId(''); }}
                               className="flex-1 bg-white border border-indigo-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 cursor-pointer shadow-sm"
                             >
-                              <option value="">-- اختر الفصل أولاً --</option>
+                              <option value="">-- اختر فصل الثاني عشر --</option>
                               {availableSectionsForDropdown.map(sec => (
                                 <option key={sec.id} value={sec.id}>{sec.name}</option>
                               ))}
                             </select>
 
-                            {/* قائمة الطالب (مفلترة بناء على الفصل) */}
                             <select 
                               value={selectedStudentId} 
                               onChange={(e) => setSelectedStudentId(e.target.value)}
@@ -413,7 +422,8 @@ export default function GraduationDocsAdmin() {
 
                        {/* لمن يهمه الأمر */}
                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
-                          <p className="text-xs font-black text-slate-700 mb-3 border-b border-slate-200 pb-2">شهادة لمن يهمه الأمر</p>
+                          <p className="text-xs font-black text-slate-700 mb-1">شهادة لمن يهمه الأمر</p>
+                          <p className="text-[9px] font-bold text-emerald-500 mb-3 border-b border-slate-200 pb-2">(إصدار مجاني)</p>
                           <div className="space-y-2">
                              <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-100">
                                 <span className="text-[10px] font-bold text-slate-500">عربي</span>
@@ -469,7 +479,7 @@ export default function GraduationDocsAdmin() {
                     </div>
                     <button 
                        onClick={saveEdit} 
-                       disabled={isSavingEdit || (isCreatingNew && !selectedStudentId) || currentEditTotal === 0} 
+                       disabled={isSavingEdit || (isCreatingNew && !selectedStudentId) || totalDocsCount === 0} 
                        className="py-4 px-6 sm:px-8 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:bg-slate-400"
                     >
                        {isSavingEdit ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> {isCreatingNew ? 'إصدار الطلب' : 'حفظ التعديل'}</>}
