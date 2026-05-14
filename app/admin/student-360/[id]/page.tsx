@@ -54,18 +54,25 @@ export default function Student360Profile({ params }: { params: Promise<{ id: st
   // 1. جلب البيانات الأساسية بأمان (Failsafe Fetcher)
   const fetchSummary = useCallback(async () => {
     try {
-      // استعلام مباشر وسريع لضمان عمل الصفحة حتى لو فشل RPC
+      // 🚀 تم إصلاح الاستعلام وإزالة اسم العلاقة الخاطئ
       const { data: studentData, error: studentError } = await supabase
         .from('students')
         .select(`
           id, national_id,
-          users!students_user_id_fkey(full_name, avatar_url),
-          sections(name, classes(name))
+          users (full_name, avatar_url),
+          sections (name, classes(name))
         `)
         .eq('id', studentId)
-        .single();
+        .maybeSingle();
 
       if (studentError) throw studentError;
+      
+      // 🚀 إذا لم يجد الطالب، نوقف التحميل فوراً
+      if (!studentData) {
+        setSummaryData(null);
+        setIsLoading(false);
+        return;
+      }
 
       const userInfo = Array.isArray(studentData?.users) ? studentData.users[0] : studentData?.users;
       const sectionInfo = Array.isArray(studentData?.sections) ? studentData.sections[0] : studentData?.sections;
