@@ -43,9 +43,10 @@ export function useAcademicCompass() {
       const gradesMap = new Map<string, number>();
       if (studentGrades) {
         studentGrades.forEach(g => {
-          // التعامل الآمن مع كائن المادة (Subject Object)
-          if (g.subjects && typeof g.subjects === 'object' && 'name' in g.subjects) {
-            gradesMap.set(g.subjects.name, g.score || 0);
+          // 🚀 الحل لخطأ Netlify و TypeScript: إجبار النوع والتأكد منه
+          const subjectData = g.subjects as any;
+          if (subjectData && typeof subjectData.name === 'string') {
+            gradesMap.set(subjectData.name, g.score || 0);
           }
         });
       }
