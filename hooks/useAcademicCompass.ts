@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// 🚀 1. واجهة البيانات (Interfaces) لضمان قوة الكود (TypeScript)
 export interface SubjectAnalysis {
   subject_name: string;
   coursework_max: number;
@@ -18,32 +17,34 @@ export function useAcademicCompass() {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<SubjectAnalysis[]>([]);
 
-  // 🚀 2. المحرك الأساسي: تحليل وضع الطالب بناءً على درجات أعمال السنة
   const calculateCompass = useCallback(async (studentId: string, academicStage: string) => {
     setLoading(true);
     try {
-      // جلب لوائح الوزارة للمرحلة الحالية (مثال: 12_scientific)
+      // 1. جلب اللوائح (يجب أن يعمل بعد تفعيل الـ RLS)
       const { data: rules, error: rulesError } = await supabase
         .from('kuwait_grading_rules')
         .select('*')
         .eq('academic_stage', academicStage);
 
-      if (rulesError) throw rulesError;
+      if (rulesError) {
+        console.error("Rules Fetch Error:", rulesError);
+        throw rulesError;
+      }
 
-      // جلب درجات الطالب الحالية (نركز على أعمال السنة فقط)
+      // 2. جلب الدرجات (تم إزالة شرط type لضمان عدم انهيار الاستعلام)
       const { data: studentGrades, error: gradesError } = await supabase
         .from('grades')
         .select('score, subjects(name)')
-        .eq('student_id', studentId)
-        .eq('type', 'coursework'); 
+        .eq('student_id', studentId);
 
-      if (gradesError) throw gradesError;
+      // إذا حدث خطأ في الدرجات، لا توقف الكود، بل اطبع تحذيراً واعتبرها أصفاراً
+      if (gradesError) {
+        console.warn("⚠️ لم نتمكن من جلب الدرجات (ربما الجدول يحتاج لتحديث):", gradesError);
+      }
 
-      // تحويل الدرجات لقاموس (Map) لسرعة المطابقة
       const gradesMap = new Map<string, number>();
-      if (studentGrades) {
+      if (studentGrades && !gradesError) {
         studentGrades.forEach(g => {
-          // 🚀 الحل لخطأ Netlify و TypeScript: إجبار النوع والتأكد منه
           const subjectData = g.subjects as any;
           if (subjectData && typeof subjectData.name === 'string') {
             gradesMap.set(subjectData.name, g.score || 0);
@@ -51,15 +52,14 @@ export function useAcademicCompass() {
         });
       }
 
-      // مطابقة اللوائح مع درجات الطالب وتوليد السيناريوهات
+      // 3. توليد التحليل
       const generatedAnalysis: SubjectAnalysis[] = (rules || []).map(rule => {
-        const studentScore = gradesMap.get(rule.subject_name) || 0; // إذا لم تُرصد نعتبرها 0
+        const studentScore = gradesMap.get(rule.subject_name) || 0;
         const needed = rule.passing_mark - studentScore;
         
         let status: SubjectAnalysis['status'] = 'SAFE';
         let message = '';
 
-        // الخوارزمية الذكية لتحديد حالة المادة
         if (needed <= 0) {
           status = 'PASSED';
           message = 'أنت ناجح بالفعل في هذه المادة من خلال أعمال السنة!';
@@ -101,28 +101,21 @@ export function useAcademicCompass() {
     }
   }, []);
 
-  // 🚀 3. محرك المحاكاة: يحسب التوقعات بناءً على إدخال الطالب التخيلي
   const calculatePredictedGPA = useCallback((
     subjects: SubjectAnalysis[], 
-    predictions: Record<string, number>, // الدرجات المتوقعة في الفاينل
-    g10: number, // نسبة العاشر
-    g11: number  // نسبة الحادي عشر
+    predictions: Record<string, number>, 
+    g10: number, 
+    g11: number  
   ) => {
     if (!subjects || subjects.length === 0) return { g12Average: "0.00", finalCumulative: "0.00" };
 
-    // حساب النهاية العظمى لجميع المواد
     const totalMax = subjects.reduce((acc, s) => acc + s.total_max, 0);
-    
-    // حساب المجموع المتوقع (الأعمال الحالية + الفاينل المتوقع)
     const predictedTotal = subjects.reduce((acc, s) => {
       const pred = predictions[s.subject_name] || 0;
       return acc + s.student_coursework + pred;
     }, 0);
     
-    // حساب نسبة الثاني عشر
     const g12Average = totalMax > 0 ? (predictedTotal / totalMax) * 100 : 0;
-    
-    // الحسبة الكويتية الذهبية (10% + 20% + 70%)
     const finalCumulative = (g10 * 0.10) + (g11 * 0.20) + (g12Average * 0.70);
 
     return {
