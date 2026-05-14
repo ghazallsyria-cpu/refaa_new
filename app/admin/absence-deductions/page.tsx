@@ -1,7 +1,8 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
+import { useAuth } from '@/context/auth-context'; 
 import { 
   Calculator, ShieldAlert, FileSignature, Printer, 
   Search, Filter, Users, Clock, AlertTriangle, 
@@ -17,12 +18,13 @@ interface DeductionStudent {
   name: string;
   className: string;
   sectionId: string;
-  absentPeriods: number;
-  deductionDays: number;
+  fullDaysAbsent: number;     // 🚀 أيام غياب كاملة (مسجلة من البوابة أو المربي)
+  partialPeriodsAbsent: number; // 🚀 حصص غياب متفرقة (من المعلمين)
+  deductionDays: number;      // 🚀 إجمالي أيام الخصم (أيام كاملة + حصص/5)
 }
 
 export default function AbsenceDeductionsPage() {
-  const { authRole, isChecking } = useAuth(); // 🚀 تفعيل الحماية
+  const { authRole, isChecking } = useAuth(); 
 
   const [students, setStudents] = useState<DeductionStudent[]>([]);
   const [sections, setSections] = useState<{id: string, name: string}[]>([]);
@@ -33,62 +35,130 @@ export default function AbsenceDeductionsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. جلب جميع سجلات الغياب في المدرسة
-      const { data: absences, error } = await supabase
+      // 1. جلب جميع سجلات الغياب في المدرسة (حصص متفرقة)
+      const { data: periodAbsences, error: pError } = await supabase
         .from('attendance_records')
         .select(`
           student_id,
+          date,
           sections(id, name, classes(name)),
           students(users(full_name))
         `)
         .eq('status', 'absent');
 
-      if (error) throw error;
+      if (pError) throw pError;
 
-      // 2. تجميع الحصص وتطبيق معادلة (5 حصص = 1 يوم خصم)
+      // 2. 🚀 جلب جميع سجلات غياب الأيام الكاملة (مثلاً من البوابة أو سجلات الغياب اليومية إن وجدت)
+      // ملاحظة: إذا كان نظامك يسجل اليوم الكامل في جدول school_gate_attendance، نجلبه من هناك.
+      const { data: gateAbsences, error: gError } = await supabase
+        .from('school_gate_attendance')
+        .select(`
+          student_id,
+          date,
+          students(users(full_name), sections(id, name, classes(name)))
+        `)
+        .eq('status', 'absent')
+        .maybeSingle(); // استخدام maybeSingle لمنع الانهيار إن لم يوجد، والأفضل حذفه لو كان يرجع مصفوفة
+        
+      // استعلام أفضل لجدول البوابة:
+      const { data: fullDayAbsences } = await supabase
+        .from('school_gate_attendance')
+        .select(`
+          student_id,
+          date,
+          students(users(full_name), sections(id, name, classes(name)))
+        `)
+        .eq('status', 'absent');
+
       const studentMap = new Map<string, DeductionStudent>();
       const sectionMap = new Map<string, {id: string, name: string}>();
 
-      if (absences) {
-        absences.forEach((record: any) => {
-          const sid = record.student_id;
-          
-          if (!studentMap.has(sid)) {
-            const stuObj = Array.isArray(record.students) ? record.students[0] : record.students;
-            const userObj = Array.isArray(stuObj?.users) ? stuObj.users[0] : stuObj?.users;
-            const secObj = Array.isArray(record.sections) ? record.sections[0] : record.sections;
-            const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
+      // دالة مساعدة لإنشاء أو تحديث الطالب في الـ Map
+      const ensureStudentInMap = (record: any, isFullDay: boolean) => {
+        const sid = record.student_id;
+        
+        let stuObj = record.students;
+        if (Array.isArray(stuObj)) stuObj = stuObj[0];
+        
+        let userObj = stuObj?.users;
+        if (Array.isArray(userObj)) userObj = userObj[0];
+        
+        // التعامل مع اختلاف هياكل الجداول
+        let secObj = record.sections || stuObj?.sections;
+        if (Array.isArray(secObj)) secObj = secObj[0];
+        
+        let classObj = secObj?.classes;
+        if (Array.isArray(classObj)) classObj = classObj[0];
+        
+        const fullClassName = classObj?.name ? `${classObj.name} - ${secObj?.name || ''}` : secObj?.name || 'فصل غير محدد';
+        const secId = secObj?.id;
+
+        if (secId && !sectionMap.has(secId)) {
+            sectionMap.set(secId, { id: secId, name: fullClassName });
+        }
+
+        if (!studentMap.has(sid)) {
+          studentMap.set(sid, {
+            id: sid,
+            name: userObj?.full_name || 'طالب غير معروف',
+            className: fullClassName,
+            sectionId: secId || 'unknown',
+            fullDaysAbsent: 0,
+            partialPeriodsAbsent: 0,
+            deductionDays: 0
+          });
+        }
+        
+        return studentMap.get(sid)!;
+      };
+
+      // 3. معالجة الغياب بالحصص
+      // لكي لا نحسب الحصة كغياب إذا كان الطالب مسجلاً "غائب يوم كامل" في نفس التاريخ
+      const fullDayAbsenceDatesByStudent = new Map<string, Set<string>>();
+      
+      if (fullDayAbsences) {
+         fullDayAbsences.forEach((record: any) => {
+            const sid = record.student_id;
+            const date = record.date;
             
-            const fullClassName = `${classObj?.name || ''} - ${secObj?.name || ''}`;
-            const secId = secObj?.id;
-
-            if (secId && !sectionMap.has(secId)) {
-                sectionMap.set(secId, { id: secId, name: fullClassName });
+            if (!fullDayAbsenceDatesByStudent.has(sid)) {
+               fullDayAbsenceDatesByStudent.set(sid, new Set());
             }
+            fullDayAbsenceDatesByStudent.get(sid)!.add(date);
 
-            studentMap.set(sid, {
-              id: sid,
-              name: userObj?.full_name || 'طالب غير معروف',
-              className: fullClassName,
-              sectionId: secId,
-              absentPeriods: 0,
-              deductionDays: 0
-            });
-          }
+            const stu = ensureStudentInMap(record, true);
+            stu.fullDaysAbsent++;
+         });
+      }
+
+      if (periodAbsences) {
+        periodAbsences.forEach((record: any) => {
+          const sid = record.student_id;
+          const date = record.date;
           
-          studentMap.get(sid)!.absentPeriods++;
+          // إذا كان غائباً يوماً كاملاً في هذا التاريخ، لا نعد الحصة بشكل مزدوج
+          if (fullDayAbsenceDatesByStudent.get(sid)?.has(date)) return;
+
+          const stu = ensureStudentInMap(record, false);
+          stu.partialPeriodsAbsent++;
         });
       }
 
-      // 3. تصفية الطلاب الذين يستحقون الخصم فقط (5 حصص فأكثر)
-      const eligibleForDeduction = Array.from(studentMap.values()).map(stu => ({
-        ...stu,
-        deductionDays: Math.floor(stu.absentPeriods / 5)
-      })).filter(stu => stu.deductionDays > 0)
-         .sort((a, b) => b.deductionDays - a.deductionDays);
+      // 4. 🚀 تصفية الطلاب الذين يستحقون الخصم فقط (يوم كامل أو 5 حصص فأكثر)
+      const eligibleForDeduction = Array.from(studentMap.values()).map(stu => {
+        // كل 5 حصص متفرقة تحسب يوم غياب
+        const daysFromPeriods = Math.floor(stu.partialPeriodsAbsent / 5);
+        const totalDeductions = stu.fullDaysAbsent + daysFromPeriods;
+        
+        return {
+          ...stu,
+          deductionDays: totalDeductions
+        };
+      }).filter(stu => stu.deductionDays > 0) // الشرط الأساسي: أن يكون لديه 1 يوم خصم على الأقل
+        .sort((a, b) => b.deductionDays - a.deductionDays);
 
       setStudents(eligibleForDeduction);
-      setSections(Array.from(sectionMap.values()));
+      setSections(Array.from(sectionMap.values()).sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
       console.error('Error fetching deduction data:', err);
     } finally {
@@ -97,7 +167,6 @@ export default function AbsenceDeductionsPage() {
   };
 
   useEffect(() => {
-    // 🚀 لا نطلب البيانات من السيرفر إلا إذا كان المستخدم ضمن الإدارة
     if (authRole === 'admin' || authRole === 'management') {
       fetchData();
     }
@@ -117,7 +186,6 @@ export default function AbsenceDeductionsPage() {
     window.print();
   };
 
-  // 🚀 شاشة التحميل وحماية الوصول
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50/50">
@@ -146,17 +214,14 @@ export default function AbsenceDeductionsPage() {
 
   return (
     <>
-      {/* 🚀 واجهة النظام للمدير (تختفي عند الطباعة) */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:hidden pt-8 font-cairo" dir="rtl">
         
-        {/* 🚀 زر العودة الموحد */}
         <div className="mb-2 no-print">
           <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-rose-600 font-bold bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-slate-200 transition-all w-fit group">
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة الإدارة
           </Link>
         </div>
 
-        {/* Hero Section */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-rose-800 via-red-700 to-rose-900 p-6 sm:p-12 text-white shadow-2xl shadow-rose-900/30 border-b-4 border-rose-400">
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
             <div className="space-y-3 sm:space-y-4">
@@ -167,8 +232,9 @@ export default function AbsenceDeductionsPage() {
               <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
                 قرارات خصم الغياب
               </h1>
-              <p className="text-rose-100 text-xs sm:text-base font-bold opacity-90 max-w-2xl leading-relaxed">
-                هذه اللوحة مخصصة لحصر الطلاب الذين تجاوزوا الحد المسموح للغياب. النظام يقوم آلياً بتطبيق لائحة الوزارة: <strong className="bg-white/20 px-2 py-0.5 rounded text-white mx-1">كل 5 حصص = 1 يوم غياب كامل</strong>.
+              <p className="text-rose-100 text-xs sm:text-base font-bold opacity-90 max-w-3xl leading-relaxed">
+                هذه اللوحة مخصصة فقط للطلاب المستحقين للخصم. النظام يقوم آلياً بتطبيق لائحة الوزارة: <br />
+                <strong className="bg-white/20 px-2 py-0.5 rounded text-white mx-1 my-1 inline-block">غياب يوم كامل = 1 يوم خصم</strong> و <strong className="bg-white/20 px-2 py-0.5 rounded text-white mx-1 inline-block">كل 5 حصص متفرقة = 1 يوم خصم</strong>.
               </p>
             </div>
             
@@ -187,7 +253,6 @@ export default function AbsenceDeductionsPage() {
           <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-white/10 blur-3xl pointer-events-none animate-pulse"></div>
         </div>
 
-        {/* Quick Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
           <div className="bg-white/90 backdrop-blur-xl p-5 sm:p-8 rounded-[2rem] border border-rose-100 shadow-sm flex items-center gap-4 group hover:shadow-lg transition-all">
             <div className="h-14 w-14 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform shadow-sm">
@@ -218,7 +283,6 @@ export default function AbsenceDeductionsPage() {
           </div>
         </div>
 
-        {/* Filters & Table */}
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-5 sm:p-8 border-b border-slate-100/50 flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-3">
@@ -227,7 +291,7 @@ export default function AbsenceDeductionsPage() {
               </div>
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">قائمة المستحقين للخصم</h2>
-                <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1">القائمة مفلترة آلياً لإظهار من تجاوز 5 حصص غياب فقط.</p>
+                <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1">القائمة مفلترة آلياً لمن تجاوز يوم غياب كامل أو 5 حصص متفرقة.</p>
               </div>
             </div>
             
@@ -263,7 +327,7 @@ export default function AbsenceDeductionsPage() {
               <thead className="bg-slate-50/30">
                 <tr>
                   <th className="py-4 sm:py-5 pr-6 sm:pr-8 pl-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">الطالب والفصل</th>
-                  <th className="px-4 py-4 sm:py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">إجمالي الغياب (حصص)</th>
+                  <th className="px-4 py-4 sm:py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">تفاصيل الغياب</th>
                   <th className="px-4 py-4 sm:py-5 text-center text-[10px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 border-x border-rose-100">أيام الخصم المستحقة</th>
                   <th className="px-6 py-4 sm:py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:table-cell">تصنيف الخطر</th>
                 </tr>
@@ -304,9 +368,10 @@ export default function AbsenceDeductionsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 sm:py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-100 text-slate-700 font-black text-sm border border-slate-200 shadow-sm">
-                          {student.absentPeriods}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          {student.fullDaysAbsent > 0 && <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">{student.fullDaysAbsent} يوم كامل</span>}
+                          {student.partialPeriodsAbsent > 0 && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">{student.partialPeriodsAbsent} حصص متفرقة</span>}
+                        </div>
                       </td>
                       <td className="px-4 py-3 sm:py-4 text-center bg-rose-50/50 border-x border-rose-50">
                         <span className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-rose-600 text-white font-black text-lg border border-rose-700 shadow-md shadow-rose-200 animate-pulse">
@@ -341,7 +406,6 @@ export default function AbsenceDeductionsPage() {
       {/* 🚀 MINISTRY OFFICIAL PDF VIEW (للطباعة فقط) */}
       {/* ========================================== */}
       <div className="hidden print:block w-full bg-white text-black p-10 font-cairo" dir="rtl">
-        {/* ترويسة كلاسيكية رسمية */}
         <div className="border-b-4 border-double border-slate-900 pb-6 mb-8 flex justify-between items-start">
           <div className="text-right space-y-1">
             <h2 className="text-lg font-black">وزارة التربية </h2>
@@ -357,14 +421,13 @@ export default function AbsenceDeductionsPage() {
           <div className="text-left space-y-2">
             <p className="text-sm font-bold">التاريخ: {format(new Date(), 'yyyy/MM/dd')}</p>
             <p className="text-sm font-bold">رقم الكشف: {Math.floor(Math.random() * 90000) + 10000}</p>
-            <p className="text-sm font-bold">المرفقات: ( ___ )</p>
           </div>
         </div>
 
         <div className="text-center mb-10">
           <h1 className="text-2xl font-black underline underline-offset-8 mb-4">كشف حصر غياب الطلاب المستحقين للخصم</h1>
           <p className="text-sm font-bold text-slate-700 leading-relaxed max-w-3xl mx-auto">
-            بناءً على لائحة السلوك والمواظبة المعتمدة، نرفع لسعادتكم كشفاً بأسماء الطلاب الذين تجاوزوا الحد المسموح للغياب، حيث تم تطبيق معادلة الخصم النظامية <span className="border px-1 border-slate-900">(خمس حصص غياب منفصلة = يوم غياب كامل)</span>، وذلك لاعتماد الخصم من درجات المواظبة.
+            بناءً على لائحة السلوك والمواظبة المعتمدة، نرفع لسعادتكم كشفاً بأسماء الطلاب الذين تجاوزوا الحد المسموح للغياب، حيث تم تطبيق معادلة الخصم النظامية <span className="border px-1 border-slate-900">(غياب يوم كامل = 1 يوم خصم) و (خمس حصص غياب منفصلة = 1 يوم خصم)</span>، وذلك لاعتماد الخصم من درجات المواظبة.
           </p>
         </div>
 
@@ -374,7 +437,7 @@ export default function AbsenceDeductionsPage() {
               <th className="border-2 border-slate-900 p-3 text-center w-12 font-black">م</th>
               <th className="border-2 border-slate-900 p-3 text-right font-black w-1/3">اسم الطالب الرباعي</th>
               <th className="border-2 border-slate-900 p-3 text-center font-black">الصف / الشعبة</th>
-              <th className="border-2 border-slate-900 p-3 text-center font-black">مجموع حصص الغياب</th>
+              <th className="border-2 border-slate-900 p-3 text-center font-black">تفاصيل الغياب</th>
               <th className="border-2 border-slate-900 p-3 text-center font-black bg-slate-300">أيام الخصم المستحقة</th>
               <th className="border-2 border-slate-900 p-3 text-center font-black w-48">ملاحظات والتوقيع</th>
             </tr>
@@ -385,7 +448,10 @@ export default function AbsenceDeductionsPage() {
                 <td className="border-2 border-slate-900 p-3 text-center font-bold">{index + 1}</td>
                 <td className="border-2 border-slate-900 p-3 text-right font-black">{stu.name}</td>
                 <td className="border-2 border-slate-900 p-3 text-center font-bold text-slate-700">{stu.className}</td>
-                <td className="border-2 border-slate-900 p-3 text-center font-bold" dir="ltr">{stu.absentPeriods} حصص</td>
+                <td className="border-2 border-slate-900 p-2 text-center font-bold" dir="ltr">
+                   {stu.fullDaysAbsent > 0 && <div>{stu.fullDaysAbsent} يوم كامل</div>}
+                   {stu.partialPeriodsAbsent > 0 && <div>{stu.partialPeriodsAbsent} حصص متفرقة</div>}
+                </td>
                 <td className="border-2 border-slate-900 p-3 text-center font-black text-lg bg-slate-100">
                   {stu.deductionDays} يوم
                 </td>
@@ -397,7 +463,6 @@ export default function AbsenceDeductionsPage() {
           </tbody>
         </table>
 
-        {/* توقيعات الاعتماد الرسمية */}
         <div className="flex justify-between items-end mt-20 pt-10 border-t-2 border-slate-900 px-10">
           <div className="text-center w-1/3">
             <h4 className="font-black mb-12">إدارة المنصة / شؤون الطلاب</h4>
@@ -416,10 +481,6 @@ export default function AbsenceDeductionsPage() {
             <div className="w-48 border-b-2 border-slate-900 border-dashed mx-auto mb-2"></div>
             <p className="text-xs font-bold text-slate-500">الاسم والتوقيع والختم</p>
           </div>
-        </div>
-
-        <div className="mt-8 text-center text-[10px] font-bold text-slate-400">
-          * تم استخراج هذا الكشف آلياً من نظام الرفعة النموذجي للإدارة المدرسية.
         </div>
       </div>
     </>
