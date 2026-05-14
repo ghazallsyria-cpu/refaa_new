@@ -3,7 +3,8 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Compass, Zap, Target, Calculator, TrendingUp, Settings, ShieldCheck, UserCircle } from 'lucide-react';
+// 🚀 تم إصلاح الاستيراد هنا:
+import { Compass, Zap, Target, Calculator, TrendingUp, Settings, ShieldCheck, UserCircle, GraduationCap, PencilLine } from 'lucide-react';
 import { useAcademicCompass } from '@/hooks/useAcademicCompass';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
@@ -31,7 +32,6 @@ export default function AcademicCompassPage() {
     }
   }, [user?.id, calculateCompass]);
 
-  // محرك الحساب اللحظي (The Core Engine)
   const results = useMemo(() => {
     if (analysis.length === 0) return { current: 0, final: 0 };
     const totalMax = analysis.reduce((acc, s) => acc + s.total_max, 0);
@@ -39,14 +39,13 @@ export default function AcademicCompassPage() {
       const data = simulationData[s.subject_name] || { coursework: 0, exam: 0 };
       return acc + data.coursework + data.exam;
     }, 0);
-    const gCurrentAvg = (predictedTotal / totalMax) * 100;
+    const gCurrentAvg = totalMax > 0 ? (predictedTotal / totalMax) * 100 : 0;
     
-    // الحسبة التراكمية حسب المرحلة
     let finalGPA = gCurrentAvg;
     if (activeStage.startsWith('12')) {
       finalGPA = (prevYears.g10 * 0.1) + (prevYears.g11 * 0.2) + (gCurrentAvg * 0.7);
     } else if (activeStage.startsWith('11')) {
-      finalGPA = (prevYears.g10 * 0.1) + (gCurrentAvg * 0.9); // محاكاة إذا كان في 11
+      finalGPA = (prevYears.g10 * 0.1) + (gCurrentAvg * 0.9);
     }
 
     return { current: gCurrentAvg.toFixed(2), final: finalGPA.toFixed(2) };
