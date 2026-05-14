@@ -13,7 +13,6 @@ import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 
 // نستخدم نفس مصفوفة الروابط لضمان التطابق التام
-// ملاحظة: في مشروعك الحقيقي يفضل وضع هذه المصفوفة في ملف خارجي واستيرادها هنا وفي السايد بار
 const navigationGroups = [
   { title: 'شؤون أكاديمية وطلابية', items: ['الطلاب', 'الفصول', 'المواد الدراسية', 'أولياء الأمور', 'الهيكل الأكاديمي'] },
   { title: 'شؤون المعلمين (HR)', items: ['المعلمين', 'متابعة المعلمين', 'تقرير المعلمين', 'تعيينات المعلمين'] },
@@ -32,17 +31,23 @@ const roles = [
 export default function PermissionsManagementPage() {
   const { authRole } = useAuth() as any;
   const [dbPermissions, setDbPermissions] = useState<Record<string, string[]>>({ teacher: [], student: [], parent: [] });
+  const [settingsId, setSettingsId] = useState<string | null>(null); // 🚀 الحقل الجديد لحفظ الـ UUID الحقيقي
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeRole, setActiveTab] = useState('teacher');
 
-  // جلب الصلاحيات الحالية من قاعدة البيانات
+  // جلب الصلاحيات الحالية والـ ID من قاعدة البيانات
   useEffect(() => {
     async function fetchPerms() {
       try {
-        const { data, error } = await supabase.from('platform_settings').select('role_permissions').single();
-        if (data?.role_permissions) {
-          setDbPermissions(data.role_permissions);
+        // 🚀 نجلب الـ id مع الصلاحيات
+        const { data, error } = await supabase.from('platform_settings').select('id, role_permissions').limit(1).single();
+        
+        if (data) {
+          setSettingsId(data.id); // 👈 تخزين الـ ID الحقيقي للجدول
+          if (data.role_permissions) {
+            setDbPermissions(data.role_permissions);
+          }
         }
       } catch (e) {
         console.error("Error loading perms", e);
@@ -64,17 +69,23 @@ export default function PermissionsManagementPage() {
   };
 
   const handleSave = async () => {
+    if (!settingsId) {
+      alert('لم يتم العثور على إعدادات المنصة في قاعدة البيانات. يرجى التحقق من جدول platform_settings.');
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase
         .from('platform_settings')
         .update({ role_permissions: dbPermissions })
-        .eq('id', 1); // نفترض أن الإعدادات دائماً في الصف رقم 1
+        .eq('id', settingsId); // 🚀 نستخدم الـ UUID الحقيقي الذي جلبناه
 
       if (error) throw error;
       alert('تم تحديث الصلاحيات فورياً لجميع المستخدمين! 🚀');
     } catch (e) {
-      alert('حدث خطأ أثناء الحفظ');
+      console.error("Save Error:", e);
+      alert('حدث خطأ أثناء الحفظ. تأكد من اتصال الإنترنت أو من صلاحيات قاعدة البيانات.');
     } finally {
       setSaving(false);
     }
@@ -106,7 +117,7 @@ export default function PermissionsManagementPage() {
            </div>
            <button 
              onClick={handleSave} 
-             disabled={saving}
+             disabled={saving || loading}
              className="w-full md:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-[0_0_20px_rgba(99,102,241,0.4)] disabled:opacity-50"
            >
              {saving ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
