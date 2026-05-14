@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ScrollText, Loader2, CheckCircle2, Search, X, Coins, ShieldCheck, Filter, PrinterIcon, Edit3, Save, Trash2 } from 'lucide-react';
+import { ScrollText, Loader2, CheckCircle2, Search, X, Coins, ShieldCheck, Filter, PrinterIcon, Edit3, Save, Trash2, PlusCircle, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,10 +16,16 @@ export default function GraduationDocsAdmin() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('');
 
-  // 🚀 حالات التعديل اليدوي
+  // 🚀 حالات التعديل اليدوي وإضافة طلب جديد
   const [editingRequest, setEditingRequest] = useState<any>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [editForm, setEditForm] = useState({ cert_ar: 0, cert_en: 0, twimc_ar: 0, twimc_en: 0, conduct_ar: 0, conduct_en: 0 });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  
+  // 🚀 حالات لاختيار الطالب عند إنشاء طلب جديد
+  const [allStudents, setAllStudents] = useState<any[]>([]);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
 
   const currentYear = '2025-2026';
 
@@ -31,6 +37,7 @@ export default function GraduationDocsAdmin() {
         .select(`
           *,
           students (
+            id,
             users (full_name),
             sections (name, classes(name, level))
           )
@@ -40,6 +47,17 @@ export default function GraduationDocsAdmin() {
 
       if (error) throw error;
       setRequests(data || []);
+
+      // جلب قائمة كل الطلاب (لاستخدامها عند إنشاء طلب إداري جديد)
+      const { data: studentsData } = await supabase
+        .from('students')
+        .select(`
+          id,
+          users (full_name),
+          sections (name, classes(name, level))
+        `);
+      setAllStudents(studentsData || []);
+
     } catch (err) {
       console.error(err);
     } finally {
@@ -50,6 +68,14 @@ export default function GraduationDocsAdmin() {
   useEffect(() => {
     if (['admin', 'management'].includes(currentRole)) fetchData();
   }, [currentRole]);
+
+  // دالة مساعدة لجلب اسم الصف بدقة
+  const getFullClassName = (studentData: any) => {
+    if (!studentData) return 'غير محدد';
+    const classLvl = studentData?.sections?.classes?.level || studentData?.sections?.[0]?.classes?.level;
+    const secName = studentData?.sections?.name || studentData?.sections?.[0]?.name || '';
+    return classLvl ? `الصف ${classLvl} - ${secName}` : secName || 'صف غير محدد';
+  };
 
   // دالة الاعتماد المالي
   const markAsPaid = async (id: string, studentName: string) => {
@@ -75,14 +101,24 @@ export default function GraduationDocsAdmin() {
     } catch (e) { alert('خطأ في الحذف'); }
   };
 
-  // 🚀 دوال التعديل اليدوي
-  const openEditModal = (req: any) => {
-    setEditingRequest(req);
-    setEditForm({
-      cert_ar: req.cert_ar || 0, cert_en: req.cert_en || 0,
-      twimc_ar: req.twimc_ar || 0, twimc_en: req.twimc_en || 0,
-      conduct_ar: req.conduct_ar || 0, conduct_en: req.conduct_en || 0
-    });
+  // 🚀 دوال التعديل والإضافة
+  const openEditModal = (req: any = null) => {
+    if (req) {
+      setIsCreatingNew(false);
+      setEditingRequest(req);
+      setSelectedStudentId(req.student_id);
+      setEditForm({
+        cert_ar: req.cert_ar || 0, cert_en: req.cert_en || 0,
+        twimc_ar: req.twimc_ar || 0, twimc_en: req.twimc_en || 0,
+        conduct_ar: req.conduct_ar || 0, conduct_en: req.conduct_en || 0
+      });
+    } else {
+      setIsCreatingNew(true);
+      setEditingRequest({ id: 'new' }); // معرف وهمي لفتح النافذة
+      setSelectedStudentId('');
+      setStudentSearchTerm('');
+      setEditForm({ cert_ar: 0, cert_en: 0, twimc_ar: 0, twimc_en: 0, conduct_ar: 0, conduct_en: 0 });
+    }
   };
 
   const handleDocChange = (field: string, delta: number) => {
@@ -92,29 +128,62 @@ export default function GraduationDocsAdmin() {
   const currentEditTotal = Object.values(editForm).reduce((a, b) => a + b, 0);
 
   const saveEdit = async () => {
-    if (currentEditTotal === 0) { alert('لا يمكن أن يكون الطلب فارغاً. استخدم زر الحذف إذا أردت إلغاء الطلب.'); return; }
+    if (isCreatingNew && !selectedStudentId) {
+      alert('يجب اختيار الطالب أولاً قبل حفظ الطلب.');
+      return;
+    }
+    if (currentEditTotal === 0 && isCreatingNew) { 
+      alert('لا يمكن إنشاء طلب فارغ.'); 
+      return; 
+    }
+    if (currentEditTotal === 0 && !isCreatingNew) { 
+      alert('لا يمكن أن يكون الطلب فارغاً. استخدم زر الحذف إذا أردت إلغاء الطلب.'); 
+      return; 
+    }
+    
     setIsSavingEdit(true);
     try {
-      const { error } = await supabase.from('graduation_documents').update({
-        cert_ar: editForm.cert_ar, cert_en: editForm.cert_en,
-        twimc_ar: editForm.twimc_ar, twimc_en: editForm.twimc_en,
-        conduct_ar: editForm.conduct_ar, conduct_en: editForm.conduct_en,
-        total_amount: currentEditTotal 
-      }).eq('id', editingRequest.id);
+      if (isCreatingNew) {
+        // التحقق إذا كان الطالب لديه طلب مفتوح وغير مدفوع لنفس العام
+        const { data: existing } = await supabase.from('graduation_documents')
+          .select('id').eq('student_id', selectedStudentId).eq('academic_year', currentYear).eq('payment_status', 'pending').maybeSingle();
+          
+        if (existing) {
+          alert('هذا الطالب لديه طلب سابق غير مدفوع في النظام، قم بتعديل طلبه السابق بدلاً من إنشاء واحد جديد.');
+          setIsSavingEdit(false);
+          return;
+        }
 
-      if (error) throw error;
-      alert('تم تحديث الطلب وإعادة حساب المبلغ بنجاح! ✅');
+        const { error } = await supabase.from('graduation_documents').insert({
+          student_id: selectedStudentId,
+          academic_year: currentYear,
+          cert_ar: editForm.cert_ar, cert_en: editForm.cert_en,
+          twimc_ar: editForm.twimc_ar, twimc_en: editForm.twimc_en,
+          conduct_ar: editForm.conduct_ar, conduct_en: editForm.conduct_en,
+          total_amount: currentEditTotal,
+          payment_status: 'pending' // الإدارة ستسجل الدفع من القائمة الخارجية
+        });
+        if (error) throw error;
+        alert('تم إنشاء الطلب الإداري بنجاح! ✅');
+      } else {
+        const { error } = await supabase.from('graduation_documents').update({
+          cert_ar: editForm.cert_ar, cert_en: editForm.cert_en,
+          twimc_ar: editForm.twimc_ar, twimc_en: editForm.twimc_en,
+          conduct_ar: editForm.conduct_ar, conduct_en: editForm.conduct_en,
+          total_amount: currentEditTotal 
+        }).eq('id', editingRequest.id);
+        if (error) throw error;
+        alert('تم تحديث الطلب وإعادة حساب المبلغ بنجاح! ✅');
+      }
+
       setEditingRequest(null);
       fetchData();
-    } catch(e) { alert('حدث خطأ أثناء حفظ التعديلات.'); }
-    finally { setIsSavingEdit(false); }
-  };
-
-  // دالة مساعدة لجلب اسم الصف بدقة
-  const getFullClassName = (studentData: any) => {
-    const classLvl = studentData?.sections?.classes?.level || studentData?.sections?.[0]?.classes?.level;
-    const secName = studentData?.sections?.name || studentData?.sections?.[0]?.name || '';
-    return `الصف ${classLvl || '12'} - ${secName}`;
+    } catch(e) { 
+      console.error(e);
+      alert('حدث خطأ أثناء حفظ البيانات.'); 
+    } finally { 
+      setIsSavingEdit(false); 
+    }
   };
 
   // استخراج الصفوف الموجودة في الطلبات للفلترة
@@ -130,6 +199,11 @@ export default function GraduationDocsAdmin() {
     const classMatch = filterClass ? getFullClassName(r.students) === filterClass : true;
     return nameMatch && classMatch;
   });
+
+  // فلترة الطلاب عند إنشاء طلب جديد
+  const filteredStudentsForNewReq = allStudents.filter(s => 
+    s.users?.full_name?.toLowerCase().includes(studentSearchTerm.toLowerCase())
+  ).slice(0, 10); // عرض أول 10 نتائج فقط لعدم ثقل الشاشة
 
   // الحسابات المالية اللحظية للإدارة
   const totalExpected = requests.reduce((acc, r) => acc + r.total_amount, 0);
@@ -169,8 +243,14 @@ export default function GraduationDocsAdmin() {
                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">تم تحصيله (خزنة المندوب)</p>
                  <p className="text-xl sm:text-2xl font-black text-emerald-700">{totalCollected} د.ك</p>
                </div>
+               
+               {/* 🚀 زر الإضافة الإدارية */}
+               <button onClick={() => openEditModal()} className="w-full sm:w-auto bg-fuchsia-600 hover:bg-fuchsia-500 text-white px-6 py-3 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-md print:hidden active:scale-95">
+                 <PlusCircle className="w-5 h-5" /> إصدار طلب (نقدي)
+               </button>
+
                <button onClick={printManifest} className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-md print:hidden active:scale-95">
-                 <PrinterIcon className="w-5 h-5" /> طباعة كشف للمندوب
+                 <PrinterIcon className="w-5 h-5" /> طباعة الكشف
                </button>
             </div>
           </div>
@@ -251,25 +331,80 @@ export default function GraduationDocsAdmin() {
         </div>
       </div>
 
-      {/* 🚀 نافذة التعديل اليدوي للمدير (مضادة للانهيار Pure Modal) */}
+      {/* 🚀 نافذة التعديل اليدوي / إضافة طلب إداري */}
       <AnimatePresence>
         {editingRequest && (
           <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
              <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setEditingRequest(null)}></div>
              
-             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white border border-slate-200 rounded-[2rem] w-full max-w-2xl shadow-2xl relative z-10 flex flex-col max-h-[90vh]" dir="rtl">
+             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white border border-slate-200 rounded-[2rem] w-full max-w-2xl shadow-2xl relative z-10 flex flex-col max-h-[95vh]" dir="rtl">
                  <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0 bg-slate-50">
                     <div className="flex items-center gap-3">
-                       <div className="w-10 h-10 bg-fuchsia-100 rounded-xl flex items-center justify-center text-fuchsia-600 shadow-inner border border-fuchsia-200"><Edit3 className="w-5 h-5"/></div>
+                       <div className="w-10 h-10 bg-fuchsia-100 rounded-xl flex items-center justify-center text-fuchsia-600 shadow-inner border border-fuchsia-200">
+                          {isCreatingNew ? <PlusCircle className="w-5 h-5"/> : <Edit3 className="w-5 h-5"/>}
+                       </div>
                        <div>
-                         <h2 className="text-lg font-black text-slate-800 leading-tight">تعديل طلب الوثائق</h2>
-                         <p className="text-[10px] font-bold text-slate-500 mt-1">الطالب: <span className="text-fuchsia-600 font-black">{editingRequest.students?.users?.full_name}</span></p>
+                         <h2 className="text-lg font-black text-slate-800 leading-tight">{isCreatingNew ? 'إصدار طلب وثائق (إداري)' : 'تعديل طلب الوثائق'}</h2>
+                         {!isCreatingNew && <p className="text-[10px] font-bold text-slate-500 mt-1">الطالب: <span className="text-fuchsia-600 font-black">{editingRequest.students?.users?.full_name}</span></p>}
                        </div>
                     </div>
                     <button onClick={() => setEditingRequest(null)} className="text-slate-400 hover:text-rose-500 bg-white border border-slate-200 p-2 rounded-full transition-colors active:scale-90 shadow-sm"><X className="w-5 h-5"/></button>
                  </div>
 
-                 <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                 <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                    
+                    {/* 🚀 مربع اختيار الطالب عند إنشاء طلب جديد */}
+                    {isCreatingNew && (
+                      <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl shadow-inner space-y-4">
+                         <label className="text-xs font-black text-indigo-800 flex items-center gap-2"><UserPlus className="w-4 h-4"/> اختر الطالب (مقدم الطلب):</label>
+                         
+                         {!selectedStudentId ? (
+                           <>
+                             <div className="relative">
+                               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                               <input 
+                                 type="text" 
+                                 placeholder="ابحث باسم الطالب..." 
+                                 value={studentSearchTerm} 
+                                 onChange={e => setStudentSearchTerm(e.target.value)} 
+                                 className="w-full pl-3 pr-10 py-2.5 bg-white border border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400" 
+                               />
+                             </div>
+                             
+                             {studentSearchTerm.trim().length > 0 && (
+                               <div className="mt-2 border border-indigo-100 rounded-xl overflow-hidden bg-white max-h-40 overflow-y-auto custom-scrollbar shadow-sm">
+                                 {filteredStudentsForNewReq.length > 0 ? (
+                                   filteredStudentsForNewReq.map(s => (
+                                     <button 
+                                       key={s.id} 
+                                       onClick={() => setSelectedStudentId(s.id)}
+                                       className="w-full text-right px-4 py-2 hover:bg-indigo-50 border-b border-indigo-50 last:border-0 transition-colors flex flex-col"
+                                     >
+                                       <span className="font-black text-sm text-slate-700">{s.users?.full_name}</span>
+                                       <span className="text-[10px] text-indigo-500 font-bold">{getFullClassName(s)}</span>
+                                     </button>
+                                   ))
+                                 ) : (
+                                   <div className="p-3 text-center text-xs font-bold text-slate-400">لا يوجد طالب بهذا الاسم.</div>
+                                 )}
+                               </div>
+                             )}
+                           </>
+                         ) : (
+                           <div className="flex items-center justify-between bg-white border border-emerald-200 p-3 rounded-xl shadow-sm">
+                             <div className="flex items-center gap-3">
+                               <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                               <div>
+                                 <p className="font-black text-sm text-slate-800">{allStudents.find(s => s.id === selectedStudentId)?.users?.full_name}</p>
+                                 <p className="text-[10px] text-emerald-600 font-bold">{getFullClassName(allStudents.find(s => s.id === selectedStudentId))}</p>
+                               </div>
+                             </div>
+                             <button onClick={() => setSelectedStudentId('')} className="text-xs text-rose-500 hover:underline font-bold">تغيير</button>
+                           </div>
+                         )}
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                        {/* شهادة ثانوية */}
                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
@@ -342,16 +477,20 @@ export default function GraduationDocsAdmin() {
                     </div>
                  </div>
 
-                 <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between gap-4">
+                 <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between gap-4 rounded-b-[2rem]">
                     <div className="flex items-center gap-3">
                        <div className="p-3 bg-fuchsia-100 rounded-xl border border-fuchsia-200"><Coins className="w-5 h-5 text-fuchsia-600"/></div>
                        <div>
-                         <p className="text-[10px] font-bold text-slate-500 uppercase">المبلغ الإجمالي الجديد</p>
+                         <p className="text-[10px] font-bold text-slate-500 uppercase">المبلغ الإجمالي</p>
                          <p className="text-xl font-black text-fuchsia-600">{currentEditTotal} د.ك</p>
                        </div>
                     </div>
-                    <button onClick={saveEdit} disabled={isSavingEdit} className="py-4 px-8 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50">
-                       {isSavingEdit ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> حفظ التعديل</>}
+                    <button 
+                       onClick={saveEdit} 
+                       disabled={isSavingEdit || (isCreatingNew && !selectedStudentId) || currentEditTotal === 0} 
+                       className="py-4 px-6 sm:px-8 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:bg-slate-400"
+                    >
+                       {isSavingEdit ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> {isCreatingNew ? 'إصدار الطلب' : 'حفظ التعديل'}</>}
                     </button>
                  </div>
              </motion.div>
@@ -370,6 +509,7 @@ export default function GraduationDocsAdmin() {
           td, th { border: 1px solid #ddd !important; }
         }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
       `}</style>
     </div>
