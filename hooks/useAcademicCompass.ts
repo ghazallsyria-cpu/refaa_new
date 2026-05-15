@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
+// 🚀 تعريف هيكل بيانات المادة المتوافق مع شاشة المحاكاة الجديدة
 export interface SubjectAnalysis {
   subject_name: string;
   coursework_max: number;
@@ -10,7 +11,7 @@ export interface SubjectAnalysis {
   real_coursework: number;
   predicted_coursework: number;
   predicted_exam: number;
-  status: 'PASSED' | 'SAFE' | 'WARNING' | 'DANGER' | 'IMPOSSIBLE';
+  status: string;
   message: string;
 }
 
@@ -19,78 +20,92 @@ export function useAcademicCompass() {
   const [analysis, setAnalysis] = useState<SubjectAnalysis[]>([]);
   const [studentStage, setStudentStage] = useState<string>('');
 
-  // 🚀 الدالة الذكية للتعرف على مرحلة الطالب (تم إصلاح استخراج البيانات)
+  // 🧠 الدالة الذكية للتعرف على مرحلة الطالب (تمنع خطأ القيمة الافتراضية)
   const fetchStudentStage = useCallback(async (studentId: string) => {
     try {
+      // استعلام واسع يغطي جميع احتمالات حفظ بيانات المرحلة في قاعدة بياناتك
       const { data, error } = await supabase
         .from('students')
         .select(`
+          track,
+          grade_level,
           next_year_track,
           sections (
-            classes ( level )
+            classes ( level, name )
           )
         `)
         .eq('id', studentId)
         .single();
 
       if (error) {
-         console.warn("لم نتمكن من جلب بيانات مرحلة الطالب، سنفترض 12 علمي:", error);
+         console.warn("⚠️ تنبيه: تعذر جلب بيانات الطالب، سنستخدم 12 علمي كافتراضي.", error);
          return '12_scientific';
       }
 
-      // 🛠️ الإصلاح الجذري لمشكلة TypeScript
-      // نتعامل مع sections كـ Any لنتجاوز تعقيد المصفوفات في TypeScript
       const rawData = data as any;
       
-      // نستخرج الـ level بأمان سواء كان sections مصفوفة أو كائن
-      let rawLevel = null;
+      // 1. محاولة استخراج الصف 
+      let rawLevel = rawData?.grade_level; 
       
-      if (Array.isArray(rawData?.sections) && rawData.sections.length > 0) {
-        // إذا كان مصفوفة، نأخذ أول فصل مسجل فيه
-        rawLevel = rawData.sections[0]?.classes?.level;
-      } else if (rawData?.sections?.classes) {
-        // إذا كان كائن مفرد
-        rawLevel = rawData.sections.classes.level;
+      if (!rawLevel) {
+        if (Array.isArray(rawData?.sections) && rawData.sections.length > 0) {
+          rawLevel = rawData.sections[0]?.classes?.level || rawData.sections[0]?.classes?.name;
+        } else if (rawData?.sections?.classes) {
+          rawLevel = rawData.sections.classes.level || rawData.sections.classes.name;
+        }
       }
 
-      const level = rawLevel?.toString(); 
-      const track = rawData?.next_year_track;
+      // 2. محاولة استخراج المسار
+      const rawTrack = rawData?.track || rawData?.next_year_track || 'scientific';
 
-      let stage = '12_scientific'; // القيمة الافتراضية
+      // 3. تحويل القيم لنصوص لتطبيق المطابقة الذكية
+      const levelStr = String(rawLevel || '').toLowerCase(); 
+      const trackStr = String(rawTrack || '').toLowerCase();
 
-      if (level === '10') {
+      let stage = '12_scientific'; // الحماية الأخيرة
+
+      // 4. خوارزمية المطابقة (Fuzzy Matching) لدعم الأرقام والنصوص العربية
+      if (levelStr.includes('10') || levelStr.includes('عاشر')) {
         stage = '10';
-      } else if (level === '11') {
-        stage = track === 'literary' ? '11_literary' : '11_scientific';
-      } else if (level === '12') {
-        stage = track === 'literary' ? '12_literary' : '12_scientific';
+      } 
+      else if (levelStr.includes('11') || levelStr.includes('حادي')) {
+        stage = (trackStr.includes('lit') || trackStr.includes('أدبي')) ? '11_literary' : '11_scientific';
+      } 
+      else if (levelStr.includes('12') || levelStr.includes('ثاني')) {
+        stage = (trackStr.includes('lit') || trackStr.includes('أدبي')) ? '12_literary' : '12_scientific';
       }
 
       setStudentStage(stage);
       return stage;
+      
     } catch (err) {
-      console.error("Error fetching stage:", err);
+      console.error("Error in fetchStudentStage:", err);
       return '12_scientific';
     }
   }, []);
 
+  // 📡 الدالة الأساسية لجلب اللوائح والدرجات
   const calculateCompass = useCallback(async (studentId: string, manualStage?: string) => {
     setLoading(true);
     try {
+      // استخدم المرحلة اليدوية (للمدير) أو اجلب مرحلة الطالب الحقيقية
       const targetStage = manualStage || await fetchStudentStage(studentId);
       setStudentStage(targetStage); 
 
+      // جلب اللوائح والأوزان الخاصة بالمرحلة
       const { data: rules } = await supabase
         .from('kuwait_grading_rules')
         .select('*')
         .eq('academic_stage', targetStage)
         .order('subject_name');
 
+      // جلب درجات الطالب المرصودة سابقاً (للبدء منها في المحاكاة)
       const { data: grades } = await supabase
         .from('grades')
         .select('score, subjects(name)')
         .eq('student_id', studentId);
 
+      // ترتيب الدرجات في قاموس لسرعة الوصول
       const gradesMap = new Map<string, number>();
       if (grades) {
         grades.forEach(g => {
@@ -101,6 +116,7 @@ export function useAcademicCompass() {
         });
       }
 
+      // دمج اللوائح مع درجات الطالب الحقيقية
       const generated: SubjectAnalysis[] = (rules || []).map(rule => {
         const realScore = gradesMap.get(rule.subject_name) || 0;
         return {
@@ -109,9 +125,9 @@ export function useAcademicCompass() {
           exam_max: rule.exam_max,
           total_max: rule.total_max,
           passing_mark: rule.passing_mark,
-          real_coursework: realScore,
-          predicted_coursework: realScore,
-          predicted_exam: rule.passing_mark - realScore > 0 ? rule.passing_mark - realScore : 0,
+          real_coursework: realScore, // الدرجة الحقيقية إن وجدت
+          predicted_coursework: realScore, // التوقع يبدأ من الدرجة الحقيقية
+          predicted_exam: 0, // يبدأ من صفر ليقوم الطالب بتحريكه
           status: 'SAFE',
           message: ''
         };
@@ -119,33 +135,11 @@ export function useAcademicCompass() {
 
       setAnalysis(generated);
       return { generated, targetStage };
+      
     } finally {
       setLoading(false);
     }
   }, [fetchStudentStage]);
 
-  const calculatePredictedGPA = useCallback((
-    subjects: SubjectAnalysis[], 
-    predictions: Record<string, number>, 
-    g10: number, 
-    g11: number  
-  ) => {
-    if (!subjects || subjects.length === 0) return { g12Average: "0.00", finalCumulative: "0.00" };
-
-    const totalMax = subjects.reduce((acc, s) => acc + s.total_max, 0);
-    const predictedTotal = subjects.reduce((acc, s) => {
-      const pred = predictions[s.subject_name] || 0;
-      return acc + s.real_coursework + pred;
-    }, 0);
-    
-    const g12Average = totalMax > 0 ? (predictedTotal / totalMax) * 100 : 0;
-    const finalCumulative = (g10 * 0.10) + (g11 * 0.20) + (g12Average * 0.70);
-
-    return {
-      g12Average: g12Average.toFixed(2),
-      finalCumulative: finalCumulative.toFixed(2)
-    };
-  }, []);
-
-  return { calculateCompass, calculatePredictedGPA, analysis, loading, studentStage };
+  return { calculateCompass, analysis, loading, studentStage };
 }
