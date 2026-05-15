@@ -2,13 +2,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BookOpen, Users, Calculator, Download, Loader2, Trophy, Medal, Plus, Save, BarChart3, Edit3, Pencil, Printer, FileText, X, Trash2, ShieldAlert } from 'lucide-react';
+import { BookOpen, Users, Calculator, Download, Loader2, Trophy, Medal, Plus, Save, BarChart3, Edit3, Pencil, Printer, FileText, X, Trash2, ShieldAlert, Compass } from 'lucide-react';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useGradebook } from '@/hooks/useGradebook';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import * as Dialog from '@radix-ui/react-dialog';
 import Image from 'next/image'; 
+import Link from 'next/link'; // 🚀 تمت إضافة Link للتوجيه
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 
@@ -29,7 +30,6 @@ export default function GradebookPage() {
 
   const [modifiedGrades, setModifiedGrades] = useState<Record<string, any>>({}); 
 
-  // 🚀 جلب صلاحيات الكادر (Staff) لتمكين نظام عين الرفعة (المراقبة)
   const [staffPermissions, setStaffPermissions] = useState<any>({});
   const [permChecking, setPermChecking] = useState(userRole === 'staff');
 
@@ -44,20 +44,17 @@ export default function GradebookPage() {
     if (!isChecking) checkStaffPerms();
   }, [userRole, user?.id, isChecking]);
 
-  // 🛡️ تعريف الصلاحيات
   const isSuperAdmin = authRole === 'admin' || authRole === 'management';
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
-  const canViewAll = isSuperAdmin || isGlobalWatcher; // الإدارة والمشرفين يرون كل شيء
-  const canEdit = isSuperAdmin || authRole === 'teacher'; // الإدارة والمعلم فقط يحق لهم التعديل
+  const canViewAll = isSuperAdmin || isGlobalWatcher; 
+  const canEdit = isSuperAdmin || authRole === 'teacher'; 
 
-  // 🚀 جلب نطاق المعلم (فصول ومواد) عند الدخول
   useEffect(() => {
     if (!isChecking && authRole === 'teacher') {
       fetchTeacherScope();
     }
   }, [isChecking, authRole, fetchTeacherScope]);
 
-  // 🚀 الفصول والمواد (ديناميكية: الكل للمدير والمشرف، المخصص للمعلم)
   const sections = canViewAll 
       ? formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || []
       : teacherSections;
@@ -110,7 +107,7 @@ export default function GradebookPage() {
   const maxAssignmentTotal = assignments.reduce((sum, a) => sum + getAssignmentMax(a), 0);
 
   const handleScoreChange = (studentId: string, column: any, val: string) => {
-    if (!canEdit) return; // 🛡️ منع إضافي للحماية
+    if (!canEdit) return; 
     const scoreVal = val === '' ? 0 : Number(val);
     const key = `${studentId}_${column.id}`;
     const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(column.id));
@@ -324,7 +321,6 @@ export default function GradebookPage() {
                     <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 sm:gap-3 w-full md:w-auto">
                       <button onClick={() => window.print()} className="flex-1 md:flex-none flex items-center justify-center gap-1.5 sm:gap-2 font-black text-slate-300 bg-[#02040a] border border-white/5 hover:bg-white/5 hover:text-white px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all active:scale-95 text-xs sm:text-sm shadow-inner"><Printer className="w-4 h-4 sm:w-4 sm:h-4" /> PDF</button>
                       
-                      {/* 🛡️ إخفاء زر إضافة عمود للمراقب */}
                       {canEdit && (
                         <Dialog.Root open={isAddColModalOpen} onOpenChange={(open) => { setIsAddColModalOpen(open); if(!open){setNewColTitle(''); setNewColMax(10);} }}>
                           <Dialog.Trigger asChild>
@@ -400,7 +396,6 @@ export default function GradebookPage() {
                                 <th key={c.id} className="bg-[#0f1423]/80 text-slate-300 font-black py-4 px-2 sm:px-4 border-b border-white/5 text-center min-w-[100px] sm:min-w-[130px] print:border-slate-300 group shadow-inner">
                                   <div className="flex items-center justify-center gap-2">
                                     <div className="text-[10px] sm:text-xs lg:text-sm truncate drop-shadow-sm" title={c.title}>{c.title}</div>
-                                    {/* 🛡️ إخفاء أيقونة التعديل للمراقب */}
                                     {canEdit && (
                                       <button onClick={() => openEditModal(c)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1.5 sm:p-2 bg-[#02040a] text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 rounded-lg transition-all print:hidden border border-white/5 shadow-inner active:scale-90"><Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
                                     )}
@@ -419,14 +414,22 @@ export default function GradebookPage() {
                               const total = getCustomTotal(student.id);
                               return (
                                 <tr key={student.id} className={`hover:bg-white/[0.03] transition-colors group print:border-b print:border-slate-300 ${idx % 2 === 0 ? 'bg-[#02040a]/40' : 'bg-transparent'}`}>
-                                  <td className="sticky right-0 z-10 font-black text-[10px] sm:text-xs lg:text-sm py-3 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.4)] bg-inherit group-hover:bg-[#131836] print:bg-transparent print:shadow-none print:border-slate-300 drop-shadow-sm">{student.name}</td>
+                                  {/* 🚀 إضافة زر البوصلة بجانب اسم الطالب */}
+                                  <td className="sticky right-0 z-10 font-black text-[10px] sm:text-xs lg:text-sm py-3 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.4)] bg-inherit group-hover:bg-[#131836] print:bg-transparent print:shadow-none print:border-slate-300 drop-shadow-sm">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="truncate">{student.name}</span>
+                                      <Link href={`/student/academic-compass?studentId=${student.id}`} target="_blank" title="فتح البوصلة الأكاديمية للطالب" className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-md transition-all print:hidden shrink-0 active:scale-95 shadow-inner">
+                                        <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                      </Link>
+                                    </div>
+                                  </td>
                                   {customColumns.map(c => (
                                     <td key={c.id} className="border-b border-white/5 py-3 px-1 sm:px-2 text-center print:border-slate-300">
                                       <input 
                                         type="number" 
                                         max={c.max_score} 
                                         min="0" 
-                                        readOnly={!canEdit} // 🔒 الجدار الناري المنيع
+                                        readOnly={!canEdit} 
                                         value={getCustomScoreDisplay(student.id, c.id)} 
                                         onChange={(e) => canEdit && handleScoreChange(student.id, c, e.target.value)} 
                                         className={`w-14 sm:w-16 lg:w-20 mx-auto text-center font-black text-white bg-[#02040a] border border-white/5 rounded-xl py-2 sm:py-2.5 outline-none transition-all print:border-none print:bg-transparent print:text-black print:p-0 print:w-auto shadow-inner text-xs sm:text-sm
@@ -492,7 +495,15 @@ export default function GradebookPage() {
                          const percentage = maxExamTotal > 0 ? Math.round((studentTotal / maxExamTotal) * 100) : 0;
                          return (
                            <tr key={student.id} className={`hover:bg-white/[0.03] transition-colors group ${idx % 2 === 0 ? 'bg-[#02040a]/40' : 'bg-transparent'}`}>
-                             <td className="sticky right-0 z-10 font-black text-[10px] sm:text-xs lg:text-sm py-4 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.4)] bg-inherit group-hover:bg-[#131836] drop-shadow-sm">{student.name}</td>
+                             {/* 🚀 زر البوصلة لتبويب الاختبارات */}
+                             <td className="sticky right-0 z-10 font-black text-[10px] sm:text-xs lg:text-sm py-4 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.4)] bg-inherit group-hover:bg-[#131836] drop-shadow-sm">
+                               <div className="flex items-center justify-between gap-2">
+                                 <span className="truncate">{student.name}</span>
+                                 <Link href={`/student/academic-compass?studentId=${student.id}`} target="_blank" title="فتح البوصلة الأكاديمية للطالب" className="p-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-md transition-all print:hidden shrink-0 active:scale-95 shadow-inner">
+                                   <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                 </Link>
+                               </div>
+                             </td>
                              {assessments.map(a => { const score = getExamScore(student.id, a.id); return (<td key={a.id} className="border-b border-white/5 py-4 px-2 sm:px-4 text-center font-black text-white text-xs sm:text-sm shadow-inner">{score === '-' ? <span className="text-slate-600">-</span> : score}</td>); })}
                              <td className="border-b border-l border-indigo-500/10 py-4 px-4 sm:px-6 text-center font-black bg-indigo-500/5 text-xs sm:text-sm lg:text-base"><span className={percentage >= 90 ? 'text-emerald-400 drop-shadow-md' : percentage >= 50 ? 'text-indigo-400 drop-shadow-md' : 'text-rose-400 drop-shadow-md'}>{studentTotal}</span></td>
                            </tr>
@@ -533,7 +544,15 @@ export default function GradebookPage() {
                          const percentage = maxAssignmentTotal > 0 ? Math.round((studentTotal / maxAssignmentTotal) * 100) : 0;
                          return (
                            <tr key={student.id} className={`hover:bg-white/[0.03] transition-colors group ${idx % 2 === 0 ? 'bg-[#02040a]/40' : 'bg-transparent'}`}>
-                             <td className="sticky right-0 z-10 font-black text-[10px] sm:text-xs lg:text-sm py-4 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.4)] bg-inherit group-hover:bg-[#131836] drop-shadow-sm">{student.name}</td>
+                             {/* 🚀 زر البوصلة لتبويب الواجبات */}
+                             <td className="sticky right-0 z-10 font-black text-[10px] sm:text-xs lg:text-sm py-4 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.4)] bg-inherit group-hover:bg-[#131836] drop-shadow-sm">
+                               <div className="flex items-center justify-between gap-2">
+                                 <span className="truncate">{student.name}</span>
+                                 <Link href={`/student/academic-compass?studentId=${student.id}`} target="_blank" title="فتح البوصلة الأكاديمية للطالب" className="p-1.5 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500 hover:text-white rounded-md transition-all print:hidden shrink-0 active:scale-95 shadow-inner">
+                                   <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                 </Link>
+                               </div>
+                             </td>
                              {assignments.map(a => { const score = getAssignmentScore(student.id, a.id); return (<td key={a.id} className="border-b border-white/5 py-4 px-2 sm:px-4 text-center font-black text-white text-xs sm:text-sm shadow-inner">{score === '-' ? <span className="text-slate-600">-</span> : score}</td>); })}
                              <td className="border-b border-l border-cyan-500/10 py-4 px-4 sm:px-6 text-center font-black bg-cyan-500/5 text-xs sm:text-sm lg:text-base"><span className={percentage >= 90 ? 'text-emerald-400 drop-shadow-md' : percentage >= 50 ? 'text-cyan-400 drop-shadow-md' : 'text-rose-400 drop-shadow-md'}>{studentTotal}</span></td>
                            </tr>
