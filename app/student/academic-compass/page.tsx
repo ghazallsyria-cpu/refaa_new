@@ -3,10 +3,11 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+// 🚀 تم إضافة AlertTriangle هنا لكي لا يغضب Netlify
 import { 
   Compass, Zap, Target, Calculator, TrendingUp, Settings, 
   ShieldCheck, UserCircle, GraduationCap, PencilLine,
-  Star, Sparkles, Info, ArrowUpRight, History
+  Star, Sparkles, Info, ArrowUpRight, History, AlertTriangle
 } from 'lucide-react';
 import { useAcademicCompass } from '@/hooks/useAcademicCompass';
 import { useAuth } from '@/context/auth-context';
