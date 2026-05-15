@@ -1,17 +1,20 @@
 // @ts-nocheck
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Compass, Calculator, TrendingUp, Settings, 
   ShieldCheck, GraduationCap, PencilLine,
   Star, Sparkles, Info, ArrowUpRight, History, 
-  AlertTriangle, BookOpen, BarChart3, AlertCircle, CheckCircle2
+  AlertTriangle, BookOpen, BarChart3, AlertCircle, CheckCircle2,
+  UserCheck, ArrowLeft
 } from 'lucide-react';
 import { useAcademicCompass } from '@/hooks/useAcademicCompass';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 const formatStageName = (stage: string) => {
   const map: Record<string, string> = {
@@ -24,19 +27,36 @@ const formatStageName = (stage: string) => {
   return map[stage] || "جاري التحديد...";
 };
 
-export default function AcademicCompassPage() {
-  const { user, userRole, isAdminByEmail } = useAuth();
+function CompassContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const urlStudentId = searchParams.get('studentId');
+
+  const { user, userRole, authRole, isAdminByEmail } = useAuth();
   const { calculateCompass, analysis, loading, studentStage } = useAcademicCompass();
   
-  const isManager = userRole === 'admin' || userRole === 'management' || isAdminByEmail;
+  // 🎯 تحديد الهوية والهدف بذكاء
+  const targetStudentId = urlStudentId || user?.id;
+  const isConsultationMode = (authRole === 'teacher' || authRole === 'admin' || authRole === 'management' || userRole === 'staff') && !!urlStudentId;
+  const isManagerTesting = (userRole === 'admin' || userRole === 'management' || isAdminByEmail) && !urlStudentId;
   
   const [activeStage, setActiveStage] = useState('');
+  const [targetStudentName, setTargetStudentName] = useState('جاري تحميل بيانات الطالب...');
   const [simulationData, setSimulationData] = useState<Record<string, { term1: number, t2_coursework: number, t2_exam: number }>>({});
   const [prevRecords, setPrevRecords] = useState({ g10: 90, g11: 90 });
 
+  // جلب اسم الطالب إذا كان المعلم في وضع الاستشارة
   useEffect(() => {
-    if (user?.id) {
-      calculateCompass(user.id).then(({ generated, targetStage }) => {
+    if (isConsultationMode && targetStudentId) {
+      supabase.from('users').select('full_name').eq('id', targetStudentId).single().then(({data}) => {
+        if(data) setTargetStudentName(data.full_name);
+      });
+    }
+  }, [isConsultationMode, targetStudentId]);
+
+  useEffect(() => {
+    if (targetStudentId) {
+      calculateCompass(targetStudentId).then(({ generated, targetStage }) => {
         setActiveStage(targetStage);
         const initial: Record<string, any> = {};
         generated.forEach((s: any) => {
@@ -49,9 +69,8 @@ export default function AcademicCompassPage() {
         setSimulationData(initial);
       });
     }
-  }, [user?.id, calculateCompass]);
+  }, [targetStudentId, calculateCompass]);
 
-  // المحرك الرياضي (يأخذ المتوسط للفصلين)
   const results = useMemo(() => {
     if (analysis.length === 0) return { term1Avg: "0.00", term2Avg: "0.00", yearAvg: "0.00", final: "0.00" };
     
@@ -67,8 +86,6 @@ export default function AcademicCompassPage() {
 
     const term1Avg = totalMaxTerm > 0 ? (totalTerm1Student / totalMaxTerm) * 100 : 0;
     const term2Avg = totalMaxTerm > 0 ? (totalTerm2Student / totalMaxTerm) * 100 : 0;
-    
-    // معدل العام الدراسي كنسبة مئوية
     const yearAvg = (term1Avg + term2Avg) / 2; 
 
     let finalGPA = yearAvg;
@@ -94,7 +111,6 @@ export default function AcademicCompassPage() {
 
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 p-4 sm:p-6 lg:p-8 pt-24 font-sans" dir="rtl">
-      
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-[-10%] right-[-10%] w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-indigo-600/10 blur-[100px] rounded-full animate-pulse"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-[250px] sm:w-[500px] h-[250px] sm:h-[500px] bg-emerald-600/10 blur-[90px] rounded-full"></div>
@@ -102,52 +118,69 @@ export default function AcademicCompassPage() {
 
       <div className="max-w-7xl mx-auto relative z-10 space-y-8 sm:space-y-12">
         
-        {/* 🔝 الترويسة وأدوات المدير */}
-        <header className="flex flex-col lg:flex-row justify-between gap-6 bg-white/5 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border border-white/10 backdrop-blur-xl shadow-2xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-[1.2rem] sm:rounded-[2rem] bg-indigo-600/20 flex items-center justify-center border border-indigo-500/30 shrink-0">
-              <Compass className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">البوصلة الذكية</h1>
-              <p className="text-slate-400 mt-1 text-xs sm:text-sm font-bold">توقع وتخطيط درجاتك في مدرسة الرفعة النموذجية.</p>
-            </div>
-          </div>
-
-          {isManager ? (
-            <div className="bg-indigo-500/10 p-4 sm:p-5 rounded-[1.2rem] sm:rounded-[2rem] border border-indigo-500/30 w-full lg:w-auto">
-              <p className="text-[10px] font-black text-indigo-400 mb-2 flex items-center gap-1 uppercase tracking-widest">
-                <Settings className="w-3 h-3"/> لوحة المدير (اختبار المراحل)
-              </p>
-              <select 
-                value={activeStage || studentStage} 
-                onChange={(e) => {
-                  setActiveStage(e.target.value);
-                  calculateCompass(user.id, e.target.value);
-                }}
-                className="w-full bg-black/50 text-white font-black px-4 py-3 rounded-xl sm:rounded-2xl outline-none border border-white/10 cursor-pointer focus:border-indigo-500"
-              >
-                <option value="10">الصف العاشر</option>
-                <option value="11_scientific">11 علمي</option>
-                <option value="11_literary">11 أدبي</option>
-                <option value="12_scientific">12 علمي</option>
-                <option value="12_literary">12 أدبي</option>
-              </select>
-            </div>
-          ) : (
-            <div className="bg-emerald-500/10 p-4 sm:p-5 rounded-[1.2rem] sm:rounded-[2rem] border border-emerald-500/20 flex flex-col justify-center w-full lg:w-auto">
-              <p className="text-[10px] font-black text-emerald-400 mb-1 uppercase tracking-widest">المرحلة الأكاديمية</p>
-              <div className="flex items-center gap-2 text-white font-black text-lg sm:text-xl">
-                <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
-                {formatStageName(activeStage || studentStage)}
+        {/* 🔝 الترويسة الذكية تتغير حسب المستخدم */}
+        {isConsultationMode ? (
+           <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-gradient-to-r from-amber-500/20 to-orange-600/20 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 w-full shadow-[0_20px_50px_rgba(245,158,11,0.15)] backdrop-blur-xl">
+             <div className="flex items-center gap-4 sm:gap-6">
+                <div className="p-3 sm:p-4 bg-amber-500/20 rounded-2xl sm:rounded-[1.5rem] border border-amber-500/30 shadow-inner">
+                   <UserCheck className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 drop-shadow-md" />
+                </div>
+                <div>
+                  <p className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest mb-1 sm:mb-2 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4"/> وضع الاستشارة الأكاديمية
+                  </p>
+                  <h2 className="text-xl sm:text-3xl font-black text-white">الطالب: <span className="text-amber-300">{targetStudentName}</span></h2>
+                </div>
+             </div>
+             <button onClick={() => router.back()} className="w-full md:w-auto px-6 py-3 sm:py-4 bg-[#02040a]/80 hover:bg-[#02040a] border border-white/10 rounded-xl sm:rounded-2xl transition-all text-sm font-black flex items-center justify-center gap-2 text-slate-300 hover:text-white shadow-inner active:scale-95">
+                العودة لسجل الدرجات <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+             </button>
+           </motion.div>
+        ) : (
+          <header className="flex flex-col lg:flex-row justify-between gap-6 bg-white/5 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border border-white/10 backdrop-blur-xl shadow-2xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-[1.2rem] sm:rounded-[2rem] bg-indigo-600/20 flex items-center justify-center border border-indigo-500/30 shrink-0">
+                <Compass className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">البوصلة الذكية</h1>
+                <p className="text-slate-400 mt-1 text-xs sm:text-sm font-bold">توقع وتخطيط درجاتك في مدرسة الرفعة النموذجية.</p>
               </div>
             </div>
-          )}
-        </header>
 
-        {/* 📊 لوحة الإحصائيات المركزية */}
+            {isManagerTesting ? (
+              <div className="bg-indigo-500/10 p-4 sm:p-5 rounded-[1.2rem] sm:rounded-[2rem] border border-indigo-500/30 w-full lg:w-auto">
+                <p className="text-[10px] font-black text-indigo-400 mb-2 flex items-center gap-1 uppercase tracking-widest">
+                  <Settings className="w-3 h-3"/> لوحة المدير (اختبار المراحل)
+                </p>
+                <select 
+                  value={activeStage || studentStage} 
+                  onChange={(e) => {
+                    setActiveStage(e.target.value);
+                    calculateCompass(user.id, e.target.value);
+                  }}
+                  className="w-full bg-black/50 text-white font-black px-4 py-3 rounded-xl sm:rounded-2xl outline-none border border-white/10 cursor-pointer focus:border-indigo-500"
+                >
+                  <option value="10">الصف العاشر</option>
+                  <option value="11_scientific">11 علمي</option>
+                  <option value="11_literary">11 أدبي</option>
+                  <option value="12_scientific">12 علمي</option>
+                  <option value="12_literary">12 أدبي</option>
+                </select>
+              </div>
+            ) : (
+              <div className="bg-emerald-500/10 p-4 sm:p-5 rounded-[1.2rem] sm:rounded-[2rem] border border-emerald-500/20 flex flex-col justify-center w-full lg:w-auto">
+                <p className="text-[10px] font-black text-emerald-400 mb-1 uppercase tracking-widest">المرحلة الأكاديمية</p>
+                <div className="flex items-center gap-2 text-white font-black text-lg sm:text-xl">
+                  <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
+                  {formatStageName(activeStage || studentStage)}
+                </div>
+              </div>
+            )}
+          </header>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          
           {(showG10 || showG11) && (
             <div className="bg-[#0f1423] p-5 sm:p-6 rounded-[2rem] border border-white/10 shadow-xl col-span-1 md:col-span-2 lg:col-span-1 flex flex-col justify-center">
               <h3 className="text-[10px] sm:text-xs font-black text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-widest">
@@ -192,16 +225,12 @@ export default function AcademicCompassPage() {
           </div>
         </div>
 
-        {/* 🎯 شبكة المواد والتفاعلات */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           {analysis.map((subject, index) => {
             const data = simulationData[subject.subject_name] || { term1: 0, t2_coursework: 0, t2_exam: 0 };
             
-            // 🛠️ المعادلة الرياضية الصحيحة 100%
             const studentCurrentTotal = Number(data.term1) + Number(data.t2_coursework);
             const neededForYear = (subject.passing_mark * 2) - studentCurrentTotal;
-            
-            // حساب معدل المادة (المتوسط) للعرض
             const subjectYearAverage = (Number(data.term1) + Number(data.t2_coursework) + Number(data.t2_exam)) / 2;
 
             let statusConfig = {
@@ -233,7 +262,7 @@ export default function AcademicCompassPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="bg-[#0f1423] border border-white/10 p-5 sm:p-8 rounded-[2rem] sm:rounded-[3rem] shadow-xl flex flex-col"
+                className={cn("bg-[#0f1423] border p-5 sm:p-8 rounded-[2rem] sm:rounded-[3rem] shadow-xl flex flex-col", isConsultationMode ? "border-amber-500/20" : "border-white/10")}
               >
                 <div className="flex justify-between items-start mb-6 border-b border-white/5 pb-4">
                   <div>
@@ -319,5 +348,17 @@ export default function AcademicCompassPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function AcademicCompassPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#02040a] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <CompassContent />
+    </Suspense>
   );
 }
