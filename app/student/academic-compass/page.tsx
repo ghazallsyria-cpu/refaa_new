@@ -3,7 +3,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-// 🚀 تم إضافة AlertTriangle هنا لكي لا يغضب Netlify
 import { 
   Compass, Zap, Target, Calculator, TrendingUp, Settings, 
   ShieldCheck, UserCircle, GraduationCap, PencilLine,
@@ -13,7 +12,6 @@ import { useAcademicCompass } from '@/hooks/useAcademicCompass';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 
-// دالة مساعدة لتنسيق اسم المرحلة
 const formatStageName = (stage: string) => {
   const map: Record<string, string> = {
     '10': 'الصف العاشر',
@@ -29,19 +27,18 @@ export default function AcademicCompassPage() {
   const { user, userRole, isAdminByEmail } = useAuth();
   const { calculateCompass, analysis, loading, studentStage } = useAcademicCompass();
   
-  // صلاحية المدير لتجربة المراحل
   const isManager = userRole === 'admin' || userRole === 'management' || isAdminByEmail;
   
   const [activeStage, setActiveStage] = useState('');
   const [simulationData, setSimulationData] = useState<Record<string, { coursework: number, exam: number }>>({});
-  const [prevYears, setPrevYears] = useState({ g10: 90, g11: 90 });
+  
+  // 🚀 حالة جديدة: دعم الفصل الأول والأعوام السابقة
+  const [prevRecords, setPrevRecords] = useState({ g10: 90, g11: 90, term1: 0 });
 
-  // 1. تشغيل المحرك عند الدخول
   useEffect(() => {
     if (user?.id) {
       calculateCompass(user.id).then(({ generated, targetStage }) => {
         setActiveStage(targetStage);
-        // تهيئة بيانات المحاكاة بناءً على الدرجات الحقيقية
         const initial: Record<string, any> = {};
         generated.forEach((s: any) => {
           initial[s.subject_name] = { 
@@ -54,9 +51,8 @@ export default function AcademicCompassPage() {
     }
   }, [user?.id, calculateCompass]);
 
-  // 2. محرك الحسابات اللحظي (التراكمي + السنوي)
   const results = useMemo(() => {
-    if (analysis.length === 0) return { current: 0, final: 0 };
+    if (analysis.length === 0) return { currentTerm: "0.00", currentYear: "0.00", final: "0.00" };
     
     const totalMax = analysis.reduce((acc, s) => acc + s.total_max, 0);
     const predictedTotal = analysis.reduce((acc, s) => {
@@ -64,29 +60,43 @@ export default function AcademicCompassPage() {
       return acc + Number(data.coursework) + Number(data.exam);
     }, 0);
 
-    const gCurrentAvg = totalMax > 0 ? (predictedTotal / totalMax) * 100 : 0;
+    // نسبة الفصل الثاني (المحاكاة الحالية)
+    const currentTermAvg = totalMax > 0 ? (predictedTotal / totalMax) * 100 : 0;
     
-    // تطبيق منطق الأوزان الكويتية (10% - 20% - 70%)
-    let finalGPA = gCurrentAvg;
+    // 🚀 دمج نسبة الفصل الأول لحساب العام الدراسي بالكامل
+    let currentYearAvg = currentTermAvg;
+    if (prevRecords.term1 > 0) {
+      currentYearAvg = (Number(prevRecords.term1) + currentTermAvg) / 2;
+    }
+
+    // تطبيق منطق الأوزان الكويتية
+    let finalGPA = currentYearAvg;
     const currentStage = activeStage || studentStage;
 
     if (currentStage.startsWith('12')) {
-      finalGPA = (prevYears.g10 * 0.1) + (prevYears.g11 * 0.2) + (gCurrentAvg * 0.7);
+      finalGPA = (prevRecords.g10 * 0.1) + (prevRecords.g11 * 0.2) + (currentYearAvg * 0.7);
     } else if (currentStage.startsWith('11')) {
-      // إذا كان في 11، نحاكي النسبة بناءً على رصيد 10 والوزن الحالي
-      finalGPA = (prevYears.g10 * 0.1) + (gCurrentAvg * 0.9); 
+      finalGPA = (prevRecords.g10 * 0.1) + (currentYearAvg * 0.9); 
+    } else {
+      finalGPA = currentYearAvg; // إذا كان في العاشر، فالتراكمي هو نسبة العام نفسه
     }
 
     return { 
-      current: gCurrentAvg.toFixed(2), 
+      currentTerm: currentTermAvg.toFixed(2),
+      currentYear: currentYearAvg.toFixed(2), 
       final: finalGPA.toFixed(2) 
     };
-  }, [analysis, simulationData, prevYears, activeStage, studentStage]);
+  }, [analysis, simulationData, prevRecords, activeStage, studentStage]);
+
+  // تحديد الحقول التي يجب إظهارها بناءً على المرحلة
+  const currentStageCheck = activeStage || studentStage;
+  const showG10 = currentStageCheck.startsWith('11') || currentStageCheck.startsWith('12');
+  const showG11 = currentStageCheck.startsWith('12');
 
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 p-4 sm:p-8 pt-24 font-sans" dir="rtl">
       
-      {/* 🌌 الخلفية الحيوية */}
+      {/* 🌌 الخلفية */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/10 blur-[120px] rounded-full animate-pulse"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-600/10 blur-[100px] rounded-full"></div>
@@ -94,7 +104,7 @@ export default function AcademicCompassPage() {
 
       <div className="max-w-7xl mx-auto relative z-10">
         
-        {/* 🔝 Header Section */}
+        {/* 🔝 Header */}
         <header className="flex flex-col lg:flex-row justify-between gap-6 mb-12 bg-white/5 p-8 rounded-[3rem] border border-white/10 backdrop-blur-xl shadow-2xl">
           <div className="flex items-center gap-5">
             <div className="h-20 w-20 rounded-[2rem] bg-indigo-600/20 flex items-center justify-center border border-indigo-500/30 shadow-inner">
@@ -137,56 +147,69 @@ export default function AcademicCompassPage() {
           )}
         </header>
 
-        {/* 📊 Score Dashboard - لوحة الحسابات المركزية */}
+        {/* 📊 Score Dashboard - اللوحة المركزية المحدثة */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           
-          {/* مدخلات السنوات السابقة */}
+          {/* 🚀 الحقول الذكية (إدخال الفصل الأول والسنوات) */}
           <div className="bg-[#0f1423] p-8 rounded-[3rem] border border-white/10 shadow-xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:scale-110 transition-transform"><History className="w-32 h-32 text-white" /></div>
             <h3 className="text-sm font-black text-slate-500 mb-6 flex items-center gap-2 uppercase tracking-widest">
-              <Star className="w-4 h-4 text-amber-400" /> رصيد السنوات السابقة
+              <Star className="w-4 h-4 text-amber-400" /> الأرصدة التراكمية والفصول
             </h3>
-            <div className="space-y-6 relative z-10">
-              <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
-                <label className="text-[10px] font-bold text-indigo-400 block mb-2">نسبة الصف العاشر (10%)</label>
+            
+            <div className="space-y-4 relative z-10">
+              {/* إدخال نسبة الفصل الأول (تظهر للجميع) */}
+              <div className="bg-indigo-500/10 p-4 rounded-2xl border border-indigo-500/20">
+                <label className="text-[10px] font-black text-indigo-300 block mb-1">نسبة الفصل الدراسي الأول (لهذا العام)</label>
                 <input 
-                  type="number" 
-                  value={prevYears.g10} 
-                  onChange={e => setPrevYears({...prevYears, g10: Number(e.target.value)})} 
-                  className="w-full bg-transparent text-2xl font-black text-white outline-none"
+                  type="number" placeholder="أدخل النسبة إذا كنت في الفصل 2"
+                  value={prevRecords.term1 || ''} 
+                  onChange={e => setPrevRecords({...prevRecords, term1: Number(e.target.value)})} 
+                  className="w-full bg-transparent text-xl font-black text-white outline-none placeholder:text-indigo-400/30 placeholder:text-sm"
                 />
               </div>
-              <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
-                <label className="text-[10px] font-bold text-indigo-400 block mb-2">نسبة الصف الحادي عشر (20%)</label>
-                <input 
-                  type="number" 
-                  value={prevYears.g11} 
-                  onChange={e => setPrevYears({...prevYears, g11: Number(e.target.value)})} 
-                  className="w-full bg-transparent text-2xl font-black text-white outline-none"
-                />
+
+              <div className="flex gap-4">
+                {showG10 && (
+                  <div className="flex-1 bg-black/30 p-3 rounded-2xl border border-white/5">
+                    <label className="text-[10px] font-bold text-slate-400 block mb-1">نسبة العاشر</label>
+                    <input type="number" value={prevRecords.g10} onChange={e => setPrevRecords({...prevRecords, g10: Number(e.target.value)})} className="w-full bg-transparent text-lg font-black text-white outline-none" />
+                  </div>
+                )}
+                {showG11 && (
+                  <div className="flex-1 bg-black/30 p-3 rounded-2xl border border-white/5">
+                    <label className="text-[10px] font-bold text-slate-400 block mb-1">نسبة 11</label>
+                    <input type="number" value={prevRecords.g11} onChange={e => setPrevRecords({...prevRecords, g11: Number(e.target.value)})} className="w-full bg-transparent text-lg font-black text-white outline-none" />
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* معدل السنة الحالية المتوقع */}
+          {/* معدل السنة الحالية المتوقع (المعدل بعد الدمج) */}
           <div className="bg-gradient-to-br from-indigo-600 to-indigo-900 p-8 rounded-[3rem] shadow-2xl flex flex-col items-center justify-center text-center group">
             <TrendingUp className="w-10 h-10 text-indigo-200/50 mb-4 group-hover:scale-125 transition-transform" />
-            <p className="text-indigo-100 font-black text-sm mb-1 uppercase tracking-widest">معدل العام الحالي</p>
-            <div className="text-7xl font-black text-white drop-shadow-2xl">{results.current}%</div>
-            <div className="mt-4 bg-white/10 px-4 py-1 rounded-full text-[10px] font-bold text-indigo-100 backdrop-blur-md">تراكمي الفصلين</div>
+            <p className="text-indigo-100 font-black text-sm mb-1 uppercase tracking-widest">نسبة العام الدراسي المتوقعة</p>
+            <div className="text-7xl font-black text-white drop-shadow-2xl">{results.currentYear}%</div>
+            <div className="mt-4 bg-white/10 px-4 py-1 rounded-full text-[10px] font-bold text-indigo-100 backdrop-blur-md flex gap-2">
+              <span>الفصل 1: {prevRecords.term1 > 0 ? `${prevRecords.term1}%` : '---'}</span> | 
+              <span>المحاكاة: {results.currentTerm}%</span>
+            </div>
           </div>
 
-          {/* المعدل التراكمي النهائي (الوزن الكلي) */}
+          {/* المعدل التراكمي النهائي */}
           <div className="bg-gradient-to-br from-emerald-600 to-teal-900 p-8 rounded-[3rem] shadow-2xl flex flex-col items-center justify-center text-center relative overflow-hidden group">
              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
             <Sparkles className="w-10 h-10 text-emerald-200/50 mb-4 animate-pulse" />
-            <p className="text-emerald-100 font-black text-sm mb-1 uppercase tracking-widest">المعدل التراكمي النهائي</p>
+            <p className="text-emerald-100 font-black text-sm mb-1 uppercase tracking-widest">المعدل التراكمي الكلي</p>
             <div className="text-8xl font-black text-white drop-shadow-2xl">{results.final}%</div>
-            <p className="mt-2 text-[10px] font-bold text-emerald-100 opacity-80">نسبة الشهادة الثانوية (100%)</p>
+            <p className="mt-2 text-[10px] font-bold text-emerald-100 opacity-80">
+              {currentStageCheck.startsWith('12') ? 'نسبة الشهادة الثانوية (100%)' : 'التراكمي التقريبي لمرحلتك'}
+            </p>
           </div>
         </div>
 
-        {/* 🎯 Simulation Grid - شبكة محاكاة المواد */}
+        {/* 🎯 Simulation Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {analysis.map((subject, index) => (
             <motion.div 
@@ -212,13 +235,12 @@ export default function AcademicCompassPage() {
                 </div>
               </div>
 
-              {/*Sliders - أشرطة التحكم */}
+              {/* Sliders */}
               <div className="space-y-10">
-                {/* Coursework Slider */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-black text-indigo-300 flex items-center gap-2">
-                      <PencilLine className="w-4 h-4" /> أعمال السنة (المتوقعة)
+                      <PencilLine className="w-4 h-4" /> أعمال السنة المتوقعة (للفصل الحالي)
                     </label>
                     <span className="text-lg font-black text-white">{simulationData[subject.subject_name]?.coursework} <span className="text-xs text-slate-600">/ {subject.coursework_max}</span></span>
                   </div>
@@ -230,11 +252,10 @@ export default function AcademicCompassPage() {
                   />
                 </div>
 
-                {/* Final Exam Slider */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-black text-emerald-300 flex items-center gap-2">
-                      <Calculator className="w-4 h-4" /> درجة الاختبار (المتوقعة)
+                      <Calculator className="w-4 h-4" /> درجة الاختبار المتوقعة (للفصل الحالي)
                     </label>
                     <span className="text-lg font-black text-white">{simulationData[subject.subject_name]?.exam} <span className="text-xs text-slate-600">/ {subject.exam_max}</span></span>
                   </div>
@@ -247,16 +268,15 @@ export default function AcademicCompassPage() {
                 </div>
               </div>
 
-              {/* Status Indicator */}
               <div className="mt-10 pt-6 border-t border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {((Number(simulationData[subject.subject_name]?.coursework || 0) + Number(simulationData[subject.subject_name]?.exam || 0)) >= subject.passing_mark) ? (
                     <div className="flex items-center gap-2 text-emerald-400 font-black text-xs bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
-                      <ShieldCheck className="w-4 h-4" /> حالة النجاح: آمنة ومستقرة
+                      <ShieldCheck className="w-4 h-4" /> حالة النجاح للمادة: آمنة
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-rose-400 font-black text-xs bg-rose-500/10 px-4 py-2 rounded-full border border-rose-500/20 animate-pulse">
-                      <AlertTriangle className="w-4 h-4" /> حالة النجاح: لم تتحقق بعد
+                      <AlertTriangle className="w-4 h-4" /> حالة النجاح: خطر (تحتاج للمزيد)
                     </div>
                   )}
                 </div>
@@ -268,13 +288,12 @@ export default function AcademicCompassPage() {
           ))}
         </div>
 
-        {/* Footer Disclaimer */}
         <footer className="mt-16 p-12 border-t border-white/5 text-center">
            <div className="flex items-center justify-center gap-2 text-indigo-500/50 mb-3">
               <Info className="w-4 h-4" />
               <p className="text-xs font-bold leading-relaxed">تعتمد هذه الحسابات على نظام الأوزان النسبية لوزارة التربية بدولة الكويت (10% - 20% - 70%). جميع النتائج تقديرية للمحاكاة فقط.</p>
            </div>
-           <p className="text-slate-600 text-[10px] font-black uppercase tracking-[0.2em]">Developed by Al-Refaa Digital Systems v2.0</p>
+           <p className="text-slate-600 text-[10px] font-black uppercase tracking-[0.2em]">Developed by Al-Refaa Digital Systems</p>
         </footer>
 
       </div>
