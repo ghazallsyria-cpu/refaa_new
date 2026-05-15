@@ -13,7 +13,6 @@ import { useAcademicCompass } from '@/hooks/useAcademicCompass';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 
-// تنسيق اسم المرحلة للواجهة
 const formatStageName = (stage: string) => {
   const map: Record<string, string> = {
     '10': 'الصف العاشر',
@@ -30,13 +29,8 @@ export default function AcademicCompassPage() {
   const { calculateCompass, analysis, loading, studentStage } = useAcademicCompass();
   
   const isManager = userRole === 'admin' || userRole === 'management' || isAdminByEmail;
-  
   const [activeStage, setActiveStage] = useState('');
-  
-  // حالة البيانات: الفصل الأول (نهائي) + الفصل الثاني (أعمال + اختبار)
   const [simulationData, setSimulationData] = useState<Record<string, { term1: number, t2_coursework: number, t2_exam: number }>>({});
-  
-  // الأرصدة السابقة
   const [prevRecords, setPrevRecords] = useState({ g10: 90, g11: 90 });
 
   useEffect(() => {
@@ -56,12 +50,10 @@ export default function AcademicCompassPage() {
     }
   }, [user?.id, calculateCompass]);
 
-  // المحرك الرياضي الجديد للتراكمي والفصول
   const results = useMemo(() => {
     if (analysis.length === 0) return { term1Avg: "0.00", term2Avg: "0.00", yearAvg: "0.00", final: "0.00" };
     
-    const totalMaxTerm = analysis.reduce((acc, s) => acc + s.total_max, 0); // المجموع الكلي للفصل
-    
+    const totalMaxTerm = analysis.reduce((acc, s) => acc + s.total_max, 0); 
     let totalTerm1Student = 0;
     let totalTerm2Student = 0;
 
@@ -73,11 +65,8 @@ export default function AcademicCompassPage() {
 
     const term1Avg = totalMaxTerm > 0 ? (totalTerm1Student / totalMaxTerm) * 100 : 0;
     const term2Avg = totalMaxTerm > 0 ? (totalTerm2Student / totalMaxTerm) * 100 : 0;
-    
-    // نسبة العام هي متوسط نسبة الفصلين
     const yearAvg = (term1Avg + term2Avg) / 2; 
 
-    // تطبيق الأوزان التراكمية
     let finalGPA = yearAvg;
     const currentStage = activeStage || studentStage;
 
@@ -101,16 +90,12 @@ export default function AcademicCompassPage() {
 
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 p-4 sm:p-6 lg:p-8 pt-24 font-sans" dir="rtl">
-      
-      {/* 🌌 الخلفية التفاعلية */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-[-10%] right-[-10%] w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-indigo-600/10 blur-[100px] rounded-full animate-pulse"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-[250px] sm:w-[500px] h-[250px] sm:h-[500px] bg-emerald-600/10 blur-[90px] rounded-full"></div>
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10 space-y-8 sm:space-y-12">
-        
-        {/* 🔝 الترويسة وأدوات المدير */}
         <header className="flex flex-col lg:flex-row justify-between gap-6 bg-white/5 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border border-white/10 backdrop-blur-xl shadow-2xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-[1.2rem] sm:rounded-[2rem] bg-indigo-600/20 flex items-center justify-center border border-indigo-500/30 shrink-0">
@@ -153,9 +138,7 @@ export default function AcademicCompassPage() {
           )}
         </header>
 
-        {/* 📊 لوحة الإحصائيات المركزية */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          
           {(showG10 || showG11) && (
             <div className="bg-[#0f1423] p-5 sm:p-6 rounded-[2rem] border border-white/10 shadow-xl col-span-1 md:col-span-2 lg:col-span-1 flex flex-col justify-center">
               <h3 className="text-[10px] sm:text-xs font-black text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-widest">
@@ -200,12 +183,11 @@ export default function AcademicCompassPage() {
           </div>
         </div>
 
-        {/* 🎯 شبكة المواد والتفاعلات */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           {analysis.map((subject, index) => {
             const data = simulationData[subject.subject_name] || { term1: 0, t2_coursework: 0, t2_exam: 0 };
             
-            // حسابات حافة النجاح الدقيقة
+            // 🛠️ الإصلاح السحري: تم تغيير المتغير ليكون neededForYear لتجنب الانهيار
             const yearTotalMax = subject.total_max * 2; 
             const yearPassingMark = subject.passing_mark * 2; 
             const studentCurrentTotal = Number(data.term1) + Number(data.t2_coursework);
@@ -229,11 +211,9 @@ export default function AcademicCompassPage() {
                statusConfig = {
                  color: "text-amber-400",
                  bg: "bg-amber-500/10 border-amber-500/20",
-                 text: `تحتاج لـ ${neededInFinalExam} درجة في الفاينل لتنجح`,
+                 text: `تحتاج لـ ${neededForYear} درجة في الفاينل لتنجح`, // 👈 تم إصلاح الخطأ المسبب للانهيار
                  icon: <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
                };
-               // إصلاح متغير الرسالة
-               statusConfig.text = `تحتاج لـ ${neededForYear} درجة في الفاينل لتنجح`;
             }
 
             return (
@@ -244,7 +224,6 @@ export default function AcademicCompassPage() {
                 transition={{ delay: index * 0.05 }}
                 className="bg-[#0f1423] border border-white/10 p-5 sm:p-8 rounded-[2rem] sm:rounded-[3rem] shadow-xl flex flex-col"
               >
-                {/* ترويسة المادة */}
                 <div className="flex justify-between items-start mb-6 border-b border-white/5 pb-4">
                   <div>
                     <h4 className="text-lg sm:text-2xl font-black text-white mb-2">{subject.subject_name}</h4>
@@ -262,8 +241,6 @@ export default function AcademicCompassPage() {
                 </div>
 
                 <div className="space-y-6 flex-1">
-                  
-                  {/* إدخال الفصل الأول (الشهادة) */}
                   <div className="bg-blue-500/10 p-4 sm:p-5 rounded-2xl border border-blue-500/20">
                     <label className="text-[10px] sm:text-xs font-black text-blue-300 block mb-2 sm:mb-3 flex items-center gap-2">
                       <BookOpen className="w-3 h-3" /> درجة الفصل الأول (من الشهادة)
@@ -280,7 +257,6 @@ export default function AcademicCompassPage() {
                     </div>
                   </div>
 
-                  {/* محاكاة الفصل الثاني */}
                   <div className="space-y-5 bg-white/5 p-4 sm:p-5 rounded-2xl border border-white/5">
                     <h5 className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">محاكاة الفصل الثاني</h5>
                     
@@ -312,7 +288,6 @@ export default function AcademicCompassPage() {
                   </div>
                 </div>
 
-                {/* شريط حالة النجاح */}
                 <div className="mt-6 sm:mt-8 pt-4 sm:pt-5 border-t border-white/5">
                   <div className={cn("flex items-center gap-2 font-black text-[9px] sm:text-[11px] px-3 sm:px-4 py-3 sm:py-4 rounded-xl border", statusConfig.bg, statusConfig.color)}>
                     {statusConfig.icon} {statusConfig.text}
@@ -323,7 +298,6 @@ export default function AcademicCompassPage() {
           })}
         </div>
 
-        {/* التذييل */}
         <footer className="mt-12 sm:mt-16 p-6 sm:p-12 border-t border-white/5 text-center">
            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-indigo-500/60 mb-3">
               <Info className="w-4 h-4 shrink-0" />
