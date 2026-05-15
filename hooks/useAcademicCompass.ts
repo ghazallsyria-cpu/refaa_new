@@ -19,7 +19,7 @@ export function useAcademicCompass() {
   const [analysis, setAnalysis] = useState<SubjectAnalysis[]>([]);
   const [studentStage, setStudentStage] = useState<string>('');
 
-  // 🚀 الاستعلام الدقيق المطابق لـ Schema قاعدة بيانات الرفعة
+  // 🚀 الاستعلام المدرع للتعرف على المرحلة
   const fetchStudentStage = useCallback(async (studentId: string) => {
     try {
       const { data, error } = await supabase
@@ -35,19 +35,28 @@ export function useAcademicCompass() {
 
       if (error) throw error;
 
-      // استخراج المستوى والمسار بناءً على العلاقات (Relations) الحقيقية
-      // @ts-ignore
-      const level = data?.sections?.classes?.level; 
-      const track = data?.next_year_track; // 'scientific' أو 'literary'
+      const rawData = data as any;
+      let extractedLevel: any = null;
+
+      // 1. استخراج آمن للمستوى سواء كان sections مصفوفة أو كائن
+      if (Array.isArray(rawData?.sections) && rawData.sections.length > 0) {
+        extractedLevel = rawData.sections[0]?.classes?.level;
+      } else if (rawData?.sections?.classes) {
+        extractedLevel = rawData.sections.classes.level;
+      }
+
+      // 2. تحويل المستوى إلى نص لضمان نجاح المطابقة (String Matching)
+      const levelStr = String(extractedLevel || '').trim(); 
+      const track = rawData?.next_year_track; // 'scientific' أو 'literary'
 
       let stage = '12_scientific'; // افتراضي للحماية
 
-      // تحديد المرحلة بدقة تامة
-      if (level === 10) {
+      // 3. تحديد المرحلة بدقة تامة باستخدام النص
+      if (levelStr === '10') {
         stage = '10';
-      } else if (level === 11) {
+      } else if (levelStr === '11') {
         stage = track === 'literary' ? '11_literary' : '11_scientific';
-      } else if (level === 12) {
+      } else if (levelStr === '12') {
         stage = track === 'literary' ? '12_literary' : '12_scientific';
       }
 
@@ -56,7 +65,7 @@ export function useAcademicCompass() {
       
     } catch (err) {
       console.error("Error fetching stage:", err);
-      return '12_scientific';
+      return '12_scientific'; // الرجوع للافتراضي فقط عند فشل الاستعلام تماماً
     }
   }, []);
 
