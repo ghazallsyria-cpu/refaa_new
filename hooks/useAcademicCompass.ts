@@ -10,7 +10,7 @@ export interface SubjectAnalysis {
   real_coursework: number;
   predicted_coursework: number;
   predicted_exam: number;
-  status: string;
+  status: 'PASSED' | 'SAFE' | 'WARNING' | 'DANGER' | 'IMPOSSIBLE';
   message: string;
 }
 
@@ -19,7 +19,7 @@ export function useAcademicCompass() {
   const [analysis, setAnalysis] = useState<SubjectAnalysis[]>([]);
   const [studentStage, setStudentStage] = useState<string>('');
 
-  // 🚀 الدالة الذكية للتعرف على مرحلة الطالب
+  // 🚀 الدالة الذكية للتعرف على مرحلة الطالب (تم إصلاح استخراج البيانات)
   const fetchStudentStage = useCallback(async (studentId: string) => {
     try {
       const { data, error } = await supabase
@@ -38,12 +38,25 @@ export function useAcademicCompass() {
          return '12_scientific';
       }
 
-      // تحليل المستوى (10, 11, 12) والمسار (علمي، أدبي)
-      // ملاحظة: قمنا بتحويل level إلى نص احتياطاً
-      const level = data?.sections?.classes?.level?.toString(); 
-      const track = data?.next_year_track; // 'scientific' أو 'literary'
+      // 🛠️ الإصلاح الجذري لمشكلة TypeScript
+      // نتعامل مع sections كـ Any لنتجاوز تعقيد المصفوفات في TypeScript
+      const rawData = data as any;
+      
+      // نستخرج الـ level بأمان سواء كان sections مصفوفة أو كائن
+      let rawLevel = null;
+      
+      if (Array.isArray(rawData?.sections) && rawData.sections.length > 0) {
+        // إذا كان مصفوفة، نأخذ أول فصل مسجل فيه
+        rawLevel = rawData.sections[0]?.classes?.level;
+      } else if (rawData?.sections?.classes) {
+        // إذا كان كائن مفرد
+        rawLevel = rawData.sections.classes.level;
+      }
 
-      let stage = '12_scientific'; // القيمة الافتراضية للنجاة من الأخطاء
+      const level = rawLevel?.toString(); 
+      const track = rawData?.next_year_track;
+
+      let stage = '12_scientific'; // القيمة الافتراضية
 
       if (level === '10') {
         stage = '10';
@@ -64,10 +77,7 @@ export function useAcademicCompass() {
   const calculateCompass = useCallback(async (studentId: string, manualStage?: string) => {
     setLoading(true);
     try {
-      // 🚀 إذا مرر المدير مرحلة يدوية، استخدمها. وإلا، ابحث عن مرحلة الطالب الحقيقية
       const targetStage = manualStage || await fetchStudentStage(studentId);
-      
-      // تحديث الـ State لكي تعرف الواجهة ما هي المرحلة المحددة حالياً
       setStudentStage(targetStage); 
 
       const { data: rules } = await supabase
@@ -81,13 +91,15 @@ export function useAcademicCompass() {
         .select('score, subjects(name)')
         .eq('student_id', studentId);
 
-      const gradesMap = new Map();
-      grades?.forEach(g => {
-         const subjectData = g.subjects as any;
-         if (subjectData && typeof subjectData.name === 'string') {
-           gradesMap.set(subjectData.name, g.score || 0);
-         }
-      });
+      const gradesMap = new Map<string, number>();
+      if (grades) {
+        grades.forEach(g => {
+          const subjectData = g.subjects as any;
+          if (subjectData && typeof subjectData.name === 'string') {
+            gradesMap.set(subjectData.name, g.score || 0);
+          }
+        });
+      }
 
       const generated: SubjectAnalysis[] = (rules || []).map(rule => {
         const realScore = gradesMap.get(rule.subject_name) || 0;
@@ -112,5 +124,28 @@ export function useAcademicCompass() {
     }
   }, [fetchStudentStage]);
 
-  return { calculateCompass, analysis, loading, studentStage };
+  const calculatePredictedGPA = useCallback((
+    subjects: SubjectAnalysis[], 
+    predictions: Record<string, number>, 
+    g10: number, 
+    g11: number  
+  ) => {
+    if (!subjects || subjects.length === 0) return { g12Average: "0.00", finalCumulative: "0.00" };
+
+    const totalMax = subjects.reduce((acc, s) => acc + s.total_max, 0);
+    const predictedTotal = subjects.reduce((acc, s) => {
+      const pred = predictions[s.subject_name] || 0;
+      return acc + s.real_coursework + pred;
+    }, 0);
+    
+    const g12Average = totalMax > 0 ? (predictedTotal / totalMax) * 100 : 0;
+    const finalCumulative = (g10 * 0.10) + (g11 * 0.20) + (g12Average * 0.70);
+
+    return {
+      g12Average: g12Average.toFixed(2),
+      finalCumulative: finalCumulative.toFixed(2)
+    };
+  }, []);
+
+  return { calculateCompass, calculatePredictedGPA, analysis, loading, studentStage };
 }
