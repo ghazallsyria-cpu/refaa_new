@@ -4,7 +4,7 @@
  * 🏗️ التوثيق الهندسي (Gemini Style Edition - Ultra Fast Performance)
  * ============================================================================
  * @file        app/page.tsx
- * @version     8.5.0 (Speed Optimized - No HUD)
+ * @version     8.6.0 (Added Academic Compass Banner)
  * @description الواجهة الرئيسية خالية من الكونسول ومحسنة لتجربة سلسة جداً.
  * ============================================================================
  */
@@ -204,7 +204,7 @@ export default function DigitalCampusPage() {
         
         {/* 🌟 1. الواجهة الترحيبية والبطاقة الرئيسية (Hero Bento) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-h-[50vh] sm:min-h-[60vh]">
-           
+            
            <motion.div style={{ opacity: opacityHero }} variants={itemVariants} className="lg:col-span-8 xl:col-span-9 bg-[#0f1423]/80 rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-10 border border-white/10 shadow-md relative overflow-hidden flex flex-col justify-center">
               <div className="absolute top-[-10%] right-[-10%] w-48 h-48 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-500/20 to-transparent pointer-events-none"></div>
               
@@ -249,7 +249,7 @@ export default function DigitalCampusPage() {
               )}
            </motion.div>
 
-           {/* بطاقات الإحصائيات הגانبية */}
+           {/* بطاقات الإحصائيات الجانبية */}
            <div className="lg:col-span-4 xl:col-span-3 flex flex-col gap-4 sm:gap-6">
               <motion.div variants={itemVariants} className="bg-[#0f1423]/80 p-6 rounded-[1.5rem] sm:rounded-[2.5rem] border border-white/10 shadow-md flex-1 relative overflow-hidden flex flex-col justify-center">
                  <div className="w-12 h-12 bg-blue-500/20 text-blue-300 rounded-xl flex items-center justify-center mb-3 relative z-10"><Activity className="w-6 h-6"/></div>
@@ -268,6 +268,39 @@ export default function DigitalCampusPage() {
               </motion.div>
            </div>
         </div>
+
+        {/* 🧭 1.5 إعلان البوصلة الذكية (New Feature Banner) */}
+        <motion.div variants={itemVariants} className="relative w-full rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden border border-emerald-500/20 shadow-2xl group cursor-pointer">
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/40 via-[#0f1423] to-indigo-900/40 opacity-80 group-hover:opacity-100 transition-opacity duration-500"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+
+          <div className="relative z-10 p-6 sm:p-10 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-10">
+            <div className="flex items-center gap-6 sm:gap-8 w-full md:w-auto">
+              <div className="relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-emerald-400 to-indigo-500 rounded-[1.5rem] p-[2px] shadow-lg shadow-emerald-500/20">
+                <div className="w-full h-full bg-[#0f1423] rounded-[1.4rem] flex items-center justify-center relative overflow-hidden">
+                   <div className="absolute inset-0 bg-emerald-400/20 animate-pulse"></div>
+                   <Compass className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-400 drop-shadow-md relative z-10" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500/20 text-emerald-300 uppercase tracking-widest border border-emerald-500/30">جديد وحصري</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">البوصلة الذكية <span className="text-emerald-400">للتفوق</span></h2>
+                <p className="text-slate-400 text-xs sm:text-sm font-bold max-w-xl leading-relaxed">
+                  ارسم طريق نجاحك بدقة متناهية. نظام محاكاة متطور يقرأ درجاتك، يتوقع معدلك التراكمي، ويخبرك بالضبط بما تحتاجه لتجاوز العام الدراسي بأعلى الدرجات!
+                </p>
+              </div>
+            </div>
+            
+            <div className="shrink-0 w-full md:w-auto">
+              <Link href={user ? "/student/academic-compass" : "/login"} className="w-full md:w-auto flex items-center justify-center gap-3 px-6 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-900 rounded-2xl font-black text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] active:scale-95">
+                اكتشف بوصلتك الآن <ArrowLeft className="w-5 h-5" />
+              </Link>
+            </div>
+          </div>
+        </motion.div>
 
         {/* 📣 2. الإعلانات السريعة */}
         {announcements && announcements.length > 0 && (
