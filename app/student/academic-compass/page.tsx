@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   Compass, Calculator, TrendingUp, Settings, 
   ShieldCheck, GraduationCap, PencilLine,
@@ -29,6 +29,7 @@ export default function AcademicCompassPage() {
   const { calculateCompass, analysis, loading, studentStage } = useAcademicCompass();
   
   const isManager = userRole === 'admin' || userRole === 'management' || isAdminByEmail;
+  
   const [activeStage, setActiveStage] = useState('');
   const [simulationData, setSimulationData] = useState<Record<string, { term1: number, t2_coursework: number, t2_exam: number }>>({});
   const [prevRecords, setPrevRecords] = useState({ g10: 90, g11: 90 });
@@ -50,6 +51,7 @@ export default function AcademicCompassPage() {
     }
   }, [user?.id, calculateCompass]);
 
+  // المحرك الرياضي (يأخذ المتوسط للفصلين)
   const results = useMemo(() => {
     if (analysis.length === 0) return { term1Avg: "0.00", term2Avg: "0.00", yearAvg: "0.00", final: "0.00" };
     
@@ -65,6 +67,8 @@ export default function AcademicCompassPage() {
 
     const term1Avg = totalMaxTerm > 0 ? (totalTerm1Student / totalMaxTerm) * 100 : 0;
     const term2Avg = totalMaxTerm > 0 ? (totalTerm2Student / totalMaxTerm) * 100 : 0;
+    
+    // معدل العام الدراسي كنسبة مئوية
     const yearAvg = (term1Avg + term2Avg) / 2; 
 
     let finalGPA = yearAvg;
@@ -90,12 +94,15 @@ export default function AcademicCompassPage() {
 
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 p-4 sm:p-6 lg:p-8 pt-24 font-sans" dir="rtl">
+      
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-[-10%] right-[-10%] w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-indigo-600/10 blur-[100px] rounded-full animate-pulse"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-[250px] sm:w-[500px] h-[250px] sm:h-[500px] bg-emerald-600/10 blur-[90px] rounded-full"></div>
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10 space-y-8 sm:space-y-12">
+        
+        {/* 🔝 الترويسة وأدوات المدير */}
         <header className="flex flex-col lg:flex-row justify-between gap-6 bg-white/5 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border border-white/10 backdrop-blur-xl shadow-2xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-[1.2rem] sm:rounded-[2rem] bg-indigo-600/20 flex items-center justify-center border border-indigo-500/30 shrink-0">
@@ -138,7 +145,9 @@ export default function AcademicCompassPage() {
           )}
         </header>
 
+        {/* 📊 لوحة الإحصائيات المركزية */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          
           {(showG10 || showG11) && (
             <div className="bg-[#0f1423] p-5 sm:p-6 rounded-[2rem] border border-white/10 shadow-xl col-span-1 md:col-span-2 lg:col-span-1 flex flex-col justify-center">
               <h3 className="text-[10px] sm:text-xs font-black text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-widest">
@@ -183,15 +192,17 @@ export default function AcademicCompassPage() {
           </div>
         </div>
 
+        {/* 🎯 شبكة المواد والتفاعلات */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           {analysis.map((subject, index) => {
             const data = simulationData[subject.subject_name] || { term1: 0, t2_coursework: 0, t2_exam: 0 };
             
-            // 🛠️ الإصلاح السحري: تم تغيير المتغير ليكون neededForYear لتجنب الانهيار
-            const yearTotalMax = subject.total_max * 2; 
-            const yearPassingMark = subject.passing_mark * 2; 
+            // 🛠️ المعادلة الرياضية الصحيحة 100%
             const studentCurrentTotal = Number(data.term1) + Number(data.t2_coursework);
-            const neededForYear = yearPassingMark - studentCurrentTotal;
+            const neededForYear = (subject.passing_mark * 2) - studentCurrentTotal;
+            
+            // حساب معدل المادة (المتوسط) للعرض
+            const subjectYearAverage = (Number(data.term1) + Number(data.t2_coursework) + Number(data.t2_exam)) / 2;
 
             let statusConfig = {
               color: "text-emerald-400",
@@ -211,7 +222,7 @@ export default function AcademicCompassPage() {
                statusConfig = {
                  color: "text-amber-400",
                  bg: "bg-amber-500/10 border-amber-500/20",
-                 text: `تحتاج لـ ${neededForYear} درجة في الفاينل لتنجح`, // 👈 تم إصلاح الخطأ المسبب للانهيار
+                 text: `تحتاج لـ ${neededForYear} درجة في الفاينل لتنجح`,
                  icon: <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
                };
             }
@@ -232,10 +243,10 @@ export default function AcademicCompassPage() {
                     </div>
                   </div>
                   <div className="bg-black/40 p-2 sm:p-3 rounded-xl border border-white/5 text-center min-w-[70px]">
-                     <p className="text-[7px] sm:text-[9px] font-bold text-slate-500">مجموع العام</p>
+                     <p className="text-[7px] sm:text-[9px] font-bold text-slate-500">معدل المادة (السنوي)</p>
                      <p className="text-base sm:text-xl font-black text-white">
-                      {(Number(data.term1) + Number(data.t2_coursework) + Number(data.t2_exam))}
-                      <span className="text-[10px] text-slate-500"> /{yearTotalMax}</span>
+                      {subjectYearAverage.toFixed(1)}
+                      <span className="text-[10px] text-slate-500"> /{subject.total_max}</span>
                      </p>
                   </div>
                 </div>
