@@ -52,7 +52,7 @@ export function useAcademicCompass() {
   const [analysis, setAnalysis] = useState<SubjectAnalysis[]>([]);
   const [studentStage, setStudentStage] = useState<string>('');
 
-  // 🚀 الاستعلام المدرع للتعرف على المرحلة
+  // 🚀 الاستعلام المدرع للتعرف على المرحلة (Ultimate Fuzzy Search)
   const fetchStudentStage = useCallback(async (studentId: string) => {
     try {
       const { data, error } = await supabase
@@ -60,7 +60,8 @@ export function useAcademicCompass() {
         .select(`
           next_year_track,
           sections (
-            classes ( level )
+            name,
+            classes ( name, level )
           )
         `)
         .eq('id', studentId)
@@ -69,25 +70,31 @@ export function useAcademicCompass() {
       if (error) throw error;
 
       const rawData = data as any;
-      let extractedLevel: any = null;
+      
+      // 1. استخراج الكائنات بأمان تام لتجنب أخطاء المصفوفات
+      const sec = Array.isArray(rawData?.sections) ? rawData.sections[0] : rawData?.sections;
+      const cls = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
 
-      if (Array.isArray(rawData?.sections) && rawData.sections.length > 0) {
-        extractedLevel = rawData.sections[0]?.classes?.level;
-      } else if (rawData?.sections?.classes) {
-        extractedLevel = rawData.sections.classes.level;
-      }
+      // 2. تجميع كل الأدلة الممكنة من قاعدة البيانات
+      const levelNum = cls?.level || '';
+      const className = cls?.name || '';
+      const sectionName = sec?.name || '';
+      const track = rawData?.next_year_track || '';
 
-      const levelStr = String(extractedLevel || '').trim(); 
-      const track = rawData?.next_year_track;
+      // 3. دمج كل البيانات في "بصمة نصية" واحدة وتوحيد حالة الأحرف
+      const searchString = `${levelNum} ${className} ${sectionName} ${track}`.toLowerCase();
 
-      let stage = '12_scientific';
+      let stage = '12_scientific'; // الافتراضي للحماية
 
-      if (levelStr === '10') {
+      // 4. البحث الشامل والذكي داخل البصمة النصية
+      if (searchString.includes('10') || searchString.includes('عاشر')) {
         stage = '10';
-      } else if (levelStr === '11') {
-        stage = track === 'literary' ? '11_literary' : '11_scientific';
-      } else if (levelStr === '12') {
-        stage = track === 'literary' ? '12_literary' : '12_scientific';
+      } 
+      else if (searchString.includes('11') || searchString.includes('حادي')) {
+        stage = (searchString.includes('lit') || searchString.includes('أدبي')) ? '11_literary' : '11_scientific';
+      } 
+      else if (searchString.includes('12') || searchString.includes('ثاني')) {
+        stage = (searchString.includes('lit') || searchString.includes('أدبي')) ? '12_literary' : '12_scientific';
       }
 
       setStudentStage(stage);
@@ -105,10 +112,11 @@ export function useAcademicCompass() {
       const targetStage = manualStage || await fetchStudentStage(studentId);
       setStudentStage(targetStage); 
 
+      // جلب اللوائح بدون ترتيب من قاعدة البيانات، لأننا سنرتبها برمجياً
       const { data: rules } = await supabase
         .from('kuwait_grading_rules')
         .select('*')
-        .eq('academic_stage', targetStage); // 👈 أزلنا الترتيب الافتراضي من قاعدة البيانات
+        .eq('academic_stage', targetStage);
 
       const { data: grades } = await supabase
         .from('grades')
@@ -146,7 +154,7 @@ export function useAcademicCompass() {
         let indexA = OFFICIAL_SUBJECT_ORDER.indexOf(a.subject_name.trim());
         let indexB = OFFICIAL_SUBJECT_ORDER.indexOf(b.subject_name.trim());
 
-        // إذا أضفت مادة غير موجودة في المصفوفة مستقبلاً، ستنزل في آخر القائمة تلقائياً
+        // في حال إضافة مادة غير موجودة في القائمة، ستظهر في الأسفل
         if (indexA === -1) indexA = 999;
         if (indexB === -1) indexB = 999;
 
