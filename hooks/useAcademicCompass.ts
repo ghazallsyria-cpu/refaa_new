@@ -14,6 +14,39 @@ export interface SubjectAnalysis {
   message: string;
 }
 
+// 📜 المصفوفة الذهبية لترتيب المواد مطابقة للشهادة الأصلية لوزارة التربية
+const OFFICIAL_SUBJECT_ORDER = [
+  'القرآن الكريم',
+  'التربية الإسلامية',
+  'اللغة العربية',
+  'اللغة الإنجليزية',
+  'اللغة الفرنسية',
+  'الرياضيات',
+  'الرياضيات والاحصاء',
+  'الرياضيات والإحصاء',
+  'الفيزياء',
+  'الكيمياء',
+  'الأحياء',
+  'الجيولوجيا',
+  'تاريخ الكويت',
+  'الاجتماعيات',
+  'التاريخ',
+  'الجغرافيا',
+  'علم النفس',
+  'الفلسفة',
+  'قضايا البيئة والتنمية المعاصرة',
+  'الدستور',
+  'الدستور وحقوق الإنسان',
+  'الحاسوب',
+  'المعلوماتية',
+  'المعلوماتية وطرق البحث',
+  'التربية البدنية',
+  'الاختيار الحر 1',
+  'اختياري حر 1',
+  'الاختيار الحر 2',
+  'اختياري حر 2'
+];
+
 export function useAcademicCompass() {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<SubjectAnalysis[]>([]);
@@ -38,20 +71,17 @@ export function useAcademicCompass() {
       const rawData = data as any;
       let extractedLevel: any = null;
 
-      // 1. استخراج آمن للمستوى سواء كان sections مصفوفة أو كائن
       if (Array.isArray(rawData?.sections) && rawData.sections.length > 0) {
         extractedLevel = rawData.sections[0]?.classes?.level;
       } else if (rawData?.sections?.classes) {
         extractedLevel = rawData.sections.classes.level;
       }
 
-      // 2. تحويل المستوى إلى نص لضمان نجاح المطابقة (String Matching)
       const levelStr = String(extractedLevel || '').trim(); 
-      const track = rawData?.next_year_track; // 'scientific' أو 'literary'
+      const track = rawData?.next_year_track;
 
-      let stage = '12_scientific'; // افتراضي للحماية
+      let stage = '12_scientific';
 
-      // 3. تحديد المرحلة بدقة تامة باستخدام النص
       if (levelStr === '10') {
         stage = '10';
       } else if (levelStr === '11') {
@@ -65,7 +95,7 @@ export function useAcademicCompass() {
       
     } catch (err) {
       console.error("Error fetching stage:", err);
-      return '12_scientific'; // الرجوع للافتراضي فقط عند فشل الاستعلام تماماً
+      return '12_scientific'; 
     }
   }, []);
 
@@ -78,8 +108,7 @@ export function useAcademicCompass() {
       const { data: rules } = await supabase
         .from('kuwait_grading_rules')
         .select('*')
-        .eq('academic_stage', targetStage)
-        .order('subject_name');
+        .eq('academic_stage', targetStage); // 👈 أزلنا الترتيب الافتراضي من قاعدة البيانات
 
       const { data: grades } = await supabase
         .from('grades')
@@ -110,6 +139,18 @@ export function useAcademicCompass() {
           status: 'SAFE',
           message: ''
         };
+      });
+
+      // 🌟 الفرز الذكي (Smart Sorting) لمطابقة الشهادة الأصلية
+      generated.sort((a, b) => {
+        let indexA = OFFICIAL_SUBJECT_ORDER.indexOf(a.subject_name.trim());
+        let indexB = OFFICIAL_SUBJECT_ORDER.indexOf(b.subject_name.trim());
+
+        // إذا أضفت مادة غير موجودة في المصفوفة مستقبلاً، ستنزل في آخر القائمة تلقائياً
+        if (indexA === -1) indexA = 999;
+        if (indexB === -1) indexB = 999;
+
+        return indexA - indexB;
       });
 
       setAnalysis(generated);
