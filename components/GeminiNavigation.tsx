@@ -117,7 +117,7 @@ const navigationGroups = [
       { name: 'سجل الأداء', href: '/student/performance', icon: Award },
       { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
       { name: 'مصنع الدروع', href: '/admin/memorial-shields', icon: Shield }, 
-      { name: 'إدارة الصلاحيات', href: '/admin/settings/roles', icon: ShieldCheck },
+      { name: 'إدارة الصلاحيات', href: '/admin/settings/permissions', icon: ShieldCheck }, // 👈 التعديل هنا للمسار الصحيح
       { name: 'المستندات', href: '/documents', icon: FolderOpen },
       { name: 'استيراد البيانات', href: '/seed', icon: Database },
       { name: 'تقرير التدقيق', href: '/report', icon: FileText },
