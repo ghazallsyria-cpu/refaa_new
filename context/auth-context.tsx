@@ -49,7 +49,6 @@ const recordDailyPresence = async (currentUser: SupabaseUser, role: string, real
       return; 
     }
 
-    // 🚀 نستخدم الاسم الحقيقي المرسل، وإذا لم يوجد نلجأ للحلول البديلة
     const fullName = realName || currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'مستخدم مجهول';
 
     const { error } = await supabase
@@ -73,7 +72,6 @@ const recordDailyPresence = async (currentUser: SupabaseUser, role: string, real
     console.error("Silent Tracker Error:", err);
   }
 };
-
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const APP_VERSION = '1.1.0';
@@ -163,6 +161,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (controlRes.data) setIsControlTeamMember(true);
 
     const name = userRes.data.full_name || authResult.user.email?.split('@')[0] || '';
+    
+    // 🛡️ هذا السطر يمنع onAuthStateChange من الدوران مرتين ويحمي من الوميض!
+    fetchedUserId.current = authResult.user.id;
+
     setUser(authResult.user);
     setAuthRole(userRes.data.role as UserRole);
     setUserName(name);
@@ -170,17 +172,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('cached_role', userRes.data.role);
     localStorage.setItem('cached_name', name);
 
-    // 🚀 نمرر الاسم الحقيقي هنا!
     recordDailyPresence(authResult.user, userRes.data.role, name);
 
     setIsChecking(false);
     
+    // 🛠️ التعديل الجوهري: استخدام window.location.replace لضمان إرسال الـ Cookies فوراً للسيرفر
     if (userRes.data.must_reset_password) {
       setMustResetPassword(true);
-      router.push('/reset-password');
+      window.location.replace('/reset-password');
     } else {
       const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', staff: '/dashboard/staff' };
-      router.push(paths[userRes.data.role] || '/');
+      // توجيه صارم (Hard Reload) لضمان أن Middleware يرى الـ Cookie ولا يعيدنا للـ Login
+      window.location.replace(paths[userRes.data.role] || '/');
     }
   }; 
 
@@ -258,7 +261,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 localStorage.setItem('cached_role', userRes.data.role);
                 localStorage.setItem('cached_name', name);
                 
-                // 🚀 نمرر الاسم الحقيقي هنا!
                 recordDailyPresence(session.user, userRes.data.role, name);
              }
              if (settingsRes?.data) {
@@ -270,7 +272,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
            if (mounted) {
               setIsChecking(false);
               if (authRole) {
-                 // 🚀 نمرر الاسم المخزن مؤقتاً هنا
                  const cachedName = localStorage.getItem('cached_name') || '';
                  recordDailyPresence(session.user, authRole, cachedName);
               }
