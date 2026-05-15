@@ -63,6 +63,7 @@ const navigationGroups = [
       { name: 'فريق الكنترول', href: '/admin/control-team', icon: ShieldCheck },
       { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
       { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
+      { name: 'اللوائح الأكاديمية', href: '/admin/grading-rules', icon: Scale }, // 🚀 رابط اللوائح للمدير
       { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature },
       { name: 'مسار إنجاز الكنترول', href: '/admin/exam-pipeline', icon: BarChart3 },
       { name: 'جداول الاختبارات', href: '/admin/exam-timetables', icon: CalendarDays },
@@ -87,6 +88,7 @@ const navigationGroups = [
   {
     title: 'العمليات والساحة', icon: CalendarDays, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
     items: [
+      { name: 'البوصلة الأكاديمية', href: '/student/academic-compass', icon: Target }, // 🚀 رابط البوصلة للطلاب
       { name: 'العمليات المركزية', href: '/admin/exam-live-dashboard', icon: Activity },
       { name: 'استوديو الهويات', href: '/admin/id-cards', icon: CreditCard },
       { name: 'رادار البوابة', href: '/admin/gate-radar', icon: ScanLine },
@@ -115,7 +117,7 @@ const navigationGroups = [
       { name: 'سجل الأداء', href: '/student/performance', icon: Award },
       { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
       { name: 'مصنع الدروع', href: '/admin/memorial-shields', icon: Shield }, 
-      { name: 'إدارة الصلاحيات', href: '/admin/settings/permissions', icon: ShieldCheck }, // 🚀 الرابط الجديد
+      { name: 'إدارة الصلاحيات', href: '/admin/settings/roles', icon: ShieldCheck },
       { name: 'المستندات', href: '/documents', icon: FolderOpen },
       { name: 'استيراد البيانات', href: '/seed', icon: Database },
       { name: 'تقرير التدقيق', href: '/report', icon: FileText },
@@ -192,7 +194,7 @@ export default function GeminiNavigation() {
     if (r === 'student') {
       const internalStudentSafety = [
         'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 
-        'شاشة العرض المركزية', 'المنتديات'
+        'شاشة العرض المركزية', 'المنتديات', 'البوصلة الأكاديمية' // 🚀 تم السماح برؤية البوصلة
       ];
       return internalStudentSafety.includes(n);
     }
@@ -200,7 +202,7 @@ export default function GeminiNavigation() {
     if (r === 'parent') {
       const internalParentSafety = [
         'الجدول الدراسي', 'الاختبارات والدرجات', 'الواجبات', 'سجل الأداء', 'الحضور والغياب', 
-        'شاشة العرض المركزية'
+        'شاشة العرض المركزية', 'البوصلة الأكاديمية' // 🚀 تم السماح برؤية البوصلة
       ];
       return internalParentSafety.includes(n);
     }
@@ -235,8 +237,9 @@ export default function GeminiNavigation() {
       base.push({ name: 'الجدول', href: '/schedule', icon: CalendarDays, color: 'text-amber-400' });
       base.push({ name: 'الواجبات', href: '/assignments', icon: PenTool, color: 'text-purple-400' });
     } else if (authRole === 'student') {
+      // 🚀 تم إضافة البوصلة للروابط السريعة للطلاب
+      base.push({ name: 'البوصلة', href: '/student/academic-compass', icon: Target, color: 'text-purple-400' });
       base.push({ name: 'الجدول', href: '/schedule', icon: CalendarDays, color: 'text-amber-400' });
-      base.push({ name: 'الاختبارات', href: '/exams', icon: FileText, color: 'text-rose-400' });
     }
     return base;
   };
