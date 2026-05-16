@@ -78,8 +78,8 @@ export function Header({
   const finalLogoSrc = schoolData.logo_url || "/images/logo.png";
 
   return (
-    {/* 🚀 هنا تم التعديل الجوهري: right-0 و left-auto لضبط الاتجاه العربي */}
-    <header className="relative w-full h-[100px] sm:h-[110px] shrink-0 border-b border-indigo-500/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 z-40 sticky top-0 [&_.notification-dropdown]:max-w-[calc(100vw-2rem)] [&_.notification-dropdown]:right-0 [&_.notification-dropdown]:left-auto" dir="rtl">
+    // 🚀 أزلنا الكلاسات المعقدة من هنا وتركناها نقية
+    <header className="relative w-full h-[100px] sm:h-[110px] shrink-0 border-b border-indigo-500/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 z-40 sticky top-0" dir="rtl">
       
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-20">
         <img 
@@ -107,7 +107,6 @@ export function Header({
             </button>
           )}
           
-          {/* 🚀 إجبار الإشعارات على عدم تجاوز الشاشة */}
           <div className="p-1 sm:p-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors shadow-inner backdrop-blur-md relative shrink-0">
             <NotificationsBell />
           </div>
@@ -197,8 +196,29 @@ export function Header({
             )}
           </AnimatePresence>
         </div>
-
       </div>
+
+      {/* 🚀 الحل النووي: ستايل إجباري عالمي لمعالجة تعنت قائمة الإشعارات */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .notification-dropdown {
+           right: 0 !important;
+           left: auto !important;
+           transform: none !important;
+           transform-origin: top right !important;
+        }
+        
+        /* 📱 على الجوال: نجعلها بطاقة تتوسط الشاشة بالكامل لتجنب خروجها من الحواف */
+        @media (max-width: 640px) {
+           .notification-dropdown {
+              position: fixed !important;
+              top: 85px !important;
+              right: 1rem !important;
+              left: 1rem !important;
+              width: calc(100vw - 2rem) !important;
+              max-width: none !important;
+           }
+        }
+      `}} />
     </header>
   );
 }
