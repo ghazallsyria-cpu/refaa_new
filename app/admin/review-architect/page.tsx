@@ -56,34 +56,54 @@ export default function ReviewArchitectPage() {
     setStatus(null);
 
     try {
-      const cleanedInput = jsonInput.trim();
-      let parsedData;
+      // 1. 🧹 المكنسة الذكية: تنظيف مخرجات الذكاء الاصطناعي إجبارياً
+      let cleanedInput = jsonInput.trim();
       
+      // أ) إزالة علامات الماركدوان إذا أضافها الذكاء الاصطناعي
+      cleanedInput = cleanedInput.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+      // ب) صائد المصفوفات: استخراج ما بين القوسين [ ] فقط
+      const arrayMatch = cleanedInput.match(/\[[\s\S]*\]/);
+      if (!arrayMatch) {
+        throw new Error("لم يتم العثور على مصفوفة JSON صحيحة. تأكد من وجود الأقواس [ ].");
+      }
+      
+      cleanedInput = arrayMatch[0];
+
+      // 2. محاولة تحويل النص المنظف إلى كود برمجي
+      let parsedData;
       try {
         parsedData = JSON.parse(cleanedInput);
       } catch (jsonErr) {
-        throw new Error("صيغة الـ JSON غير صحيحة. يرجى التأكد من عدم وجود فواصل زائدة أو نصوص خارج الأقواس المصفوفية [ ].");
+        throw new Error("صيغة الـ JSON غير صحيحة داخلياً. تأكد من عدم وجود أخطاء في النص المستخرج.");
       }
 
       if (!Array.isArray(parsedData)) {
-        throw new Error("بنية البيانات غير سليمة، يجب أن يكون الـ JSON عبارة عن مصفوفة أسئلة تبدأ بـ [ وتنتهي بـ ].");
+        throw new Error("بنية البيانات غير سليمة، يجب أن يكون الـ JSON عبارة عن مصفوفة أسئلة.");
       }
 
+      // التحقق من الحقول الإلزامية
       if (parsedData.length > 0) {
         const firstItem = parsedData[0];
         if (!firstItem.category || !firstItem.question_text || !firstItem.model_answer) {
-          throw new Error("العناصر تفتقد لبعض الحقول الأساسية (category, question_text, model_answer). يرجى مراجعة قالب الاستخراج.");
+          throw new Error("العناصر تفتقد لبعض الحقول الأساسية (category, question_text, model_answer).");
         }
       }
 
+      // 3. إنشاء مستند المراجعة الرئيسي
       const { data: doc, error: docErr } = await supabase
         .from('review_documents')
-        .insert({ title: title.trim(), academic_stage: stage, subject_name: subject.trim() })
+        .insert({ 
+          title: title.trim(), 
+          academic_stage: stage, 
+          subject_name: subject.trim() 
+        })
         .select()
         .single();
 
       if (docErr) throw docErr;
 
+      // 4. تجهيز الأسئلة للحقن
       const questionsToInsert = parsedData.map((q: any) => ({
         document_id: doc.id,
         category: q.category,
@@ -94,6 +114,7 @@ export default function ReviewArchitectPage() {
         importance_weight: q.importance_weight || 'MEDIUM'
       }));
 
+      // 5. الحقن الجماعي الصاروخي
       const { error: questionsErr } = await supabase
         .from('extracted_questions')
         .insert(questionsToInsert);
@@ -103,11 +124,18 @@ export default function ReviewArchitectPage() {
         throw questionsErr;
       }
 
-      setStatus({ type: 'success', msg: `تم تفكيك وتحليل الاختبارات! تم حقن ${questionsToInsert.length} سؤالاً مصفى من التكرار بنجاح.` });
+      setStatus({ 
+        type: 'success', 
+        msg: `تم تفكيك وتحليل الاختبارات! تم حقن ${questionsToInsert.length} سؤالاً مصفى من التكرار بنجاح.` 
+      });
+      
       setJsonInput('');
       setTitle('');
     } catch (err: any) {
-      setStatus({ type: 'error', msg: err.message || "حدث خطأ غير متوقع أثناء حقن البيانات في السيرفر." });
+      setStatus({ 
+        type: 'error', 
+        msg: err.message || "حدث خطأ غير متوقع أثناء حقن البيانات في السيرفر." 
+      });
     } finally {
       setLoading(false);
     }
@@ -134,7 +162,7 @@ export default function ReviewArchitectPage() {
               </h2>
             </div>
             <p className="text-slate-400 text-xs sm:text-sm font-medium">
-              الخطوة 1: انسخ البرومبت للذكاء الاصطناعي. الخطوة 2: الصق الـ JSON الناتج هنا.
+              الخطوة 1: انسخ البرومبت للذكاء الاصطناعي. الخطوة 2: الصق الـ JSON الناتج هنا ليتم تنظيفه وحقنه تلقائياً.
             </p>
           </div>
 
@@ -168,7 +196,6 @@ export default function ReviewArchitectPage() {
               </div>
             </div>
 
-            {/* 🚀 قسم البرومبت الجديد المضاف */}
             <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-5 space-y-3 relative overflow-hidden">
               <div className="flex justify-between items-center mb-2 relative z-10">
                 <label className="text-xs font-black text-indigo-300 flex items-center gap-2">
@@ -187,7 +214,6 @@ export default function ReviewArchitectPage() {
               </div>
             </div>
 
-            {/* وعاء الـ JSON المستخلص */}
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
                 <label className="text-xs font-black text-emerald-400 flex items-center gap-1">
