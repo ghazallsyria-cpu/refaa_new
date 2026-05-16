@@ -6,7 +6,10 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Printer, ChevronRight, BookOpen, Layers, Loader2, Sparkles, AlertCircle, School } from 'lucide-react';
 
-// 🌍 قاموس ترجمة الفئات الأكاديمية
+// 🚀 1. استيراد مكتبات المعادلات الرياضية
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
+
 const CATEGORY_MAP: Record<string, string> = {
   'scientific_term': 'المصطلح العلمي',
   'give_reason': 'علل لما يلي تعليلاً علمياً دقيقاً',
@@ -16,11 +19,18 @@ const CATEGORY_MAP: Record<string, string> = {
   'compare': 'قارن بين كل مما يلي',
 };
 
-// 🚀 تحديث Next.js 15: الـ params أصبحت Promise ويجب تعريفها هكذا
+// 🚀 2. دالة تنظيف المعادلات (لإصلاح أخطاء الذكاء الاصطناعي في الرموز)
+const formatMath = (text: string) => {
+  if (!text) return '';
+  // إصلاح مشكلة علامة الدولار المعكوسة \$ وتحويلها إلى $ ليقرأها Katex
+  let formatted = text.replace(/\\\$/g, '$');
+  // إصلاح المسافات العالقة بين علامات الدولار
+  formatted = formatted.replace(/\$ (.*?) \$/g, '$$$1$$');
+  return formatted;
+};
+
 export default function ReviewDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  
-  // 🚀 فك الوعد (Unwrap Promise) باستخدام دالة use الجديدة من React
   const resolvedParams = use(params);
   const documentId = resolvedParams.id;
 
@@ -32,7 +42,6 @@ export default function ReviewDocumentPage({ params }: { params: Promise<{ id: s
   useEffect(() => {
     const fetchReviewData = async () => {
       try {
-        // 1. جلب بيانات المستند الرئيسي
         const { data: docData, error: docError } = await supabase
           .from('review_documents')
           .select('*')
@@ -42,12 +51,11 @@ export default function ReviewDocumentPage({ params }: { params: Promise<{ id: s
         if (docError) throw docError;
         setDocument(docData);
 
-        // 2. جلب الأسئلة المرتبطة به
         const { data: qData, error: qError } = await supabase
           .from('extracted_questions')
           .select('*')
           .eq('document_id', documentId)
-          .order('category', { ascending: true }); // ترتيب مبدئي
+          .order('category', { ascending: true });
 
         if (qError) throw qError;
         setQuestions(qData || []);
@@ -62,7 +70,6 @@ export default function ReviewDocumentPage({ params }: { params: Promise<{ id: s
     if (documentId) fetchReviewData();
   }, [documentId]);
 
-  // دالة لتجميع الأسئلة بحسب الفئة
   const groupedQuestions = questions.reduce((acc, curr) => {
     const cat = curr.category || 'other';
     if (!acc[cat]) acc[cat] = [];
@@ -164,18 +171,20 @@ export default function ReviewDocumentPage({ params }: { params: Promise<{ id: s
                       <span className="flex-shrink-0 w-8 h-8 rounded-full bg-[#02040a] print:bg-white border border-white/10 print:border-black flex items-center justify-center text-sm font-black text-slate-400 print:text-black mt-1">
                         {i + 1}
                       </span>
-                      <div className="flex-1 space-y-4">
-                        <p className="text-base sm:text-lg font-bold text-white print:text-black leading-relaxed">
-                          {q.question_text}
-                        </p>
+                      <div className="flex-1 space-y-4 overflow-x-auto custom-scrollbar pb-2">
+                        {/* 🚀 3. تغليف نص السؤال بمكتبة Latex */}
+                        <div className="text-base sm:text-lg font-bold text-white print:text-black leading-relaxed" dir="rtl">
+                          <Latex>{formatMath(q.question_text)}</Latex>
+                        </div>
                         
-                        <div className="bg-indigo-500/10 print:bg-gray-50 border border-indigo-500/20 print:border-gray-300 p-4 rounded-xl print:rounded-lg">
+                        <div className="bg-indigo-500/10 print:bg-gray-50 border border-indigo-500/20 print:border-gray-300 p-4 rounded-xl print:rounded-lg overflow-x-auto custom-scrollbar">
                           <span className="block text-[10px] font-black text-indigo-300 print:text-gray-600 uppercase tracking-widest mb-2">
                             الإجابة النموذجية
                           </span>
-                          <p className="text-sm sm:text-base font-bold text-indigo-100 print:text-black leading-relaxed">
-                            {q.model_answer}
-                          </p>
+                          {/* 🚀 4. تغليف الإجابة النموذجية بمكتبة Latex */}
+                          <div className="text-sm sm:text-base font-bold text-indigo-100 print:text-black leading-relaxed" dir="rtl">
+                            <Latex>{formatMath(q.model_answer)}</Latex>
+                          </div>
                         </div>
                       </div>
                     </div>
