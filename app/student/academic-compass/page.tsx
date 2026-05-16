@@ -18,6 +18,10 @@ import { supabase } from '@/lib/supabase';
 
 const formatStageName = (stage: string) => {
   const map: Record<string, string> = {
+    '6': 'الصف السادس',
+    '7': 'الصف السابع',
+    '8': 'الصف الثامن',
+    '9': 'الصف التاسع',
     '10': 'الصف العاشر',
     '11_scientific': 'الحادي عشر (علمي)',
     '11_literary': 'الحادي عشر (أدبي)',
@@ -35,7 +39,6 @@ function CompassContent() {
   const { user, userRole, authRole, isAdminByEmail } = useAuth();
   const { calculateCompass, analysis, loading, studentStage } = useAcademicCompass();
   
-  // 🎯 تحديد الهوية والهدف بذكاء
   const targetStudentId = urlStudentId || user?.id;
   const isConsultationMode = (authRole === 'teacher' || authRole === 'admin' || authRole === 'management' || userRole === 'staff') && !!urlStudentId;
   const isManagerTesting = (userRole === 'admin' || userRole === 'management' || isAdminByEmail) && !urlStudentId;
@@ -45,7 +48,6 @@ function CompassContent() {
   const [simulationData, setSimulationData] = useState<Record<string, { term1: number, t2_coursework: number, t2_exam: number }>>({});
   const [prevRecords, setPrevRecords] = useState({ g10: 90, g11: 90 });
 
-  // جلب اسم الطالب إذا كان المعلم في وضع الاستشارة
   useEffect(() => {
     if (isConsultationMode && targetStudentId) {
       supabase.from('users').select('full_name').eq('id', targetStudentId).single().then(({data}) => {
@@ -88,9 +90,10 @@ function CompassContent() {
     const term2Avg = totalMaxTerm > 0 ? (totalTerm2Student / totalMaxTerm) * 100 : 0;
     const yearAvg = (term1Avg + term2Avg) / 2; 
 
-    let finalGPA = yearAvg;
+    let finalGPA = yearAvg; // 🚀 هنا العبقرية: للمتوسط والعاشر سيكون التراكمي هو معدل السنة فقط
     const currentStage = activeStage || studentStage;
 
+    // 🚀 تطبيق التراكمي فقط وحصرياً لـ 11 و 12
     if (currentStage.startsWith('12')) {
       finalGPA = (prevRecords.g10 * 0.1) + (prevRecords.g11 * 0.2) + (yearAvg * 0.7);
     } else if (currentStage.startsWith('11')) {
@@ -106,8 +109,10 @@ function CompassContent() {
   }, [analysis, simulationData, prevRecords, activeStage, studentStage]);
 
   const currentStageCheck = activeStage || studentStage;
+  // 🚀 إخفاء مدخلات الأعوام السابقة للمتوسط والعاشر بذكاء
   const showG10 = currentStageCheck.startsWith('11') || currentStageCheck.startsWith('12');
   const showG11 = currentStageCheck.startsWith('12');
+  const isCumulativeStage = currentStageCheck.startsWith('11') || currentStageCheck.startsWith('12');
 
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 p-4 sm:p-6 lg:p-8 pt-24 font-sans" dir="rtl">
@@ -118,7 +123,6 @@ function CompassContent() {
 
       <div className="max-w-7xl mx-auto relative z-10 space-y-8 sm:space-y-12">
         
-        {/* 🔝 الترويسة الذكية تتغير حسب المستخدم */}
         {isConsultationMode ? (
            <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-gradient-to-r from-amber-500/20 to-orange-600/20 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border border-amber-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 w-full shadow-[0_20px_50px_rgba(245,158,11,0.15)] backdrop-blur-xl">
              <div className="flex items-center gap-4 sm:gap-6">
@@ -161,6 +165,10 @@ function CompassContent() {
                   }}
                   className="w-full bg-black/50 text-white font-black px-4 py-3 rounded-xl sm:rounded-2xl outline-none border border-white/10 cursor-pointer focus:border-indigo-500"
                 >
+                  <option value="6">الصف السادس</option>
+                  <option value="7">الصف السابع</option>
+                  <option value="8">الصف الثامن</option>
+                  <option value="9">الصف التاسع</option>
                   <option value="10">الصف العاشر</option>
                   <option value="11_scientific">11 علمي</option>
                   <option value="11_literary">11 أدبي</option>
@@ -219,9 +227,10 @@ function CompassContent() {
 
           <div className="bg-gradient-to-br from-emerald-600 to-teal-900 p-5 sm:p-6 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center text-center relative overflow-hidden">
             <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-200/50 mb-2 sm:mb-3 animate-pulse" />
-            <p className="text-emerald-100 font-black text-[9px] sm:text-[10px] mb-1 uppercase tracking-widest">المعدل التراكمي النهائي</p>
+            {/* 🚀 تغيير النص بذكاء بناءً على المرحلة */}
+            <p className="text-emerald-100 font-black text-[9px] sm:text-[10px] mb-1 uppercase tracking-widest">{isCumulativeStage ? 'المعدل التراكمي النهائي' : 'النسبة المئوية النهائية'}</p>
             <div className="text-5xl sm:text-7xl font-black text-white drop-shadow-2xl">{results.final}%</div>
-            <p className="text-[8px] sm:text-[9px] font-bold text-emerald-100 opacity-80 mt-2">نسبتك المئوية التراكمية</p>
+            <p className="text-[8px] sm:text-[9px] font-bold text-emerald-100 opacity-80 mt-2">{isCumulativeStage ? 'نسبتك المئوية التراكمية' : 'المعدل المئوي لنجاحك هذا العام'}</p>
           </div>
         </div>
 
@@ -341,7 +350,7 @@ function CompassContent() {
         <footer className="mt-12 sm:mt-16 p-6 sm:p-12 border-t border-white/5 text-center">
            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-indigo-500/60 mb-3">
               <Info className="w-4 h-4 shrink-0" />
-              <p className="text-[9px] sm:text-xs font-bold leading-relaxed max-w-2xl">هذا المحاكي مصمم وفقاً لأحدث لوائح وزارة التربية الكويتية لعام 2026. الأرقام الناتجة هي للمحاكاة والتوقع الأكاديمي بناءً على مدخلاتك.</p>
+              <p className="text-[9px] sm:text-xs font-bold leading-relaxed max-w-2xl">تم تصميم المحاكي وفقاً لأحدث لوائح وزارة التربية الكويتية. الأرقام الناتجة هي للتوقع الأكاديمي بناءً على مدخلاتك.</p>
            </div>
            <p className="text-slate-600 text-[8px] sm:text-[10px] font-black uppercase tracking-widest">تطوير مدرسة الرفعة النموذجية</p>
         </footer>
