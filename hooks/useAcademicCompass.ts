@@ -14,22 +14,29 @@ export interface SubjectAnalysis {
   message: string;
 }
 
-// 📜 المصفوفة الذهبية لترتيب المواد مطابقة للشهادة الأصلية لوزارة التربية
+// 📜 المصفوفة الذهبية لترتيب المواد (تمت إضافة أسماء مواد المتوسطة)
 const OFFICIAL_SUBJECT_ORDER = [
   'القرآن الكريم',
+  'قرآن كريم',
   'التربية الإسلامية',
+  'تربيه اسلاميه',
   'اللغة العربية',
+  'لغه عربيه',
   'اللغة الإنجليزية',
+  'لغه انجليزيه',
   'اللغة الفرنسية',
   'الرياضيات',
+  'رياضيات',
   'الرياضيات والاحصاء',
   'الرياضيات والإحصاء',
   'الفيزياء',
   'الكيمياء',
   'الأحياء',
+  'علوم', // 🚀 مادة العلوم للمتوسطة
   'الجيولوجيا',
   'تاريخ الكويت',
   'الاجتماعيات',
+  'اجتماعيات', // 🚀 اجتماعيات للمتوسطة
   'التاريخ',
   'الجغرافيا',
   'علم النفس',
@@ -38,9 +45,11 @@ const OFFICIAL_SUBJECT_ORDER = [
   'الدستور',
   'الدستور وحقوق الإنسان',
   'الحاسوب',
+  'حاسب آلي', // 🚀 حاسب آلي للمتوسطة
   'المعلوماتية',
   'المعلوماتية وطرق البحث',
   'التربية البدنية',
+  'تربيه بدنيه',
   'الاختيار الحر 1',
   'اختياري حر 1',
   'الاختيار الحر 2',
@@ -52,7 +61,7 @@ export function useAcademicCompass() {
   const [analysis, setAnalysis] = useState<SubjectAnalysis[]>([]);
   const [studentStage, setStudentStage] = useState<string>('');
 
-  // 🚀 الاستعلام المدرع للتعرف على المرحلة (Ultimate Fuzzy Search)
+  // 🚀 الاستعلام المدرع للتعرف على المرحلة (يدعم الآن المتوسط والثانوي معاً)
   const fetchStudentStage = useCallback(async (studentId: string) => {
     try {
       const { data, error } = await supabase
@@ -71,25 +80,24 @@ export function useAcademicCompass() {
 
       const rawData = data as any;
       
-      // 1. استخراج الكائنات بأمان تام لتجنب أخطاء المصفوفات
       const sec = Array.isArray(rawData?.sections) ? rawData.sections[0] : rawData?.sections;
       const cls = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
 
-      // 2. تجميع كل الأدلة الممكنة من قاعدة البيانات
       const levelNum = cls?.level || '';
       const className = cls?.name || '';
       const sectionName = sec?.name || '';
       const track = rawData?.next_year_track || '';
 
-      // 3. دمج كل البيانات في "بصمة نصية" واحدة وتوحيد حالة الأحرف
       const searchString = `${levelNum} ${className} ${sectionName} ${track}`.toLowerCase();
 
       let stage = '12_scientific'; // الافتراضي للحماية
 
-      // 4. البحث الشامل والذكي داخل البصمة النصية
-      if (searchString.includes('10') || searchString.includes('عاشر')) {
-        stage = '10';
-      } 
+      // 4. 🚀 البحث الشامل والذكي (متوسط + ثانوي)
+      if (searchString.includes('6') || searchString.includes('سادس')) stage = '6';
+      else if (searchString.includes('7') || searchString.includes('سابع')) stage = '7';
+      else if (searchString.includes('8') || searchString.includes('ثامن')) stage = '8';
+      else if (searchString.includes('9') || searchString.includes('تاسع')) stage = '9';
+      else if (searchString.includes('10') || searchString.includes('عاشر')) stage = '10';
       else if (searchString.includes('11') || searchString.includes('حادي')) {
         stage = (searchString.includes('lit') || searchString.includes('أدبي')) ? '11_literary' : '11_scientific';
       } 
@@ -112,7 +120,6 @@ export function useAcademicCompass() {
       const targetStage = manualStage || await fetchStudentStage(studentId);
       setStudentStage(targetStage); 
 
-      // جلب اللوائح بدون ترتيب من قاعدة البيانات، لأننا سنرتبها برمجياً
       const { data: rules } = await supabase
         .from('kuwait_grading_rules')
         .select('*')
@@ -149,12 +156,10 @@ export function useAcademicCompass() {
         };
       });
 
-      // 🌟 الفرز الذكي (Smart Sorting) لمطابقة الشهادة الأصلية
       generated.sort((a, b) => {
         let indexA = OFFICIAL_SUBJECT_ORDER.indexOf(a.subject_name.trim());
         let indexB = OFFICIAL_SUBJECT_ORDER.indexOf(b.subject_name.trim());
 
-        // في حال إضافة مادة غير موجودة في القائمة، ستظهر في الأسفل
         if (indexA === -1) indexA = 999;
         if (indexB === -1) indexB = 999;
 
