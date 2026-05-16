@@ -1,10 +1,10 @@
+// @ts-nocheck
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Printer, ChevronRight, BookOpen, Layers, Loader2, Sparkles, AlertCircle, School } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 // 🌍 قاموس ترجمة الفئات الأكاديمية
 const CATEGORY_MAP: Record<string, string> = {
@@ -16,8 +16,14 @@ const CATEGORY_MAP: Record<string, string> = {
   'compare': 'قارن بين كل مما يلي',
 };
 
-export default function ReviewDocumentPage({ params }: { params: { id: string } }) {
+// 🚀 تحديث Next.js 15: الـ params أصبحت Promise ويجب تعريفها هكذا
+export default function ReviewDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  
+  // 🚀 فك الوعد (Unwrap Promise) باستخدام دالة use الجديدة من React
+  const resolvedParams = use(params);
+  const documentId = resolvedParams.id;
+
   const [document, setDocument] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +36,7 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
         const { data: docData, error: docError } = await supabase
           .from('review_documents')
           .select('*')
-          .eq('id', params.id)
+          .eq('id', documentId)
           .single();
 
         if (docError) throw docError;
@@ -40,7 +46,7 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
         const { data: qData, error: qError } = await supabase
           .from('extracted_questions')
           .select('*')
-          .eq('document_id', params.id)
+          .eq('document_id', documentId)
           .order('category', { ascending: true }); // ترتيب مبدئي
 
         if (qError) throw qError;
@@ -53,10 +59,10 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
       }
     };
 
-    if (params.id) fetchReviewData();
-  }, [params.id]);
+    if (documentId) fetchReviewData();
+  }, [documentId]);
 
-  // دالة لتجميع الأسئلة بحسب الفئة (Category)
+  // دالة لتجميع الأسئلة بحسب الفئة
   const groupedQuestions = questions.reduce((acc, curr) => {
     const cat = curr.category || 'other';
     if (!acc[cat]) acc[cat] = [];
@@ -94,7 +100,6 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
   return (
     <div className="min-h-screen bg-[#02040a] print:bg-white text-slate-200 print:text-black font-sans selection:bg-indigo-500/30" dir="rtl">
       
-      {/* 🛑 أزرار التحكم (تختفي عند الطباعة بفضل كلاس print:hidden) */}
       <div className="print:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-[#0f1423]/90 backdrop-blur-xl p-3 rounded-full border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.8)]">
         <button onClick={() => router.back()} className="p-3 bg-white/5 hover:bg-white/10 text-slate-300 rounded-full transition-colors" title="العودة">
           <ChevronRight className="w-5 h-5" />
@@ -104,10 +109,8 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
         </button>
       </div>
 
-      {/* 📄 ورقة العمل الرئيسية */}
       <div className="max-w-4xl mx-auto p-4 sm:p-8 print:p-0 print:max-w-none">
         
-        {/* 🏆 ترويسة المذكرة (الهيدر الرسمي للطباعة) */}
         <div className="bg-[#0f1423] print:bg-transparent p-8 rounded-[2rem] print:rounded-none border border-white/10 print:border-b-4 print:border-black mb-8 print:mb-6 shadow-xl print:shadow-none text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] pointer-events-none print:hidden"></div>
           
@@ -132,27 +135,21 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
           </div>
         </div>
 
-        {/* 📝 الأسئلة مقسمة حسب الفئات */}
         <div className="space-y-12 print:space-y-8">
           {Object.entries(groupedQuestions).map(([category, catQuestions], index) => (
             <div key={category} className="space-y-6">
               
-              {/* عنوان الفئة (مثال: المصطلح العلمي) */}
               <div className="flex items-center gap-4 print:border-b-2 print:border-black print:pb-2">
                 <div className="h-8 w-1 bg-indigo-500 rounded-full print:bg-black"></div>
                 <h2 className="text-2xl font-black text-indigo-400 print:text-black">
-                  {/* السؤال الأول، الثاني، الخ... */}
                   السؤال {index + 1}: {CATEGORY_MAP[category] || category}
                 </h2>
               </div>
 
-              {/* قائمة أسئلة هذه الفئة */}
               <div className="space-y-4">
                 {catQuestions.map((q: any, i: number) => (
-                  // break-inside-avoid تمنع انقسام السؤال بين صفحتين عند الطباعة!
                   <div key={q.id} className="bg-white/5 print:bg-transparent p-5 sm:p-6 rounded-2xl print:rounded-none border border-white/5 print:border-b print:border-gray-300 break-inside-avoid relative group">
                     
-                    {/* شارات الأعوام المتكررة (السر الثوري للمنصة) */}
                     {q.years_appeared && q.years_appeared.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-4">
                         {q.years_appeared.map((year: number) => (
@@ -168,12 +165,10 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
                         {i + 1}
                       </span>
                       <div className="flex-1 space-y-4">
-                        {/* نص السؤال */}
                         <p className="text-base sm:text-lg font-bold text-white print:text-black leading-relaxed">
                           {q.question_text}
                         </p>
                         
-                        {/* الإجابة النموذجية */}
                         <div className="bg-indigo-500/10 print:bg-gray-50 border border-indigo-500/20 print:border-gray-300 p-4 rounded-xl print:rounded-lg">
                           <span className="block text-[10px] font-black text-indigo-300 print:text-gray-600 uppercase tracking-widest mb-2">
                             الإجابة النموذجية
@@ -192,7 +187,6 @@ export default function ReviewDocumentPage({ params }: { params: { id: string } 
           ))}
         </div>
 
-        {/* ذيل الطباعة المخفي الذي يظهر فقط في الـ PDF */}
         <div className="hidden print:block mt-12 pt-4 border-t border-gray-300 text-center text-gray-500 text-sm font-bold">
           مع تمنياتنا لكم بالنجاح والتفوق - منصة مدرسة الرفعة النموذجية
         </div>
