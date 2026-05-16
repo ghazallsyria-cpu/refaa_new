@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Printer, ChevronRight, BookOpen, Layers, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { Printer, ChevronRight, BookOpen, Layers, Loader2, Sparkles, AlertCircle, School } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // 🌍 قاموس ترجمة الفئات الأكاديمية
