@@ -48,17 +48,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         
         {/* ==========================================
             🌌 5. واجهة جيمناي الحية (Alive UI Background)
-            أجرام سماوية تتحرك ببطء وتندمج ألوانها
+            تم حقنها بـ transform-gpu للتسريع العتادي الفائق
             ========================================== */}
         <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none print:hidden">
           {/* الجرم النيلي (القيادة) */}
-          <div className="absolute -top-[20%] -right-[10%] w-[60vw] h-[60vw] max-w-[800px] max-h-[800px] bg-indigo-600/10 rounded-full blur-[100px] animate-nebula mix-blend-screen" />
+          <div className="absolute -top-[20%] -right-[10%] w-[60vw] h-[60vw] max-w-[800px] max-h-[800px] bg-indigo-600/10 rounded-full blur-[80px] animate-nebula transform-gpu will-change-transform" />
           
           {/* الجرم البنفسجي (الذكاء) */}
-          <div className="absolute top-[20%] -left-[10%] w-[50vw] h-[50vw] max-w-[700px] max-h-[700px] bg-violet-600/10 rounded-full blur-[120px] animate-nebula animation-delay-2000 mix-blend-screen" />
+          <div className="absolute top-[20%] -left-[10%] w-[50vw] h-[50vw] max-w-[700px] max-h-[700px] bg-violet-600/10 rounded-full blur-[90px] animate-nebula animation-delay-2000 transform-gpu will-change-transform" />
           
           {/* الجرم الزمردي (النمو) */}
-          <div className="absolute -bottom-[20%] left-[20%] w-[70vw] h-[70vw] max-w-[900px] max-h-[900px] bg-emerald-600/5 rounded-full blur-[130px] animate-nebula animation-delay-4000 mix-blend-screen" />
+          <div className="absolute -bottom-[20%] left-[20%] w-[70vw] h-[70vw] max-w-[900px] max-h-[900px] bg-emerald-600/5 rounded-full blur-[100px] animate-nebula animation-delay-4000 transform-gpu will-change-transform" />
         </div>
 
         {/* ==========================================
