@@ -1,13 +1,14 @@
 // @ts-nocheck
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation'; // 🚀 استيراد الموجّه الجديد
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Database, FileCheck, AlertCircle, Sparkles, 
-  Layers, BookOpen, Heading, CheckCircle2, ClipboardCopy, Copy, Check, Bot
+  Layers, BookOpen, Heading, CheckCircle2, ClipboardCopy, 
+  Copy, Check, Bot, Trash2, Edit3, Calendar, FolderOpen 
 } from 'lucide-react';
 
 const GOLDEN_PROMPT = `أنت مبرمج خبير ومحلل بيانات أكاديمي لمناهج وزارة التربية الكويتية.
@@ -36,7 +37,7 @@ const GOLDEN_PROMPT = `أنت مبرمج خبير ومحلل بيانات أكا
 ]`;
 
 export default function ReviewArchitectPage() {
-  const router = useRouter(); // 🚀 تفعيل سحري للموجّه
+  const router = useRouter();
   const [title, setTitle] = useState('');
   const [stage, setStage] = useState('11_scientific');
   const [subject, setSubject] = useState('الفيزياء');
@@ -45,10 +46,49 @@ export default function ReviewArchitectPage() {
   const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
+  // 🚀 حالة تخزين المذكرات القديمة
+  const [existingDocs, setExistingDocs] = useState<any[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
+
+  // 🚀 جلب المذكرات القديمة من قاعدة البيانات
+  const fetchExistingDocs = async () => {
+    try {
+      setDocsLoading(true);
+      const { data, error } = await supabase
+        .from('review_documents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setExistingDocs(data || []);
+    } catch (err) {
+      console.error('Error fetching docs:', err);
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchExistingDocs();
+  }, []);
+
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(GOLDEN_PROMPT);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  // 🚀 حذف مذكرة بالكامل مع أسئلتها
+  const handleDeleteDoc = async (docId: string, docTitle: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف مذكرة "${docTitle}" بالكامل مع جميع أسئلتها ورسوماتها؟`)) return;
+    try {
+      const { error } = await supabase.from('review_documents').delete().eq('id', docId);
+      if (error) throw error;
+      setStatus({ type: 'success', msg: 'تم حذف المذكرة بالكامل بنجاح! 🗑️' });
+      fetchExistingDocs(); // تحديث القائمة
+    } catch (err) {
+      setStatus({ type: 'error', msg: 'فشل حذف المذكرة.' });
+    }
   };
 
   const handleIngestData = async (e: React.FormEvent) => {
@@ -74,7 +114,6 @@ export default function ReviewArchitectPage() {
         throw new Error("بنية البيانات غير سليمة.");
       }
 
-      // أ) إنشاء رأس المستند الفردي
       const { data: doc, error: docErr } = await supabase
         .from('review_documents')
         .insert({ title: title.trim(), academic_stage: stage, subject_name: subject.trim() })
@@ -83,7 +122,6 @@ export default function ReviewArchitectPage() {
 
       if (docErr) throw docErr;
 
-      // ب) إعداد حزمة الأسئلة
       const questionsToInsert = parsedData.map((q: any) => ({
         document_id: doc.id,
         category: q.category,
@@ -95,7 +133,6 @@ export default function ReviewArchitectPage() {
         image_url: q.image_url || null
       }));
 
-      // ج) الحقن الجماعي في الخادم
       const { error: questionsErr } = await supabase
         .from('extracted_questions')
         .insert(questionsToInsert);
@@ -105,13 +142,11 @@ export default function ReviewArchitectPage() {
         throw questionsErr;
       }
 
-      // 🎉 د) النجاح وإعلام المستخدم بالتوجيه الحركي القادم
       setStatus({ 
         type: 'success', 
-        msg: `تم بنجاح بناء الكبسولة وحقن ${questionsToInsert.length} سؤالاً وزارياً! جاري تحويلك الآن تلقائياً لصفحة مدير الصور لرفع الرسومات البيانية عبر Cloudinary... ☁️` 
+        msg: `تم بنجاح بناء الكبسولة وحقن ${questionsToInsert.length} سؤالاً وزارياً! جاري تحويلك الآن تلقائياً لصفحة مدير الصور... ☁️` 
       });
       
-      // 🚀 هـ) توجيه تلقائي ذكي لصفحة إدارة الصور بعد ثانيتين ونصف ليرى المعلم الإشعار أولاً
       setTimeout(() => {
         router.push(`/admin/review-architect/${doc.id}`);
       }, 2500);
@@ -125,7 +160,9 @@ export default function ReviewArchitectPage() {
 
   return (
     <div className="min-h-screen bg-transparent p-4 sm:p-6 lg:p-8 font-sans" dir="rtl">
-      <div className="max-w-5xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-12">
+        
+        {/* 1️⃣ نموذج حقن المذكرات الجديدة */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative glass-panel p-6 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl">
           <div className="mb-8 border-b border-white/5 pb-6">
             <h2 className="text-xl sm:text-3xl font-black text-white flex items-center gap-2">
@@ -136,7 +173,7 @@ export default function ReviewArchitectPage() {
           <form onSubmit={handleIngestData} className="space-y-6 relative z-10">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400"><Heading className="inline w-3.5 h-3.5" /> عنوان المستند</label>
+                <label className="text-xs font-black text-slate-400"><Heading className="inline w-3.5 h-3.5" /> عنوان المستند الجديد</label>
                 <input type="text" required value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: بنك أسئلة الفاينل الشامل لآخر 5 سنوات" className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-500" />
               </div>
               <div className="space-y-2">
@@ -163,7 +200,7 @@ export default function ReviewArchitectPage() {
 
             <div className="space-y-2">
               <label className="text-xs font-black text-emerald-400"><ClipboardCopy className="inline w-3.5 h-3.5" /> الصق ناتج وعاء الـ JSON هنا</label>
-              <textarea required rows={8} value={jsonInput} onChange={e => setJsonInput(e.target.value)} placeholder="[ { 'category': 'problems', ... } ]" className="w-full bg-[#02040a]/80 border border-white/10 rounded-2xl p-4 text-emerald-400 font-mono text-xs outline-none focus:border-emerald-500 custom-scrollbar" dir="ltr" />
+              <textarea required rows={6} value={jsonInput} onChange={e => setJsonInput(e.target.value)} placeholder="[ { 'category': 'problems', ... } ]" className="w-full bg-[#02040a]/80 border border-white/10 rounded-2xl p-4 text-emerald-400 font-mono text-xs outline-none focus:border-emerald-500 custom-scrollbar" dir="ltr" />
             </div>
 
             <AnimatePresence mode="wait">
@@ -175,10 +212,61 @@ export default function ReviewArchitectPage() {
             </AnimatePresence>
 
             <button type="submit" disabled={loading || !jsonInput || !title} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black py-4 rounded-xl hover:opacity-90 transition-all disabled:opacity-40 flex items-center justify-center gap-2 active:scale-[0.99]">
-              {loading ? 'جاري معالجة وتدقيق حزم البيانات...' : 'حقن البيانات وإصدار المراجعة'}
+              {loading ? 'جاري معالجة وتدقيق حزم البيانات...' : 'حقن البيانات وإصدار المراجعة الجديدة'}
             </button>
           </form>
         </motion.div>
+
+        {/* 2️⃣ 🗄️ قسم المذكرات الحالية والمطروحة سابقاً */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-2">
+            <FolderOpen className="text-indigo-400 w-5 h-5" />
+            <h3 className="text-xl font-black text-white">مذكرات المراجعة الحالية (قيد الإدارة)</h3>
+          </div>
+
+          {docsLoading ? (
+            <div className="p-10 text-center"><Loader2 className="w-8 h-8 animate-spin text-slate-500 mx-auto" /></div>
+          ) : existingDocs.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4">
+              {existingDocs.map((doc) => (
+                <div key={doc.id} className="glass-panel p-5 rounded-2xl border border-white/5 bg-[#0f1423]/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-white/10 transition-all">
+                  <div className="space-y-1">
+                    <h4 className="text-base font-black text-white">{doc.title}</h4>
+                    <div className="flex items-center gap-3 text-xs text-slate-400 font-bold">
+                      <span className="text-amber-400">{doc.subject_name}</span>
+                      <span>•</span>
+                      <span>المرحلة: {doc.academic_stage}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1 text-[10px] text-slate-500"><Calendar className="w-3 h-3" /> {new Date(doc.created_at).toLocaleDateString('ar-SA')}</span>
+                    </div>
+                  </div>
+
+                  {/* أزرار الإدارة والحذف للمستند القديم */}
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t border-white/5 sm:border-none pt-3 sm:pt-0">
+                    <button 
+                      onClick={() => router.push(`/admin/review-architect/${doc.id}`)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-black transition-colors"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" /> تعديل الأسئلة والصور
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteDoc(doc.id, doc.title)}
+                      className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl transition-colors"
+                      title="حذف المذكرة نهائياً"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-10 text-center bg-[#0f1423]/10 rounded-2xl border border-white/5 text-sm text-slate-500 font-bold">
+              لا توجد مذكرات مؤرشفة حالياً. قم بحقن أول JSON في الأعلى!
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
