@@ -38,7 +38,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// 🚀 دالة المتتبع الصامت (تعديل: تستقبل الآن الاسم الحقيقي realName)
 const recordDailyPresence = async (currentUser: SupabaseUser, role: string, realName: string) => {
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -114,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const emergencyClear = () => {
     localStorage.clear();
     sessionStorage.clear();
+    document.cookie = "sb-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"; // إزالة كعكة الأمان
     window.location.replace('/login?cleared=emergency');
   };
 
@@ -162,7 +162,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const name = userRes.data.full_name || authResult.user.email?.split('@')[0] || '';
     
-    // 🛡️ هذا السطر يمنع onAuthStateChange من الدوران مرتين ويحمي من الوميض!
     fetchedUserId.current = authResult.user.id;
 
     setUser(authResult.user);
@@ -174,15 +173,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     recordDailyPresence(authResult.user, userRes.data.role, name);
 
+    // 🚀 الحل السحري: نزرع الكوكيز ليقرأها الـ Middleware ويسمح للطالب بالمرور
+    document.cookie = "sb-auth-token=true; path=/; max-age=31536000; SameSite=Lax";
+
     setIsChecking(false);
     
-    // 🛠️ التعديل الجوهري: استخدام window.location.replace لضمان إرسال الـ Cookies فوراً للسيرفر
     if (userRes.data.must_reset_password) {
       setMustResetPassword(true);
       window.location.replace('/reset-password');
     } else {
       const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', staff: '/dashboard/staff' };
-      // توجيه صارم (Hard Reload) لضمان أن Middleware يرى الـ Cookie ولا يعيدنا للـ Login
       window.location.replace(paths[userRes.data.role] || '/');
     }
   }; 
@@ -193,6 +193,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsControlTeamMember(false);
     localStorage.clear();
     sessionStorage.clear();
+    
+    // 🚀 إزالة الكوكيز عند تسجيل الخروج
+    document.cookie = "sb-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    
     await supabase.auth.signOut();
     window.location.replace('/login');
   };
@@ -232,6 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsControlTeamMember(false);
             localStorage.removeItem('cached_role');
             localStorage.removeItem('cached_name');
+            document.cookie = "sb-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
             
             if (!isPublicPage) window.location.replace('/login');
             setIsChecking(false);
@@ -262,6 +267,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 localStorage.setItem('cached_name', name);
                 
                 recordDailyPresence(session.user, userRes.data.role, name);
+
+                // 🚀 زرع الكوكيز إذا لم تكن موجودة لمنع الطرد
+                document.cookie = "sb-auth-token=true; path=/; max-age=31536000; SameSite=Lax";
+
+                // 🚀 التوجيه التلقائي: لو الطالب دخل لصفحة Login وهو مسجل دخوله فعلاً
+                if (pathname === '/login') {
+                  const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', staff: '/dashboard/staff' };
+                  router.push(paths[userRes.data.role] || '/');
+                }
              }
              if (settingsRes?.data) {
                setRawSettings(settingsRes.data);
@@ -295,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsControlTeamMember(false);
           localStorage.removeItem('cached_role');
           localStorage.removeItem('cached_name');
+          document.cookie = "sb-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
           if (!isPublicPage) window.location.replace('/login'); 
         }
       } 
@@ -309,7 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false; 
       subscription.unsubscribe(); 
     };
-  }, [isPublicPage, authRole]);
+  }, [isPublicPage, authRole, pathname]);
 
   useEffect(() => {
     if (isChecking) return;
