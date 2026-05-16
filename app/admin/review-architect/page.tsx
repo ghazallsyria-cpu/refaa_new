@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Database, FileCheck, AlertCircle, Sparkles, 
   Layers, BookOpen, Heading, CheckCircle2, ClipboardCopy, 
-  Copy, Check, Bot, Trash2, Edit3, Calendar, FolderOpen 
+  Copy, Check, Bot, Trash2, Edit3, Calendar, FolderOpen, Loader2
 } from 'lucide-react';
 
 const GOLDEN_PROMPT = `أنت مبرمج خبير ومحلل بيانات أكاديمي لمناهج وزارة التربية الكويتية.
@@ -45,12 +45,9 @@ export default function ReviewArchitectPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
-
-  // 🚀 حالة تخزين المذكرات القديمة
   const [existingDocs, setExistingDocs] = useState<any[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
 
-  // 🚀 جلب المذكرات القديمة من قاعدة البيانات
   const fetchExistingDocs = async () => {
     try {
       setDocsLoading(true);
@@ -78,14 +75,13 @@ export default function ReviewArchitectPage() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // 🚀 حذف مذكرة بالكامل مع أسئلتها
   const handleDeleteDoc = async (docId: string, docTitle: string) => {
-    if (!window.confirm(`هل أنت متأكد من حذف مذكرة "${docTitle}" بالكامل مع جميع أسئلتها ورسوماتها؟`)) return;
+    if (!window.confirm(`هل أنت متأكد من حذف مذكرة "${docTitle}" بالكامل؟`)) return;
     try {
       const { error } = await supabase.from('review_documents').delete().eq('id', docId);
       if (error) throw error;
-      setStatus({ type: 'success', msg: 'تم حذف المذكرة بالكامل بنجاح! 🗑️' });
-      fetchExistingDocs(); // تحديث القائمة
+      setStatus({ type: 'success', msg: 'تم حذف المذكرة بنجاح!' });
+      fetchExistingDocs();
     } catch (err) {
       setStatus({ type: 'error', msg: 'فشل حذف المذكرة.' });
     }
@@ -144,12 +140,12 @@ export default function ReviewArchitectPage() {
 
       setStatus({ 
         type: 'success', 
-        msg: `تم بنجاح بناء الكبسولة وحقن ${questionsToInsert.length} سؤالاً وزارياً! جاري تحويلك الآن تلقائياً لصفحة مدير الصور... ☁️` 
+        msg: `تم بنجاح بناء الكبسولة وحقن الأسئلة! جاري تحويلك لصفحة مدير الصور...` 
       });
       
       setTimeout(() => {
         router.push(`/admin/review-architect/${doc.id}`);
-      }, 2500);
+      }, 2000);
 
     } catch (err: any) {
       setStatus({ type: 'error', msg: err.message || "حدث خطأ غير متوقع." });
@@ -162,7 +158,6 @@ export default function ReviewArchitectPage() {
     <div className="min-h-screen bg-transparent p-4 sm:p-6 lg:p-8 font-sans" dir="rtl">
       <div className="max-w-5xl mx-auto space-y-12">
         
-        {/* 1️⃣ نموذج حقن المذكرات الجديدة */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative glass-panel p-6 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl">
           <div className="mb-8 border-b border-white/5 pb-6">
             <h2 className="text-xl sm:text-3xl font-black text-white flex items-center gap-2">
@@ -211,13 +206,13 @@ export default function ReviewArchitectPage() {
               )}
             </AnimatePresence>
 
-            <button type="submit" disabled={loading || !jsonInput || !title} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black py-4 rounded-xl hover:opacity-90 transition-all disabled:opacity-40 flex items-center justify-center gap-2 active:scale-[0.99]">
-              {loading ? 'جاري معالجة وتدقيق حزم البيانات...' : 'حقن البيانات وإصدار المراجعة الجديدة'}
+            <button type="submit" disabled={loading || !jsonInput || !title} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black py-4 rounded-xl hover:opacity-90 flex items-center justify-center gap-2">
+              {loading ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : null}
+              <span>{loading ? 'جاري معالجة وتدقيق حزم البيانات...' : 'حقن البيانات وإصدار المراجعة الجديدة'}</span>
             </button>
           </form>
         </motion.div>
 
-        {/* 2️⃣ 🗄️ قسم المذكرات الحالية والمطروحة سابقاً */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-2">
             <FolderOpen className="text-indigo-400 w-5 h-5" />
@@ -229,10 +224,10 @@ export default function ReviewArchitectPage() {
           ) : existingDocs.length > 0 ? (
             <div className="grid grid-cols-1 gap-4">
               {existingDocs.map((doc) => (
-                <div key={doc.id} className="glass-panel p-5 rounded-2xl border border-white/5 bg-[#0f1423]/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-white/10 transition-all">
-                  <div className="space-y-1">
+                <div key={doc.id} className="glass-panel p-5 rounded-2xl border border-white/5 bg-[#0f1423]/30 flex flex-col sm:flex-row justify-between items-center gap-4 hover:border-white/10 transition-all">
+                  <div className="space-y-1 w-full sm:w-auto text-right">
                     <h4 className="text-base font-black text-white">{doc.title}</h4>
-                    <div className="flex items-center gap-3 text-xs text-slate-400 font-bold">
+                    <div className="flex items-center gap-3 text-xs text-slate-400 font-bold justify-start">
                       <span className="text-amber-400">{doc.subject_name}</span>
                       <span>•</span>
                       <span>المرحلة: {doc.academic_stage}</span>
@@ -241,7 +236,6 @@ export default function ReviewArchitectPage() {
                     </div>
                   </div>
 
-                  {/* أزرار الإدارة والحذف للمستند القديم */}
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t border-white/5 sm:border-none pt-3 sm:pt-0">
                     <button 
                       onClick={() => router.push(`/admin/review-architect/${doc.id}`)}
@@ -252,7 +246,6 @@ export default function ReviewArchitectPage() {
                     <button 
                       onClick={() => handleDeleteDoc(doc.id, doc.title)}
                       className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl transition-colors"
-                      title="حذف المذكرة نهائياً"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -262,7 +255,7 @@ export default function ReviewArchitectPage() {
             </div>
           ) : (
             <div className="p-10 text-center bg-[#0f1423]/10 rounded-2xl border border-white/5 text-sm text-slate-500 font-bold">
-              لا توجد مذكرات مؤرشفة حالياً. قم بحقن أول JSON في الأعلى!
+              لا توجد مذكرات مؤرشفة حالياً.
             </div>
           )}
         </div>
