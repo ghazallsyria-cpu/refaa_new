@@ -78,7 +78,8 @@ export function Header({
   const finalLogoSrc = schoolData.logo_url || "/images/logo.png";
 
   return (
-    <header className="relative w-full h-[100px] sm:h-[110px] shrink-0 border-b border-indigo-500/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 z-40 sticky top-0 [&_.notification-dropdown]:max-w-[calc(100vw-2rem)] [&_.notification-dropdown]:left-0 [&_.notification-dropdown]:right-auto" dir="rtl">
+    {/* 🚀 هنا تم التعديل الجوهري: right-0 و left-auto لضبط الاتجاه العربي */}
+    <header className="relative w-full h-[100px] sm:h-[110px] shrink-0 border-b border-indigo-500/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 z-40 sticky top-0 [&_.notification-dropdown]:max-w-[calc(100vw-2rem)] [&_.notification-dropdown]:right-0 [&_.notification-dropdown]:left-auto" dir="rtl">
       
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-20">
         <img 
