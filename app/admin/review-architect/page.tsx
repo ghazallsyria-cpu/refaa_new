@@ -39,10 +39,22 @@ const GOLDEN_PROMPT = `أنت مهندس بيانات أكاديمي صارم ل
 ]
 استخرج كل الأسئلة بلا استثناء، أخرج JSON فقط.`;
 
+// 🚀 دالة استخراج الـ ID الخاص بالصورة من رابط Cloudinary
+const extractPublicId = (url: string) => {
+  try {
+    const parts = url.split('/');
+    const uploadIndex = parts.indexOf('upload');
+    if (uploadIndex === -1) return null;
+    const idWithExt = parts.slice(uploadIndex + 2).join('/');
+    return idWithExt.split('.')[0];
+  } catch (e) {
+    return null;
+  }
+};
+
 export default function ReviewArchitectPage() {
   const router = useRouter();
   
-  // 🚀 وضعيات الحقن: 'new' لإنشاء مذكرة, 'append' للإضافة لمذكرة موجودة
   const [injectionMode, setInjectionMode] = useState<'new' | 'append'>('new');
   const [selectedDocId, setSelectedDocId] = useState('');
 
@@ -67,7 +79,6 @@ export default function ReviewArchitectPage() {
 
       if (error) throw error;
       setExistingDocs(data || []);
-      // تعيين أول مستند كقيمة افتراضية في وضع الإضافة
       if (data && data.length > 0) {
         setSelectedDocId(data[0].id);
       }
@@ -88,15 +99,49 @@ export default function ReviewArchitectPage() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  // 🚀 دالة الحذف الشامل الآمنة (قاعدة البيانات + Cloudinary API مع Token)
   const handleDeleteDoc = async (docId: string, docTitle: string) => {
-    if (!window.confirm(`هل أنت متأكد من حذف مذكرة "${docTitle}" بالكامل؟`)) return;
+    if (!window.confirm(`هل أنت متأكد من حذف مذكرة "${docTitle}" بالكامل؟ سيتم مسح جميع صورها من السحابة أيضاً.`)) return;
+    
     try {
+      setStatus({ type: 'success', msg: 'جاري الحذف والتنظيف السحابي الشامل...' });
+
+      // 1. جلب كل الأسئلة لمعرفة التي تحتوي على صور
+      const { data: questions } = await supabase
+        .from('extracted_questions')
+        .select('image_url')
+        .eq('document_id', docId)
+        .not('image_url', 'is', null);
+
+      // 2. جلب التوكن الخاص بالمستخدم للمصادقة مع الـ API الخاص بك
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // 3. حذف الصور من كلاودينري
+      if (questions && questions.length > 0 && token) {
+        for (const q of questions) {
+          const publicId = extractPublicId(q.image_url);
+          if (publicId) {
+            await fetch('/api/cloudinary/delete', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ public_id: publicId })
+            });
+          }
+        }
+      }
+
+      // 4. حذف رأس المذكرة (وكل أسئلتها بالتبعية)
       const { error } = await supabase.from('review_documents').delete().eq('id', docId);
       if (error) throw error;
-      setStatus({ type: 'success', msg: 'تم حذف المذكرة بنجاح!' });
+      
+      setStatus({ type: 'success', msg: 'تمت الإبادة الشاملة للمذكرة وصورها بنجاح! 🧹' });
       fetchExistingDocs();
     } catch (err) {
-      setStatus({ type: 'error', msg: 'فشل حذف المذكرة.' });
+      setStatus({ type: 'error', msg: 'فشل الحذف.' });
     }
   };
 
@@ -125,7 +170,6 @@ export default function ReviewArchitectPage() {
 
       let targetDocumentId = '';
 
-      // 🚀 المنطق الذكي: إنشاء جديد أو الدمج مع القديم
       if (injectionMode === 'new') {
         const { data: doc, error: docErr } = await supabase
           .from('review_documents')
@@ -140,7 +184,6 @@ export default function ReviewArchitectPage() {
         targetDocumentId = selectedDocId;
       }
 
-      // إعداد حزمة الأسئلة وربطها بـ ID المذكرة المستهدفة
       const questionsToInsert = parsedData.map((q: any) => ({
         document_id: targetDocumentId,
         category: q.category,
@@ -157,7 +200,6 @@ export default function ReviewArchitectPage() {
         .insert(questionsToInsert);
 
       if (questionsErr) {
-        // إذا فشل الحقن وكنا في وضع إنشاء جديد، نحذف الرأس لمنع وجود مذكرة فارغة
         if (injectionMode === 'new') {
           await supabase.from('review_documents').delete().eq('id', targetDocumentId);
         }
@@ -166,7 +208,7 @@ export default function ReviewArchitectPage() {
 
       setStatus({ 
         type: 'success', 
-        msg: `تم بنجاح حقن ${questionsToInsert.length} سؤالاً إضافياً! جاري تحويلك للمحرر...` 
+        msg: `تم بنجاح حقن ${questionsToInsert.length} سؤالاً! جاري تحويلك للمحرر...` 
       });
       
       setTimeout(() => {
@@ -193,7 +235,6 @@ export default function ReviewArchitectPage() {
 
           <form onSubmit={handleIngestData} className="space-y-8 relative z-10">
             
-            {/* 🚀 أزرار تبديل وضعيات الحقن */}
             <div className="flex p-1.5 bg-[#02040a]/60 rounded-2xl border border-white/10 w-full md:w-max mx-auto shadow-inner">
               <button 
                 type="button" 
@@ -211,7 +252,6 @@ export default function ReviewArchitectPage() {
               </button>
             </div>
 
-            {/* 🚀 حقول الإدخال حسب الوضعية المختارة */}
             <AnimatePresence mode="wait">
               {injectionMode === 'new' ? (
                 <motion.div key="new-doc" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -284,7 +324,6 @@ export default function ReviewArchitectPage() {
           </form>
         </motion.div>
 
-        {/* 🗄️ قسم المذكرات الحالية (الأرشيف) */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-2">
             <FolderOpen className="text-indigo-400 w-5 h-5" />
