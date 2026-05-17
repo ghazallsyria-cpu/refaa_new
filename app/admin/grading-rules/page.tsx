@@ -10,13 +10,15 @@ import { useRouter } from 'next/navigation';
 export default function ManualGradingPage() {
   const router = useRouter();
 
-  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  // 🚀 وضعنا العام الافتراضي لحماية القائمة من الظهور فارغة نهائياً
+  const [academicYears, setAcademicYears] = useState<any[]>([{ name: '2025/2026', is_current: true }]);
+  const [selectedYear, setSelectedYear] = useState('2025/2026');
+
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
   const [gradingRules, setGradingRules] = useState<any[]>([]); 
   const [optionsLoading, setOptionsLoading] = useState(true);
 
-  const [selectedYear, setSelectedYear] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('الفصل الدراسي الثاني');
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -43,12 +45,12 @@ export default function ManualGradingPage() {
 
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
-  // 🚀 تهيئة النظام وجلب الإعدادات والصفوف بحماية مدرعة للأعوام الدراسية
   useEffect(() => {
     const initializeEngine = async () => {
       try {
         setOptionsLoading(true);
         
+        // 1. جلب الإعدادات بأمان
         const { data: settings } = await supabase.from('school_settings').select('*').maybeSingle();
         if (settings) {
           setGradingToggles({
@@ -66,22 +68,18 @@ export default function ManualGradingPage() {
         if (rulesData) setGradingRules(rulesData);
 
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
+        if (!user) { setOptionsLoading(false); return; }
         
-        // 🛡️ المعالجة الآمنة لمنع القائمة الفارغة على الآيفون
+        // 🚀 الحل السحري: maybeSingle تمنع انهيار الشاشة إذا كان الحساب للمدير فقط وغير موجود بجدول المعلمين
+        const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
+        
         try {
           const { data: years, error: yearsError } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
           if (years && years.length > 0 && !yearsError) {
             setAcademicYears(years);
             setSelectedYear(years.find(y => y.is_current)?.name || years[0].name);
-          } else {
-            throw new Error("No years available");
           }
-        } catch (yearErr) {
-          setAcademicYears([{ name: '2025-2026', is_current: true }]);
-          setSelectedYear('2025-2026');
-        }
+        } catch (yearErr) { console.warn("Using default academic year"); }
 
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
         if (userData?.role === 'teacher') {
@@ -114,7 +112,8 @@ export default function ManualGradingPage() {
       try {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
-        const { data: userData } = await supabase.from('users').select('role').eq('id', user?.id).single();
+        // 🚀 استخدام maybeSingle مجدداً لحماية وظيفة جلب المواد للمدير
+        const { data: userData } = await supabase.from('users').select('role').eq('id', user?.id).maybeSingle();
         
         let subjectSet = new Set<string>();
         if (userData?.role === 'teacher') {
@@ -149,14 +148,14 @@ export default function ManualGradingPage() {
 
         const cleanSubjectName = selectedSubject.trim();
 
-        // 1. بناء مفتاح المرحلة بناءً على تشكيل الصف (علمي / أدبي)
+        // 1. بناء مفتاح المرحلة
         let targetStage = String(cLevel);
         if (cLevel === 11 || cLevel === 12) {
           if (className.includes('علمي')) targetStage = `${cLevel}_scientific`;
           else if (className.includes('ادبي') || className.includes('أدبي')) targetStage = `${cLevel}_literary`;
         }
 
-        // 2. ترجمة ذكية للمصطلحات والمواد المشتركة والمكررة
+        // 2. ترجمة ذكية للمصطلحات والمواد
         let searchSubject = cleanSubjectName;
         if (searchSubject.includes('اجتماعيات') && cLevel === 10) searchSubject = 'تاريخ الكويت';
         if (searchSubject.includes('رياضيات') && targetStage === '11_literary') searchSubject = 'الرياضيات والاحصاء';
@@ -166,7 +165,7 @@ export default function ManualGradingPage() {
         if (searchSubject.includes('انجليزي') || searchSubject.includes('إنجليزي') || searchSubject.includes('انجليزية')) searchSubject = 'اللغة الإنجليزية';
         if (searchSubject.includes('عربي') || searchSubject.includes('عربيه')) searchSubject = 'اللغة العربية';
 
-        // 3. الفرز والمطابقة السحابية التراتبية لمنع تداخل أوزان المتوسط والثانوي
+        // 3. الفرز والمطابقة السحابية
         let matchedRule = gradingRules.find(r => 
           r.academic_stage === targetStage && 
           (r.subject_name === searchSubject || searchSubject.includes(r.subject_name) || r.subject_name.includes(searchSubject))
@@ -208,7 +207,7 @@ export default function ManualGradingPage() {
 
         setRows(mergedRows);
         if (mergedRows.some(r => r.is_locked)) setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل مسبقاً.' });
-      } catch (err: any) { setStatus({ type: 'error', msg: 'Fails to construct spreadsheet mapping.' }); } finally { setLoading(false); }
+      } catch (err: any) { setStatus({ type: 'error', msg: 'فشل بناء الكشف.' }); } finally { setLoading(false); }
     };
     if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndLimits();
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading, levelGating, sectionsList, gradingRules]);
