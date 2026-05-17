@@ -31,7 +31,6 @@ export default function ManualGradingPage() {
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
   
-  // 🚀 استخراج ذكي وآمن لمعلومات الصف
   const currentSectionObj = sectionsList.find(s => s.id === selectedSectionId);
   const currentClassObj = Array.isArray(currentSectionObj?.classes) ? currentSectionObj?.classes[0] : currentSectionObj?.classes;
   const currentClassLevel = Number(currentClassObj?.level || 0);
@@ -137,9 +136,9 @@ export default function ManualGradingPage() {
         const sectionName = sectionObj?.name || '';
         const cLevel = Number(classObj?.level || 0);
 
-        // 🚀 معالجة احترافية لاسم المادة لتجاهل أي مسافات زائدة في قاعدة البيانات
-        const cleanSubjectName = selectedSubject.trim().replace(/\s+/g, '%');
+        const cleanSubjectName = selectedSubject.trim();
 
+        // 🚀 نجلب الأوزان المخصصة لهذه المادة فقط
         const { data: rulesData } = await supabase
           .from('kuwait_grading_rules')
           .select('academic_stage, coursework_max, exam_max')
@@ -148,24 +147,22 @@ export default function ManualGradingPage() {
         let finalCw = 40;
         let finalEx = 60;
 
-        // 🚀 الذكاء الاصطناعي في الفلترة لضمان تطابق أوزان المدير والمعلم 100%
+        // 🚀 مطابقة سحرية ومباشرة بناءً على بنية قاعدة بياناتك الدقيقة!
         if (rulesData && rulesData.length > 0) {
-          let matchedRule = rulesData.find(rule => {
-            const stageStr = String(rule.academic_stage || '');
-            if (cLevel === 10) return stageStr.includes('10') || stageStr.includes('عاشر');
-            if (cLevel === 11) return stageStr.includes('11') || stageStr.includes('حادي');
-            if (cLevel === 12) return stageStr.includes('12') || stageStr.includes('ثاني');
-            return stageStr.includes(className);
-          });
+          // نبحث عن السطر الذي يبدأ برقم الصف الحالي (مثلاً يبدأ بـ '11' ليلتقط 11_scientific أو 11_literary)
+          let matchedRule = rulesData.find(rule => 
+            String(rule.academic_stage).startsWith(String(cLevel))
+          );
 
-          if (!matchedRule) {
-            matchedRule = rulesData.find(r => String(r.academic_stage || '').includes(className));
+          if (matchedRule) {
+            finalCw = Number(matchedRule.coursework_max || 40);
+            finalEx = Number(matchedRule.exam_max || 60);
+          } else {
+             // لو لم يجد تطابقاً للصف (لأي سبب)، يأخذ أول نتيجة لا تخص المرحلة المتوسطة (6,7,8,9)
+             matchedRule = rulesData.find(r => !['6','7','8','9'].includes(String(r.academic_stage))) || rulesData[0];
+             finalCw = Number(matchedRule.coursework_max || 40);
+             finalEx = Number(matchedRule.exam_max || 60);
           }
-
-          if (!matchedRule) matchedRule = rulesData[0];
-
-          finalCw = Number(matchedRule.coursework_max || 40);
-          finalEx = Number(matchedRule.exam_max || 60);
         }
 
         setSubjectLimits({ cw_max: finalCw, ex_max: finalEx });
