@@ -29,7 +29,7 @@ export default function ManualGradingPage() {
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
 
   // ==========================================
-  // 1️⃣ جلب السنوات والفصول (للمرحلة الثانوية فقط وبترتيب متسلسل)
+  // 1️⃣ جلب السنوات والفصول 
   // ==========================================
   useEffect(() => {
     const fetchInitialDropdowns = async () => {
@@ -37,11 +37,16 @@ export default function ManualGradingPage() {
         setOptionsLoading(true);
         
         // جلب السنوات الدراسية
-        const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
-        if (years) {
+        const { data: years, error: yearsError } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
+        
+        // 🚀 نظام الحماية: إذا لم يكن هناك سنوات في الداتا بيز، نضع قيمة افتراضية
+        if (years && years.length > 0) {
           setAcademicYears(years);
           const currentYear = years.find(y => y.is_current) || years[0];
-          if (currentYear) setSelectedYear(currentYear.name);
+          setSelectedYear(currentYear.name);
+        } else {
+          setAcademicYears([{ name: '2025/2026', is_current: true }]);
+          setSelectedYear('2025/2026');
         }
         
         // 🚀 جلب فصول المرحلة الثانوية فقط (المستوى 10 وما فوق)
@@ -51,7 +56,6 @@ export default function ManualGradingPage() {
           .gte('classes.level', 10);
 
         if (secs && secs.length > 0) {
-          // ترتيب الفصول تسلسلياً (10 ثم 11 ثم 12) ثم ترتيب أسماء الشعب
           const sortedSecs = secs.sort((a, b) => {
             if (a.classes.level !== b.classes.level) return a.classes.level - b.classes.level;
             return a.name.localeCompare(b.name);
@@ -71,7 +75,7 @@ export default function ManualGradingPage() {
   }, []);
 
   // ==========================================
-  // 2️⃣ جلب المواد المربوطة بالفصل المختار ديناميكياً
+  // 2️⃣ جلب المواد المربوطة بالفصل 
   // ==========================================
   useEffect(() => {
     const fetchSubjectsForSection = async () => {
@@ -80,7 +84,6 @@ export default function ManualGradingPage() {
       try {
         setLoading(true);
         
-        // نبحث عن المواد المربوطة بهذا الفصل
         const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId);
         const { data: schData } = await supabase.from('schedules').select('subjects(id, name)').eq('section_id', selectedSectionId);
 
@@ -93,7 +96,6 @@ export default function ManualGradingPage() {
           setSubjectsList(subjectsArray);
           setSelectedSubject(subjectsArray[0].name);
         } else {
-          // جلب كل المواد كإجراء احتياطي إذا لم توجد جداول
           const { data: allSubs } = await supabase.from('subjects').select('name').order('name', { ascending: true });
           setSubjectsList(allSubs || []);
           if (allSubs && allSubs.length > 0) setSelectedSubject(allSubs[0].name);
@@ -115,6 +117,7 @@ export default function ManualGradingPage() {
   // ==========================================
   useEffect(() => {
     const fetchGradesAndStudents = async () => {
+      // التأكد من وجود كل الفلاتر قبل جلب الداتا
       if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) return;
       
       setLoading(true);
@@ -125,12 +128,11 @@ export default function ManualGradingPage() {
         const className = sectionObj?.classes?.name || '';
         const sectionName = sectionObj?.name || '';
 
-        // أ) جلب الطلاب الفعليين
+        // أ) جلب الطلاب الفعليين (تم إزالة شرط enrollment_status لتفادي مشاكل الداتا القديمة)
         const { data: studentsData, error: studentsError } = await supabase
           .from('students')
           .select('id, users!inner(full_name)')
-          .eq('section_id', selectedSectionId)
-          .in('enrollment_status', ['active']); // فقط الطلاب النشطين
+          .eq('section_id', selectedSectionId);
           
         if (studentsError) throw studentsError;
 
@@ -176,7 +178,7 @@ export default function ManualGradingPage() {
       }
     };
 
-    if (!optionsLoading && selectedSubject) {
+    if (!optionsLoading && selectedSubject && selectedYear) {
       fetchGradesAndStudents();
     }
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading]);
@@ -323,7 +325,7 @@ export default function ManualGradingPage() {
             </div>
             
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400">المادة الدراسية</label>
+              <label className="text-xs font-black text-slate-400">المادة الدراسية (حسب الشعبة)</label>
               <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
                 {subjectsList.length > 0 ? (
                   subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>)
@@ -435,7 +437,9 @@ export default function ManualGradingPage() {
                 <Users className="w-12 h-12 text-amber-500 opacity-80" />
               </div>
               <h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب في هذه الشعبة</h3>
-              <p className="text-slate-400 font-bold text-sm">يرجى التأكد من تسجيل الطلاب في هذا الفصل من لوحة شؤون الطلبة أولاً ليظهر كشف الرصد.</p>
+              <p className="text-slate-400 font-bold text-sm text-center">
+                يرجى التأكد من إضافة طلاب لهذه الشعبة (عبر لوحة شؤون الطلبة) ليظهر كشف الرصد.
+              </p>
             </div>
           )
         )}
