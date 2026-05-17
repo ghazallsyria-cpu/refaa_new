@@ -11,30 +11,47 @@ import {
   Copy, Check, Bot, Trash2, Edit3, Calendar, FolderOpen, Loader2
 } from 'lucide-react';
 
-const GOLDEN_PROMPT = `أنت مبرمج خبير ومحلل بيانات أكاديمي لمناهج وزارة التربية الكويتية.
-مهمتك تفكيك الاختبارات السابقة وتصفيتها من التكرار في مصفوفة JSON نقية.
+// ==========================================
+// 🧠 البرومبت الذهبي (V4 - النسخة المدرّعة ضد الكسل)
+// ==========================================
+const GOLDEN_PROMPT = `أنت مهندس بيانات أكاديمي صارم لمناهج وزارة التربية الكويتية.
+مهمتك: قراءة ملفات الاختبارات المرفقة واستخراج **100% من الأسئلة بلا استثناء**. ممنوع التلخيص، ممنوع أخذ عينات، ممنوع تخطي أي سؤال مهما كان صغيراً أو مكرراً.
 
-شروط هامة جداً:
-1. تصنيف الأسئلة إلى فئات: ("scientific_term", "give_reason", "what_happens", "problems", "graphics", "compare").
-2. منع التكرار: اجمع السنوات التي ورد فيها السؤال في [years_appeared].
-3. الجداول: إذا كان السؤال أو الإجابة جدول مقارنة, حوله إلى كود LaTeX باستخدام بيئة \\begin{array}{|c|c|}.
-4. الصور: إذا كان السؤال يحتوي على رسم بياني أو دائرة كهربائية، اكتب في البداية: "[يوجد رسم توضيحي]".
-5. الأسطر: في الأسئلة المقالية أو الخطوات، استخدم \\n للنزول لسطر جديد.
-6. المعادلات: استخدم $$ للمسائل الكبيرة المستقلة، و $ للمتغيرات داخل النص.
-7. لا تكتب أي نصوص خارج مصفوفة الـ JSON.
+يجب تفكيك الاختبارات وتصفيتها من التكرار الحرفي في مصفوفة JSON نقية باتباع هذه القواعد الصارمة:
 
-الهيكل المطلوب:
+1. فئات الأسئلة المدعومة (اختر الأنسب):
+("scientific_term", "give_reason", "what_happens", "problems", "graphics", "compare", "mcq")
+
+2. أسئلة الاختيار من متعدد (mcq):
+- في حقل question_text: اكتب نص السؤال كاملاً، تحته سطر جديد، ثم رص الخيارات (أ، ب، ج، د) كل خيار في سطر باستخدام \\n.
+- في حقل model_answer: اكتب الخيار الصحيح فقط.
+
+3. الصور والرسومات (تنبيه حرج):
+- إذا كان السؤال يحتاج لرؤية صورة، رسم بياني، أو دائرة كهربائية، **يجب** أن يبدأ نص السؤال حصراً بهذه العبارة: "[يوجد رسم ⚠️]\\n"
+
+4. الجداول الأكاديمية:
+- أي جدول مقارنة يجب تحويله لكود LaTeX باستخدام بيئة \\begin{array}{|c|c|}
+
+5. الرياضيات والأسطر:
+- استخدم $$ للمسائل والقوانين الكبيرة المستقلة، و $ للمتغيرات والأرقام داخل النص.
+- استخدم \\n للنزول لسطر جديد في الأسئلة المقالية أو خطوات الحل.
+
+6. دمج التكرار:
+- إذا تكرر نفس السؤال الحرفي، ادمجه في عنصر واحد واجمع سنوات ظهوره في مصفوفة [years_appeared].
+
+الهيكل الإلزامي (مثال لسؤال اختياري به صورة):
 [
   {
-    "category": "problems",
+    "category": "mcq",
     "topic_name": "الكهرباء",
-    "question_text": "[يوجد رسم توضيحي]\\nمن خلال الدائرة، احسب:\\n1- المقاومة المكافئة.",
-    "model_answer": "الخطوة الأولى:\\n $$ R = R_1 + R_2 $$ \\nالناتج النهائي...",
-    "years_appeared": [2022, 2024],
+    "question_text": "[يوجد رسم ⚠️]\\nفي الدائرة المجاورة، قراءة الفولتميتر تساوي:\\nأ) 5V\\nب) 10V\\nج) 15V\\nد) 20V",
+    "model_answer": "ب) 10V",
+    "years_appeared": [2021, 2023],
     "importance_weight": "HIGH",
     "image_url": ""
   }
-]`;
+]
+تذكر: استخرج كل الأسئلة بلا استثناء، أخرج JSON فقط دون أي نصوص أو مقدمات.`;
 
 export default function ReviewArchitectPage() {
   const router = useRouter();
@@ -169,7 +186,7 @@ export default function ReviewArchitectPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div className="space-y-2">
                 <label className="text-xs font-black text-slate-400"><Heading className="inline w-3.5 h-3.5" /> عنوان المستند الجديد</label>
-                <input type="text" required value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: بنك أسئلة الفاينل الشامل لآخر 5 سنوات" className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-500" />
+                <input type="text" required value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: بنك أسئلة الفاينل الشامل" className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-500" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-black text-slate-400"><Layers className="inline w-3.5 h-3.5" /> المرحلة الدراسية</label>
@@ -185,12 +202,12 @@ export default function ReviewArchitectPage() {
 
             <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-5 relative">
               <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-black text-indigo-300"><Bot className="inline w-4 h-4" /> البرومبت الذهبي (انسخه للذكاء الاصطناعي الخارجي)</label>
-                <button type="button" onClick={handleCopyPrompt} className="px-3 py-1.5 bg-indigo-500/20 text-indigo-200 text-[10px] font-bold rounded-lg border border-indigo-500/30">
-                  {isCopied ? 'تم النسخ!' : 'نسخ البرومبت'}
+                <label className="text-xs font-black text-indigo-300"><Bot className="inline w-4 h-4" /> البرومبت الذهبي للذكاء الاصطناعي (V4)</label>
+                <button type="button" onClick={handleCopyPrompt} className="px-3 py-1.5 bg-indigo-500/20 text-indigo-200 text-[10px] font-bold rounded-lg border border-indigo-500/30 hover:bg-indigo-500/40 transition-colors">
+                  {isCopied ? 'تم النسخ بنجاح! ✨' : 'نسخ البرومبت'}
                 </button>
               </div>
-              <div className="h-24 overflow-y-auto custom-scrollbar text-[10px] text-slate-400 font-mono bg-[#02040a]/50 p-3 rounded-xl border border-black/50">{GOLDEN_PROMPT}</div>
+              <div className="h-28 overflow-y-auto custom-scrollbar text-[11px] text-slate-300 font-mono bg-[#02040a]/60 p-4 rounded-xl border border-black/50 leading-relaxed whitespace-pre-wrap">{GOLDEN_PROMPT}</div>
             </div>
 
             <div className="space-y-2">
@@ -206,8 +223,8 @@ export default function ReviewArchitectPage() {
               )}
             </AnimatePresence>
 
-            <button type="submit" disabled={loading || !jsonInput || !title} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black py-4 rounded-xl hover:opacity-90 flex items-center justify-center gap-2">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : null}
+            <button type="submit" disabled={loading || !jsonInput || !title} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black py-4 rounded-xl hover:opacity-90 flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50">
+              {loading ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : <CheckCircle2 className="w-5 h-5" />}
               <span>{loading ? 'جاري معالجة وتدقيق حزم البيانات...' : 'حقن البيانات وإصدار المراجعة الجديدة'}</span>
             </button>
           </form>
@@ -241,7 +258,7 @@ export default function ReviewArchitectPage() {
                       onClick={() => router.push(`/admin/review-architect/${doc.id}`)}
                       className="flex items-center gap-1.5 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-black transition-colors"
                     >
-                      <Edit3 className="w-3.5 h-3.5" /> تعديل الأسئلة والصور
+                      <Edit3 className="w-3.5 h-3.5" /> إدارة الأسئلة والصور
                     </button>
                     <button 
                       onClick={() => handleDeleteDoc(doc.id, doc.title)}
