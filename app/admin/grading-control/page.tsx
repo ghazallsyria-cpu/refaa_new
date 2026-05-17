@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ShieldAlert, Activity, CheckCircle2, Clock, Loader2, Power, AlertCircle, RefreshCw, Target } from 'lucide-react';
+import { ShieldAlert, Activity, CheckCircle2, Clock, Loader2, Power, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function GradingControlPage() {
@@ -11,11 +11,9 @@ export default function GradingControlPage() {
   const [toggleLoading, setToggleLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
 
-  // 🚀 إعدادات فتح وإغلاق الفترات + النهاية العظمى
+  // 🚀 إعدادات قواطع الفترات (عامة للمدرسة)
   const [settings, setSettings] = useState({
-    id: 1, 
-    p1_cw_active: false, p1_ex_active: false, p2_cw_active: true, p2_ex_active: false,
-    p1_cw_max: 40, p1_ex_max: 60, p2_cw_max: 40, p2_ex_max: 60
+    id: 1, p1_cw_active: false, p1_ex_active: false, p2_cw_active: true, p2_ex_active: false
   });
 
   const [teacherProgress, setTeacherProgress] = useState<any[]>([]);
@@ -32,10 +30,6 @@ export default function GradingControlPage() {
           p1_ex_active: schoolSettings.grading_p1_ex_active || false,
           p2_cw_active: schoolSettings.grading_p2_cw_active || false,
           p2_ex_active: schoolSettings.grading_p2_ex_active || false,
-          p1_cw_max: schoolSettings.p1_cw_max || 40,
-          p1_ex_max: schoolSettings.p1_ex_max || 60,
-          p2_cw_max: schoolSettings.p2_cw_max || 40,
-          p2_ex_max: schoolSettings.p2_ex_max || 60,
         });
       }
 
@@ -82,7 +76,6 @@ export default function GradingControlPage() {
 
   useEffect(() => { fetchRadarData(); }, []);
 
-  // 🚀 دالة فتح/إغلاق الفترة
   const handleToggle = async (field: string, currentValue: boolean) => {
     setToggleLoading(true); setStatus(null);
     try {
@@ -99,25 +92,11 @@ export default function GradingControlPage() {
     }
   };
 
-  // 🚀 دالة حفظ النهاية العظمى (تعمل تلقائياً عند إبعاد الماوس عن المربع)
-  const updateMaxMark = async (field: string, value: string) => {
-    const numVal = Number(value);
-    if (numVal < 0) return;
-    try {
-      const { error } = await supabase.from('school_settings').update({ [field]: numVal }).eq('id', settings.id);
-      if (error) throw error;
-      setStatus({ type: 'success', msg: `تم حفظ النهاية العظمى (${numVal}) بنجاح!` });
-      setTimeout(() => setStatus(null), 3000);
-    } catch (err) {
-      setStatus({ type: 'error', msg: 'فشل حفظ النهاية العظمى.' });
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#02040a]">
         <Activity className="w-16 h-16 text-amber-500 animate-pulse mb-4" />
-        <p className="text-amber-400 font-black tracking-widest animate-pulse">جاري تشغيل رادار الإدارة المركزي...</p>
+        <p className="text-amber-400 font-black tracking-widest animate-pulse">جاري تشغيل الرادار المركزي...</p>
       </div>
     );
   }
@@ -133,7 +112,7 @@ export default function GradingControlPage() {
               <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20"><ShieldAlert className="w-8 h-8 text-amber-500" /></div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-white">غرفة عمليات الرصد المركزية</h1>
-                <p className="text-sm font-bold text-slate-400 mt-1">تحكم بصلاحيات الإدخال والنهاية العظمى، وراقب إنجاز المعلمين.</p>
+                <p className="text-sm font-bold text-slate-400 mt-1">تحكم بصلاحيات الإدخال للمعلمين، وراقب إنجازهم لحظة بلحظة.</p>
               </div>
             </div>
             <button onClick={fetchRadarData} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 flex items-center gap-2 transition-colors">
@@ -154,83 +133,37 @@ export default function GradingControlPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* 🎛️ قواطع الإدخال وتحديد النهاية العظمى */}
           <div className="lg:col-span-1 space-y-6">
+            {/* 🎛️ قواطع الإدخال العامة */}
             <div className="glass-panel p-6 rounded-[2rem] border border-white/10 bg-[#0f1423]/80">
-              <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2"><Power className="w-5 h-5 text-indigo-400" /> قواطع الإدخال</h2>
-
+              <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2"><Power className="w-5 h-5 text-indigo-400" /> قواطع إدخال الدرجات</h2>
               <div className="space-y-4">
-                {/* 1 */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
-                  <div>
-                    <p className="font-bold text-slate-200">أعمال الفترة 1</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Target className="w-3 h-3 text-slate-400" />
-                      <label className="text-[10px] text-slate-400 font-bold">النهاية العظمى:</label>
-                      <input type="number" min="0" value={settings.p1_cw_max} onChange={e => setSettings({...settings, p1_cw_max: e.target.value})} onBlur={e => updateMaxMark('p1_cw_max', e.target.value)} className="w-12 bg-white/5 border border-white/10 rounded-md p-0.5 text-center text-white text-xs outline-none focus:border-amber-500" />
-                    </div>
-                  </div>
-                  <button disabled={toggleLoading} onClick={() => handleToggle('p1_cw_active', settings.p1_cw_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p1_cw_active ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p1_cw_active ? 'left-1' : 'left-7'}`}></div>
-                  </button>
+                  <div><p className="font-bold text-slate-200">أعمال الفترة 1</p><p className="text-[10px] text-slate-500 mt-1">{settings.p1_cw_active ? 'مفتوح للرصد' : 'مغلق (للقراءة)'}</p></div>
+                  <button disabled={toggleLoading} onClick={() => handleToggle('p1_cw_active', settings.p1_cw_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p1_cw_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p1_cw_active ? 'left-1' : 'left-7'}`}></div></button>
                 </div>
-
-                {/* 2 */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
-                  <div>
-                    <p className="font-bold text-slate-200">اختبار الفترة 1</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Target className="w-3 h-3 text-slate-400" />
-                      <label className="text-[10px] text-slate-400 font-bold">النهاية العظمى:</label>
-                      <input type="number" min="0" value={settings.p1_ex_max} onChange={e => setSettings({...settings, p1_ex_max: e.target.value})} onBlur={e => updateMaxMark('p1_ex_max', e.target.value)} className="w-12 bg-white/5 border border-white/10 rounded-md p-0.5 text-center text-white text-xs outline-none focus:border-amber-500" />
-                    </div>
-                  </div>
-                  <button disabled={toggleLoading} onClick={() => handleToggle('p1_ex_active', settings.p1_ex_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p1_ex_active ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p1_ex_active ? 'left-1' : 'left-7'}`}></div>
-                  </button>
+                  <div><p className="font-bold text-slate-200">اختبار الفترة 1</p><p className="text-[10px] text-slate-500 mt-1">{settings.p1_ex_active ? 'مفتوح للرصد' : 'مغلق (للقراءة)'}</p></div>
+                  <button disabled={toggleLoading} onClick={() => handleToggle('p1_ex_active', settings.p1_ex_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p1_ex_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p1_ex_active ? 'left-1' : 'left-7'}`}></div></button>
                 </div>
-
-                <div className="my-4 border-t border-white/5"></div>
-
-                {/* 3 */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
-                  <div>
-                    <p className="font-bold text-slate-200">أعمال الفترة 2</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Target className="w-3 h-3 text-slate-400" />
-                      <label className="text-[10px] text-slate-400 font-bold">النهاية العظمى:</label>
-                      <input type="number" min="0" value={settings.p2_cw_max} onChange={e => setSettings({...settings, p2_cw_max: e.target.value})} onBlur={e => updateMaxMark('p2_cw_max', e.target.value)} className="w-12 bg-white/5 border border-white/10 rounded-md p-0.5 text-center text-white text-xs outline-none focus:border-amber-500" />
-                    </div>
-                  </div>
-                  <button disabled={toggleLoading} onClick={() => handleToggle('p2_cw_active', settings.p2_cw_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p2_cw_active ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p2_cw_active ? 'left-1' : 'left-7'}`}></div>
-                  </button>
+                  <div><p className="font-bold text-slate-200">أعمال الفترة 2</p><p className="text-[10px] text-slate-500 mt-1">{settings.p2_cw_active ? 'مفتوح للرصد' : 'مغلق (للقراءة)'}</p></div>
+                  <button disabled={toggleLoading} onClick={() => handleToggle('p2_cw_active', settings.p2_cw_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p2_cw_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p2_cw_active ? 'left-1' : 'left-7'}`}></div></button>
                 </div>
-
-                {/* 4 */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
-                  <div>
-                    <p className="font-bold text-slate-200">اختبار الفترة 2</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Target className="w-3 h-3 text-slate-400" />
-                      <label className="text-[10px] text-slate-400 font-bold">النهاية العظمى:</label>
-                      <input type="number" min="0" value={settings.p2_ex_max} onChange={e => setSettings({...settings, p2_ex_max: e.target.value})} onBlur={e => updateMaxMark('p2_ex_max', e.target.value)} className="w-12 bg-white/5 border border-white/10 rounded-md p-0.5 text-center text-white text-xs outline-none focus:border-amber-500" />
-                    </div>
-                  </div>
-                  <button disabled={toggleLoading} onClick={() => handleToggle('p2_ex_active', settings.p2_ex_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p2_ex_active ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p2_ex_active ? 'left-1' : 'left-7'}`}></div>
-                  </button>
+                  <div><p className="font-bold text-slate-200">اختبار الفترة 2</p><p className="text-[10px] text-slate-500 mt-1">{settings.p2_ex_active ? 'مفتوح للرصد' : 'مغلق (للقراءة)'}</p></div>
+                  <button disabled={toggleLoading} onClick={() => handleToggle('p2_ex_active', settings.p2_ex_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p2_ex_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p2_ex_active ? 'left-1' : 'left-7'}`}></div></button>
                 </div>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="glass-panel p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 text-center"><p className="text-3xl font-black text-emerald-400 mb-1">{stats.submitted}</p><p className="text-xs font-bold text-slate-300">اعتُمدت</p></div>
-              <div className="glass-panel p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 text-center"><p className="text-3xl font-black text-amber-400 mb-1">{stats.pending}</p><p className="text-xs font-bold text-slate-300">متأخرة</p></div>
+              <div className="glass-panel p-5 rounded-2xl border border-rose-500/20 bg-rose-500/5 text-center"><p className="text-3xl font-black text-rose-400 mb-1">{stats.pending}</p><p className="text-xs font-bold text-slate-300">متأخرة</p></div>
             </div>
           </div>
 
-          {/* 📡 الرادار الاستخباراتي (المتابعة) */}
+          {/* 📡 الرادار الاستخباراتي */}
           <div className="lg:col-span-2">
             <div className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 bg-[#0f1423]/80 h-full">
               <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2"><Activity className="w-5 h-5 text-amber-400" /> رادار إنجاز المعلمين</h2>
@@ -245,7 +178,7 @@ export default function GradingControlPage() {
                           <td className="p-4 text-sm font-bold text-indigo-300">{item.subjectName}</td>
                           <td className="p-4 text-sm font-bold text-slate-300">{item.className} - شعـبة {item.sectionName}</td>
                           <td className="p-4 text-center">
-                            {item.isSubmitted ? (<span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-black rounded-lg border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> تم الاعتماد</span>) : (<span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs font-black rounded-lg border border-amber-500/20"><Clock className="w-4 h-4" /> قيد الإدخال</span>)}
+                            {item.isSubmitted ? (<span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-black rounded-lg border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> تم الاعتماد</span>) : (<span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 text-rose-400 text-xs font-black rounded-lg border border-rose-500/20"><Clock className="w-4 h-4" /> متأخر</span>)}
                           </td>
                         </tr>
                       ))
