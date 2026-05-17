@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ShieldAlert, Activity, CheckCircle2, Clock, Loader2, Power, AlertCircle, RefreshCw, Megaphone, Eye, EyeOff, Image as ImageIcon, X, Filter, Unlock, Star, Plus } from 'lucide-react';
+import { ShieldAlert, Activity, CheckCircle2, Clock, Loader2, Power, AlertCircle, RefreshCw, Megaphone, Eye, EyeOff, Image as ImageIcon, X, Filter, Unlock, Star, Plus, ListChecks } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
@@ -12,7 +12,7 @@ export default function GradingControlPage() {
   const [loading, setLoading] = useState(true);
   const [toggleLoading, setToggleLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
   const [settings, setSettings] = useState({
     id: 1, 
@@ -23,6 +23,7 @@ export default function GradingControlPage() {
 
   // 🚀 ميزة القائمة البيضاء للرصد المبكر
   const [vipSubjects, setVipSubjects] = useState<string[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]); // 🚀 قائمة المواد من الداتابيز
   const [newVipSubject, setNewVipSubject] = useState('');
   const [vipLoading, setVipLoading] = useState(false);
 
@@ -34,6 +35,7 @@ export default function GradingControlPage() {
   const fetchRadarData = async () => {
     setLoading(true);
     try {
+      // 1. جلب الإعدادات والمواد المستثناة الحالية
       const { data: schoolSettings } = await supabase.from('school_settings').select('*').single();
       if (schoolSettings) {
         setSettings({
@@ -46,6 +48,15 @@ export default function GradingControlPage() {
         setVipSubjects(schoolSettings.early_grading_subjects || []);
       }
 
+      // 🚀 2. جلب جميع المواد الرسمية من لائحة الدرجات لاستخدامها في القائمة المنسدلة
+      const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('subject_name');
+      if (rulesData) {
+        // تنظيف التكرارات وترتيبها أبجدياً
+        const uniqueSubjects = Array.from(new Set(rulesData.map(r => r.subject_name?.trim()))).filter(Boolean).sort();
+        setAvailableSubjects(uniqueSubjects);
+      }
+
+      // 3. جلب بيانات الرادار للمستطيل الأيسر
       const { data: teacherSections } = await supabase.from('teacher_sections').select('*');
       const { data: users } = await supabase.from('users').select('id, full_name').eq('role', 'teacher');
       const { data: sections } = await supabase.from('sections').select('id, name, classes(name, level)');
@@ -96,9 +107,17 @@ export default function GradingControlPage() {
     } catch (error) { setStatus({ type: 'error', msg: 'فشل تغيير الإعدادات.' }); } finally { setToggleLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
-  // 🚀 دوال إضافة وحذف مواد الرصد المبكر
+  // 🚀 دوال إضافة وحذف مواد الرصد المبكر باستخدام القائمة المنسدلة
   const addVipSubject = async () => {
     if (!newVipSubject.trim()) return;
+    
+    // منع تكرار إضافة نفس المادة
+    if (vipSubjects.includes(newVipSubject.trim())) {
+      setStatus({ type: 'warning', msg: 'هذه المادة موجودة بالفعل في القائمة البيضاء!' });
+      setTimeout(() => setStatus(null), 3000);
+      return;
+    }
+
     setVipLoading(true);
     try {
       const updatedList = [...vipSubjects, newVipSubject.trim()];
@@ -119,31 +138,6 @@ export default function GradingControlPage() {
       setVipSubjects(updatedList);
       setStatus({ type: 'success', msg: `تمت إزالة (${subjectToRemove}) من القائمة البيضاء.` });
     } catch (err) { setStatus({ type: 'error', msg: 'فشل إزالة المادة.' }); } finally { setVipLoading(false); setTimeout(() => setStatus(null), 3000); }
-  };
-
-  const handleCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingImage(true); setStatus(null);
-    try {
-      const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string);
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'خطأ في الرفع');
-      setSettings(prev => ({ ...prev, cta_image_url: data.secure_url }));
-      setStatus({ type: 'success', msg: 'تم إرفاق الصورة بنجاح! اضغط تفعيل للحفظ.' });
-    } catch (err: any) { setStatus({ type: 'error', msg: err.message }); } finally { setUploadingImage(false); setTimeout(() => setStatus(null), 3000); }
-  };
-
-  const saveCTASettings = async (isVisible: boolean) => {
-    setCtaLoading(true); setStatus(null);
-    try {
-      const { error } = await supabase.from('school_settings').update({ grading_cta_visible: isVisible, grading_cta_message: settings.cta_message, grading_cta_image_url: settings.cta_image_url }).eq('id', settings.id);
-      if (error) throw error;
-      setSettings(prev => ({ ...prev, cta_visible: isVisible }));
-      setStatus({ type: 'success', msg: isVisible ? 'تم النشر بنجاح!' : 'تم الإخفاء بنجاح.' });
-    } catch (error) { setStatus({ type: 'error', msg: 'فشل التحديث.' }); } finally { setCtaLoading(false); setTimeout(() => setStatus(null), 4000); }
   };
 
   const handleUnlockSheet = async (className: string, sectionName: string, subjectName: string, id: string) => {
@@ -186,28 +180,34 @@ export default function GradingControlPage() {
           </div>
 
           <AnimatePresence>
-            {status && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6 overflow-hidden"><div className={`p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>{status.msg}</div></motion.div>)}
+            {status && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6 overflow-hidden"><div className={`p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : status.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>{status.msg}</div></motion.div>)}
           </AnimatePresence>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
             
-            {/* 🚀 القائمة البيضاء (مواد الرصد المبكر VIP) */}
+            {/* 🚀 القائمة البيضاء (مواد الرصد المبكر VIP) بالقائمة المنسدلة */}
             <div className="glass-panel p-6 rounded-[2rem] border border-purple-500/30 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-purple-400 mb-2 flex items-center gap-2"><Star className="w-5 h-5" /> القائمة البيضاء (VIP)</h2>
               <p className="text-xs text-slate-400 mb-6 font-bold">المواد المضافة هنا (مثل الدستور، القرآن) مسموح رصدها <span className="text-purple-300">طوال الوقت</span> بغض النظر عن قواطع الفترات.</p>
               
               <div className="space-y-4">
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="اسم المادة (مثال: القرآن الكريم)" 
-                    value={newVipSubject} 
-                    onChange={(e) => setNewVipSubject(e.target.value)} 
-                    className="flex-1 bg-black/50 border border-purple-500/20 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500 font-bold"
-                  />
-                  <button onClick={addVipSubject} disabled={vipLoading || !newVipSubject.trim()} className="p-3 bg-purple-500 hover:bg-purple-400 text-white rounded-xl transition-colors disabled:opacity-50">
+                <div className="flex gap-2 relative">
+                  <div className="relative flex-1">
+                    <ListChecks className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400 opacity-60 pointer-events-none" />
+                    <select 
+                      value={newVipSubject} 
+                      onChange={(e) => setNewVipSubject(e.target.value)} 
+                      className="w-full bg-black/50 border border-purple-500/20 rounded-xl py-3 pl-3 pr-10 text-white text-sm outline-none focus:border-purple-500 font-bold appearance-none"
+                    >
+                      <option value="" disabled>اختر المادة من اللائحة...</option>
+                      {availableSubjects.map((sub, idx) => (
+                        <option key={idx} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button onClick={addVipSubject} disabled={vipLoading || !newVipSubject} className="p-3 bg-purple-500 hover:bg-purple-400 text-white rounded-xl transition-colors disabled:opacity-50">
                     {vipLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
                   </button>
                 </div>
