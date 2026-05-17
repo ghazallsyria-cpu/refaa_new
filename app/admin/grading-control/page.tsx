@@ -4,25 +4,24 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ShieldAlert, Activity, CheckCircle2, Clock, Loader2, Power, AlertCircle, RefreshCw, Megaphone, Eye, EyeOff, Image as ImageIcon, X, Filter } from 'lucide-react';
+import { ShieldAlert, Activity, CheckCircle2, Clock, Loader2, Power, AlertCircle, RefreshCw, Megaphone, Eye, EyeOff, Image as ImageIcon, X, Filter, Unlock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function GradingControlPage() {
   const [loading, setLoading] = useState(true);
   const [toggleLoading, setToggleLoading] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
 
-  // 🚀 إعدادات المدرسة الشاملة
   const [settings, setSettings] = useState({
     id: 1, 
     p1_cw_active: false, p1_ex_active: false, p2_cw_active: true, p2_ex_active: false,
     cta_visible: true, cta_message: '', cta_image_url: '',
-    g10_active: true, g11_active: true, g12_active: true // 🚀 بوابات الصفوف
+    g10_active: true, g11_active: true, g12_active: true 
   });
 
   const [uploadingImage, setUploadingImage] = useState(false);
   const [ctaLoading, setCtaLoading] = useState(false);
-
   const [teacherProgress, setTeacherProgress] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, submitted: 0, pending: 0 });
 
@@ -33,16 +32,10 @@ export default function GradingControlPage() {
       if (schoolSettings) {
         setSettings({
           id: schoolSettings.id,
-          p1_cw_active: schoolSettings.grading_p1_cw_active || false,
-          p1_ex_active: schoolSettings.grading_p1_ex_active || false,
-          p2_cw_active: schoolSettings.grading_p2_cw_active || false,
-          p2_ex_active: schoolSettings.grading_p2_ex_active || false,
-          cta_visible: schoolSettings.grading_cta_visible ?? true,
-          cta_message: schoolSettings.grading_cta_message || '',
-          cta_image_url: schoolSettings.grading_cta_image_url || '',
-          g10_active: schoolSettings.grading_g10_active ?? true,
-          g11_active: schoolSettings.grading_g11_active ?? true,
-          g12_active: schoolSettings.grading_g12_active ?? true,
+          p1_cw_active: schoolSettings.grading_p1_cw_active || false, p1_ex_active: schoolSettings.grading_p1_ex_active || false,
+          p2_cw_active: schoolSettings.grading_p2_cw_active || false, p2_ex_active: schoolSettings.grading_p2_ex_active || false,
+          cta_visible: schoolSettings.grading_cta_visible ?? true, cta_message: schoolSettings.grading_cta_message || '', cta_image_url: schoolSettings.grading_cta_image_url || '',
+          g10_active: schoolSettings.grading_g10_active ?? true, g11_active: schoolSettings.grading_g11_active ?? true, g12_active: schoolSettings.grading_g12_active ?? true,
         });
       }
 
@@ -64,7 +57,8 @@ export default function GradingControlPage() {
             if (isSubmitted) submittedCount++;
             progressArray.push({
               id: `${ts.teacher_id}-${ts.section_id}`,
-              teacherName: teacher.full_name, className: sectionObj.classes.name, sectionName: sectionObj.name, isSubmitted
+              teacherName: teacher.full_name, className: sectionObj.classes.name, sectionName: sectionObj.name, isSubmitted,
+              subjectName: lockedGrades?.find(lg => lg.grade_level === sectionObj.classes.name && lg.section === sectionObj.name)?.subject_name || ''
             });
           }
         });
@@ -75,11 +69,7 @@ export default function GradingControlPage() {
         setTeacherProgress(uniqueProgress);
         setStats({ total: uniqueProgress.length, submitted: submittedCount, pending: uniqueProgress.length - submittedCount });
       }
-    } catch (error) {
-      setStatus({ type: 'error', msg: 'فشل تشغيل الرادار.' });
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { setStatus({ type: 'error', msg: 'فشل تشغيل الرادار.' }); } finally { setLoading(false); }
   };
 
   useEffect(() => { fetchRadarData(); }, []);
@@ -89,21 +79,14 @@ export default function GradingControlPage() {
     try {
       const newValue = !currentValue;
       const dbFieldMap: Record<string, string> = { 
-        'p1_cw_active': 'grading_p1_cw_active', 'p1_ex_active': 'grading_p1_ex_active', 
-        'p2_cw_active': 'grading_p2_cw_active', 'p2_ex_active': 'grading_p2_ex_active',
-        'g10_active': 'grading_g10_active', 'g11_active': 'grading_g11_active', 'g12_active': 'grading_g12_active' // 🚀 الحقول الجديدة
+        'p1_cw_active': 'grading_p1_cw_active', 'p1_ex_active': 'grading_p1_ex_active', 'p2_cw_active': 'grading_p2_cw_active', 'p2_ex_active': 'grading_p2_ex_active',
+        'g10_active': 'grading_g10_active', 'g11_active': 'grading_g11_active', 'g12_active': 'grading_g12_active' 
       };
-      
       const { error } = await supabase.from('school_settings').update({ [dbFieldMap[field]]: newValue }).eq('id', settings.id);
       if (error) throw error;
-      
       setSettings(prev => ({ ...prev, [field]: newValue }));
       setStatus({ type: 'success', msg: 'تم تحديث صلاحيات الرصد بنجاح!' });
-    } catch (error) {
-      setStatus({ type: 'error', msg: 'فشل تغيير الإعدادات.' });
-    } finally {
-      setToggleLoading(false); setTimeout(() => setStatus(null), 3000);
-    }
+    } catch (error) { setStatus({ type: 'error', msg: 'فشل تغيير الإعدادات.' }); } finally { setToggleLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
   const handleCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,9 +101,7 @@ export default function GradingControlPage() {
       if (!res.ok) throw new Error(data.error?.message || 'خطأ في الرفع');
       setSettings(prev => ({ ...prev, cta_image_url: data.secure_url }));
       setStatus({ type: 'success', msg: 'تم إرفاق الصورة بنجاح! اضغط تفعيل للحفظ.' });
-    } catch (err: any) {
-      setStatus({ type: 'error', msg: err.message });
-    } finally { setUploadingImage(false); setTimeout(() => setStatus(null), 3000); }
+    } catch (err: any) { setStatus({ type: 'error', msg: err.message }); } finally { setUploadingImage(false); setTimeout(() => setStatus(null), 3000); }
   };
 
   const saveCTASettings = async (isVisible: boolean) => {
@@ -131,6 +112,31 @@ export default function GradingControlPage() {
       setSettings(prev => ({ ...prev, cta_visible: isVisible }));
       setStatus({ type: 'success', msg: isVisible ? 'تم النشر بنجاح!' : 'تم الإخفاء بنجاح.' });
     } catch (error) { setStatus({ type: 'error', msg: 'فشل التحديث.' }); } finally { setCtaLoading(false); setTimeout(() => setStatus(null), 4000); }
+  };
+
+  // 🚀 دالة فك الاعتماد (Unlock)
+  const handleUnlockSheet = async (className: string, sectionName: string, subjectName: string, id: string) => {
+    if (!window.confirm(`⚠️ تأكيد أمني: هل تريد فك الاعتماد لكشف (الصف ${className} - شعبة ${sectionName})؟ سيتمكن المعلم من التعديل مجدداً.`)) return;
+    setActionLoadingId(id); setStatus(null);
+    try {
+      // فك القفل عن الكشف المحدد
+      const { error } = await supabase
+        .from('manual_grades')
+        .update({ is_locked: false })
+        .eq('grade_level', className)
+        .eq('section', sectionName)
+        // إذا كان هناك خطأ في جلب اسم المادة، نكتفي بالصف والشعبة لفك قفل كل مواد هذا الفصل المعتمدة (أو نستخدم subjectName إذا توفر)
+        // في هذه الحالة نستخدم الصف والشعبة لضمان فتح الكشف
+        
+      if (error) throw error;
+      setStatus({ type: 'success', msg: 'تم فك الاعتماد بنجاح! يمكن للمعلم تعديل الدرجات الآن.' });
+      fetchRadarData(); // تحديث الرادار
+    } catch (err: any) {
+      setStatus({ type: 'error', msg: 'حدث خطأ أثناء فك الاعتماد.' });
+    } finally {
+      setActionLoadingId(null);
+      setTimeout(() => setStatus(null), 4000);
+    }
   };
 
   if (loading) return (<div className="min-h-screen flex flex-col items-center justify-center bg-[#02040a]"><Activity className="w-16 h-16 text-amber-500 animate-pulse mb-4" /></div>);
@@ -146,7 +152,7 @@ export default function GradingControlPage() {
               <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20"><ShieldAlert className="w-8 h-8 text-amber-500" /></div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-white">غرفة عمليات الرصد المركزية</h1>
-                <p className="text-sm font-bold text-slate-400 mt-1">تحكم بالصفوف والفترات بصلاحية "القناص"، وراقب المعلمين.</p>
+                <p className="text-sm font-bold text-slate-400 mt-1">تحكم بالصفوف والفترات بصلاحية "القناص"، وفك الاعتمادات.</p>
               </div>
             </div>
             <button onClick={fetchRadarData} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 flex items-center gap-2 transition-colors"><RefreshCw className="w-4 h-4" /> تحديث الرادار</button>
@@ -159,22 +165,13 @@ export default function GradingControlPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
             
-            {/* 🚀 بوابات الصفوف المسموحة (Granular Gating) */}
+            {/* 🚀 بوابات الصفوف */}
             <div className="glass-panel p-6 rounded-[2rem] border border-blue-500/30 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-blue-400 mb-6 flex items-center gap-2"><Filter className="w-5 h-5" /> بوابات الصفوف (مسموح بالرصد)</h2>
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20">
-                  <div><p className="font-bold text-white">الصف العاشر</p></div>
-                  <button disabled={toggleLoading} onClick={() => handleToggle('g10_active', settings.g10_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g10_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g10_active ? 'left-1' : 'left-7'}`}></div></button>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20">
-                  <div><p className="font-bold text-white">الصف الحادي عشر</p></div>
-                  <button disabled={toggleLoading} onClick={() => handleToggle('g11_active', settings.g11_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g11_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g11_active ? 'left-1' : 'left-7'}`}></div></button>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20">
-                  <div><p className="font-bold text-white">الصف الثاني عشر</p></div>
-                  <button disabled={toggleLoading} onClick={() => handleToggle('g12_active', settings.g12_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g12_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g12_active ? 'left-1' : 'left-7'}`}></div></button>
-                </div>
+                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">الصف العاشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g10_active', settings.g10_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g10_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g10_active ? 'left-1' : 'left-7'}`}></div></button></div>
+                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">الصف الحادي عشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g11_active', settings.g11_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g11_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g11_active ? 'left-1' : 'left-7'}`}></div></button></div>
+                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">الصف الثاني عشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g12_active', settings.g12_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g12_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g12_active ? 'left-1' : 'left-7'}`}></div></button></div>
               </div>
             </div>
 
@@ -189,7 +186,7 @@ export default function GradingControlPage() {
               </div>
             </div>
 
-            {/* لوحة توجيهات المعلمين */}
+            {/* لوحة التوجيهات */}
             <div className="glass-panel p-6 rounded-[2rem] border border-indigo-500/30 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-indigo-400 mb-6 flex items-center gap-2"><Megaphone className="w-5 h-5" /> توجيهات لوحة المعلم</h2>
               <div className="space-y-4">
@@ -211,7 +208,7 @@ export default function GradingControlPage() {
           <div className="lg:col-span-2">
             <div className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 bg-[#0f1423]/80 h-full">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black text-white flex items-center gap-2"><Activity className="w-5 h-5 text-amber-400" /> رادار إنجاز المعلمين (مبسط)</h2>
+                <h2 className="text-xl font-black text-white flex items-center gap-2"><Activity className="w-5 h-5 text-amber-400" /> رادار إنجاز المعلمين</h2>
                 <div className="flex gap-4">
                   <div className="text-center"><p className="text-xl font-black text-emerald-400">{stats.submitted}</p><p className="text-[10px] text-slate-400">مكتمل</p></div>
                   <div className="text-center"><p className="text-xl font-black text-rose-400">{stats.pending}</p><p className="text-[10px] text-slate-400">متأخر</p></div>
@@ -219,15 +216,30 @@ export default function GradingControlPage() {
               </div>
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-right">
-                  <thead><tr className="border-b border-white/10"><th className="p-3 text-slate-400 font-bold text-sm">المعلم</th><th className="p-3 text-slate-400 font-bold text-sm">الصف والشعبة</th><th className="p-3 text-slate-400 font-bold text-sm text-center">الحالة</th></tr></thead>
+                  <thead><tr className="border-b border-white/10"><th className="p-3 text-slate-400 font-bold text-sm">المعلم</th><th className="p-3 text-slate-400 font-bold text-sm">الصف والشعبة</th><th className="p-3 text-slate-400 font-bold text-sm text-center">الاعتماد</th></tr></thead>
                   <tbody>
                     {teacherProgress.length > 0 ? (
                       teacherProgress.map((item) => (
                         <tr key={item.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                           <td className="p-4 font-bold text-slate-200">أ. {item.teacherName}</td>
                           <td className="p-4 text-sm font-bold text-slate-300">{item.className} - شعـبة {item.sectionName}</td>
-                          <td className="p-4 text-center">
-                            {item.isSubmitted ? (<span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-black rounded-lg border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> تم الاعتماد</span>) : (<span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs font-black rounded-lg border border-amber-500/20"><Clock className="w-4 h-4" /> قيد الإدخال</span>)}
+                          <td className="p-4 flex items-center justify-center gap-2">
+                            {item.isSubmitted ? (
+                              <>
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-black rounded-lg border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> معتمد</span>
+                                {/* 🚀 زر فك الاعتماد الجديد */}
+                                <button 
+                                  onClick={() => handleUnlockSheet(item.className, item.sectionName, item.subjectName, item.id)}
+                                  disabled={actionLoadingId === item.id}
+                                  className="p-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg transition-colors border border-rose-500/20"
+                                  title="فك الاعتماد وإعادة الكشف للمعلم"
+                                >
+                                  {actionLoadingId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
+                                </button>
+                              </>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs font-black rounded-lg border border-amber-500/20"><Clock className="w-4 h-4" /> قيد الإدخال</span>
+                            )}
                           </td>
                         </tr>
                       ))
