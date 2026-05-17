@@ -24,8 +24,6 @@ export default function ManualGradingPage() {
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
   const [gradingToggles, setGradingToggles] = useState({ p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false });
-  
-  // 🚀 أوزان المادة من جدول kuwait_grading_rules
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
@@ -35,7 +33,7 @@ export default function ManualGradingPage() {
       try {
         setOptionsLoading(true);
         
-        const { data: settings } = await supabase.from('school_settings').select('*').single();
+        const { data: settings } = await supabase.from('school_settings').select('*').maybeSingle();
         if (settings) {
           setGradingToggles({
             p1_cw: settings.grading_p1_cw_active || false,
@@ -125,29 +123,30 @@ export default function ManualGradingPage() {
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
-  // 🚀 جلب أوزان المادة من جدول (kuwait_grading_rules) + جلب الطلاب والدرجات
+  // 🚀 جلب أوزان المادة + الطلاب
   useEffect(() => {
     const fetchGradesAndLimits = async () => {
       if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) { setRows([]); return; }
+      
+      // 🚀 تفريغ الذاكرة فوراً لمنع تداخل حالات القفل بين المواد
+      setRows([]); 
       setLoading(true); setStatus(null);
+      
       try {
-        // 1. جلب قواعد الدرجات للمادة من جدول kuwait_grading_rules
-        // نبحث باستخدام اسم المادة 
+        // 🚀 استخدام maybeSingle لمنع الانهيار إذا كانت المادة غير موجودة بجدول الوزارة
         const { data: rulesData } = await supabase
           .from('kuwait_grading_rules')
           .select('coursework_max, exam_max')
           .eq('subject_name', selectedSubject)
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (rulesData) {
           setSubjectLimits({ cw_max: rulesData.coursework_max, ex_max: rulesData.exam_max });
         } else {
-          // قيم افتراضية في حال عدم تسجيل المادة في جدول الوزارة
           setSubjectLimits({ cw_max: 40, ex_max: 60 });
         }
 
-        // 2. جلب الطلاب
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
         const className = sectionObj?.classes?.name || '';
         const sectionName = sectionObj?.name || '';
@@ -174,7 +173,6 @@ export default function ManualGradingPage() {
     if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndLimits();
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading]);
 
-  // 🚀 درع الحماية 1: منع تجاوز الأوزان الرسمية
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isSheetLocked) return;
 
@@ -199,7 +197,6 @@ export default function ManualGradingPage() {
   const saveAndLockGrades = async () => {
     if (rows.length === 0) return;
 
-    // 🚀 درع الحماية 2: إجبار المعلم على تعبئة الخانات المفتوحة
     const activeFields = [];
     if (gradingToggles.p1_cw) activeFields.push({ key: 'p1_coursework', label: 'أعمال ف1' });
     if (gradingToggles.p1_ex) activeFields.push({ key: 'p1_exam', label: 'اختبار ف1' });
@@ -246,6 +243,8 @@ export default function ManualGradingPage() {
     }
   };
 
+  const handlePrint = () => window.print();
+
   if (optionsLoading) return (<div className="min-h-screen flex items-center justify-center bg-[#02040a]"><Loader2 className="w-12 h-12 text-amber-500 animate-spin" /></div>);
 
   return (
@@ -259,7 +258,7 @@ export default function ManualGradingPage() {
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lock className="w-5 h-5" />} اعتماد وقفل للإدارة
           </button>
         )}
-        <button onClick={() => window.print()} disabled={rows.length === 0} className="px-6 py-4 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-full transition-colors flex items-center gap-2 disabled:opacity-50">
+        <button onClick={handlePrint} disabled={rows.length === 0} className="px-6 py-4 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-full transition-colors flex items-center gap-2 disabled:opacity-50">
           <Printer className="w-5 h-5" /> طباعة الكشف
         </button>
       </div>
@@ -303,7 +302,6 @@ export default function ManualGradingPage() {
                   <th rowSpan={2} className="w-24 p-3 font-black bg-white/10 print:bg-gray-200">مجموع العام</th>
                 </tr>
                 <tr className="bg-white/5 border-b border-white/10 text-sm">
-                  {/* 🚀 عرض وزن المادة القادم من قاعدة بيانات الوزارة */}
                   <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال ({subjectLimits.cw_max})</th>
                   <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار ({subjectLimits.ex_max})</th>
                   <th className="p-3 border-l border-white/10 font-black text-white print:text-black bg-emerald-500/10 print:bg-transparent">مجموع</th>
