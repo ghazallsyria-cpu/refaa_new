@@ -13,7 +13,7 @@ export default function GradingControlPage() {
 
   // 🚀 إعدادات فتح وإغلاق الفترات
   const [settings, setSettings] = useState({
-    id: 1, // الـ ID الافتراضي لجدول الإعدادات
+    id: 1, 
     p1_cw_active: false,
     p1_ex_active: false,
     p2_cw_active: true,
@@ -42,19 +42,18 @@ export default function GradingControlPage() {
         });
       }
 
-      // ب) جلب التشكيلات المدرسية (المعلمون، الفصول، المواد)
+      // ب) جلب التشكيلات المدرسية
       const { data: teacherSections } = await supabase.from('teacher_sections').select('*');
       const { data: users } = await supabase.from('users').select('id, full_name').eq('role', 'teacher');
       const { data: sections } = await supabase.from('sections').select('id, name, classes(name, level)');
       const { data: subjects } = await supabase.from('subjects').select('id, name');
       
-      // ج) جلب الكشوفات التي تم اعتمادها وقفلها فقط
+      // ج) جلب الكشوفات المعتمدة
       const { data: lockedGrades } = await supabase
         .from('manual_grades')
         .select('grade_level, section, subject_name')
         .eq('is_locked', true);
 
-      // د) تجميع وتنقيب البيانات
       if (teacherSections && users && sections && subjects) {
         const progressArray: any[] = [];
         let submittedCount = 0;
@@ -64,12 +63,11 @@ export default function GradingControlPage() {
           const sectionObj = sections.find(s => s.id === ts.section_id);
           const subjectObj = subjects.find(su => su.id === ts.subject_id);
 
-          if (teacher && sectionObj && subjectObj && sectionObj.classes.level >= 10) { // للثانوي فقط
+          if (teacher && sectionObj && subjectObj && sectionObj.classes.level >= 10) { 
             const className = sectionObj.classes.name;
             const sectionName = sectionObj.name;
             const subjectName = subjectObj.name;
 
-            // التحقق هل يوجد كشف مقفل يطابق هذه التشكيلة؟
             const isSubmitted = lockedGrades?.some(lg => 
               lg.grade_level === className && 
               lg.section === sectionName && 
@@ -89,7 +87,6 @@ export default function GradingControlPage() {
           }
         });
 
-        // ترتيب أبجدي حسب المعلم
         progressArray.sort((a, b) => a.teacherName.localeCompare(b.teacherName));
         setTeacherProgress(progressArray);
         setStats({
@@ -111,7 +108,7 @@ export default function GradingControlPage() {
   }, []);
 
   // ==========================================
-  // 2️⃣ معالجة مفاتيح التحكم بالفترات (Toggles)
+  // 2️⃣ معالجة مفاتيح التحكم (Toggles)
   // ==========================================
   const handleToggle = async (field: string, currentValue: boolean) => {
     setToggleLoading(true);
@@ -177,19 +174,19 @@ export default function GradingControlPage() {
 
           <AnimatePresence>
             {status && (
-              <motion.initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6 overflow-hidden">
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6 overflow-hidden">
                 <div className={`p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                   {status.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
                   {status.msg}
                 </div>
-              </motion.initial>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* 🎛️ العمود الأيمن: مفاتيح التحكم (Circuit Breakers) */}
+          {/* 🎛️ العمود الأيمن: مفاتيح التحكم */}
           <div className="lg:col-span-1 space-y-6">
             <div className="glass-panel p-6 rounded-[2rem] border border-white/10 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2">
@@ -197,11 +194,10 @@ export default function GradingControlPage() {
               </h2>
 
               <div className="space-y-4">
-                {/* مفتاح أعمال الفترة الأولى */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
                   <div>
                     <p className="font-bold text-slate-200">أعمال الفترة الأولى</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{settings.p1_cw_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة والطباعة فقط)'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{settings.p1_cw_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة فقط)'}</p>
                   </div>
                   <button 
                     disabled={toggleLoading}
@@ -212,11 +208,10 @@ export default function GradingControlPage() {
                   </button>
                 </div>
 
-                {/* مفتاح اختبار الفترة الأولى */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
                   <div>
                     <p className="font-bold text-slate-200">اختبار الفترة الأولى</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{settings.p1_ex_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة والطباعة فقط)'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{settings.p1_ex_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة فقط)'}</p>
                   </div>
                   <button 
                     disabled={toggleLoading}
@@ -229,11 +224,10 @@ export default function GradingControlPage() {
 
                 <div className="my-4 border-t border-white/5"></div>
 
-                {/* مفتاح أعمال الفترة الثانية */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
                   <div>
                     <p className="font-bold text-slate-200">أعمال الفترة الثانية</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{settings.p2_cw_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة والطباعة فقط)'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{settings.p2_cw_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة فقط)'}</p>
                   </div>
                   <button 
                     disabled={toggleLoading}
@@ -244,11 +238,10 @@ export default function GradingControlPage() {
                   </button>
                 </div>
 
-                {/* مفتاح اختبار الفترة الثانية */}
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
                   <div>
                     <p className="font-bold text-slate-200">اختبار الفترة الثانية</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{settings.p2_ex_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة والطباعة فقط)'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{settings.p2_ex_active ? 'مفتوح للإدخال والتعديل' : 'مغلق (للقراءة فقط)'}</p>
                   </div>
                   <button 
                     disabled={toggleLoading}
@@ -261,7 +254,6 @@ export default function GradingControlPage() {
               </div>
             </div>
 
-            {/* بطاقات الإحصائيات السريعة */}
             <div className="grid grid-cols-2 gap-4">
               <div className="glass-panel p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 text-center">
                 <p className="text-3xl font-black text-emerald-400 mb-1">{stats.submitted}</p>
@@ -274,7 +266,7 @@ export default function GradingControlPage() {
             </div>
           </div>
 
-          {/* 📡 العمود الأيسر: الرادار الاستخباراتي (المتابعة) */}
+          {/* 📡 العمود الأيسر: الرادار الاستخباراتي */}
           <div className="lg:col-span-2">
             <div className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 bg-[#0f1423]/80 h-full">
               <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2">
