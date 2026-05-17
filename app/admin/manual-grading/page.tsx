@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Printer, Save, FileSpreadsheet, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock } from 'lucide-react';
+import { Printer, Save, FileSpreadsheet, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function ManualGradingPage() {
@@ -13,11 +13,11 @@ export default function ManualGradingPage() {
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
-  
   const [optionsLoading, setOptionsLoading] = useState(true);
 
   // 🚀 الفلاتر المختارة
   const [selectedYear, setSelectedYear] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('الفصل الدراسي الثاني');
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
 
@@ -29,63 +29,103 @@ export default function ManualGradingPage() {
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
 
   // ==========================================
-  // 1️⃣ جلب الخيارات للقوائم المنسدلة
+  // 1️⃣ جلب السنوات والفصول (للمرحلة الثانوية فقط وبترتيب متسلسل)
   // ==========================================
   useEffect(() => {
-    const fetchDropdownOptions = async () => {
+    const fetchInitialDropdowns = async () => {
       try {
         setOptionsLoading(true);
         
         // جلب السنوات الدراسية
         const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
-        // جلب الشعب مع اسم الصف التابع لها
-        const { data: secs } = await supabase.from('sections').select('id, name, classes(name)').order('name', { ascending: true });
-        // جلب المواد الدراسية
-        const { data: subs } = await supabase.from('subjects').select('name').order('name', { ascending: true });
-
         if (years) {
           setAcademicYears(years);
           const currentYear = years.find(y => y.is_current) || years[0];
           if (currentYear) setSelectedYear(currentYear.name);
         }
         
-        if (secs && secs.length > 0) {
-          setSectionsList(secs);
-          setSelectedSectionId(secs[0].id);
-        }
-        
-        if (subs && subs.length > 0) {
-          setSubjectsList(subs);
-          setSelectedSubject(subs[0].name);
-        }
+        // 🚀 جلب فصول المرحلة الثانوية فقط (المستوى 10 وما فوق)
+        const { data: secs } = await supabase
+          .from('sections')
+          .select('id, name, classes!inner(id, name, level)')
+          .gte('classes.level', 10); // فلتر المرحلة الثانوية
 
+        if (secs && secs.length > 0) {
+          // 🚀 ترتيب الفصول تسلسلياً (10 ثم 11 ثم 12) ثم ترتيب أسماء الشعب
+          const sortedSecs = secs.sort((a, b) => {
+            if (a.classes.level !== b.classes.level) return a.classes.level - b.classes.level;
+            return a.name.localeCompare(b.name);
+          });
+          
+          setSectionsList(sortedSecs);
+          setSelectedSectionId(sortedSecs[0].id);
+        }
       } catch (error) {
-        console.error('Error fetching options:', error);
+        console.error('Error fetching initial options:', error);
       } finally {
         setOptionsLoading(false);
       }
     };
 
-    fetchDropdownOptions();
+    fetchInitialDropdowns();
   }, []);
 
   // ==========================================
-  // 2️⃣ جلب الطلاب الحقيقيين والدرجات المحفوظة
+  // 2️⃣ جلب المواد المربوطة بالفصل المختار ديناميكياً
+  // ==========================================
+  useEffect(() => {
+    const fetchSubjectsForSection = async () => {
+      if (!selectedSectionId) return;
+      
+      try {
+        setLoading(true);
+        
+        // نبحث عن المواد المربوطة بهذا الفصل عن طريق جداول المعلمين والجدول الدراسي
+        const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId);
+        const { data: schData } = await supabase.from('schedules').select('subjects(id, name)').eq('section_id', selectedSectionId);
+
+        const subjectSet = new Set<string>();
+        tsData?.forEach(item => { if (item.subjects?.name) subjectSet.add(item.subjects.name); });
+        schData?.forEach(item => { if (item.subjects?.name) subjectSet.add(item.subjects.name); });
+
+        if (subjectSet.size > 0) {
+          const subjectsArray = Array.from(subjectSet).map(name => ({ name })).sort((a, b) => a.name.localeCompare(b.name));
+          setSubjectsList(subjectsArray);
+          setSelectedSubject(subjectsArray[0].name);
+        } else {
+          // في حال عدم وجود جداول مربوطة بعد، نجلب كل المواد كإجراء احتياطي
+          const { data: allSubs } = await supabase.from('subjects').select('name').order('name', { ascending: true });
+          setSubjectsList(allSubs || []);
+          if (allSubs && allSubs.length > 0) setSelectedSubject(allSubs[0].name);
+        }
+      } catch (err) {
+        console.error('Error fetching subjects', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (!optionsLoading) {
+      fetchSubjectsForSection();
+    }
+  }, [selectedSectionId, optionsLoading]);
+
+  // ==========================================
+  // 3️⃣ جلب الطلاب والدرجات عند تغيير أي فلتر
   // ==========================================
   useEffect(() => {
     const fetchGradesAndStudents = async () => {
-      if (!selectedSectionId || !selectedSubject || !selectedYear) return;
+      if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) return;
       
       setLoading(true);
       setStatus(null);
       
       try {
-        // استخراج اسم الصف واسم الشعبة من الـ ID المختار
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
         const className = sectionObj?.classes?.name || '';
         const sectionName = sectionObj?.name || '';
 
-        // أ) جلب الطلاب الفعليين في هذه الشعبة مع أسمائهم من جدول users
+        // أ) جلب الطلاب الفعليين
         const { data: studentsData, error: studentsError } = await supabase
           .from('students')
           .select('id, users!inner(full_name)')
@@ -93,19 +133,19 @@ export default function ManualGradingPage() {
           
         if (studentsError) throw studentsError;
 
-        // ب) جلب الكشف المحفوظ مسبقاً (إن وجد)
+        // ب) جلب الكشف المحفوظ (مفلتر بالفصل الدراسي أيضاً)
         const { data: gradesData, error: gradesError } = await supabase
           .from('manual_grades')
           .select('*')
           .eq('grade_level', className)
           .eq('section', sectionName)
           .eq('subject_name', selectedSubject)
-          .eq('academic_year', selectedYear);
+          .eq('academic_year', selectedYear)
+          .eq('semester', selectedSemester); // 🚀 فلترة بالفصل الدراسي الثاني
 
         if (gradesError) throw gradesError;
 
-        // ج) دمج الطلاب الحقيقيين مع درجاتهم
-        // الترتيب الأبجدي للأسماء كما في الكشوفات الرسمية
+        // ج) ترتيب أبجدي ودمج
         const sortedStudents = (studentsData || []).sort((a, b) => a.users.full_name.localeCompare(b.users.full_name));
 
         const mergedRows = sortedStudents.map(student => {
@@ -113,12 +153,12 @@ export default function ManualGradingPage() {
           const existingRecord = gradesData?.find(g => g.student_name === studentName);
           
           if (existingRecord) {
-            return existingRecord; // إذا كان مرصوداً سابقاً
+            return existingRecord;
           } else {
             return {
               student_name: studentName,
               p1_coursework: '', p1_exam: '', p2_coursework: '', p2_exam: '', is_locked: false
-            }; // إذا كان طالباً جديداً
+            };
           }
         });
 
@@ -137,13 +177,14 @@ export default function ManualGradingPage() {
       }
     };
 
-    if (!optionsLoading) {
+    // لا نستدعي جلب الطلاب إلا بعد أن تتحدث قائمة المواد
+    if (!optionsLoading && selectedSubject) {
       fetchGradesAndStudents();
     }
-  }, [selectedSectionId, selectedSubject, selectedYear, optionsLoading]);
+  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading]);
 
   // ==========================================
-  // 3️⃣ معالجة الحفظ والاعتماد
+  // 4️⃣ معالجة الحفظ والاعتماد النهائي
   // ==========================================
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isSheetLocked) return;
@@ -169,6 +210,7 @@ export default function ManualGradingPage() {
         section: sectionName,
         subject_name: selectedSubject,
         academic_year: selectedYear,
+        semester: selectedSemester, // 🚀 حفظ الفصل الدراسي
         p1_coursework: Number(row.p1_coursework) || 0,
         p1_exam: Number(row.p1_exam) || 0,
         p2_coursework: Number(row.p2_coursework) || 0,
@@ -178,13 +220,11 @@ export default function ManualGradingPage() {
 
       const { error } = await supabase
         .from('manual_grades')
-        .upsert(payload, { onConflict: 'student_name, subject_name, academic_year' });
+        .upsert(payload, { onConflict: 'student_name, subject_name, academic_year, semester' });
 
       if (error) throw error;
       
       setStatus({ type: 'success', msg: 'تم الاعتماد والقفل بنجاح! 🔒 الكشف الآن بعهدة الإدارة.' });
-      
-      // التحديث ليعكس حالة القفل فوراً
       const lockedRows = rows.map(r => ({ ...r, is_locked: true }));
       setRows(lockedRows);
 
@@ -197,14 +237,16 @@ export default function ManualGradingPage() {
 
   const handlePrint = () => window.print();
 
-  // الحصول على المسميات الصريحة للطباعة
   const printClassName = sectionsList.find(s => s.id === selectedSectionId)?.classes?.name || '';
   const printSectionName = sectionsList.find(s => s.id === selectedSectionId)?.name || '';
 
   if (optionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#02040a]">
-        <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
+          <p className="text-amber-400 font-black tracking-widest animate-pulse">تهيئة محرك الرصد الثانوي...</p>
+        </div>
       </div>
     );
   }
@@ -244,36 +286,52 @@ export default function ManualGradingPage() {
         <div className="no-print glass-panel p-6 rounded-[2rem] border border-white/10 mb-8 shadow-xl bg-[#0f1423]/80">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-white/5 pb-4 mb-6 gap-4">
             <div className="flex items-center gap-3">
-              <FileSpreadsheet className="w-8 h-8 text-amber-400" />
-              <h1 className="text-2xl font-black text-white">محرك الرصد اليدوي (ديناميكي)</h1>
+              <div className="bg-amber-500/20 p-3 rounded-2xl border border-amber-500/30">
+                <GraduationCap className="w-8 h-8 text-amber-400" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black text-white">محرك الرصد اليدوي (الثانوي)</h1>
+                <p className="text-xs text-slate-400 font-bold mt-1">نظام مرتبط آلياً بالتشكيلات المدرسية</p>
+              </div>
             </div>
             {isSheetLocked && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black">
+              <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black animate-pulse">
                 <ShieldCheck className="w-5 h-5" /> كشف معتمد للإدارة
               </div>
             )}
           </div>
           
-          {/* 🚀 القوائم المنسدلة التفاعلية */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400">العام الدراسي</label>
-              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
+              <label className="text-xs font-black text-slate-400">العام الدراسي</label>
+              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
                 {academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400">الفصل الدراسي</label>
+              <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} disabled={loading} className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 text-indigo-300 outline-none focus:border-amber-500 font-black disabled:opacity-50">
+                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+                <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
               </select>
             </div>
             
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400">الصف والشعبة (الفصل)</label>
-              <select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
+              <label className="text-xs font-black text-slate-400">الصف والشعبة (ثانوي)</label>
+              <select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
                 {sectionsList.map(sec => <option key={sec.id} value={sec.id}>{sec.classes?.name} - شعـبة {sec.name}</option>)}
               </select>
             </div>
             
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400">المادة الدراسية</label>
-              <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
-                {subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>)}
+              <label className="text-xs font-black text-slate-400">المادة الدراسية (حسب الشعبة)</label>
+              <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
+                {subjectsList.length > 0 ? (
+                  subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>)
+                ) : (
+                  <option value="">لا يوجد مواد مربوطة</option>
+                )}
               </select>
             </div>
           </div>
@@ -285,13 +343,14 @@ export default function ManualGradingPage() {
           )}
         </div>
 
-        {/* 🖨️ الترويسة الرسمية للطباعة (مربوطة بالقيم الديناميكية) */}
+        {/* 🖨️ الترويسة الرسمية للطباعة */}
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed">
             <p>وزارة التربية</p>
             <p>نظام سجل الطالب</p>
             <p>إدارة التعليم الخاص</p>
             <p className="mt-2">العام الدراسي : {selectedYear}</p>
+            <p>الفصل : {selectedSemester}</p>
           </div>
           <div className="text-center leading-relaxed flex flex-col items-center">
             <p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p>
@@ -319,7 +378,7 @@ export default function ManualGradingPage() {
                   <th rowSpan={2} className="w-64 p-3 border-l border-white/10 text-amber-400 print:text-black">اسم الطالب</th>
                   <th colSpan={3} className="p-3 border-b border-l border-white/10 text-emerald-400 print:text-black">الفترة الأولى</th>
                   <th colSpan={3} className="p-3 border-b border-l border-white/10 text-indigo-400 print:text-black">الفترة الثانية</th>
-                  <th rowSpan={2} className="w-24 p-3 font-black bg-white/10 print:bg-gray-200">نهاية العام<br/>مجموع</th>
+                  <th rowSpan={2} className="w-24 p-3 font-black bg-white/10 print:bg-gray-200">مجموع<br/>الفصل الدراسي</th>
                 </tr>
                 <tr className="bg-white/5 border-b border-white/10 text-sm">
                   <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال</th>
