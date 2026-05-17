@@ -13,6 +13,7 @@ export default function ManualGradingPage() {
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
+  const [gradingRules, setGradingRules] = useState<any[]>([]); // 🚀 تخزين كل الأوزان
   const [optionsLoading, setOptionsLoading] = useState(true);
 
   const [selectedYear, setSelectedYear] = useState('');
@@ -42,11 +43,13 @@ export default function ManualGradingPage() {
 
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
+  // تهيئة النظام وجلب كل شيء مرة واحدة
   useEffect(() => {
     const initializeEngine = async () => {
       try {
         setOptionsLoading(true);
         
+        // 1. جلب الإعدادات
         const { data: settings } = await supabase.from('school_settings').select('*').maybeSingle();
         if (settings) {
           setGradingToggles({
@@ -54,11 +57,13 @@ export default function ManualGradingPage() {
             p2_cw: settings.grading_p2_cw_active || false, p2_ex: settings.grading_p2_ex_active || false,
           });
           setLevelGating({
-            g10: settings.grading_g10_active ?? true,
-            g11: settings.grading_g11_active ?? true,
-            g12: settings.grading_g12_active ?? true,
+            g10: settings.grading_g10_active ?? true, g11: settings.grading_g11_active ?? true, g12: settings.grading_g12_active ?? true,
           });
         }
+
+        // 2. جلب كل جدول الأوزان (لائحة الكويت) لتسريع الفلترة الذكية
+        const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('*');
+        if (rulesData) setGradingRules(rulesData);
 
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -68,9 +73,6 @@ export default function ManualGradingPage() {
         if (years && years.length > 0) {
           setAcademicYears(years);
           setSelectedYear(years.find(y => y.is_current)?.name || years[0].name);
-        } else {
-          setAcademicYears([{ name: '2025/2026', is_current: true }]);
-          setSelectedYear('2025/2026');
         }
 
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
@@ -124,9 +126,10 @@ export default function ManualGradingPage() {
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
+  // 🚀 المترجم الذكي للدرجات (The Mapping Engine)
   useEffect(() => {
     const fetchGradesAndLimits = async () => {
-      if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) { setRows([]); return; }
+      if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester || gradingRules.length === 0) { setRows([]); return; }
       setRows([]); setLoading(true); setStatus(null);
       
       try {
@@ -136,37 +139,51 @@ export default function ManualGradingPage() {
         const sectionName = sectionObj?.name || '';
         const cLevel = Number(classObj?.level || 0);
 
-        const cleanSubjectName = selectedSubject.trim();
-
-        // 🚀 نجلب الأوزان المخصصة لهذه المادة فقط
-        const { data: rulesData } = await supabase
-          .from('kuwait_grading_rules')
-          .select('academic_stage, coursework_max, exam_max')
-          .ilike('subject_name', `%${cleanSubjectName}%`);
-
-        let finalCw = 40;
-        let finalEx = 60;
-
-        // 🚀 مطابقة سحرية ومباشرة بناءً على بنية قاعدة بياناتك الدقيقة!
-        if (rulesData && rulesData.length > 0) {
-          // نبحث عن السطر الذي يبدأ برقم الصف الحالي (مثلاً يبدأ بـ '11' ليلتقط 11_scientific أو 11_literary)
-          let matchedRule = rulesData.find(rule => 
-            String(rule.academic_stage).startsWith(String(cLevel))
-          );
-
-          if (matchedRule) {
-            finalCw = Number(matchedRule.coursework_max || 40);
-            finalEx = Number(matchedRule.exam_max || 60);
-          } else {
-             // لو لم يجد تطابقاً للصف (لأي سبب)، يأخذ أول نتيجة لا تخص المرحلة المتوسطة (6,7,8,9)
-             matchedRule = rulesData.find(r => !['6','7','8','9'].includes(String(r.academic_stage))) || rulesData[0];
-             finalCw = Number(matchedRule.coursework_max || 40);
-             finalEx = Number(matchedRule.exam_max || 60);
-          }
+        // 1. ترجمة اسم الصف للعربي إلى مفاتيح قاعدة البيانات
+        let targetStage = String(cLevel);
+        if (cLevel === 11 || cLevel === 12) {
+          if (className.includes('علمي')) targetStage = `${cLevel}_scientific`;
+          else if (className.includes('ادبي') || className.includes('أدبي')) targetStage = `${cLevel}_literary`;
         }
 
+        // 2. ترجمة مصطلحات المواد التي يكتبها المعلمون بشكل مختصر إلى الاسم الرسمي
+        let searchSubject = selectedSubject.trim();
+        if (searchSubject.includes('اجتماعيات') && cLevel === 10) searchSubject = 'تاريخ الكويت';
+        if (searchSubject.includes('رياضيات') && targetStage === '11_literary') searchSubject = 'الرياضيات والاحصاء';
+        if (searchSubject.includes('رياضيات') && targetStage === '12_literary') searchSubject = 'الرياضيات والاحصاء';
+        if (searchSubject.includes('بدنية')) searchSubject = 'التربية البدنية';
+        if (searchSubject.includes('اسلامية') || searchSubject.includes('إسلامية')) searchSubject = 'التربية الإسلامية';
+        if (searchSubject.includes('انجليزي') || searchSubject.includes('إنجليزي') || searchSubject.includes('انجليزية')) searchSubject = 'اللغة الإنجليزية';
+        if (searchSubject.includes('عربي') || searchSubject.includes('عربيه')) searchSubject = 'اللغة العربية';
+
+        // 3. البحث الدقيق في جدول الأوزان المحمل مسبقاً
+        let matchedRule = gradingRules.find(r => 
+          r.academic_stage === targetStage && 
+          (r.subject_name === searchSubject || searchSubject.includes(r.subject_name) || r.subject_name.includes(searchSubject))
+        );
+
+        // 4. خط الدفاع الأول: إذا كانت المادة (مثل اللغة العربية) موحدة للعلمي والأدبي
+        if (!matchedRule) {
+          matchedRule = gradingRules.find(r => 
+            String(r.academic_stage) === String(cLevel) && 
+            (r.subject_name === searchSubject || searchSubject.includes(r.subject_name) || r.subject_name.includes(searchSubject))
+          );
+        }
+
+        // 5. خط الدفاع الأخير: جلب أي أرقام لهذه المادة في المرحلة الثانوية (منع سحب أرقام المتوسط نهائياً)
+        if (!matchedRule && cLevel >= 10) {
+          matchedRule = gradingRules.find(r => 
+            !['6','7','8','9'].includes(String(r.academic_stage)) && 
+            (r.subject_name === searchSubject || searchSubject.includes(r.subject_name) || r.subject_name.includes(searchSubject))
+          );
+        }
+
+        const finalCw = matchedRule ? Number(matchedRule.coursework_max) : 40;
+        const finalEx = matchedRule ? Number(matchedRule.exam_max) : 60;
+        
         setSubjectLimits({ cw_max: finalCw, ex_max: finalEx });
 
+        // تنبيه الإدارة
         if ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12)) {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية. يمكنك عرض وطباعة الكشف فقط.' });
         }
@@ -187,7 +204,7 @@ export default function ManualGradingPage() {
       } catch (err: any) { setStatus({ type: 'error', msg: 'فشل جلب البيانات.' }); } finally { setLoading(false); }
     };
     if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndLimits();
-  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading, levelGating, sectionsList]);
+  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading, levelGating, sectionsList, gradingRules]);
 
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isInputDisabled) return; 
