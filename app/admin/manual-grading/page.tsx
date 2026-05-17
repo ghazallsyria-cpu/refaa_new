@@ -24,9 +24,22 @@ export default function ManualGradingPage() {
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
   const [gradingToggles, setGradingToggles] = useState({ p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false });
+  // 🚀 حالة بوابات الصفوف
+  const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
+  
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
+  
+  // 🚀 تحديد ما إذا كان الصف المختار مغلقاً من الإدارة
+  const currentClassLevel = sectionsList.find(s => s.id === selectedSectionId)?.classes?.level;
+  const isLevelLockedByAdmin = 
+    (currentClassLevel === 10 && !levelGating.g10) ||
+    (currentClassLevel === 11 && !levelGating.g11) ||
+    (currentClassLevel === 12 && !levelGating.g12);
+
+  // المتغير الشامل للقفل (مقفل بالكشف أو مقفل بسبب إغلاق الصف من الإدارة)
+  const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
   useEffect(() => {
     const initializeEngine = async () => {
@@ -36,10 +49,14 @@ export default function ManualGradingPage() {
         const { data: settings } = await supabase.from('school_settings').select('*').maybeSingle();
         if (settings) {
           setGradingToggles({
-            p1_cw: settings.grading_p1_cw_active || false,
-            p1_ex: settings.grading_p1_ex_active || false,
-            p2_cw: settings.grading_p2_cw_active || false,
-            p2_ex: settings.grading_p2_ex_active || false,
+            p1_cw: settings.grading_p1_cw_active || false, p1_ex: settings.grading_p1_ex_active || false,
+            p2_cw: settings.grading_p2_cw_active || false, p2_ex: settings.grading_p2_ex_active || false,
+          });
+          // قراءة بوابات الصفوف
+          setLevelGating({
+            g10: settings.grading_g10_active ?? true,
+            g11: settings.grading_g11_active ?? true,
+            g12: settings.grading_g12_active ?? true,
           });
         }
 
@@ -50,23 +67,18 @@ export default function ManualGradingPage() {
         const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
         if (years && years.length > 0) {
           setAcademicYears(years);
-          const currentYear = years.find(y => y.is_current) || years[0];
-          setSelectedYear(currentYear.name);
+          setSelectedYear(years.find(y => y.is_current)?.name || years[0].name);
         } else {
           setAcademicYears([{ name: '2025/2026', is_current: true }]);
           setSelectedYear('2025/2026');
         }
 
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
-
         if (userData?.role === 'teacher') {
           const { data: assignedSections } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
           const assignedIds = assignedSections?.map(s => s.section_id) || [];
-          if (assignedIds.length > 0) {
-            sectionsQuery = sectionsQuery.in('id', assignedIds);
-          } else {
-            sectionsQuery = sectionsQuery.in('id', ['00000000-0000-0000-0000-000000000000']);
-          }
+          if (assignedIds.length > 0) sectionsQuery = sectionsQuery.in('id', assignedIds);
+          else sectionsQuery = sectionsQuery.in('id', ['00000000-0000-0000-0000-000000000000']);
         }
 
         const { data: secs } = await sectionsQuery;
@@ -75,16 +87,11 @@ export default function ManualGradingPage() {
             if (a.classes.level !== b.classes.level) return a.classes.level - b.classes.level;
             return a.name.localeCompare(b.name);
           });
-          setSectionsList(sortedSecs);
-          setSelectedSectionId(sortedSecs[0].id);
-        } else {
-          setSectionsList([]);
-        }
+          setSectionsList(sortedSecs); setSelectedSectionId(sortedSecs[0].id);
+        } else setSectionsList([]);
       } catch (error) {
         console.error(error);
-      } finally {
-        setOptionsLoading(false);
-      }
+      } finally { setOptionsLoading(false); }
     };
     initializeEngine();
   }, []);
@@ -98,7 +105,6 @@ export default function ManualGradingPage() {
         const { data: userData } = await supabase.from('users').select('role').eq('id', user?.id).single();
         
         let subjectSet = new Set<string>();
-
         if (userData?.role === 'teacher') {
           const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId).eq('teacher_id', user?.id);
           tsData?.forEach(item => { if (item.subjects?.name) subjectSet.add(item.subjects.name); });
@@ -109,47 +115,31 @@ export default function ManualGradingPage() {
 
         if (subjectSet.size > 0) {
           const subjectsArray = Array.from(subjectSet).map(name => ({ name })).sort((a, b) => a.name.localeCompare(b.name));
-          setSubjectsList(subjectsArray);
-          setSelectedSubject(subjectsArray[0].name);
-        } else {
-          setSubjectsList([]); setSelectedSubject('');
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+          setSubjectsList(subjectsArray); setSelectedSubject(subjectsArray[0].name);
+        } else { setSubjectsList([]); setSelectedSubject(''); }
+      } catch (err) { console.error(err); } finally { setLoading(false); }
     };
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
-  // 🚀 جلب أوزان المادة + الطلاب
   useEffect(() => {
     const fetchGradesAndLimits = async () => {
       if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) { setRows([]); return; }
-      
-      // 🚀 تفريغ الذاكرة فوراً لمنع تداخل حالات القفل بين المواد
-      setRows([]); 
-      setLoading(true); setStatus(null);
+      setRows([]); setLoading(true); setStatus(null);
       
       try {
-        // 🚀 استخدام maybeSingle لمنع الانهيار إذا كانت المادة غير موجودة بجدول الوزارة
-        const { data: rulesData } = await supabase
-          .from('kuwait_grading_rules')
-          .select('coursework_max, exam_max')
-          .eq('subject_name', selectedSubject)
-          .limit(1)
-          .maybeSingle();
-
-        if (rulesData) {
-          setSubjectLimits({ cw_max: rulesData.coursework_max, ex_max: rulesData.exam_max });
-        } else {
-          setSubjectLimits({ cw_max: 40, ex_max: 60 });
-        }
+        const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('coursework_max, exam_max').eq('subject_name', selectedSubject).limit(1).maybeSingle();
+        setSubjectLimits({ cw_max: rulesData?.coursework_max || 40, ex_max: rulesData?.exam_max || 60 });
 
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
         const className = sectionObj?.classes?.name || '';
         const sectionName = sectionObj?.name || '';
+        
+        // 🚀 تنبيه المعلم إذا كان الصف مغلقاً
+        const cLevel = sectionObj?.classes?.level;
+        if ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12)) {
+          setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية. يمكنك عرض وطباعة الكشف فقط.' });
+        }
 
         const { data: studentsData } = await supabase.from('students').select('id, users!inner(full_name)').eq('section_id', selectedSectionId);
         const { data: gradesData } = await supabase.from('manual_grades').select('*').eq('grade_level', className).eq('section', sectionName).eq('subject_name', selectedSubject).eq('academic_year', selectedYear).eq('semester', selectedSemester);
@@ -163,64 +153,50 @@ export default function ManualGradingPage() {
         });
 
         setRows(mergedRows);
-        if (mergedRows.some(r => r.is_locked)) setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل. التعديل للإدارة فقط.' });
-      } catch (err: any) {
-        setStatus({ type: 'error', msg: 'فشل جلب البيانات.' });
-      } finally {
-        setLoading(false);
-      }
+        if (mergedRows.some(r => r.is_locked)) setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل مسبقاً.' });
+      } catch (err: any) { setStatus({ type: 'error', msg: 'فشل جلب البيانات.' }); } finally { setLoading(false); }
     };
     if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndLimits();
-  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading]);
+  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading, levelGating]);
 
   const handleGradeChange = (index: number, field: string, value: string) => {
-    if (isSheetLocked) return;
-
+    if (isInputDisabled) return; // حماية
     if (value !== '') {
       const numValue = Number(value);
       let maxMark = 100;
       if (field === 'p1_coursework' || field === 'p2_coursework') maxMark = subjectLimits.cw_max;
       if (field === 'p1_exam' || field === 'p2_exam') maxMark = subjectLimits.ex_max;
-
       if (numValue > maxMark) {
-        setStatus({ type: 'error', msg: `❌ تجاوزت النهاية العظمى! الحد الأقصى المسموح لمادة (${selectedSubject}) في هذه الخانة هو: ${maxMark}` });
-        setTimeout(() => setStatus(null), 4000);
-        return; 
+        setStatus({ type: 'error', msg: `❌ تجاوزت النهاية العظمى! الحد الأقصى المسموح لمادة (${selectedSubject}) هو: ${maxMark}` });
+        setTimeout(() => setStatus(null), 4000); return; 
       }
     }
-
-    const newRows = [...rows];
-    newRows[index][field] = value;
-    setRows(newRows);
+    const newRows = [...rows]; newRows[index][field] = value; setRows(newRows);
   };
 
   const saveAndLockGrades = async () => {
-    if (rows.length === 0) return;
+    if (rows.length === 0 || isInputDisabled) return;
 
     const activeFields = [];
-    if (gradingToggles.p1_cw) activeFields.push({ key: 'p1_coursework', label: 'أعمال ف1' });
-    if (gradingToggles.p1_ex) activeFields.push({ key: 'p1_exam', label: 'اختبار ف1' });
-    if (gradingToggles.p2_cw) activeFields.push({ key: 'p2_coursework', label: 'أعمال ف2' });
-    if (gradingToggles.p2_ex) activeFields.push({ key: 'p2_exam', label: 'اختبار ف2' });
+    if (gradingToggles.p1_cw) activeFields.push({ key: 'p1_coursework' });
+    if (gradingToggles.p1_ex) activeFields.push({ key: 'p1_exam' });
+    if (gradingToggles.p2_cw) activeFields.push({ key: 'p2_coursework' });
+    if (gradingToggles.p2_ex) activeFields.push({ key: 'p2_exam' });
 
     let hasEmpty = false;
     for (const row of rows) {
       for (const field of activeFields) {
-        if (row[field.key] === '' || row[field.key] === null || row[field.key] === undefined) {
-          hasEmpty = true;
-          break;
-        }
+        if (row[field.key] === '' || row[field.key] === null || row[field.key] === undefined) { hasEmpty = true; break; }
       }
       if (hasEmpty) break;
     }
 
     if (hasEmpty) {
-      setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة. يرجى وضع (0) في حال غياب الطالب لتتحمل مسؤولية الدرجة.' });
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
+      setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة. يرجى وضع (0) للمحروم أو الغائب.' });
+      window.scrollTo({ top: 0, behavior: 'smooth' }); return;
     }
 
-    if (!window.confirm('⚠️ تحذير: هل أنت متأكد من اعتماد الدرجات؟ لن تتمكن من التعديل بعد هذه الخطوة.')) return;
+    if (!window.confirm('⚠️ تحذير: هل أنت متأكد من اعتماد الدرجات؟ لن تتمكن من التعديل بعد ذلك.')) return;
     
     setLoading(true); setStatus(null);
     try {
@@ -233,17 +209,10 @@ export default function ManualGradingPage() {
 
       const { error } = await supabase.from('manual_grades').upsert(payload, { onConflict: 'student_name, subject_name, academic_year, semester' });
       if (error) throw error;
-      
       setStatus({ type: 'success', msg: 'تم الاعتماد والقفل بنجاح! 🔒' });
       setRows(rows.map(r => ({ ...r, is_locked: true })));
-    } catch (err: any) {
-      setStatus({ type: 'error', msg: 'فشل الاعتماد.' });
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { setStatus({ type: 'error', msg: 'فشل الاعتماد.' }); } finally { setLoading(false); }
   };
-
-  const handlePrint = () => window.print();
 
   if (optionsLoading) return (<div className="min-h-screen flex items-center justify-center bg-[#02040a]"><Loader2 className="w-12 h-12 text-amber-500 animate-spin" /></div>);
 
@@ -253,12 +222,12 @@ export default function ManualGradingPage() {
 
       <div className="no-print fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#0f1423]/95 backdrop-blur-xl p-4 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
         <button onClick={() => router.back()} className="p-4 bg-white/5 hover:bg-white/10 text-white rounded-full transition-colors"><ChevronRight /></button>
-        {!isSheetLocked && rows.length > 0 && (
+        {!isInputDisabled && rows.length > 0 && (
           <button onClick={saveAndLockGrades} disabled={loading} className="px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lock className="w-5 h-5" />} اعتماد وقفل للإدارة
           </button>
         )}
-        <button onClick={handlePrint} disabled={rows.length === 0} className="px-6 py-4 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-full transition-colors flex items-center gap-2 disabled:opacity-50">
+        <button onClick={() => window.print()} disabled={rows.length === 0} className="px-6 py-4 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-full transition-colors flex items-center gap-2 disabled:opacity-50">
           <Printer className="w-5 h-5" /> طباعة الكشف
         </button>
       </div>
@@ -269,9 +238,9 @@ export default function ManualGradingPage() {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-white/5 pb-4 mb-6 gap-4">
             <div className="flex items-center gap-3">
               <div className="bg-amber-500/20 p-3 rounded-2xl border border-amber-500/30"><GraduationCap className="w-8 h-8 text-amber-400" /></div>
-              <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي (الثانوي)</h1><p className="text-xs text-slate-400 font-bold mt-1">يمنع ترك خانات فارغة - أقصى درجة محكومة بلائحة الوزارة</p></div>
+              <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي</h1><p className="text-xs text-slate-400 font-bold mt-1">يمنع ترك خانات فارغة - أقصى درجة محكومة بلائحة الوزارة</p></div>
             </div>
-            {isSheetLocked && <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black animate-pulse"><ShieldCheck className="w-5 h-5" /> كشف معتمد للإدارة</div>}
+            {isSheetLocked && <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black animate-pulse"><ShieldCheck className="w-5 h-5" /> كشف معتمد مسبقاً</div>}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -280,7 +249,7 @@ export default function ManualGradingPage() {
             <div className="space-y-2"><label className="text-xs font-black text-slate-400">الصف والشعبة</label><select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading || sectionsList.length===0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{sectionsList.length > 0 ? sectionsList.map(sec => <option key={sec.id} value={sec.id}>{sec.classes?.name} - شعـبة {sec.name}</option>) : <option>غير مكلف بأي فصل</option>}</select></div>
             <div className="space-y-2"><label className="text-xs font-black text-slate-400">المادة الدراسية</label><select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{subjectsList.length > 0 ? subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>) : <option value="">لا يوجد مواد مربوطة بك</option>}</select></div>
           </div>
-          {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
+          {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : status.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
         </div>
 
         <div className="hidden print-header print:flex">
@@ -291,7 +260,7 @@ export default function ManualGradingPage() {
 
         {rows.length > 0 ? (
           <div className="overflow-x-auto bg-[#0f1423]/40 print:bg-transparent rounded-2xl print:rounded-none border border-white/10 print:border-none p-1 print:p-0 relative">
-            {isSheetLocked && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
+            {isInputDisabled && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
             <table className="w-full text-center official-table relative z-0">
               <thead>
                 <tr className="bg-white/5 border-b border-white/10">
@@ -322,22 +291,22 @@ export default function ManualGradingPage() {
                       <td className="p-3 border-l border-white/10 font-bold text-right pr-4">{row.student_name}</td>
                       
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p1_cw && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p1_coursework} disabled={isSheetLocked || !gradingToggles.p1_cw} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p1_cw && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p1_coursework} disabled={isInputDisabled || !gradingToggles.p1_cw} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p1_ex && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p1_exam} disabled={isSheetLocked || !gradingToggles.p1_ex} onChange={(e) => handleGradeChange(idx, 'p1_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p1_ex && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p1_exam} disabled={isInputDisabled || !gradingToggles.p1_ex} onChange={(e) => handleGradeChange(idx, 'p1_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-3 border-l border-white/10 font-black text-emerald-400 print:text-black bg-emerald-500/5 print:bg-transparent">{p1Sum > 0 ? p1Sum : ''}</td>
 
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p2_cw && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p2_coursework} disabled={isSheetLocked || !gradingToggles.p2_cw} onChange={(e) => handleGradeChange(idx, 'p2_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p2_cw && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p2_coursework} disabled={isInputDisabled || !gradingToggles.p2_cw} onChange={(e) => handleGradeChange(idx, 'p2_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p2_ex && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p2_exam} disabled={isSheetLocked || !gradingToggles.p2_ex} onChange={(e) => handleGradeChange(idx, 'p2_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p2_ex && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p2_exam} disabled={isInputDisabled || !gradingToggles.p2_ex} onChange={(e) => handleGradeChange(idx, 'p2_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-3 border-l border-white/10 font-black text-indigo-400 print:text-black bg-indigo-500/5 print:bg-transparent">{p2Sum > 0 ? p2Sum : ''}</td>
 
