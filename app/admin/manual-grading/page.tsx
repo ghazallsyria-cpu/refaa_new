@@ -4,39 +4,36 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Printer, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap, Users } from 'lucide-react';
+import { Printer, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap, Users, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// 🚀 [الجدار الإسمنتي] - ثوابت لا تتغير لمنع خطأ الآيفون بشكل قاطع
 const ACADEMIC_YEARS = ['2025/2026', '2024/2025', '2023/2024'];
 const SEMESTERS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
 
 export default function ManualGradingPage() {
   const router = useRouter();
 
-  // 1. حالات القوائم المنسدلة (قيم افتراضية صلبة)
   const [selectedYear, setSelectedYear] = useState(ACADEMIC_YEARS[0]);
   const [selectedSemester, setSelectedSemester] = useState(SEMESTERS[1]);
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
 
-  // 2. قوائم البيانات
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
   const [gradingRules, setGradingRules] = useState<any[]>([]); 
   
-  // 3. حالات التحميل والبيانات
   const [isInitializing, setIsInitializing] = useState(true);
   const [isGridLoading, setIsGridLoading] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
-  // 4. إعدادات المدرسة والأوزان
   const [gradingToggles, setGradingToggles] = useState({ p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false });
   const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
+  
+  // 🚀 حالة جديدة لحفظ القائمة البيضاء
+  const [vipSubjectsList, setVipSubjectsList] = useState<string[]>([]);
 
-  // 5. فحص حالة القفل
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
   const currentSectionObj = sectionsList.find(s => s.id === selectedSectionId);
   const currentClassObj = Array.isArray(currentSectionObj?.classes) ? currentSectionObj?.classes[0] : currentSectionObj?.classes;
@@ -49,15 +46,16 @@ export default function ManualGradingPage() {
 
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
-  // =========================================================================
-  // المحرك الأول: جلب الإعدادات والصفوف (بدون الاعتماد على الفلترة المعقدة)
-  // =========================================================================
+  // 🚀 نتحقق هل المادة المختارة حالياً تعتبر مادة VIP؟
+  const isVIPSubject = vipSubjectsList.some(vipSub => 
+    selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject)
+  );
+
   useEffect(() => {
     const bootEngine = async () => {
       try {
         setIsInitializing(true);
         
-        // جلب الإعدادات
         const { data: settings } = await supabase.from('school_settings').select('*').maybeSingle();
         if (settings) {
           setGradingToggles({
@@ -67,13 +65,13 @@ export default function ManualGradingPage() {
           setLevelGating({
             g10: settings.grading_g10_active ?? true, g11: settings.grading_g11_active ?? true, g12: settings.grading_g12_active ?? true,
           });
+          // حفظ القائمة البيضاء
+          setVipSubjectsList(settings.early_grading_subjects || []);
         }
 
-        // جلب لائحة الكويت
         const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('*');
         if (rulesData) setGradingRules(rulesData);
 
-        // جلب بيانات المستخدم
         const { data: { user } } = await supabase.auth.getUser();
         let role = 'admin'; 
         if (user) {
@@ -81,24 +79,29 @@ export default function ManualGradingPage() {
           if (userData) role = userData.role;
         }
 
-        // جلب الصفوف بطريقة آمنة جداً (نجلب الكل ونفلتر في الجافاسكريبت)
+        let fetchedYears = [{ name: '2025/2026', is_current: true }];
+        try {
+          const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
+          if (years && years.length > 0) fetchedYears = years;
+        } catch (yearErr) { console.warn("Using fallback year"); }
+
+        setAcademicYears(fetchedYears);
+        setSelectedYear(fetchedYears.find(y => y.is_current)?.name || fetchedYears[0].name);
+
         const { data: allSections } = await supabase.from('sections').select('id, name, classes(id, name, level)');
         let validSections = allSections || [];
 
-        // فلترة إذا كان المستخدم معلماً
         if (role === 'teacher' && user) {
           const { data: ts } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
           const teacherSecIds = ts?.map(t => t.section_id) || [];
           validSections = validSections.filter(sec => teacherSecIds.includes(sec.id));
         }
 
-        // إبقاء المرحلة الثانوية فقط
         validSections = validSections.filter(sec => {
           const cObj = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
           return Number(cObj?.level || 0) >= 10;
         });
 
-        // الترتيب
         validSections.sort((a, b) => {
           const lvlA = Number(Array.isArray(a.classes) ? a.classes[0]?.level : a.classes?.level || 0);
           const lvlB = Number(Array.isArray(b.classes) ? b.classes[0]?.level : b.classes?.level || 0);
@@ -114,9 +117,6 @@ export default function ManualGradingPage() {
     bootEngine();
   }, []);
 
-  // =========================================================================
-  // المحرك الثاني: جلب المواد بناءً على الصف المختار
-  // =========================================================================
   useEffect(() => {
     const fetchSubjectsForSection = async () => {
       if (!selectedSectionId) { setSubjectsList([]); setSelectedSubject(''); return; }
@@ -145,9 +145,6 @@ export default function ManualGradingPage() {
     if (!isInitializing) fetchSubjectsForSection();
   }, [selectedSectionId, isInitializing]);
 
-  // =========================================================================
-  // المحرك الثالث: المترجم الذكي وبناء كشف الدرجات
-  // =========================================================================
   useEffect(() => {
     const buildGradeGrid = async () => {
       if (!selectedSectionId || !selectedSubject || gradingRules.length === 0) { setRows([]); return; }
@@ -163,14 +160,12 @@ export default function ManualGradingPage() {
 
         const cleanSubjectName = selectedSubject.trim();
 
-        // 1. بناء مفتاح المرحلة 
         let targetStage = String(cLevel);
         if (cLevel === 11 || cLevel === 12) {
           if (className.includes('علمي')) targetStage = `${cLevel}_scientific`;
           else if (className.includes('ادبي') || className.includes('أدبي')) targetStage = `${cLevel}_literary`;
         }
 
-        // 2. مترجم المصطلحات المطور لحل مشكلات الهمزات والتداخل الإملائي
         let searchSub = cleanSubjectName;
         if (searchSub.includes('اجتماعيات') && cLevel === 10) searchSub = 'تاريخ الكويت';
         if (searchSub.includes('رياضيات') && targetStage.includes('literary')) searchSub = 'الرياضيات والاحصاء';
@@ -184,18 +179,21 @@ export default function ManualGradingPage() {
         if (searchSub.includes('حاسوب') || searchSub.includes('حاسب')) searchSub = 'الحاسوب';
         if (searchSub.includes('قرآن') || searchSub.includes('قران')) searchSub = 'القرآن الكريم';
 
-        // 3. المطابقة السحابية
         let rule = gradingRules.find(r => r.academic_stage === targetStage && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
         if (!rule) rule = gradingRules.find(r => String(r.academic_stage) === String(cLevel) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
         if (!rule && cLevel >= 10) rule = gradingRules.find(r => !['6','7','8','9'].includes(String(r.academic_stage)) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
 
         setSubjectLimits({ cw_max: Number(rule?.coursework_max || 40), ex_max: Number(rule?.exam_max || 60) });
 
-        if ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12)) {
+        // نتحقق إذا كانت المادة VIP، فلا نظهر تحذير الإغلاق
+        const isCurrentSubVIP = vipSubjectsList.some(vipSub => selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject));
+
+        if (!isCurrentSubVIP && ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12))) {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية.' });
+        } else if (isCurrentSubVIP) {
+          setStatus({ type: 'success', msg: '🌟 هذه مادة استثنائية (VIP): الرصد متاح لها بشكل مبكر طوال الوقت.' });
         }
 
-        // جلب الطلاب والدرجات
         const { data: studentsData } = await supabase.from('students').select('id, users!inner(full_name)').eq('section_id', selectedSectionId);
         const { data: gradesData } = await supabase.from('manual_grades').select('*').eq('grade_level', className).eq('section', sectionName).eq('subject_name', selectedSubject).eq('academic_year', selectedYear).eq('semester', selectedSemester);
 
@@ -212,11 +210,8 @@ export default function ManualGradingPage() {
       } catch (err) { setStatus({ type: 'error', msg: 'فشل بناء الكشف.' }); } finally { setIsGridLoading(false); }
     };
     if (!isInitializing && selectedSubject && selectedSectionId) buildGradeGrid();
-  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, isInitializing, gradingRules, levelGating, sectionsList]);
+  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, isInitializing, gradingRules, levelGating, sectionsList, vipSubjectsList]);
 
-  // =========================================================================
-  // وظائف التعديل والحفظ
-  // =========================================================================
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isInputDisabled) return; 
     if (value !== '') {
@@ -232,11 +227,13 @@ export default function ManualGradingPage() {
 
   const saveAndLockGrades = async () => {
     if (rows.length === 0 || isInputDisabled) return;
+    
+    // 🚀 إذا كانت المادة VIP، نعتبر كل الحقول مطلوبة لأنها معفاة من القواطع
     const activeFields = [];
-    if (gradingToggles.p1_cw) activeFields.push({ key: 'p1_coursework' });
-    if (gradingToggles.p1_ex) activeFields.push({ key: 'p1_exam' });
-    if (gradingToggles.p2_cw) activeFields.push({ key: 'p2_coursework' });
-    if (gradingToggles.p2_ex) activeFields.push({ key: 'p2_exam' });
+    if (gradingToggles.p1_cw || isVIPSubject) activeFields.push({ key: 'p1_coursework' });
+    if (gradingToggles.p1_ex || isVIPSubject) activeFields.push({ key: 'p1_exam' });
+    if (gradingToggles.p2_cw || isVIPSubject) activeFields.push({ key: 'p2_coursework' });
+    if (gradingToggles.p2_ex || isVIPSubject) activeFields.push({ key: 'p2_exam' });
 
     let hasEmpty = false;
     for (const row of rows) {
@@ -244,7 +241,7 @@ export default function ManualGradingPage() {
       if (hasEmpty) break;
     }
 
-    if (hasEmpty) { setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة.' }); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (hasEmpty) { setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة. يرجى وضع (0) للغائب.' }); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (!window.confirm('⚠️ هل أنت متأكد من اعتماد الدرجات؟ لن تتمكن من التعديل بعد ذلك.')) return;
     
     setIsGridLoading(true); setStatus(null);
@@ -274,9 +271,7 @@ export default function ManualGradingPage() {
           @page { size: A4 portrait; margin: 15mm 10mm; } 
           body { background: white !important; color: black !important; } 
           .no-print { display: none !important; } 
-          /* 🚀 الضربة القاضية لمنع ظهور شريط الأدوات وعناصر التنقل العامة العائمة */
           nav, footer, header:not(.print-header), .fixed, .sticky, [class*="fixed bottom"] { display: none !important; }
-          
           input { border: none !important; background: transparent !important; color: black !important; text-align: center; width: 100%; font-weight: bold; } 
           .official-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; } 
           .official-table th, .official-table td { border: 1px solid black !important; padding: 8px 4px; text-align: center; } 
@@ -285,7 +280,6 @@ export default function ManualGradingPage() {
         } 
       `}} />
 
-      {/* شريط الأزرار العائم */}
       <div className="no-print fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#0f1423]/95 backdrop-blur-xl p-4 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
         <button onClick={() => router.back()} className="p-4 bg-white/5 hover:bg-white/10 text-white rounded-full transition-colors"><ChevronRight /></button>
         {!isInputDisabled && rows.length > 0 && (
@@ -300,7 +294,6 @@ export default function ManualGradingPage() {
 
       <div className="max-w-6xl mx-auto p-4 sm:p-8 print:p-0 print:max-w-none pb-32">
         
-        {/* لوحة التحكم */}
         <div className="no-print glass-panel p-6 rounded-[2rem] border border-white/10 mb-8 shadow-xl bg-[#0f1423]/80">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-white/5 pb-4 mb-6 gap-4">
             <div className="flex items-center gap-3">
@@ -308,13 +301,14 @@ export default function ManualGradingPage() {
               <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي</h1><p className="text-xs text-slate-400 font-bold mt-1">آلية مطورة لضمان توافق الدرجات العظمى مع التخصص</p></div>
             </div>
             {isSheetLocked && <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black animate-pulse"><ShieldCheck className="w-5 h-5" /> كشف معتمد مسبقاً</div>}
+            {isVIPSubject && <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-xl text-sm font-black animate-pulse"><Star className="w-5 h-5" /> مادة مستثناة (مفتوحة)</div>}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-400">العام الدراسي</label>
               <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold">
-                {ACADEMIC_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                {academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}
               </select>
             </div>
             
@@ -345,10 +339,9 @@ export default function ManualGradingPage() {
           {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : status.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
         </div>
 
-        {/* الكشف للطباعة */}
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed"><p>وزارة التربية</p><p>إدارة التعليم الخاص</p><p>العام : {selectedYear}</p></div>
-          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (م - ث) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
+          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
           <div className="text-left leading-relaxed">
             <p>الصف : <span className="font-black">{Array.isArray(sectionsList.find(s => s.id === selectedSectionId)?.classes) ? sectionsList.find(s => s.id === selectedSectionId)?.classes[0]?.name : sectionsList.find(s => s.id === selectedSectionId)?.classes?.name}</span></p>
             <p>الشعبة : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.name}</span></p>
@@ -356,12 +349,12 @@ export default function ManualGradingPage() {
           </div>
         </div>
 
-        {/* جدول الدرجات */}
         {isGridLoading ? (
            <div className="flex flex-col items-center justify-center p-20 bg-[#0f1423]/40 border border-white/5 rounded-[2rem]"><Loader2 className="w-10 h-10 text-amber-500 animate-spin" /><p className="mt-4 text-slate-400 font-bold">جاري بناء كشف الدرجات...</p></div>
         ) : rows.length > 0 ? (
           <div className="overflow-x-auto bg-[#0f1423]/40 print:bg-transparent rounded-2xl print:rounded-none border border-white/10 print:border-none p-1 print:p-0 relative">
-            {isInputDisabled && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
+            {/* إذا المادة ليست VIP والصف مقفل، نضع الغطاء المظلل لمنع الإدخال */}
+            {isInputDisabled && !isVIPSubject && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
             <table className="w-full text-center official-table relative z-0">
               <thead>
                 <tr className="bg-white/5 border-b border-white/10">
@@ -386,28 +379,34 @@ export default function ManualGradingPage() {
                   const p2Sum = (Number(row.p2_coursework) || 0) + (Number(row.p2_exam) || 0);
                   const finalSum = p1Sum + p2Sum;
 
+                  // 🚀 المادة VIP تُكسر قواطعها وتُصبح متاحة للإدخال طوال الوقت
+                  const disableP1Cw = (!isVIPSubject && !gradingToggles.p1_cw) || (isInputDisabled && !isVIPSubject);
+                  const disableP1Ex = (!isVIPSubject && !gradingToggles.p1_ex) || (isInputDisabled && !isVIPSubject);
+                  const disableP2Cw = (!isVIPSubject && !gradingToggles.p2_cw) || (isInputDisabled && !isVIPSubject);
+                  const disableP2Ex = (!isVIPSubject && !gradingToggles.p2_ex) || (isInputDisabled && !isVIPSubject);
+
                   return (
                     <tr key={idx} className="border-b border-white/5 hover:bg-white/5 print:hover:bg-transparent transition-colors">
                       <td className="p-3 border-l border-white/10 font-bold">{idx + 1}</td>
                       <td className="p-3 border-l border-white/10 font-bold text-right pr-4">{row.student_name}</td>
                       
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p1_cw && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p1_coursework} disabled={isInputDisabled || !gradingToggles.p1_cw} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {disableP1Cw && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p1_coursework} disabled={disableP1Cw} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${disableP1Cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p1_ex && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p1_exam} disabled={isInputDisabled || !gradingToggles.p1_ex} onChange={(e) => handleGradeChange(idx, 'p1_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {disableP1Ex && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p1_exam} disabled={disableP1Ex} onChange={(e) => handleGradeChange(idx, 'p1_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${disableP1Ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-3 border-l border-white/10 font-black text-emerald-400 print:text-black bg-emerald-500/5 print:bg-transparent">{p1Sum > 0 ? p1Sum : ''}</td>
 
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p2_cw && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p2_coursework} disabled={isInputDisabled || !gradingToggles.p2_cw} onChange={(e) => handleGradeChange(idx, 'p2_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {disableP2Cw && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p2_coursework} disabled={disableP2Cw} onChange={(e) => handleGradeChange(idx, 'p2_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${disableP2Cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingToggles.p2_ex && !isInputDisabled && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p2_exam} disabled={isInputDisabled || !gradingToggles.p2_ex} onChange={(e) => handleGradeChange(idx, 'p2_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {disableP2Ex && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p2_exam} disabled={disableP2Ex} onChange={(e) => handleGradeChange(idx, 'p2_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${disableP2Ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-3 border-l border-white/10 font-black text-indigo-400 print:text-black bg-indigo-500/5 print:bg-transparent">{p2Sum > 0 ? p2Sum : ''}</td>
 
@@ -419,7 +418,7 @@ export default function ManualGradingPage() {
             </table>
           </div>
         ) : (
-          <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة إليك</h3></div>
+          <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة</h3></div>
         )}
       </div>
     </div>
