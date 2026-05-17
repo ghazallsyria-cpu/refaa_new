@@ -19,7 +19,7 @@ import {
   MonitorPlay, Target, Wand2, MonitorUp, ShieldCheck, FileKey, 
   ScanLine, FileSignature, UserSearch, CreditCard, ClipboardList, 
   Globe, ScrollText, Star, Shield, LogOut, Search, ChevronDown,
-  FileSpreadsheet // 🚀 تم استيراد أيقونة الرصد اليدوي
+  FileSpreadsheet, Unlock // 🚀 تم استيراد أيقونة فك الاعتماد بنجاح
 } from 'lucide-react';
 
 // ==========================================
@@ -64,8 +64,9 @@ const navigationGroups = [
       { name: 'فريق الكنترول', href: '/admin/control-team', icon: ShieldCheck },
       { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
       { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
-      { name: 'غرفة عمليات الرصد', href: '/admin/grading-control', icon: Activity }, // 🚀 جديد: غرفة تحكم المدير للرصد اليدوي
-      { name: 'محرك الرصد اليدوي', href: '/admin/manual-grading', icon: FileSpreadsheet }, // 🚀 جديد: محرك الرصد للمعلمين (ومدير الطوارئ)
+      { name: 'غرفة عمليات الرصد', href: '/admin/grading-control', icon: Activity }, 
+      { name: 'الخزنة المركزية', href: '/admin/grading-unlock', icon: Unlock }, // 🚀 تم زرع الباب السري للخزنة هنا بنجاح
+      { name: 'محرك الرصد اليدوي', href: '/admin/manual-grading', icon: FileSpreadsheet }, 
       { name: 'اللوائح الأكاديمية', href: '/admin/grading-rules', icon: Scale },
       { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature },
       { name: 'مسار إنجاز الكنترول', href: '/admin/exam-pipeline', icon: BarChart3 },
@@ -143,13 +144,11 @@ export default function GeminiNavigation() {
 
   useEffect(() => {
     async function fetchPlatformSettingsAndPerms() {
-      // 1. جلب صلاحيات الكادر (Staff) إن وجد
       if (userRole === 'staff' && user?.id) {
         const { data: staffData } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
         if (staffData) setStaffPermissions(staffData.permissions || {});
       }
 
-      // 2. جلب الصلاحيات الديناميكية للرتب من قاعدة البيانات
       try {
         const { data: settingsData } = await supabase.from('platform_settings').select('role_permissions').single();
         if (settingsData?.role_permissions) {
@@ -174,23 +173,19 @@ export default function GeminiNavigation() {
     const r = authRole;
     const n = item.name;
 
-    // 1. روابط "العامود الفقري" للنظام (مفتوحة دائماً للجميع)
     if (['الرئيسية (الحرم)', 'لوحة التحكم', 'الرسائل', 'الإعلانات'].includes(n)) return true;
 
-    // 2. المدير والإدارة دائماً يرون كل شيء (All Access)
     if (r === 'admin' || r === 'management' || isGlobalWatcher) return true;
 
-    // 3. التحقق من الصلاحيات الديناميكية المسجلة في DB من قبل المدير
     if (dynamicRolePermissions && dynamicRolePermissions[r]) {
       return dynamicRolePermissions[r].includes(n);
     }
 
-    // 4. (Strict Fallback) في حال عدم وجود إعدادات ديناميكية، نطبق المنطق الداخلي الصارم
     if (r === 'teacher') {
       const internalTeacherSafety = [
         'ملفي الشخصي (CV)', 'الفصول', 'الحضور والغياب', 'سجل الدرجات', 'الاختبارات والدرجات',
         'الواجبات', 'مراقبة الساحة', 'الجدول الدراسي', 'شاشة العرض المركزية', 'المنتديات',
-        'محرك الرصد اليدوي' // 🚀 تم إضافته ليظهر للمعلم ضمن صلاحياته
+        'محرك الرصد اليدوي' 
       ];
       return internalTeacherSafety.includes(n);
     }
