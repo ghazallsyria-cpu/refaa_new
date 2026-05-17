@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Printer, Save, FileSpreadsheet, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap } from 'lucide-react';
+import { Printer, Save, FileSpreadsheet, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function ManualGradingPage() {
@@ -48,10 +48,10 @@ export default function ManualGradingPage() {
         const { data: secs } = await supabase
           .from('sections')
           .select('id, name, classes!inner(id, name, level)')
-          .gte('classes.level', 10); // فلتر المرحلة الثانوية
+          .gte('classes.level', 10);
 
         if (secs && secs.length > 0) {
-          // 🚀 ترتيب الفصول تسلسلياً (10 ثم 11 ثم 12) ثم ترتيب أسماء الشعب
+          // ترتيب الفصول تسلسلياً (10 ثم 11 ثم 12) ثم ترتيب أسماء الشعب
           const sortedSecs = secs.sort((a, b) => {
             if (a.classes.level !== b.classes.level) return a.classes.level - b.classes.level;
             return a.name.localeCompare(b.name);
@@ -80,7 +80,7 @@ export default function ManualGradingPage() {
       try {
         setLoading(true);
         
-        // نبحث عن المواد المربوطة بهذا الفصل عن طريق جداول المعلمين والجدول الدراسي
+        // نبحث عن المواد المربوطة بهذا الفصل
         const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId);
         const { data: schData } = await supabase.from('schedules').select('subjects(id, name)').eq('section_id', selectedSectionId);
 
@@ -93,7 +93,7 @@ export default function ManualGradingPage() {
           setSubjectsList(subjectsArray);
           setSelectedSubject(subjectsArray[0].name);
         } else {
-          // في حال عدم وجود جداول مربوطة بعد، نجلب كل المواد كإجراء احتياطي
+          // جلب كل المواد كإجراء احتياطي إذا لم توجد جداول
           const { data: allSubs } = await supabase.from('subjects').select('name').order('name', { ascending: true });
           setSubjectsList(allSubs || []);
           if (allSubs && allSubs.length > 0) setSelectedSubject(allSubs[0].name);
@@ -129,11 +129,12 @@ export default function ManualGradingPage() {
         const { data: studentsData, error: studentsError } = await supabase
           .from('students')
           .select('id, users!inner(full_name)')
-          .eq('section_id', selectedSectionId);
+          .eq('section_id', selectedSectionId)
+          .in('enrollment_status', ['active']); // فقط الطلاب النشطين
           
         if (studentsError) throw studentsError;
 
-        // ب) جلب الكشف المحفوظ (مفلتر بالفصل الدراسي أيضاً)
+        // ب) جلب الكشف المحفوظ
         const { data: gradesData, error: gradesError } = await supabase
           .from('manual_grades')
           .select('*')
@@ -141,7 +142,7 @@ export default function ManualGradingPage() {
           .eq('section', sectionName)
           .eq('subject_name', selectedSubject)
           .eq('academic_year', selectedYear)
-          .eq('semester', selectedSemester); // 🚀 فلترة بالفصل الدراسي الثاني
+          .eq('semester', selectedSemester);
 
         if (gradesError) throw gradesError;
 
@@ -166,8 +167,6 @@ export default function ManualGradingPage() {
 
         if (mergedRows.some(r => r.is_locked)) {
           setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل. التعديل متاح للإدارة فقط.' });
-        } else if (mergedRows.length === 0) {
-          setStatus({ type: 'warning', msg: 'لا يوجد طلاب مسجلين في هذه الشعبة حالياً.' });
         }
 
       } catch (err: any) {
@@ -177,7 +176,6 @@ export default function ManualGradingPage() {
       }
     };
 
-    // لا نستدعي جلب الطلاب إلا بعد أن تتحدث قائمة المواد
     if (!optionsLoading && selectedSubject) {
       fetchGradesAndStudents();
     }
@@ -210,7 +208,7 @@ export default function ManualGradingPage() {
         section: sectionName,
         subject_name: selectedSubject,
         academic_year: selectedYear,
-        semester: selectedSemester, // 🚀 حفظ الفصل الدراسي
+        semester: selectedSemester,
         p1_coursework: Number(row.p1_coursework) || 0,
         p1_exam: Number(row.p1_exam) || 0,
         p2_coursework: Number(row.p2_coursework) || 0,
@@ -325,7 +323,7 @@ export default function ManualGradingPage() {
             </div>
             
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400">المادة الدراسية (حسب الشعبة)</label>
+              <label className="text-xs font-black text-slate-400">المادة الدراسية</label>
               <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
                 {subjectsList.length > 0 ? (
                   subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>)
@@ -363,8 +361,8 @@ export default function ManualGradingPage() {
           </div>
         </div>
 
-        {/* 📊 الجدول */}
-        {rows.length > 0 && (
+        {/* 📊 الجدول أو الشاشة الفارغة */}
+        {rows.length > 0 ? (
           <div className="overflow-x-auto bg-[#0f1423]/40 print:bg-transparent rounded-2xl print:rounded-none border border-white/10 print:border-none p-1 print:p-0 relative">
             
             {isSheetLocked && (
@@ -430,6 +428,16 @@ export default function ManualGradingPage() {
               </tbody>
             </table>
           </div>
+        ) : (
+          !loading && !optionsLoading && (
+            <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4 shadow-inner">
+              <div className="bg-amber-500/10 p-5 rounded-full mb-4 border border-amber-500/20">
+                <Users className="w-12 h-12 text-amber-500 opacity-80" />
+              </div>
+              <h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب في هذه الشعبة</h3>
+              <p className="text-slate-400 font-bold text-sm">يرجى التأكد من تسجيل الطلاب في هذا الفصل من لوحة شؤون الطلبة أولاً ليظهر كشف الرصد.</p>
+            </div>
+          )
         )}
 
       </div>
