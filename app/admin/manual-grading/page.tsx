@@ -1,0 +1,270 @@
+// @ts-nocheck
+'use client';
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Printer, Save, FileSpreadsheet, Loader2, AlertCircle, ChevronRight, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+export default function ManualGradingPage() {
+  const router = useRouter();
+
+  // 🚀 فلاتر الكشف
+  const [academicYear, setAcademicYear] = useState('2025/2026');
+  const [gradeLevel, setGradeLevel] = useState('الصف الثاني عشر - علمي');
+  const [section, setSection] = useState('1');
+  const [subject, setSubject] = useState('تربية إسلامية');
+
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+
+  // 🚀 أسماء طلاب تجريبية (مطابقة للكشف المرفق للسرعة)
+  const demoStudents = [
+    "ابراهيم خميس سعيد الشمري", "باسل سعود فضل مقطوف", "خالد احمد عطيه بطى",
+    "خالد فهد شبيب المطيري", "خليفه ثامر خليفه العازمي", "صالح فيصل صالح الهده",
+    "طارق زياد العبدالله", "طارق نمر حسين الشيحان", "عبد الرحمن محمد عبد العزيز الفنار",
+    "عبد العزيز مشعل قاسم صابط", "عبدالله صطام مرزوق العتيبي", "عمر احمد عيد الحربي"
+  ];
+
+  // 🚀 جلب البيانات أو تهيئتها
+  const fetchGrades = async () => {
+    setLoading(true);
+    setStatus(null);
+    try {
+      const { data, error } = await supabase
+        .from('manual_grades')
+        .select('*')
+        .eq('grade_level', gradeLevel)
+        .eq('section', section)
+        .eq('subject_name', subject)
+        .eq('academic_year', academicYear);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setRows(data);
+      } else {
+        // إذا لم يكن هناك رصد سابق، قم بتهيئة الكشف بأسماء الطلاب التجريبية
+        const initialRows = demoStudents.map(name => ({
+          student_name: name,
+          p1_coursework: '', p1_exam: '', p2_coursework: '', p2_exam: ''
+        }));
+        setRows(initialRows);
+      }
+    } catch (err: any) {
+      setStatus({ type: 'error', msg: 'فشل جلب البيانات من الخادم.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchGrades();
+  }, [gradeLevel, section, subject, academicYear]);
+
+  // 🚀 معالجة إدخال الدرجات مع حساب المجموع التلقائي
+  const handleGradeChange = (index: number, field: string, value: string) => {
+    const newRows = [...rows];
+    newRows[index][field] = value;
+    setRows(newRows);
+  };
+
+  // 🚀 حفظ الكشف في قاعدة البيانات (Upsert)
+  const saveGrades = async () => {
+    setLoading(true);
+    setStatus(null);
+    try {
+      const payload = rows.map(row => ({
+        student_name: row.student_name,
+        grade_level: gradeLevel,
+        section: section,
+        subject_name: subject,
+        academic_year: academicYear,
+        p1_coursework: Number(row.p1_coursework) || 0,
+        p1_exam: Number(row.p1_exam) || 0,
+        p2_coursework: Number(row.p2_coursework) || 0,
+        p2_exam: Number(row.p2_exam) || 0,
+      }));
+
+      const { error } = await supabase
+        .from('manual_grades')
+        .upsert(payload, { onConflict: 'student_name, subject_name, academic_year' });
+
+      if (error) throw error;
+      setStatus({ type: 'success', msg: 'تم حفظ رصد الدرجات بنجاح واعتماده! ✅' });
+    } catch (err: any) {
+      setStatus({ type: 'error', msg: 'فشل حفظ الكشف، تأكد من الاتصال.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="min-h-screen bg-[#02040a] print:bg-white text-slate-200 print:text-black font-sans" dir="rtl">
+      
+      {/* ==========================================
+          🎨 CSS الطباعة الاحترافي لكشوفات الوزارة
+          ========================================== */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          @page { size: A4 portrait; margin: 15mm 10mm; }
+          body { background: white !important; color: black !important; }
+          .no-print { display: none !important; }
+          input { border: none !important; background: transparent !important; color: black !important; text-align: center; width: 100%; font-weight: bold; }
+          
+          /* تصميم الجدول الرسمي للمطابع */
+          .official-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+          .official-table th, .official-table td { border: 1px solid black !important; padding: 8px 4px; text-align: center; }
+          .official-table th { background-color: #f3f4f6 !important; font-weight: 900; -webkit-print-color-adjust: exact; }
+          
+          .print-header { display: flex !important; justify-content: space-between; margin-bottom: 20px; font-weight: bold; }
+        }
+      `}} />
+
+      {/* 🎛️ شريط التحكم العائم (يختفي في الطباعة) */}
+      <div className="no-print fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#0f1423]/95 backdrop-blur-xl p-4 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
+        <button onClick={() => router.back()} className="p-4 bg-white/5 hover:bg-white/10 text-white rounded-full transition-colors"><ChevronRight /></button>
+        <button onClick={saveGrades} disabled={loading} className="px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-full transition-colors flex items-center gap-2">
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} حفظ الكشف
+        </button>
+        <button onClick={handlePrint} className="px-6 py-4 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-full transition-colors flex items-center gap-2">
+          <Printer className="w-5 h-5" /> طباعة الكشف المعتمد
+        </button>
+      </div>
+
+      <div className="max-w-6xl mx-auto p-4 sm:p-8 print:p-0 print:max-w-none">
+        
+        {/* ==========================================
+            🖥️ لوحة الفلاتر العلوية (تظهر في الشاشة فقط)
+            ========================================== */}
+        <div className="no-print glass-panel p-6 rounded-[2rem] border border-white/10 mb-8 shadow-xl bg-[#0f1423]/80">
+          <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+            <FileSpreadsheet className="w-8 h-8 text-amber-400" />
+            <h1 className="text-2xl font-black text-white">محرك الرصد اليدوي للدرجات</h1>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400">العام الدراسي</label>
+              <input value={academicYear} onChange={e => setAcademicYear(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 outline-none focus:border-amber-500" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400">الصف</label>
+              <input value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 outline-none focus:border-amber-500" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400">الشعبة</label>
+              <input value={section} onChange={e => setSection(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 outline-none focus:border-amber-500" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400">المجال الدراسي</label>
+              <input value={subject} onChange={e => setSubject(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 outline-none focus:border-amber-500" />
+            </div>
+          </div>
+          
+          {status && (
+            <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+              <AlertCircle className="w-5 h-5" /> {status.msg}
+            </div>
+          )}
+        </div>
+
+        {/* ==========================================
+            🖨️ الترويسة الرسمية (تظهر في الطباعة فقط)
+            ========================================== */}
+        <div className="hidden print-header print:flex">
+          <div className="text-right leading-relaxed">
+            <p>وزارة التربية</p>
+            <p>نظام سجل الطالب</p>
+            <p>إدارة التعليم الخاص</p>
+            <p className="mt-2">العام الدراسي : {academicYear}</p>
+          </div>
+          <div className="text-center leading-relaxed flex flex-col items-center">
+            {/* تم تطبيق تصحيح اسم المدرسة الرسمي بناءً على السجل */}
+            <p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p>
+            <p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p>
+          </div>
+          <div className="text-left leading-relaxed">
+            <p>الصف : <span className="font-black">{gradeLevel}</span></p>
+            <p>الشعبة : <span className="font-black">{section}</span></p>
+            <p className="mt-2">المجال الدراسي : <span className="font-black">{subject}</span></p>
+          </div>
+        </div>
+
+        {/* ==========================================
+            📊 جدول الرصد والتجميع التلقائي
+            ========================================== */}
+        <div className="overflow-x-auto bg-[#0f1423]/40 print:bg-transparent rounded-2xl print:rounded-none border border-white/10 print:border-none p-1 print:p-0">
+          <table className="w-full text-center official-table">
+            <thead>
+              <tr className="bg-white/5 border-b border-white/10">
+                <th rowSpan={2} className="w-12 p-3 border-l border-white/10 text-amber-400 print:text-black">م</th>
+                <th rowSpan={2} className="w-64 p-3 border-l border-white/10 text-amber-400 print:text-black">اسم الطالب</th>
+                <th colSpan={3} className="p-3 border-b border-l border-white/10 text-emerald-400 print:text-black">الفترة الأولى</th>
+                <th colSpan={3} className="p-3 border-b border-l border-white/10 text-indigo-400 print:text-black">الفترة الثانية</th>
+                <th rowSpan={2} className="w-24 p-3 font-black bg-white/10 print:bg-gray-200">نهاية العام<br/>مجموع</th>
+              </tr>
+              <tr className="bg-white/5 border-b border-white/10 text-sm">
+                <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال</th>
+                <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار</th>
+                <th className="p-3 border-l border-white/10 font-black text-white print:text-black bg-emerald-500/10 print:bg-transparent">مجموع</th>
+                
+                <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال</th>
+                <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار</th>
+                <th className="p-3 border-l border-white/10 font-black text-white print:text-black bg-indigo-500/10 print:bg-transparent">مجموع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => {
+                // الحسابات التلقائية
+                const p1Sum = (Number(row.p1_coursework) || 0) + (Number(row.p1_exam) || 0);
+                const p2Sum = (Number(row.p2_coursework) || 0) + (Number(row.p2_exam) || 0);
+                const finalSum = p1Sum + p2Sum;
+
+                return (
+                  <tr key={idx} className="border-b border-white/5 hover:bg-white/5 print:hover:bg-transparent transition-colors">
+                    <td className="p-3 border-l border-white/10 font-bold">{idx + 1}</td>
+                    <td className="p-3 border-l border-white/10 font-bold text-right pr-4">{row.student_name}</td>
+                    
+                    {/* الفترة الأولى */}
+                    <td className="p-1 border-l border-white/10">
+                      <input type="number" min="0" value={row.p1_coursework} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className="w-full text-center bg-transparent outline-none p-2 text-white print:text-black focus:bg-white/10 rounded-md" />
+                    </td>
+                    <td className="p-1 border-l border-white/10">
+                      <input type="number" min="0" value={row.p1_exam} onChange={(e) => handleGradeChange(idx, 'p1_exam', e.target.value)} className="w-full text-center bg-transparent outline-none p-2 text-white print:text-black focus:bg-white/10 rounded-md" />
+                    </td>
+                    <td className="p-3 border-l border-white/10 font-black text-emerald-400 print:text-black bg-emerald-500/5 print:bg-transparent">
+                      {p1Sum > 0 ? p1Sum : ''}
+                    </td>
+
+                    {/* الفترة الثانية */}
+                    <td className="p-1 border-l border-white/10">
+                      <input type="number" min="0" value={row.p2_coursework} onChange={(e) => handleGradeChange(idx, 'p2_coursework', e.target.value)} className="w-full text-center bg-transparent outline-none p-2 text-white print:text-black focus:bg-white/10 rounded-md" />
+                    </td>
+                    <td className="p-1 border-l border-white/10">
+                      <input type="number" min="0" value={row.p2_exam} onChange={(e) => handleGradeChange(idx, 'p2_exam', e.target.value)} className="w-full text-center bg-transparent outline-none p-2 text-white print:text-black focus:bg-white/10 rounded-md" />
+                    </td>
+                    <td className="p-3 border-l border-white/10 font-black text-indigo-400 print:text-black bg-indigo-500/5 print:bg-transparent">
+                      {p2Sum > 0 ? p2Sum : ''}
+                    </td>
+
+                    {/* نهاية العام */}
+                    <td className="p-3 font-black text-amber-400 print:text-black bg-white/5 print:bg-gray-100">
+                      {finalSum > 0 ? finalSum : ''}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  );
+}
