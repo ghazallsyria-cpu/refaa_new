@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ShieldAlert, Activity, CheckCircle2, Clock, Loader2, Power, AlertCircle, RefreshCw, Megaphone, Eye, EyeOff, Image as ImageIcon, X, Filter, Unlock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link'; // 🚀 تم استيراد Link
 
 export default function GradingControlPage() {
   const [loading, setLoading] = useState(true);
@@ -114,23 +115,19 @@ export default function GradingControlPage() {
     } catch (error) { setStatus({ type: 'error', msg: 'فشل التحديث.' }); } finally { setCtaLoading(false); setTimeout(() => setStatus(null), 4000); }
   };
 
-  // 🚀 دالة فك الاعتماد (Unlock)
   const handleUnlockSheet = async (className: string, sectionName: string, subjectName: string, id: string) => {
     if (!window.confirm(`⚠️ تأكيد أمني: هل تريد فك الاعتماد لكشف (الصف ${className} - شعبة ${sectionName})؟ سيتمكن المعلم من التعديل مجدداً.`)) return;
     setActionLoadingId(id); setStatus(null);
     try {
-      // فك القفل عن الكشف المحدد
       const { error } = await supabase
         .from('manual_grades')
         .update({ is_locked: false })
         .eq('grade_level', className)
-        .eq('section', sectionName)
-        // إذا كان هناك خطأ في جلب اسم المادة، نكتفي بالصف والشعبة لفك قفل كل مواد هذا الفصل المعتمدة (أو نستخدم subjectName إذا توفر)
-        // في هذه الحالة نستخدم الصف والشعبة لضمان فتح الكشف
+        .eq('section', sectionName);
         
       if (error) throw error;
       setStatus({ type: 'success', msg: 'تم فك الاعتماد بنجاح! يمكن للمعلم تعديل الدرجات الآن.' });
-      fetchRadarData(); // تحديث الرادار
+      fetchRadarData(); 
     } catch (err: any) {
       setStatus({ type: 'error', msg: 'حدث خطأ أثناء فك الاعتماد.' });
     } finally {
@@ -147,16 +144,27 @@ export default function GradingControlPage() {
         
         <div className="glass-panel p-8 rounded-[2.5rem] border border-amber-500/20 shadow-[0_0_40px_rgba(245,158,11,0.05)] bg-[#0f1423]/80 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-40 h-40 bg-amber-500/10 blur-[60px] rounded-full pointer-events-none"></div>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
             <div className="flex items-center gap-4">
               <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20"><ShieldAlert className="w-8 h-8 text-amber-500" /></div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-white">غرفة عمليات الرصد المركزية</h1>
-                <p className="text-sm font-bold text-slate-400 mt-1">تحكم بالصفوف والفترات بصلاحية "القناص"، وفك الاعتمادات.</p>
+                <p className="text-sm font-bold text-slate-400 mt-1">تحكم بالصفوف والفترات، وراقب المعلمين.</p>
               </div>
             </div>
-            <button onClick={fetchRadarData} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 flex items-center gap-2 transition-colors"><RefreshCw className="w-4 h-4" /> تحديث الرادار</button>
+            
+            {/* 🚀 أزرار التحكم العلوية (الخزنة + تحديث الرادار) */}
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <Link href="/admin/grading-unlock" className="flex-1 md:flex-none px-5 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold rounded-xl border border-rose-500/30 flex items-center justify-center gap-2 transition-colors">
+                <Unlock className="w-4 h-4" /> الخزنة المركزية
+              </Link>
+              <button onClick={fetchRadarData} className="flex-1 md:flex-none px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 flex items-center justify-center gap-2 transition-colors">
+                <RefreshCw className="w-4 h-4" /> تحديث
+              </button>
+            </div>
           </div>
+
           <AnimatePresence>
             {status && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6 overflow-hidden"><div className={`p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>{status.msg}</div></motion.div>)}
           </AnimatePresence>
@@ -165,9 +173,9 @@ export default function GradingControlPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
             
-            {/* 🚀 بوابات الصفوف */}
+            {/* بوابات الصفوف المسموحة */}
             <div className="glass-panel p-6 rounded-[2rem] border border-blue-500/30 bg-[#0f1423]/80">
-              <h2 className="text-xl font-black text-blue-400 mb-6 flex items-center gap-2"><Filter className="w-5 h-5" /> بوابات الصفوف (مسموح بالرصد)</h2>
+              <h2 className="text-xl font-black text-blue-400 mb-6 flex items-center gap-2"><Filter className="w-5 h-5" /> بوابات الصفوف (الرصد)</h2>
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">الصف العاشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g10_active', settings.g10_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g10_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g10_active ? 'left-1' : 'left-7'}`}></div></button></div>
                 <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">الصف الحادي عشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g11_active', settings.g11_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g11_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g11_active ? 'left-1' : 'left-7'}`}></div></button></div>
@@ -188,7 +196,7 @@ export default function GradingControlPage() {
 
             {/* لوحة التوجيهات */}
             <div className="glass-panel p-6 rounded-[2rem] border border-indigo-500/30 bg-[#0f1423]/80">
-              <h2 className="text-xl font-black text-indigo-400 mb-6 flex items-center gap-2"><Megaphone className="w-5 h-5" /> توجيهات لوحة المعلم</h2>
+              <h2 className="text-xl font-black text-indigo-400 mb-6 flex items-center gap-2"><Megaphone className="w-5 h-5" /> توجيهات المعلمين</h2>
               <div className="space-y-4">
                 <textarea rows={3} value={settings.cta_message} onChange={(e) => setSettings({...settings, cta_message: e.target.value})} placeholder="اكتب التوجيه هنا..." className="w-full bg-black/50 border border-indigo-500/20 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 custom-scrollbar" />
                 {settings.cta_image_url ? (
@@ -227,7 +235,6 @@ export default function GradingControlPage() {
                             {item.isSubmitted ? (
                               <>
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-black rounded-lg border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> معتمد</span>
-                                {/* 🚀 زر فك الاعتماد الجديد */}
                                 <button 
                                   onClick={() => handleUnlockSheet(item.className, item.sectionName, item.subjectName, item.id)}
                                   disabled={actionLoadingId === item.id}
