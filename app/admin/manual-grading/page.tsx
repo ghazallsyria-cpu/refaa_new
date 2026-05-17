@@ -23,11 +23,10 @@ export default function ManualGradingPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
-  // 🚀 إعدادات الإدارة للخانات والنهايات العظمى
-  const [gradingSettings, setGradingSettings] = useState({
-    p1_cw_active: false, p1_ex_active: false, p2_cw_active: false, p2_ex_active: false,
-    p1_cw_max: 40, p1_ex_max: 60, p2_cw_max: 40, p2_ex_max: 60
-  });
+  const [gradingToggles, setGradingToggles] = useState({ p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false });
+  
+  // 🚀 أوزان المادة من جدول kuwait_grading_rules
+  const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
 
@@ -36,26 +35,20 @@ export default function ManualGradingPage() {
       try {
         setOptionsLoading(true);
         
-        // 1. جلب إعدادات الإدارة (المفاتيح والنهايات العظمى)
         const { data: settings } = await supabase.from('school_settings').select('*').single();
         if (settings) {
-          setGradingSettings({
-            p1_cw_active: settings.grading_p1_cw_active,
-            p1_ex_active: settings.grading_p1_ex_active,
-            p2_cw_active: settings.grading_p2_cw_active,
-            p2_ex_active: settings.grading_p2_ex_active,
-            p1_cw_max: settings.p1_cw_max || 40,
-            p1_ex_max: settings.p1_ex_max || 60,
-            p2_cw_max: settings.p2_cw_max || 40,
-            p2_ex_max: settings.p2_ex_max || 60,
+          setGradingToggles({
+            p1_cw: settings.grading_p1_cw_active || false,
+            p1_ex: settings.grading_p1_ex_active || false,
+            p2_cw: settings.grading_p2_cw_active || false,
+            p2_ex: settings.grading_p2_ex_active || false,
           });
         }
 
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
-        const userRole = userData?.role;
-
+        
         const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
         if (years && years.length > 0) {
           setAcademicYears(years);
@@ -68,7 +61,7 @@ export default function ManualGradingPage() {
 
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
 
-        if (userRole === 'teacher') {
+        if (userData?.role === 'teacher') {
           const { data: assignedSections } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
           const assignedIds = assignedSections?.map(s => s.section_id) || [];
           if (assignedIds.length > 0) {
@@ -79,7 +72,6 @@ export default function ManualGradingPage() {
         }
 
         const { data: secs } = await sectionsQuery;
-
         if (secs && secs.length > 0) {
           const sortedSecs = secs.sort((a, b) => {
             if (a.classes.level !== b.classes.level) return a.classes.level - b.classes.level;
@@ -91,7 +83,7 @@ export default function ManualGradingPage() {
           setSectionsList([]);
         }
       } catch (error) {
-        console.error('Error initializing:', error);
+        console.error(error);
       } finally {
         setOptionsLoading(false);
       }
@@ -110,7 +102,7 @@ export default function ManualGradingPage() {
         let subjectSet = new Set<string>();
 
         if (userData?.role === 'teacher') {
-          const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId).eq('teacher_id', user.id);
+          const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId).eq('teacher_id', user?.id);
           tsData?.forEach(item => { if (item.subjects?.name) subjectSet.add(item.subjects.name); });
         } else {
           const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId);
@@ -133,11 +125,29 @@ export default function ManualGradingPage() {
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
+  // 🚀 جلب أوزان المادة من جدول (kuwait_grading_rules) + جلب الطلاب والدرجات
   useEffect(() => {
-    const fetchGradesAndStudents = async () => {
+    const fetchGradesAndLimits = async () => {
       if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) { setRows([]); return; }
       setLoading(true); setStatus(null);
       try {
+        // 1. جلب قواعد الدرجات للمادة من جدول kuwait_grading_rules
+        // نبحث باستخدام اسم المادة 
+        const { data: rulesData } = await supabase
+          .from('kuwait_grading_rules')
+          .select('coursework_max, exam_max')
+          .eq('subject_name', selectedSubject)
+          .limit(1)
+          .single();
+
+        if (rulesData) {
+          setSubjectLimits({ cw_max: rulesData.coursework_max, ex_max: rulesData.exam_max });
+        } else {
+          // قيم افتراضية في حال عدم تسجيل المادة في جدول الوزارة
+          setSubjectLimits({ cw_max: 40, ex_max: 60 });
+        }
+
+        // 2. جلب الطلاب
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
         const className = sectionObj?.classes?.name || '';
         const sectionName = sectionObj?.name || '';
@@ -156,30 +166,28 @@ export default function ManualGradingPage() {
         setRows(mergedRows);
         if (mergedRows.some(r => r.is_locked)) setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل. التعديل للإدارة فقط.' });
       } catch (err: any) {
-        setStatus({ type: 'error', msg: 'فشل جلب الكشف.' });
+        setStatus({ type: 'error', msg: 'فشل جلب البيانات.' });
       } finally {
         setLoading(false);
       }
     };
-    if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndStudents();
+    if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndLimits();
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading]);
 
-  // 🚀 درع الحماية 1: منع تجاوز النهاية العظمى
+  // 🚀 درع الحماية 1: منع تجاوز الأوزان الرسمية
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isSheetLocked) return;
 
     if (value !== '') {
       const numValue = Number(value);
       let maxMark = 100;
-      if (field === 'p1_coursework') maxMark = gradingSettings.p1_cw_max;
-      if (field === 'p1_exam') maxMark = gradingSettings.p1_ex_max;
-      if (field === 'p2_coursework') maxMark = gradingSettings.p2_cw_max;
-      if (field === 'p2_exam') maxMark = gradingSettings.p2_ex_max;
+      if (field === 'p1_coursework' || field === 'p2_coursework') maxMark = subjectLimits.cw_max;
+      if (field === 'p1_exam' || field === 'p2_exam') maxMark = subjectLimits.ex_max;
 
       if (numValue > maxMark) {
-        setStatus({ type: 'error', msg: `❌ تجاوزت النهاية العظمى! الحد الأقصى لهذه الخانة هو (${maxMark})` });
-        setTimeout(() => setStatus(null), 3000);
-        return; // منع الإدخال
+        setStatus({ type: 'error', msg: `❌ تجاوزت النهاية العظمى! الحد الأقصى المسموح لمادة (${selectedSubject}) في هذه الخانة هو: ${maxMark}` });
+        setTimeout(() => setStatus(null), 4000);
+        return; 
       }
     }
 
@@ -191,12 +199,12 @@ export default function ManualGradingPage() {
   const saveAndLockGrades = async () => {
     if (rows.length === 0) return;
 
-    // 🚀 درع الحماية 2: منع الاعتماد بوجود خانات فارغة
+    // 🚀 درع الحماية 2: إجبار المعلم على تعبئة الخانات المفتوحة
     const activeFields = [];
-    if (gradingSettings.p1_cw_active) activeFields.push({ key: 'p1_coursework', label: 'أعمال ف1' });
-    if (gradingSettings.p1_ex_active) activeFields.push({ key: 'p1_exam', label: 'اختبار ف1' });
-    if (gradingSettings.p2_cw_active) activeFields.push({ key: 'p2_coursework', label: 'أعمال ف2' });
-    if (gradingSettings.p2_ex_active) activeFields.push({ key: 'p2_exam', label: 'اختبار ف2' });
+    if (gradingToggles.p1_cw) activeFields.push({ key: 'p1_coursework', label: 'أعمال ف1' });
+    if (gradingToggles.p1_ex) activeFields.push({ key: 'p1_exam', label: 'اختبار ف1' });
+    if (gradingToggles.p2_cw) activeFields.push({ key: 'p2_coursework', label: 'أعمال ف2' });
+    if (gradingToggles.p2_ex) activeFields.push({ key: 'p2_exam', label: 'اختبار ف2' });
 
     let hasEmpty = false;
     for (const row of rows) {
@@ -210,7 +218,8 @@ export default function ManualGradingPage() {
     }
 
     if (hasEmpty) {
-      setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة. يرجى وضع (0) للطالب الغائب/المحروم.' });
+      setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة. يرجى وضع (0) في حال غياب الطالب لتتحمل مسؤولية الدرجة.' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -261,8 +270,9 @@ export default function ManualGradingPage() {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-white/5 pb-4 mb-6 gap-4">
             <div className="flex items-center gap-3">
               <div className="bg-amber-500/20 p-3 rounded-2xl border border-amber-500/30"><GraduationCap className="w-8 h-8 text-amber-400" /></div>
-              <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي (الثانوي)</h1><p className="text-xs text-slate-400 font-bold mt-1">يمنع ترك خانات فارغة - أقصى درجة تحكمها الإدارة</p></div>
+              <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي (الثانوي)</h1><p className="text-xs text-slate-400 font-bold mt-1">يمنع ترك خانات فارغة - أقصى درجة محكومة بلائحة الوزارة</p></div>
             </div>
+            {isSheetLocked && <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black animate-pulse"><ShieldCheck className="w-5 h-5" /> كشف معتمد للإدارة</div>}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -293,11 +303,12 @@ export default function ManualGradingPage() {
                   <th rowSpan={2} className="w-24 p-3 font-black bg-white/10 print:bg-gray-200">مجموع العام</th>
                 </tr>
                 <tr className="bg-white/5 border-b border-white/10 text-sm">
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال ({gradingSettings.p1_cw_max})</th>
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار ({gradingSettings.p1_ex_max})</th>
+                  {/* 🚀 عرض وزن المادة القادم من قاعدة بيانات الوزارة */}
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال ({subjectLimits.cw_max})</th>
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار ({subjectLimits.ex_max})</th>
                   <th className="p-3 border-l border-white/10 font-black text-white print:text-black bg-emerald-500/10 print:bg-transparent">مجموع</th>
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال ({gradingSettings.p2_cw_max})</th>
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار ({gradingSettings.p2_ex_max})</th>
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال ({subjectLimits.cw_max})</th>
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار ({subjectLimits.ex_max})</th>
                   <th className="p-3 border-l border-white/10 font-black text-white print:text-black bg-indigo-500/10 print:bg-transparent">مجموع</th>
                 </tr>
               </thead>
@@ -313,22 +324,22 @@ export default function ManualGradingPage() {
                       <td className="p-3 border-l border-white/10 font-bold text-right pr-4">{row.student_name}</td>
                       
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingSettings.p1_cw_active && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p1_coursework} disabled={isSheetLocked || !gradingSettings.p1_cw_active} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingSettings.p1_cw_active ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p1_cw && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p1_coursework} disabled={isSheetLocked || !gradingToggles.p1_cw} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingSettings.p1_ex_active && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p1_exam} disabled={isSheetLocked || !gradingSettings.p1_ex_active} onChange={(e) => handleGradeChange(idx, 'p1_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingSettings.p1_ex_active ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p1_ex && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p1_exam} disabled={isSheetLocked || !gradingToggles.p1_ex} onChange={(e) => handleGradeChange(idx, 'p1_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p1_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-3 border-l border-white/10 font-black text-emerald-400 print:text-black bg-emerald-500/5 print:bg-transparent">{p1Sum > 0 ? p1Sum : ''}</td>
 
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingSettings.p2_cw_active && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p2_coursework} disabled={isSheetLocked || !gradingSettings.p2_cw_active} onChange={(e) => handleGradeChange(idx, 'p2_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingSettings.p2_cw_active ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p2_cw && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p2_coursework} disabled={isSheetLocked || !gradingToggles.p2_cw} onChange={(e) => handleGradeChange(idx, 'p2_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_cw ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-1 border-l border-white/10 relative">
-                        {!gradingSettings.p2_ex_active && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
-                        <input type="number" min="0" value={row.p2_exam} disabled={isSheetLocked || !gradingSettings.p2_ex_active} onChange={(e) => handleGradeChange(idx, 'p2_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingSettings.p2_ex_active ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
+                        {!gradingToggles.p2_ex && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
+                        <input type="number" min="0" value={row.p2_exam} disabled={isSheetLocked || !gradingToggles.p2_ex} onChange={(e) => handleGradeChange(idx, 'p2_exam', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingToggles.p2_ex ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
                       </td>
                       <td className="p-3 border-l border-white/10 font-black text-indigo-400 print:text-black bg-indigo-500/5 print:bg-transparent">{p2Sum > 0 ? p2Sum : ''}</td>
 
