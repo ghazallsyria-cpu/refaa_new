@@ -1,4 +1,5 @@
 // @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -24,21 +25,19 @@ export default function ManualGradingPage() {
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
   const [gradingToggles, setGradingToggles] = useState({ p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false });
-  // 🚀 حالة بوابات الصفوف
   const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
   
+  // الأوزان الافتراضية
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
   
-  // 🚀 تحديد ما إذا كان الصف المختار مغلقاً من الإدارة
   const currentClassLevel = sectionsList.find(s => s.id === selectedSectionId)?.classes?.level;
   const isLevelLockedByAdmin = 
     (currentClassLevel === 10 && !levelGating.g10) ||
     (currentClassLevel === 11 && !levelGating.g11) ||
     (currentClassLevel === 12 && !levelGating.g12);
 
-  // المتغير الشامل للقفل (مقفل بالكشف أو مقفل بسبب إغلاق الصف من الإدارة)
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
   useEffect(() => {
@@ -52,7 +51,6 @@ export default function ManualGradingPage() {
             p1_cw: settings.grading_p1_cw_active || false, p1_ex: settings.grading_p1_ex_active || false,
             p2_cw: settings.grading_p2_cw_active || false, p2_ex: settings.grading_p2_ex_active || false,
           });
-          // قراءة بوابات الصفوف
           setLevelGating({
             g10: settings.grading_g10_active ?? true,
             g11: settings.grading_g11_active ?? true,
@@ -128,14 +126,24 @@ export default function ManualGradingPage() {
       setRows([]); setLoading(true); setStatus(null);
       
       try {
-        const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('coursework_max, exam_max').eq('subject_name', selectedSubject).limit(1).maybeSingle();
-        setSubjectLimits({ cw_max: rulesData?.coursework_max || 40, ex_max: rulesData?.exam_max || 60 });
+        // 🚀 الحل الجذري لقراءة أوزان الدرجات عبر تجاهل المسافات والأخطاء المطبعية
+        const cleanSubjectName = selectedSubject.trim();
+        const { data: rulesData } = await supabase
+          .from('kuwait_grading_rules')
+          .select('coursework_max, exam_max')
+          .ilike('subject_name', `%${cleanSubjectName}%`) // 👈 تقنية القناص للبحث المطابق جزئياً
+          .limit(1)
+          .maybeSingle();
+
+        setSubjectLimits({ 
+          cw_max: rulesData?.coursework_max || 40, 
+          ex_max: rulesData?.exam_max || 60 
+        });
 
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
         const className = sectionObj?.classes?.name || '';
         const sectionName = sectionObj?.name || '';
         
-        // 🚀 تنبيه المعلم إذا كان الصف مغلقاً
         const cLevel = sectionObj?.classes?.level;
         if ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12)) {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية. يمكنك عرض وطباعة الكشف فقط.' });
@@ -160,7 +168,7 @@ export default function ManualGradingPage() {
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading, levelGating]);
 
   const handleGradeChange = (index: number, field: string, value: string) => {
-    if (isInputDisabled) return; // حماية
+    if (isInputDisabled) return; 
     if (value !== '') {
       const numValue = Number(value);
       let maxMark = 100;
