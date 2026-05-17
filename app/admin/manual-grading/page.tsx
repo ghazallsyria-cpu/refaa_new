@@ -27,7 +27,6 @@ export default function ManualGradingPage() {
   const [gradingToggles, setGradingToggles] = useState({ p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false });
   const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
   
-  // الأوزان الافتراضية
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
@@ -126,30 +125,44 @@ export default function ManualGradingPage() {
       setRows([]); setLoading(true); setStatus(null);
       
       try {
-        // 1. تحديد الصف الحالي من القائمة المختارة
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
         const className = sectionObj?.classes?.name || '';
         const sectionName = sectionObj?.name || '';
-        
-        // تنظيف اسم الصف للبحث (إزالة كلمة "الصف" لو كانت موجودة لتطابق "العاشر" مثلاً)
-        const cleanClassName = className.replace('الصف', '').trim();
+        const cLevel = sectionObj?.classes?.level;
+
         const cleanSubjectName = selectedSubject.trim();
 
-        // 🚀 2. الاستهداف المزدوج (اسم المادة + الصف) لضمان جلب الوزن الدقيق
+        // 🚀 1. هجوم شامل: نجلب جميع أوزان المادة من كل الصفوف دون فلترة الصف لتجنب أخطاء التسميات
         const { data: rulesData } = await supabase
           .from('kuwait_grading_rules')
-          .select('coursework_max, exam_max')
-          .ilike('subject_name', `%${cleanSubjectName}%`) 
-          .ilike('academic_stage', `%${cleanClassName}%`) // 👈 الفلتر الذي أضفناه ليفرق بين 10 و 11 و 12
-          .limit(1)
-          .maybeSingle();
+          .select('academic_stage, coursework_max, exam_max')
+          .ilike('subject_name', `%${cleanSubjectName}%`);
 
-        setSubjectLimits({ 
-          cw_max: rulesData?.coursework_max || 40, 
-          ex_max: rulesData?.exam_max || 60 
-        });
+        let finalCw = 40;
+        let finalEx = 60;
 
-        const cLevel = sectionObj?.classes?.level;
+        // 🚀 2. فلترة ذكية في الواجهة: نبحث عن الكلمات المفتاحية الدقيقة للصف
+        if (rulesData && rulesData.length > 0) {
+          let matchedRule = rulesData.find(rule => {
+            const stageStr = String(rule.academic_stage || '');
+            if (cLevel === 10) return stageStr.includes('10') || stageStr.includes('عاشر');
+            if (cLevel === 11) return stageStr.includes('11') || stageStr.includes('حادي');
+            if (cLevel === 12) return stageStr.includes('12') || stageStr.includes('ثاني');
+            return false;
+          });
+
+          // إذا لم يجد تطابقاً (المادة وزنها ثابت لكل الصفوف)، يأخذ أول نتيجة
+          if (!matchedRule) {
+            matchedRule = rulesData[0];
+          }
+
+          finalCw = matchedRule.coursework_max;
+          finalEx = matchedRule.exam_max;
+        }
+
+        setSubjectLimits({ cw_max: finalCw, ex_max: finalEx });
+
+        // تنبيه البوابات للإدارة
         if ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12)) {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية. يمكنك عرض وطباعة الكشف فقط.' });
         }
