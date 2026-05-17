@@ -6,12 +6,11 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
   Loader2, Image as ImageIcon, Upload, AlertCircle, ChevronRight, 
-  Edit, Save, X, Trash2, School, CheckCircle2 
+  Edit, Save, X, Trash2, School, CheckCircle2, Library, Search 
 } from 'lucide-react';
 import Latex from 'react-latex-next';
 import 'katex/dist/katex.min.css';
 
-// 🚀 دالة استخراج الـ ID الخاص بالصورة من رابط Cloudinary
 const extractPublicId = (url: string) => {
   try {
     const parts = url.split('/');
@@ -37,6 +36,12 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ question_text: '', model_answer: '' });
 
+  // 🚀 حالات مكتبة الصور (Gallery State)
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<any[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+
   const fetchReviewData = async () => {
     try {
       const { data: docData } = await supabase.from('review_documents').select('*').eq('id', documentId).single();
@@ -55,6 +60,59 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
     if (documentId) fetchReviewData();
   }, [documentId]);
 
+  // 🚀 دالة فتح المعرض وجلب الصور السابقة
+  const openGallery = async (questionId: string) => {
+    setActiveQuestionId(questionId);
+    setIsGalleryOpen(true);
+    setGalleryLoading(true);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) throw new Error("غير مصرح لك");
+
+      const res = await fetch('/api/cloudinary/images', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setGalleryImages(data.images);
+    } catch (err: any) {
+      alert("فشل جلب الصور: " + err.message);
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  // 🚀 دالة اختيار صورة من المعرض وربطها بالسؤال
+  const selectImageFromGallery = async (secureUrl: string) => {
+    if (!activeQuestionId) return;
+    
+    setUploadingId(activeQuestionId);
+    setIsGalleryOpen(false);
+    setStatus(null);
+
+    try {
+      const { error: updateErr } = await supabase
+        .from('extracted_questions')
+        .update({ image_url: secureUrl })
+        .eq('id', activeQuestionId);
+
+      if (updateErr) throw updateErr;
+
+      setStatus({ type: 'success', msg: 'تم ربط الصورة من المكتبة بنجاح! ✨' });
+      await fetchReviewData();
+    } catch (err: any) {
+      setStatus({ type: 'error', msg: 'فشل ربط الصورة.' });
+    } finally {
+      setUploadingId(null);
+      setActiveQuestionId(null);
+    }
+  };
+
   const handleCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>, questionId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -66,26 +124,17 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string);
-
       const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
       if (!cloudName) throw new Error("تأكد من إعدادات Cloudinary");
 
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || 'خطأ في الرفع');
 
-      const { error: updateErr } = await supabase
-        .from('extracted_questions')
-        .update({ image_url: data.secure_url })
-        .eq('id', questionId);
-
+      const { error: updateErr } = await supabase.from('extracted_questions').update({ image_url: data.secure_url }).eq('id', questionId);
       if (updateErr) throw updateErr;
 
-      setStatus({ type: 'success', msg: 'تم رفع الصورة بنجاح! ☁️' });
+      setStatus({ type: 'success', msg: 'تم الرفع بنجاح! ☁️' });
       await fetchReviewData();
     } catch (err: any) {
       setStatus({ type: 'error', msg: err.message });
@@ -99,21 +148,12 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
     setEditForm({ question_text: q.question_text, model_answer: q.model_answer });
   };
 
-  const cancelEditing = () => {
-    setEditingId(null);
-  };
+  const cancelEditing = () => setEditingId(null);
 
   const saveEditing = async (questionId: string) => {
     try {
       setStatus(null);
-      const { error } = await supabase
-        .from('extracted_questions')
-        .update({ 
-          question_text: editForm.question_text, 
-          model_answer: editForm.model_answer 
-        })
-        .eq('id', questionId);
-
+      const { error } = await supabase.from('extracted_questions').update({ question_text: editForm.question_text, model_answer: editForm.model_answer }).eq('id', questionId);
       if (error) throw error;
       
       setStatus({ type: 'success', msg: 'تم حفظ التعديلات بنجاح! ✨' });
@@ -124,32 +164,18 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
     }
   };
 
-  // 🚀 دالة الحذف المزدوجة الآمنة (مع Token)
   const deleteQuestion = async (question: any) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا السؤال؟')) return;
-    
     try {
       setStatus({ type: 'success', msg: 'جاري الحذف والتنظيف السحابي...' });
-      
-      // 1. حذف الصورة من Cloudinary إن وجدت
       if (question.image_url) {
         const publicId = extractPublicId(question.image_url);
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
-        
         if (publicId && token) {
-          await fetch('/api/cloudinary/delete', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}` 
-            },
-            body: JSON.stringify({ public_id: publicId })
-          });
+          await fetch('/api/cloudinary/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ public_id: publicId }) });
         }
       }
-
-      // 2. حذف السؤال من قاعدة البيانات
       const { error } = await supabase.from('extracted_questions').delete().eq('id', question.id);
       if (error) throw error;
       
@@ -170,12 +196,60 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
 
   return (
     <div className="min-h-screen bg-transparent p-4 sm:p-6 lg:p-8 font-sans" dir="rtl">
+      
+      {/* 🖼️ نافذة مكتبة كلاودينري (Modal) */}
+      {isGalleryOpen && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0f1423] w-full max-w-5xl h-[85vh] rounded-[2rem] border border-white/10 flex flex-col shadow-2xl overflow-hidden">
+            {/* هيدر المعرض */}
+            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-black/20">
+              <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <Library className="text-amber-400 w-6 h-6" /> مكتبة كلاودينري السحابية
+              </h2>
+              <button onClick={() => setIsGalleryOpen(false)} className="p-2 bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* جسم المعرض */}
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              {galleryLoading ? (
+                <div className="h-full flex flex-col items-center justify-center space-y-4">
+                  <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+                  <p className="text-slate-400 font-bold text-sm tracking-widest animate-pulse">جاري سحب الأرشيف السحابي...</p>
+                </div>
+              ) : galleryImages.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {galleryImages.map((img) => (
+                    <div 
+                      key={img.public_id} 
+                      onClick={() => selectImageFromGallery(img.secure_url)}
+                      className="relative aspect-square rounded-2xl border border-white/10 bg-white/5 overflow-hidden cursor-pointer group hover:border-amber-500 transition-all"
+                    >
+                      <img src={img.secure_url} alt="رسم" className="w-full h-full object-cover mix-blend-luminosity group-hover:mix-blend-normal transition-all duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3">
+                        <span className="text-xs font-black text-white bg-amber-500 px-3 py-1 rounded-lg">اختيار الرسم</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-slate-500 font-bold">لا يوجد صور محفوظة في حسابك.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto space-y-6">
         
+        {/* الترويسة الأساسية للصفحة */}
         <div className="glass-panel p-6 rounded-2xl border border-white/10 flex justify-between items-center shadow-lg">
           <div className="text-right">
             <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-              <ImageIcon className="text-amber-400 w-6 h-6" /> المحرر الشامل للكبسولات الوزارية
+              <ImageIcon className="text-amber-400 w-6 h-6" /> المحرر الشامل للأسئلة والصور
             </h1>
             <p className="text-sm text-slate-400 mt-1 font-bold">
               مستند: <span className="text-amber-400">{document?.title}</span>
@@ -233,29 +307,34 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
 
                       <div className="flex flex-col gap-2 shrink-0">
                         <button onClick={() => startEditing(q)} className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20"><Edit className="w-4 h-4" /></button>
-                        {/* 🚀 تم تحديث زر الحذف ليمرر الكائن q كاملاً */}
                         <button onClick={() => deleteQuestion(q)} className="p-2.5 bg-rose-500/10 text-rose-400 rounded-lg border border-rose-500/20"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-white/5 pt-4 mt-2">
                       <span className="text-xs font-bold text-slate-500">القسم: <span className="text-amber-400">{q.category}</span></span>
-                      <div className="flex items-center gap-4">
-                        {q.image_url ? (
-                          <div className="flex items-center gap-3">
-                            <img src={q.image_url} alt="معاينة" className="w-16 h-16 object-cover bg-white rounded-lg border border-white/20" />
-                            <label className="cursor-pointer px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs font-bold text-slate-300">
-                              تغيير الصورة
-                              <input type="file" accept="image/*" onChange={(e) => handleCloudinaryUpload(e, q.id)} className="hidden" />
-                            </label>
+                      <div className="flex flex-wrap items-center gap-3">
+                        {q.image_url && (
+                          <div className="flex items-center gap-3 ml-2">
+                            <img src={q.image_url} alt="معاينة" className="w-12 h-12 object-cover bg-white rounded-lg border border-white/20 shadow-md" />
                           </div>
-                        ) : (
-                          <label className={`cursor-pointer flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${uploadingId === q.id ? 'bg-slate-800 text-slate-500' : isMissingImage ? 'bg-amber-500 text-black' : 'bg-indigo-600 text-white'}`}>
-                            {uploadingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                            {uploadingId === q.id ? 'جاري الرفع...' : isMissingImage ? 'رفع الرسم الناقص ⚠️' : 'إرفاق صورة مساعدة'}
-                            <input type="file" accept="image/*" disabled={uploadingId === q.id} onChange={(e) => handleCloudinaryUpload(e, q.id)} className="hidden" />
-                          </label>
                         )}
+                        
+                        {/* 🚀 الزر الجديد: الاختيار من المكتبة */}
+                        <button 
+                          onClick={() => openGallery(q.id)}
+                          disabled={uploadingId === q.id}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 text-indigo-300 rounded-xl text-xs font-black transition-colors"
+                        >
+                          <Library className="w-4 h-4" /> المكتبة
+                        </button>
+                        
+                        {/* زر الرفع المباشر */}
+                        <label className={`cursor-pointer flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black transition-all shadow-lg ${uploadingId === q.id ? 'bg-slate-800 text-slate-500' : isMissingImage && !q.image_url ? 'bg-amber-500 text-black' : 'bg-indigo-600 text-white'}`}>
+                          {uploadingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          {uploadingId === q.id ? 'جاري الرفع...' : 'رفع من الجهاز'}
+                          <input type="file" accept="image/*" disabled={uploadingId === q.id} onChange={(e) => handleCloudinaryUpload(e, q.id)} className="hidden" />
+                        </label>
                       </div>
                     </div>
                   </div>
