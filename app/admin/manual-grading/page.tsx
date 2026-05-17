@@ -126,12 +126,21 @@ export default function ManualGradingPage() {
       setRows([]); setLoading(true); setStatus(null);
       
       try {
-        // 🚀 الحل الجذري لقراءة أوزان الدرجات عبر تجاهل المسافات والأخطاء المطبعية
+        // 1. تحديد الصف الحالي من القائمة المختارة
+        const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
+        const className = sectionObj?.classes?.name || '';
+        const sectionName = sectionObj?.name || '';
+        
+        // تنظيف اسم الصف للبحث (إزالة كلمة "الصف" لو كانت موجودة لتطابق "العاشر" مثلاً)
+        const cleanClassName = className.replace('الصف', '').trim();
         const cleanSubjectName = selectedSubject.trim();
+
+        // 🚀 2. الاستهداف المزدوج (اسم المادة + الصف) لضمان جلب الوزن الدقيق
         const { data: rulesData } = await supabase
           .from('kuwait_grading_rules')
           .select('coursework_max, exam_max')
-          .ilike('subject_name', `%${cleanSubjectName}%`) // 👈 تقنية القناص للبحث المطابق جزئياً
+          .ilike('subject_name', `%${cleanSubjectName}%`) 
+          .ilike('academic_stage', `%${cleanClassName}%`) // 👈 الفلتر الذي أضفناه ليفرق بين 10 و 11 و 12
           .limit(1)
           .maybeSingle();
 
@@ -140,10 +149,6 @@ export default function ManualGradingPage() {
           ex_max: rulesData?.exam_max || 60 
         });
 
-        const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
-        const className = sectionObj?.classes?.name || '';
-        const sectionName = sectionObj?.name || '';
-        
         const cLevel = sectionObj?.classes?.level;
         if ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12)) {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية. يمكنك عرض وطباعة الكشف فقط.' });
