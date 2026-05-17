@@ -11,6 +11,19 @@ import {
 import Latex from 'react-latex-next';
 import 'katex/dist/katex.min.css';
 
+// 🚀 دالة استخراج الـ ID الخاص بالصورة من رابط Cloudinary
+const extractPublicId = (url: string) => {
+  try {
+    const parts = url.split('/');
+    const uploadIndex = parts.indexOf('upload');
+    if (uploadIndex === -1) return null;
+    const idWithExt = parts.slice(uploadIndex + 2).join('/');
+    return idWithExt.split('.')[0];
+  } catch (e) {
+    return null;
+  }
+};
+
 export default function ManageReviewImagesPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const resolvedParams = use(params);
@@ -55,7 +68,7 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string);
 
       const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      if (!cloudName) throw new Error("تأكب من إعدادات Cloudinary");
+      if (!cloudName) throw new Error("تأكد من إعدادات Cloudinary");
 
       const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
@@ -111,13 +124,36 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
     }
   };
 
-  const deleteQuestion = async (questionId: string) => {
+  // 🚀 دالة الحذف المزدوجة الآمنة (مع Token)
+  const deleteQuestion = async (question: any) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا السؤال؟')) return;
+    
     try {
-      setStatus(null);
-      const { error } = await supabase.from('extracted_questions').delete().eq('id', questionId);
+      setStatus({ type: 'success', msg: 'جاري الحذف والتنظيف السحابي...' });
+      
+      // 1. حذف الصورة من Cloudinary إن وجدت
+      if (question.image_url) {
+        const publicId = extractPublicId(question.image_url);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        if (publicId && token) {
+          await fetch('/api/cloudinary/delete', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({ public_id: publicId })
+          });
+        }
+      }
+
+      // 2. حذف السؤال من قاعدة البيانات
+      const { error } = await supabase.from('extracted_questions').delete().eq('id', question.id);
       if (error) throw error;
-      setStatus({ type: 'success', msg: 'تم حذف السؤال بنجاح!' });
+      
+      setStatus({ type: 'success', msg: 'تم حذف السؤال وصورته بنجاح!' });
       await fetchReviewData();
     } catch (err: any) {
       setStatus({ type: 'error', msg: 'حدث خطأ أثناء الحذف.' });
@@ -185,10 +221,10 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
                       <div className="flex items-start gap-4 flex-1 min-w-0 text-right">
                         <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 text-black font-black text-lg flex items-center justify-center shrink-0">{idx + 1}</span>
                         <div className="space-y-4 w-full text-right">
-                          <div className="text-base font-bold text-white leading-relaxed">
+                          <div className="text-base font-bold text-white leading-relaxed whitespace-pre-wrap">
                             <Latex>{q.question_text.replace(/\\\$/g, '$')}</Latex>
                           </div>
-                          <div className="bg-emerald-500/10 border-r-4 border-emerald-500 p-4 rounded-xl text-sm font-bold text-slate-300 text-right">
+                          <div className="bg-emerald-500/10 border-r-4 border-emerald-500 p-4 rounded-xl text-sm font-bold text-slate-300 text-right whitespace-pre-wrap">
                             <span className="text-emerald-400 block mb-1 text-xs uppercase font-black">الإجابة النموذجية:</span>
                             <Latex>{q.model_answer.replace(/\\\$/g, '$')}</Latex>
                           </div>
@@ -197,7 +233,8 @@ export default function ManageReviewImagesPage({ params }: { params: Promise<{ i
 
                       <div className="flex flex-col gap-2 shrink-0">
                         <button onClick={() => startEditing(q)} className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20"><Edit className="w-4 h-4" /></button>
-                        <button onClick={() => deleteQuestion(q.id)} className="p-2.5 bg-rose-500/10 text-rose-400 rounded-lg border border-rose-500/20"><Trash2 className="w-4 h-4" /></button>
+                        {/* 🚀 تم تحديث زر الحذف ليمرر الكائن q كاملاً */}
+                        <button onClick={() => deleteQuestion(q)} className="p-2.5 bg-rose-500/10 text-rose-400 rounded-lg border border-rose-500/20"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
 
