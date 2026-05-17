@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 export default function ManualGradingPage() {
   const router = useRouter();
 
-  // 🚀 وضعنا العام الافتراضي لحماية القائمة من الظهور فارغة نهائياً
+  // 🚀 وضعنا القيم الافتراضية بشكل صلب لمنع فراغ القائمة
   const [academicYears, setAcademicYears] = useState<any[]>([{ name: '2025/2026', is_current: true }]);
   const [selectedYear, setSelectedYear] = useState('2025/2026');
 
@@ -50,7 +50,6 @@ export default function ManualGradingPage() {
       try {
         setOptionsLoading(true);
         
-        // 1. جلب الإعدادات بأمان
         const { data: settings } = await supabase.from('school_settings').select('*').maybeSingle();
         if (settings) {
           setGradingToggles({
@@ -68,21 +67,24 @@ export default function ManualGradingPage() {
         if (rulesData) setGradingRules(rulesData);
 
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setOptionsLoading(false); return; }
         
-        // 🚀 الحل السحري: maybeSingle تمنع انهيار الشاشة إذا كان الحساب للمدير فقط وغير موجود بجدول المعلمين
-        const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
-        
+        let role = 'admin'; // افتراضي للحماية
+        if (user) {
+          const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
+          if (userData) role = userData.role;
+        }
+
+        // محاولة جلب الأعوام برفق (بدون التسبب بانهيار إذا فشلت)
         try {
-          const { data: years, error: yearsError } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
-          if (years && years.length > 0 && !yearsError) {
+          const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
+          if (years && years.length > 0) {
             setAcademicYears(years);
             setSelectedYear(years.find(y => y.is_current)?.name || years[0].name);
           }
-        } catch (yearErr) { console.warn("Using default academic year"); }
+        } catch (yearErr) { /* صمتنا الخطأ لأننا نملك القيمة الافتراضية */ }
 
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
-        if (userData?.role === 'teacher') {
+        if (role === 'teacher' && user) {
           const { data: assignedSections } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
           const assignedIds = assignedSections?.map(s => s.section_id) || [];
           if (assignedIds.length > 0) sectionsQuery = sectionsQuery.in('id', assignedIds);
@@ -100,7 +102,7 @@ export default function ManualGradingPage() {
           setSectionsList(sortedSecs); setSelectedSectionId(sortedSecs[0].id);
         } else setSectionsList([]);
       } catch (error) {
-        console.error(error);
+        console.error("Init Error:", error);
       } finally { setOptionsLoading(false); }
     };
     initializeEngine();
@@ -112,12 +114,15 @@ export default function ManualGradingPage() {
       try {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
-        // 🚀 استخدام maybeSingle مجدداً لحماية وظيفة جلب المواد للمدير
-        const { data: userData } = await supabase.from('users').select('role').eq('id', user?.id).maybeSingle();
+        let role = 'admin';
+        if (user) {
+          const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
+          if (userData) role = userData.role;
+        }
         
         let subjectSet = new Set<string>();
-        if (userData?.role === 'teacher') {
-          const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId).eq('teacher_id', user?.id);
+        if (role === 'teacher' && user) {
+          const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId).eq('teacher_id', user.id);
           tsData?.forEach(item => { if (item.subjects?.name) subjectSet.add(item.subjects.name); });
         } else {
           const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId);
@@ -133,7 +138,7 @@ export default function ManualGradingPage() {
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
-  // 🚀 مترجم المصطلحات الذكي لربط الواجهة بقاعدة البيانات بدقة متناهية
+  // 🚀 مترجم المصطلحات الذكي 
   useEffect(() => {
     const fetchGradesAndLimits = async () => {
       if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester || gradingRules.length === 0) { setRows([]); return; }
@@ -148,14 +153,12 @@ export default function ManualGradingPage() {
 
         const cleanSubjectName = selectedSubject.trim();
 
-        // 1. بناء مفتاح المرحلة
         let targetStage = String(cLevel);
         if (cLevel === 11 || cLevel === 12) {
           if (className.includes('علمي')) targetStage = `${cLevel}_scientific`;
           else if (className.includes('ادبي') || className.includes('أدبي')) targetStage = `${cLevel}_literary`;
         }
 
-        // 2. ترجمة ذكية للمصطلحات والمواد
         let searchSubject = cleanSubjectName;
         if (searchSubject.includes('اجتماعيات') && cLevel === 10) searchSubject = 'تاريخ الكويت';
         if (searchSubject.includes('رياضيات') && targetStage === '11_literary') searchSubject = 'الرياضيات والاحصاء';
@@ -165,7 +168,6 @@ export default function ManualGradingPage() {
         if (searchSubject.includes('انجليزي') || searchSubject.includes('إنجليزي') || searchSubject.includes('انجليزية')) searchSubject = 'اللغة الإنجليزية';
         if (searchSubject.includes('عربي') || searchSubject.includes('عربيه')) searchSubject = 'اللغة العربية';
 
-        // 3. الفرز والمطابقة السحابية
         let matchedRule = gradingRules.find(r => 
           r.academic_stage === targetStage && 
           (r.subject_name === searchSubject || searchSubject.includes(r.subject_name) || r.subject_name.includes(searchSubject))
@@ -299,25 +301,46 @@ export default function ManualGradingPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            <div className="space-y-2"><label className="text-xs font-black text-slate-400">العام الدراسي</label><select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}</select></div>
-            <div className="space-y-2"><label className="text-xs font-black text-slate-400">الفصل الدراسي</label><select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} disabled={loading} className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 text-indigo-300 outline-none focus:border-amber-500 font-black disabled:opacity-50"><option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option><option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option></select></div>
+            {/* 🚀 القوائم المدرعة لتفادي "لا توجد خيارات" على iOS */}
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400">العام الدراسي</label>
+              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
+                {academicYears.length > 0 ? academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>) : <option value="2025/2026">2025/2026</option>}
+              </select>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400">الفصل الدراسي</label>
+              <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} disabled={loading} className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 text-indigo-300 outline-none focus:border-amber-500 font-black disabled:opacity-50">
+                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+                <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+              </select>
+            </div>
+            
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-400">الصف والشعبة</label>
               <select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading || sectionsList.length===0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
                 {sectionsList.length > 0 ? sectionsList.map(sec => {
                   const cls = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
                   return <option key={sec.id} value={sec.id}>{cls?.name} - شعـبة {sec.name}</option>
-                }) : <option>غير مكلف بأي فصل</option>}
+                }) : <option value="">لا يوجد فصول مسندة</option>}
               </select>
             </div>
-            <div className="space-y-2"><label className="text-xs font-black text-slate-400">المادة الدراسية</label><select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{subjectsList.length > 0 ? subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>) : <option value="">لا يوجد مواد مربوطة بك</option>}</select></div>
+            
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400">المادة الدراسية</label>
+              <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
+                {subjectsList.length > 0 ? subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>) : <option value="">لا يوجد مواد</option>}
+              </select>
+            </div>
           </div>
+          
           {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : status.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
         </div>
 
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed"><p>وزارة التربية</p><p>إدارة التعليم الخاص</p><p>العام : {selectedYear}</p></div>
-          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية الثانوية (بنين)</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
+          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
           <div className="text-left leading-relaxed">
             <p>الصف : <span className="font-black">{Array.isArray(sectionsList.find(s => s.id === selectedSectionId)?.classes) ? sectionsList.find(s => s.id === selectedSectionId)?.classes[0]?.name : sectionsList.find(s => s.id === selectedSectionId)?.classes?.name}</span></p>
             <p>الشعبة : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.name}</span></p>
@@ -386,7 +409,7 @@ export default function ManualGradingPage() {
           </div>
         ) : (
           !loading && !optionsLoading && (
-            <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة إليك</h3></div>
+            <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">الرجاء اختيار العام الدراسي والفصل</h3></div>
           )
         )}
       </div>
