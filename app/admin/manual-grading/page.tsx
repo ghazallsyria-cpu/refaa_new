@@ -23,9 +23,10 @@ export default function ManualGradingPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
-  // 🚀 إعدادات تحكم الإدارة بالخانات
+  // 🚀 إعدادات الإدارة للخانات والنهايات العظمى
   const [gradingSettings, setGradingSettings] = useState({
-    p1_cw_active: false, p1_ex_active: false, p2_cw_active: false, p2_ex_active: false
+    p1_cw_active: false, p1_ex_active: false, p2_cw_active: false, p2_ex_active: false,
+    p1_cw_max: 40, p1_ex_max: 60, p2_cw_max: 40, p2_ex_max: 60
   });
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
@@ -35,7 +36,7 @@ export default function ManualGradingPage() {
       try {
         setOptionsLoading(true);
         
-        // 1. جلب إعدادات الإدارة للخانات
+        // 1. جلب إعدادات الإدارة (المفاتيح والنهايات العظمى)
         const { data: settings } = await supabase.from('school_settings').select('*').single();
         if (settings) {
           setGradingSettings({
@@ -43,16 +44,18 @@ export default function ManualGradingPage() {
             p1_ex_active: settings.grading_p1_ex_active,
             p2_cw_active: settings.grading_p2_cw_active,
             p2_ex_active: settings.grading_p2_ex_active,
+            p1_cw_max: settings.p1_cw_max || 40,
+            p1_ex_max: settings.p1_ex_max || 60,
+            p2_cw_max: settings.p2_cw_max || 40,
+            p2_ex_max: settings.p2_ex_max || 60,
           });
         }
 
-        // 2. التحقق من المستخدم الحالي (مدير أم معلم؟)
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
         const userRole = userData?.role;
 
-        // 3. جلب السنوات
         const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
         if (years && years.length > 0) {
           setAcademicYears(years);
@@ -63,17 +66,14 @@ export default function ManualGradingPage() {
           setSelectedYear('2025/2026');
         }
 
-        // 4. 🚀 الفلترة الذكية للصفوف حسب الصلاحية
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
 
-        // إذا كان معلماً، نجلب فقط الفصول المربوطة به في teacher_sections
         if (userRole === 'teacher') {
           const { data: assignedSections } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
           const assignedIds = assignedSections?.map(s => s.section_id) || [];
           if (assignedIds.length > 0) {
             sectionsQuery = sectionsQuery.in('id', assignedIds);
           } else {
-            // إذا لم يكن لديه جداول، نعرض له قائمة فارغة لمنعه من رصد شيء لا يخصه
             sectionsQuery = sectionsQuery.in('id', ['00000000-0000-0000-0000-000000000000']);
           }
         }
@@ -90,18 +90,15 @@ export default function ManualGradingPage() {
         } else {
           setSectionsList([]);
         }
-
       } catch (error) {
         console.error('Error initializing:', error);
       } finally {
         setOptionsLoading(false);
       }
     };
-
     initializeEngine();
   }, []);
 
-  // جلب المواد (يتم تحديثه ليتناسب مع المعلم إذا أردت لاحقاً، حالياً يجلب مواد الفصل)
   useEffect(() => {
     const fetchSubjects = async () => {
       if (!selectedSectionId) return;
@@ -113,11 +110,9 @@ export default function ManualGradingPage() {
         let subjectSet = new Set<string>();
 
         if (userData?.role === 'teacher') {
-          // جلب مواده الخاصة بهذا الفصل فقط
           const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId).eq('teacher_id', user.id);
           tsData?.forEach(item => { if (item.subjects?.name) subjectSet.add(item.subjects.name); });
         } else {
-          // الإدارة ترى كل مواد الفصل
           const { data: tsData } = await supabase.from('teacher_sections').select('subjects(id, name)').eq('section_id', selectedSectionId);
           tsData?.forEach(item => { if (item.subjects?.name) subjectSet.add(item.subjects.name); });
         }
@@ -127,8 +122,7 @@ export default function ManualGradingPage() {
           setSubjectsList(subjectsArray);
           setSelectedSubject(subjectsArray[0].name);
         } else {
-          setSubjectsList([]);
-          setSelectedSubject('');
+          setSubjectsList([]); setSelectedSubject('');
         }
       } catch (err) {
         console.error(err);
@@ -136,17 +130,12 @@ export default function ManualGradingPage() {
         setLoading(false);
       }
     };
-
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
-  // جلب الطلاب والدرجات
   useEffect(() => {
     const fetchGradesAndStudents = async () => {
-      if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) {
-        setRows([]); return;
-      }
-      
+      if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester) { setRows([]); return; }
       setLoading(true); setStatus(null);
       try {
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
@@ -167,17 +156,33 @@ export default function ManualGradingPage() {
         setRows(mergedRows);
         if (mergedRows.some(r => r.is_locked)) setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل. التعديل للإدارة فقط.' });
       } catch (err: any) {
-        setStatus({ type: 'error', msg: 'فشل جلب الكشف والطلاب.' });
+        setStatus({ type: 'error', msg: 'فشل جلب الكشف.' });
       } finally {
         setLoading(false);
       }
     };
-
     if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndStudents();
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading]);
 
+  // 🚀 درع الحماية 1: منع تجاوز النهاية العظمى
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isSheetLocked) return;
+
+    if (value !== '') {
+      const numValue = Number(value);
+      let maxMark = 100;
+      if (field === 'p1_coursework') maxMark = gradingSettings.p1_cw_max;
+      if (field === 'p1_exam') maxMark = gradingSettings.p1_ex_max;
+      if (field === 'p2_coursework') maxMark = gradingSettings.p2_cw_max;
+      if (field === 'p2_exam') maxMark = gradingSettings.p2_ex_max;
+
+      if (numValue > maxMark) {
+        setStatus({ type: 'error', msg: `❌ تجاوزت النهاية العظمى! الحد الأقصى لهذه الخانة هو (${maxMark})` });
+        setTimeout(() => setStatus(null), 3000);
+        return; // منع الإدخال
+      }
+    }
+
     const newRows = [...rows];
     newRows[index][field] = value;
     setRows(newRows);
@@ -185,7 +190,31 @@ export default function ManualGradingPage() {
 
   const saveAndLockGrades = async () => {
     if (rows.length === 0) return;
-    if (!window.confirm('⚠️ تحذير: هل أنت متأكد من اعتماد الدرجات؟ لن تتمكن من التعديل بعد هذه الخطوة وسيُرسل الكشف للإدارة.')) return;
+
+    // 🚀 درع الحماية 2: منع الاعتماد بوجود خانات فارغة
+    const activeFields = [];
+    if (gradingSettings.p1_cw_active) activeFields.push({ key: 'p1_coursework', label: 'أعمال ف1' });
+    if (gradingSettings.p1_ex_active) activeFields.push({ key: 'p1_exam', label: 'اختبار ف1' });
+    if (gradingSettings.p2_cw_active) activeFields.push({ key: 'p2_coursework', label: 'أعمال ف2' });
+    if (gradingSettings.p2_ex_active) activeFields.push({ key: 'p2_exam', label: 'اختبار ف2' });
+
+    let hasEmpty = false;
+    for (const row of rows) {
+      for (const field of activeFields) {
+        if (row[field.key] === '' || row[field.key] === null || row[field.key] === undefined) {
+          hasEmpty = true;
+          break;
+        }
+      }
+      if (hasEmpty) break;
+    }
+
+    if (hasEmpty) {
+      setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة. يرجى وضع (0) للطالب الغائب/المحروم.' });
+      return;
+    }
+
+    if (!window.confirm('⚠️ تحذير: هل أنت متأكد من اعتماد الدرجات؟ لن تتمكن من التعديل بعد هذه الخطوة.')) return;
     
     setLoading(true); setStatus(null);
     try {
@@ -212,7 +241,6 @@ export default function ManualGradingPage() {
 
   return (
     <div className="min-h-screen bg-[#02040a] print:bg-white text-slate-200 print:text-black font-sans" dir="rtl">
-      {/* ستايل الطباعة تم إخفاؤه للاختصار، احتفظ بنفس الستايل السابق */}
       <style dangerouslySetInnerHTML={{__html: ` @media print { @page { size: A4 portrait; margin: 15mm 10mm; } body { background: white !important; color: black !important; } .no-print { display: none !important; } input { border: none !important; background: transparent !important; color: black !important; text-align: center; width: 100%; font-weight: bold; } .official-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; } .official-table th, .official-table td { border: 1px solid black !important; padding: 8px 4px; text-align: center; } .official-table th { background-color: #f3f4f6 !important; font-weight: 900; -webkit-print-color-adjust: exact; } .print-header { display: flex !important; justify-content: space-between; margin-bottom: 20px; font-weight: bold; } } `}} />
 
       <div className="no-print fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#0f1423]/95 backdrop-blur-xl p-4 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
@@ -223,43 +251,29 @@ export default function ManualGradingPage() {
           </button>
         )}
         <button onClick={() => window.print()} disabled={rows.length === 0} className="px-6 py-4 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-full transition-colors flex items-center gap-2 disabled:opacity-50">
-          <Printer className="w-5 h-5" /> طباعة الكشف المعتمد
+          <Printer className="w-5 h-5" /> طباعة الكشف
         </button>
       </div>
 
       <div className="max-w-6xl mx-auto p-4 sm:p-8 print:p-0 print:max-w-none">
         
         <div className="no-print glass-panel p-6 rounded-[2rem] border border-white/10 mb-8 shadow-xl bg-[#0f1423]/80">
-          {/* نفس الفلاتر السابقة */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400">العام الدراسي</label>
-              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
-                {academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400">الفصل الدراسي</label>
-              <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} disabled={loading} className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 text-indigo-300 outline-none focus:border-amber-500 font-black disabled:opacity-50">
-                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option><option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400">الصف والشعبة</label>
-              <select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading || sectionsList.length===0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
-                {sectionsList.length > 0 ? sectionsList.map(sec => <option key={sec.id} value={sec.id}>{sec.classes?.name} - شعـبة {sec.name}</option>) : <option>غير مكلف بأي فصل</option>}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400">المادة الدراسية</label>
-              <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
-                {subjectsList.length > 0 ? subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>) : <option value="">لا يوجد مواد مربوطة بك</option>}
-              </select>
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-white/5 pb-4 mb-6 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-500/20 p-3 rounded-2xl border border-amber-500/30"><GraduationCap className="w-8 h-8 text-amber-400" /></div>
+              <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي (الثانوي)</h1><p className="text-xs text-slate-400 font-bold mt-1">يمنع ترك خانات فارغة - أقصى درجة تحكمها الإدارة</p></div>
             </div>
           </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div className="space-y-2"><label className="text-xs font-black text-slate-400">العام الدراسي</label><select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}</select></div>
+            <div className="space-y-2"><label className="text-xs font-black text-slate-400">الفصل الدراسي</label><select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} disabled={loading} className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 text-indigo-300 outline-none focus:border-amber-500 font-black disabled:opacity-50"><option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option><option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option></select></div>
+            <div className="space-y-2"><label className="text-xs font-black text-slate-400">الصف والشعبة</label><select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading || sectionsList.length===0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{sectionsList.length > 0 ? sectionsList.map(sec => <option key={sec.id} value={sec.id}>{sec.classes?.name} - شعـبة {sec.name}</option>) : <option>غير مكلف بأي فصل</option>}</select></div>
+            <div className="space-y-2"><label className="text-xs font-black text-slate-400">المادة الدراسية</label><select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{subjectsList.length > 0 ? subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>) : <option value="">لا يوجد مواد مربوطة بك</option>}</select></div>
+          </div>
+          {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
         </div>
 
-        {/* 🖨️ الترويسة الرسمية (مخفية للشاشة) */}
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed"><p>وزارة التربية</p><p>إدارة التعليم الخاص</p><p>العام : {selectedYear}</p></div>
           <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
@@ -276,14 +290,14 @@ export default function ManualGradingPage() {
                   <th rowSpan={2} className="w-64 p-3 border-l border-white/10 text-amber-400 print:text-black">اسم الطالب</th>
                   <th colSpan={3} className="p-3 border-b border-l border-white/10 text-emerald-400 print:text-black">الفترة الأولى</th>
                   <th colSpan={3} className="p-3 border-b border-l border-white/10 text-indigo-400 print:text-black">الفترة الثانية</th>
-                  <th rowSpan={2} className="w-24 p-3 font-black bg-white/10 print:bg-gray-200">نهاية العام<br/>مجموع</th>
+                  <th rowSpan={2} className="w-24 p-3 font-black bg-white/10 print:bg-gray-200">مجموع العام</th>
                 </tr>
                 <tr className="bg-white/5 border-b border-white/10 text-sm">
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال</th>
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار</th>
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال ({gradingSettings.p1_cw_max})</th>
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار ({gradingSettings.p1_ex_max})</th>
                   <th className="p-3 border-l border-white/10 font-black text-white print:text-black bg-emerald-500/10 print:bg-transparent">مجموع</th>
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال</th>
-                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار</th>
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">أعمال ({gradingSettings.p2_cw_max})</th>
+                  <th className="p-3 border-l border-white/10 text-slate-300 print:text-black">إختبار ({gradingSettings.p2_ex_max})</th>
                   <th className="p-3 border-l border-white/10 font-black text-white print:text-black bg-indigo-500/10 print:bg-transparent">مجموع</th>
                 </tr>
               </thead>
@@ -298,7 +312,6 @@ export default function ManualGradingPage() {
                       <td className="p-3 border-l border-white/10 font-bold">{idx + 1}</td>
                       <td className="p-3 border-l border-white/10 font-bold text-right pr-4">{row.student_name}</td>
                       
-                      {/* 🚀 الحقول مربوطة بإعدادات الإدارة للتجميد أو السماح */}
                       <td className="p-1 border-l border-white/10 relative">
                         {!gradingSettings.p1_cw_active && !isSheetLocked && <Lock className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 print:hidden" />}
                         <input type="number" min="0" value={row.p1_coursework} disabled={isSheetLocked || !gradingSettings.p1_cw_active} onChange={(e) => handleGradeChange(idx, 'p1_coursework', e.target.value)} className={`w-full text-center bg-transparent outline-none p-2 text-white print:text-black rounded-md ${!gradingSettings.p1_cw_active ? 'opacity-20 cursor-not-allowed print:opacity-100' : 'focus:bg-white/10'}`} />
@@ -328,11 +341,7 @@ export default function ManualGradingPage() {
           </div>
         ) : (
           !loading && !optionsLoading && (
-            <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4">
-              <Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" />
-              <h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة إليك</h3>
-              <p className="text-slate-400 font-bold text-sm text-center">يرجى مراجعة إدارة المدرسة للتأكد من التشكيلات.</p>
-            </div>
+            <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة إليك</h3></div>
           )
         )}
       </div>
