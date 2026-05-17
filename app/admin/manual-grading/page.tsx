@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { Printer, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap, Users, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+// 🚀 الجدار الإسمنتي للأعوام والفصول
 const ACADEMIC_YEARS = ['2025/2026', '2024/2025', '2023/2024'];
 const SEMESTERS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
 
@@ -31,7 +32,6 @@ export default function ManualGradingPage() {
   const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
   
-  // 🚀 حالة جديدة لحفظ القائمة البيضاء
   const [vipSubjectsList, setVipSubjectsList] = useState<string[]>([]);
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
@@ -46,10 +46,10 @@ export default function ManualGradingPage() {
 
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
-  // 🚀 نتحقق هل المادة المختارة حالياً تعتبر مادة VIP؟
-  const isVIPSubject = vipSubjectsList.some(vipSub => 
+  // التحقق الآمن من مادة VIP
+  const isVIPSubject = selectedSubject ? vipSubjectsList.some(vipSub => 
     selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject)
-  );
+  ) : false;
 
   useEffect(() => {
     const bootEngine = async () => {
@@ -65,7 +65,6 @@ export default function ManualGradingPage() {
           setLevelGating({
             g10: settings.grading_g10_active ?? true, g11: settings.grading_g11_active ?? true, g12: settings.grading_g12_active ?? true,
           });
-          // حفظ القائمة البيضاء
           setVipSubjectsList(settings.early_grading_subjects || []);
         }
 
@@ -78,15 +77,6 @@ export default function ManualGradingPage() {
           const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
           if (userData) role = userData.role;
         }
-
-        let fetchedYears = [{ name: '2025/2026', is_current: true }];
-        try {
-          const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
-          if (years && years.length > 0) fetchedYears = years;
-        } catch (yearErr) { console.warn("Using fallback year"); }
-
-        setAcademicYears(fetchedYears);
-        setSelectedYear(fetchedYears.find(y => y.is_current)?.name || fetchedYears[0].name);
 
         const { data: allSections } = await supabase.from('sections').select('id, name, classes(id, name, level)');
         let validSections = allSections || [];
@@ -185,7 +175,6 @@ export default function ManualGradingPage() {
 
         setSubjectLimits({ cw_max: Number(rule?.coursework_max || 40), ex_max: Number(rule?.exam_max || 60) });
 
-        // نتحقق إذا كانت المادة VIP، فلا نظهر تحذير الإغلاق
         const isCurrentSubVIP = vipSubjectsList.some(vipSub => selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject));
 
         if (!isCurrentSubVIP && ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12))) {
@@ -228,7 +217,6 @@ export default function ManualGradingPage() {
   const saveAndLockGrades = async () => {
     if (rows.length === 0 || isInputDisabled) return;
     
-    // 🚀 إذا كانت المادة VIP، نعتبر كل الحقول مطلوبة لأنها معفاة من القواطع
     const activeFields = [];
     if (gradingToggles.p1_cw || isVIPSubject) activeFields.push({ key: 'p1_coursework' });
     if (gradingToggles.p1_ex || isVIPSubject) activeFields.push({ key: 'p1_exam' });
@@ -308,7 +296,7 @@ export default function ManualGradingPage() {
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-400">العام الدراسي</label>
               <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold">
-                {academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}
+                {ACADEMIC_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
             
@@ -341,7 +329,7 @@ export default function ManualGradingPage() {
 
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed"><p>وزارة التربية</p><p>إدارة التعليم الخاص</p><p>العام : {selectedYear}</p></div>
-          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
+          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (م - ث) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
           <div className="text-left leading-relaxed">
             <p>الصف : <span className="font-black">{Array.isArray(sectionsList.find(s => s.id === selectedSectionId)?.classes) ? sectionsList.find(s => s.id === selectedSectionId)?.classes[0]?.name : sectionsList.find(s => s.id === selectedSectionId)?.classes?.name}</span></p>
             <p>الشعبة : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.name}</span></p>
@@ -353,7 +341,6 @@ export default function ManualGradingPage() {
            <div className="flex flex-col items-center justify-center p-20 bg-[#0f1423]/40 border border-white/5 rounded-[2rem]"><Loader2 className="w-10 h-10 text-amber-500 animate-spin" /><p className="mt-4 text-slate-400 font-bold">جاري بناء كشف الدرجات...</p></div>
         ) : rows.length > 0 ? (
           <div className="overflow-x-auto bg-[#0f1423]/40 print:bg-transparent rounded-2xl print:rounded-none border border-white/10 print:border-none p-1 print:p-0 relative">
-            {/* إذا المادة ليست VIP والصف مقفل، نضع الغطاء المظلل لمنع الإدخال */}
             {isInputDisabled && !isVIPSubject && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
             <table className="w-full text-center official-table relative z-0">
               <thead>
@@ -379,7 +366,6 @@ export default function ManualGradingPage() {
                   const p2Sum = (Number(row.p2_coursework) || 0) + (Number(row.p2_exam) || 0);
                   const finalSum = p1Sum + p2Sum;
 
-                  // 🚀 المادة VIP تُكسر قواطعها وتُصبح متاحة للإدخال طوال الوقت
                   const disableP1Cw = (!isVIPSubject && !gradingToggles.p1_cw) || (isInputDisabled && !isVIPSubject);
                   const disableP1Ex = (!isVIPSubject && !gradingToggles.p1_ex) || (isInputDisabled && !isVIPSubject);
                   const disableP2Cw = (!isVIPSubject && !gradingToggles.p2_cw) || (isInputDisabled && !isVIPSubject);
