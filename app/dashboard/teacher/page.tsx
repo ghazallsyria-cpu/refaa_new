@@ -24,7 +24,7 @@ import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
 import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
-import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
+
 // 🚀 استيراد مكون التحفيز للرصد اليدوي
 import TeacherGradingCTA from '@/components/TeacherGradingCTA';
 
