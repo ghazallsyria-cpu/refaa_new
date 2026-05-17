@@ -10,15 +10,14 @@ import { useRouter } from 'next/navigation';
 export default function ManualGradingPage() {
   const router = useRouter();
 
-  // 🚀 وضعنا العام الدراسي بشكل صلب (Hardcoded) لكسر عناد الآيفون نهائياً!
-  const [selectedYear, setSelectedYear] = useState('2025/2026');
-  const [selectedSemester, setSelectedSemester] = useState('الفصل الدراسي الثاني');
-  
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
   const [gradingRules, setGradingRules] = useState<any[]>([]); 
   const [optionsLoading, setOptionsLoading] = useState(true);
 
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('الفصل الدراسي الثاني');
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
 
@@ -72,6 +71,16 @@ export default function ManualGradingPage() {
           const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
           if (userData) role = userData.role;
         }
+
+        // 🚀 المعالجة السليمة للأعوام (جلبها من قاعدة بياناتك لضمان تطابق الأسماء 100%)
+        let fetchedYears = [{ name: '2025/2026', is_current: true }];
+        try {
+          const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
+          if (years && years.length > 0) fetchedYears = years;
+        } catch (yearErr) { console.warn("Using fallback year"); }
+
+        setAcademicYears(fetchedYears);
+        setSelectedYear(fetchedYears.find(y => y.is_current)?.name || fetchedYears[0].name);
 
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
         if (role === 'teacher' && user) {
@@ -128,6 +137,7 @@ export default function ManualGradingPage() {
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
+  // 🚀 مترجم المصطلحات الذكي والأوزان الدقيقة
   useEffect(() => {
     const fetchGradesAndLimits = async () => {
       if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester || gradingRules.length === 0) { setRows([]); return; }
@@ -290,12 +300,11 @@ export default function ManualGradingPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            {/* 🚀 العام الدراسي مبرمج بشكل صلب لكسر حماية الآيفون */}
+            {/* 🚀 القائمة المعالجة لتطابق قيم الداتا بيز ومنع انهيار الآيفون */}
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-400">العام الدراسي</label>
               <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
-                <option value="2025/2026">2025/2026</option>
-                <option value="2024/2025">2024/2025</option>
+                {academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}
               </select>
             </div>
             
@@ -324,6 +333,7 @@ export default function ManualGradingPage() {
               </select>
             </div>
           </div>
+          
           {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : status.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
         </div>
 
@@ -398,7 +408,7 @@ export default function ManualGradingPage() {
           </div>
         ) : (
           !loading && !optionsLoading && (
-            <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">الرجاء اختيار العام الدراسي والفصل</h3></div>
+            <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة</h3></div>
           )
         )}
       </div>
