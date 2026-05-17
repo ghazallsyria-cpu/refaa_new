@@ -7,31 +7,36 @@ import { supabase } from '@/lib/supabase';
 import { Printer, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// 🚀 الجدار الإسمنتي للأعوام (لكسر حماية الآيفون نهائياً)
+// 🚀 [الجدار الإسمنتي] - ثوابت لا تتغير لمنع خطأ الآيفون بشكل قاطع
 const ACADEMIC_YEARS = ['2025/2026', '2024/2025', '2023/2024'];
 const SEMESTERS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
 
 export default function ManualGradingPage() {
   const router = useRouter();
 
+  // 1. حالات القوائم المنسدلة (قيم افتراضية صلبة)
   const [selectedYear, setSelectedYear] = useState(ACADEMIC_YEARS[0]);
   const [selectedSemester, setSelectedSemester] = useState(SEMESTERS[1]);
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
 
+  // 2. قوائم البيانات
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
   const [gradingRules, setGradingRules] = useState<any[]>([]); 
   
+  // 3. حالات التحميل والبيانات
   const [isInitializing, setIsInitializing] = useState(true);
   const [isGridLoading, setIsGridLoading] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning', msg: string } | null>(null);
 
+  // 4. إعدادات المدرسة والأوزان
   const [gradingToggles, setGradingToggles] = useState({ p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false });
   const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
 
+  // 5. فحص حالة القفل
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
   const currentSectionObj = sectionsList.find(s => s.id === selectedSectionId);
   const currentClassObj = Array.isArray(currentSectionObj?.classes) ? currentSectionObj?.classes[0] : currentSectionObj?.classes;
@@ -44,11 +49,15 @@ export default function ManualGradingPage() {
 
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
+  // =========================================================================
+  // المحرك الأول: جلب الإعدادات والصفوف (بدون الاعتماد على الفلترة المعقدة)
+  // =========================================================================
   useEffect(() => {
     const bootEngine = async () => {
       try {
         setIsInitializing(true);
         
+        // جلب الإعدادات
         const { data: settings } = await supabase.from('school_settings').select('*').maybeSingle();
         if (settings) {
           setGradingToggles({
@@ -60,9 +69,11 @@ export default function ManualGradingPage() {
           });
         }
 
+        // جلب لائحة الكويت
         const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('*');
         if (rulesData) setGradingRules(rulesData);
 
+        // جلب بيانات المستخدم
         const { data: { user } } = await supabase.auth.getUser();
         let role = 'admin'; 
         if (user) {
@@ -70,20 +81,24 @@ export default function ManualGradingPage() {
           if (userData) role = userData.role;
         }
 
+        // جلب الصفوف بطريقة آمنة جداً (نجلب الكل ونفلتر في الجافاسكريبت)
         const { data: allSections } = await supabase.from('sections').select('id, name, classes(id, name, level)');
         let validSections = allSections || [];
 
+        // فلترة إذا كان المستخدم معلماً
         if (role === 'teacher' && user) {
           const { data: ts } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
           const teacherSecIds = ts?.map(t => t.section_id) || [];
           validSections = validSections.filter(sec => teacherSecIds.includes(sec.id));
         }
 
+        // إبقاء المرحلة الثانوية فقط
         validSections = validSections.filter(sec => {
           const cObj = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
           return Number(cObj?.level || 0) >= 10;
         });
 
+        // الترتيب
         validSections.sort((a, b) => {
           const lvlA = Number(Array.isArray(a.classes) ? a.classes[0]?.level : a.classes?.level || 0);
           const lvlB = Number(Array.isArray(b.classes) ? b.classes[0]?.level : b.classes?.level || 0);
@@ -99,6 +114,9 @@ export default function ManualGradingPage() {
     bootEngine();
   }, []);
 
+  // =========================================================================
+  // المحرك الثاني: جلب المواد بناءً على الصف المختار
+  // =========================================================================
   useEffect(() => {
     const fetchSubjectsForSection = async () => {
       if (!selectedSectionId) { setSubjectsList([]); setSelectedSubject(''); return; }
@@ -127,6 +145,9 @@ export default function ManualGradingPage() {
     if (!isInitializing) fetchSubjectsForSection();
   }, [selectedSectionId, isInitializing]);
 
+  // =========================================================================
+  // المحرك الثالث: المترجم الذكي وبناء كشف الدرجات
+  // =========================================================================
   useEffect(() => {
     const buildGradeGrid = async () => {
       if (!selectedSectionId || !selectedSubject || gradingRules.length === 0) { setRows([]); return; }
@@ -142,13 +163,14 @@ export default function ManualGradingPage() {
 
         const cleanSubjectName = selectedSubject.trim();
 
+        // 1. بناء مفتاح المرحلة 
         let targetStage = String(cLevel);
         if (cLevel === 11 || cLevel === 12) {
           if (className.includes('علمي')) targetStage = `${cLevel}_scientific`;
           else if (className.includes('ادبي') || className.includes('أدبي')) targetStage = `${cLevel}_literary`;
         }
 
-        // 🚀 المترجم الذكي المُحدّث (يعالج كل الأخطاء الإملائية والهمزات)
+        // 2. مترجم المصطلحات المطور لحل مشكلات الهمزات والتداخل الإملائي
         let searchSub = cleanSubjectName;
         if (searchSub.includes('اجتماعيات') && cLevel === 10) searchSub = 'تاريخ الكويت';
         if (searchSub.includes('رياضيات') && targetStage.includes('literary')) searchSub = 'الرياضيات والاحصاء';
@@ -156,12 +178,13 @@ export default function ManualGradingPage() {
         if (searchSub.includes('اسلامية') || searchSub.includes('إسلامية')) searchSub = 'التربية الإسلامية';
         if (searchSub.includes('انجليزي') || searchSub.includes('إنجليزي') || searchSub.includes('انجليزية')) searchSub = 'اللغة الإنجليزية';
         if (searchSub.includes('عربي') || searchSub.includes('عربيه')) searchSub = 'اللغة العربية';
-        if (searchSub.includes('حياء')) searchSub = 'الأحياء'; // يحل مشكلة (احياء، أحياء، الاحياء)
+        if (searchSub.includes('حياء')) searchSub = 'الأحياء'; 
         if (searchSub.includes('فيزياء')) searchSub = 'الفيزياء';
         if (searchSub.includes('كيمياء')) searchSub = 'الكيمياء';
         if (searchSub.includes('حاسوب') || searchSub.includes('حاسب')) searchSub = 'الحاسوب';
         if (searchSub.includes('قرآن') || searchSub.includes('قران')) searchSub = 'القرآن الكريم';
 
+        // 3. المطابقة السحابية
         let rule = gradingRules.find(r => r.academic_stage === targetStage && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
         if (!rule) rule = gradingRules.find(r => String(r.academic_stage) === String(cLevel) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
         if (!rule && cLevel >= 10) rule = gradingRules.find(r => !['6','7','8','9'].includes(String(r.academic_stage)) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
@@ -172,6 +195,7 @@ export default function ManualGradingPage() {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية.' });
         }
 
+        // جلب الطلاب والدرجات
         const { data: studentsData } = await supabase.from('students').select('id, users!inner(full_name)').eq('section_id', selectedSectionId);
         const { data: gradesData } = await supabase.from('manual_grades').select('*').eq('grade_level', className).eq('section', sectionName).eq('subject_name', selectedSubject).eq('academic_year', selectedYear).eq('semester', selectedSemester);
 
@@ -190,6 +214,9 @@ export default function ManualGradingPage() {
     if (!isInitializing && selectedSubject && selectedSectionId) buildGradeGrid();
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, isInitializing, gradingRules, levelGating, sectionsList]);
 
+  // =========================================================================
+  // وظائف التعديل والحفظ
+  // =========================================================================
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isInputDisabled) return; 
     if (value !== '') {
@@ -242,7 +269,21 @@ export default function ManualGradingPage() {
 
   return (
     <div className="min-h-screen bg-[#02040a] print:bg-white text-slate-200 print:text-black font-sans" dir="rtl">
-      <style dangerouslySetInnerHTML={{__html: ` @media print { @page { size: A4 portrait; margin: 15mm 10mm; } body { background: white !important; color: black !important; } .no-print { display: none !important; } input { border: none !important; background: transparent !important; color: black !important; text-align: center; width: 100%; font-weight: bold; } .official-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; } .official-table th, .official-table td { border: 1px solid black !important; padding: 8px 4px; text-align: center; } .official-table th { background-color: #f3f4f6 !important; font-weight: 900; -webkit-print-color-adjust: exact; } .print-header { display: flex !important; justify-content: space-between; margin-bottom: 20px; font-weight: bold; } } `}} />
+      <style dangerouslySetInnerHTML={{__html: ` 
+        @media print { 
+          @page { size: A4 portrait; margin: 15mm 10mm; } 
+          body { background: white !important; color: black !important; } 
+          .no-print { display: none !important; } 
+          /* 🚀 الضربة القاضية لمنع ظهور شريط الأدوات وعناصر التنقل العامة العائمة */
+          nav, footer, header:not(.print-header), .fixed, .sticky, [class*="fixed bottom"] { display: none !important; }
+          
+          input { border: none !important; background: transparent !important; color: black !important; text-align: center; width: 100%; font-weight: bold; } 
+          .official-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; } 
+          .official-table th, .official-table td { border: 1px solid black !important; padding: 8px 4px; text-align: center; } 
+          .official-table th { background-color: #f3f4f6 !important; font-weight: 900; -webkit-print-color-adjust: exact; } 
+          .print-header { display: flex !important; justify-content: space-between; margin-bottom: 20px; font-weight: bold; } 
+        } 
+      `}} />
 
       {/* شريط الأزرار العائم */}
       <div className="no-print fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#0f1423]/95 backdrop-blur-xl p-4 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
@@ -270,7 +311,6 @@ export default function ManualGradingPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            {/* 🚀 القوائم الصلبة والمستقلة عن قواعد البيانات */}
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-400">العام الدراسي</label>
               <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold">
@@ -308,7 +348,7 @@ export default function ManualGradingPage() {
         {/* الكشف للطباعة */}
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed"><p>وزارة التربية</p><p>إدارة التعليم الخاص</p><p>العام : {selectedYear}</p></div>
-          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
+          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (م - ث) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
           <div className="text-left leading-relaxed">
             <p>الصف : <span className="font-black">{Array.isArray(sectionsList.find(s => s.id === selectedSectionId)?.classes) ? sectionsList.find(s => s.id === selectedSectionId)?.classes[0]?.name : sectionsList.find(s => s.id === selectedSectionId)?.classes?.name}</span></p>
             <p>الشعبة : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.name}</span></p>
@@ -379,7 +419,7 @@ export default function ManualGradingPage() {
             </table>
           </div>
         ) : (
-          <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة</h3></div>
+          <div className="no-print flex flex-col items-center justify-center p-16 bg-[#0f1423]/40 border border-white/5 rounded-[2rem] mt-4"><Users className="w-12 h-12 text-amber-500 opacity-80 mb-4" /><h3 className="text-2xl font-black text-white mb-2">لا يوجد طلاب / أو فصول مسندة إليك</h3></div>
         )}
       </div>
     </div>
