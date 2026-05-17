@@ -8,53 +8,44 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Database, FileCheck, AlertCircle, Sparkles, 
   Layers, BookOpen, Heading, CheckCircle2, ClipboardCopy, 
-  Copy, Check, Bot, Trash2, Edit3, Calendar, FolderOpen, Loader2
+  Copy, Check, Bot, Trash2, Edit3, Calendar, FolderOpen, Loader2, PlusCircle, ArrowDownToLine
 } from 'lucide-react';
 
-// ==========================================
-// 🧠 البرومبت الذهبي (V4 - النسخة المدرّعة ضد الكسل)
-// ==========================================
 const GOLDEN_PROMPT = `أنت مهندس بيانات أكاديمي صارم لمناهج وزارة التربية الكويتية.
-مهمتك: قراءة ملفات الاختبارات المرفقة واستخراج **100% من الأسئلة بلا استثناء**. ممنوع التلخيص، ممنوع أخذ عينات، ممنوع تخطي أي سؤال مهما كان صغيراً أو مكرراً.
+مهمتك: قراءة ملفات الاختبارات المرفقة واستخراج **100% من الأسئلة بلا استثناء**. ممنوع التلخيص، ممنوع أخذ عينات، ممنوع تخطي أي سؤال.
 
-يجب تفكيك الاختبارات وتصفيتها من التكرار الحرفي في مصفوفة JSON نقية باتباع هذه القواعد الصارمة:
+يجب تفكيك الاختبارات وتصفيتها من التكرار الحرفي في مصفوفة JSON نقية باتباع هذه القواعد:
 
-1. فئات الأسئلة المدعومة (اختر الأنسب):
-("scientific_term", "give_reason", "what_happens", "problems", "graphics", "compare", "mcq")
-
+1. فئات الأسئلة (اختر الأنسب): ("scientific_term", "give_reason", "what_happens", "problems", "graphics", "compare", "mcq")
 2. أسئلة الاختيار من متعدد (mcq):
-- في حقل question_text: اكتب نص السؤال كاملاً، تحته سطر جديد، ثم رص الخيارات (أ، ب، ج، د) كل خيار في سطر باستخدام \\n.
-- في حقل model_answer: اكتب الخيار الصحيح فقط.
+- في question_text: اكتب نص السؤال كاملاً، تحته سطر جديد، ثم رص الخيارات (أ، ب، ج، د) كل خيار في سطر باستخدام \\n.
+- في model_answer: اكتب الخيار الصحيح فقط.
+3. الصور والرسومات: إذا كان السؤال يحتاج لرؤية صورة أو رسم، يجب أن يبدأ نص السؤال حصراً بعبارة: "[يوجد رسم ⚠️]\\n"
+4. الجداول: أي جدول مقارنة يحول لكود LaTeX باستخدام \\begin{array}{|c|c|}
+5. الرياضيات: استخدم $$ للمسائل المستقلة، و $ للمتغيرات والأرقام بالنص. استخدم \\n للنزول لسطر جديد.
+6. التكرار: ادمج السؤال المتكرر واجمع سنوات ظهوره في [years_appeared].
 
-3. الصور والرسومات (تنبيه حرج):
-- إذا كان السؤال يحتاج لرؤية صورة، رسم بياني، أو دائرة كهربائية، **يجب** أن يبدأ نص السؤال حصراً بهذه العبارة: "[يوجد رسم ⚠️]\\n"
-
-4. الجداول الأكاديمية:
-- أي جدول مقارنة يجب تحويله لكود LaTeX باستخدام بيئة \\begin{array}{|c|c|}
-
-5. الرياضيات والأسطر:
-- استخدم $$ للمسائل والقوانين الكبيرة المستقلة، و $ للمتغيرات والأرقام داخل النص.
-- استخدم \\n للنزول لسطر جديد في الأسئلة المقالية أو خطوات الحل.
-
-6. دمج التكرار:
-- إذا تكرر نفس السؤال الحرفي، ادمجه في عنصر واحد واجمع سنوات ظهوره في مصفوفة [years_appeared].
-
-الهيكل الإلزامي (مثال لسؤال اختياري به صورة):
+الهيكل الإلزامي:
 [
   {
     "category": "mcq",
     "topic_name": "الكهرباء",
-    "question_text": "[يوجد رسم ⚠️]\\nفي الدائرة المجاورة، قراءة الفولتميتر تساوي:\\nأ) 5V\\nب) 10V\\nج) 15V\\nد) 20V",
+    "question_text": "[يوجد رسم ⚠️]\\nفي الدائرة المجاورة، قراءة الفولتميتر:\\nأ) 5V\\nب) 10V",
     "model_answer": "ب) 10V",
-    "years_appeared": [2021, 2023],
+    "years_appeared": [2021],
     "importance_weight": "HIGH",
     "image_url": ""
   }
 ]
-تذكر: استخرج كل الأسئلة بلا استثناء، أخرج JSON فقط دون أي نصوص أو مقدمات.`;
+استخرج كل الأسئلة بلا استثناء، أخرج JSON فقط.`;
 
 export default function ReviewArchitectPage() {
   const router = useRouter();
+  
+  // 🚀 وضعيات الحقن: 'new' لإنشاء مذكرة, 'append' للإضافة لمذكرة موجودة
+  const [injectionMode, setInjectionMode] = useState<'new' | 'append'>('new');
+  const [selectedDocId, setSelectedDocId] = useState('');
+
   const [title, setTitle] = useState('');
   const [stage, setStage] = useState('11_scientific');
   const [subject, setSubject] = useState('الفيزياء');
@@ -62,6 +53,7 @@ export default function ReviewArchitectPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  
   const [existingDocs, setExistingDocs] = useState<any[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
 
@@ -75,6 +67,10 @@ export default function ReviewArchitectPage() {
 
       if (error) throw error;
       setExistingDocs(data || []);
+      // تعيين أول مستند كقيمة افتراضية في وضع الإضافة
+      if (data && data.length > 0) {
+        setSelectedDocId(data[0].id);
+      }
     } catch (err) {
       console.error('Error fetching docs:', err);
     } finally {
@@ -127,16 +123,26 @@ export default function ReviewArchitectPage() {
         throw new Error("بنية البيانات غير سليمة.");
       }
 
-      const { data: doc, error: docErr } = await supabase
-        .from('review_documents')
-        .insert({ title: title.trim(), academic_stage: stage, subject_name: subject.trim() })
-        .select()
-        .single();
+      let targetDocumentId = '';
 
-      if (docErr) throw docErr;
+      // 🚀 المنطق الذكي: إنشاء جديد أو الدمج مع القديم
+      if (injectionMode === 'new') {
+        const { data: doc, error: docErr } = await supabase
+          .from('review_documents')
+          .insert({ title: title.trim(), academic_stage: stage, subject_name: subject.trim() })
+          .select()
+          .single();
 
+        if (docErr) throw docErr;
+        targetDocumentId = doc.id;
+      } else {
+        if (!selectedDocId) throw new Error("يرجى اختيار المذكرة التي تريد الإضافة إليها.");
+        targetDocumentId = selectedDocId;
+      }
+
+      // إعداد حزمة الأسئلة وربطها بـ ID المذكرة المستهدفة
       const questionsToInsert = parsedData.map((q: any) => ({
-        document_id: doc.id,
+        document_id: targetDocumentId,
         category: q.category,
         topic_name: q.topic_name || 'عام',
         question_text: q.question_text,
@@ -151,17 +157,20 @@ export default function ReviewArchitectPage() {
         .insert(questionsToInsert);
 
       if (questionsErr) {
-        await supabase.from('review_documents').delete().eq('id', doc.id);
+        // إذا فشل الحقن وكنا في وضع إنشاء جديد، نحذف الرأس لمنع وجود مذكرة فارغة
+        if (injectionMode === 'new') {
+          await supabase.from('review_documents').delete().eq('id', targetDocumentId);
+        }
         throw questionsErr;
       }
 
       setStatus({ 
         type: 'success', 
-        msg: `تم بنجاح بناء الكبسولة وحقن الأسئلة! جاري تحويلك لصفحة مدير الصور...` 
+        msg: `تم بنجاح حقن ${questionsToInsert.length} سؤالاً إضافياً! جاري تحويلك للمحرر...` 
       });
       
       setTimeout(() => {
-        router.push(`/admin/review-architect/${doc.id}`);
+        router.push(`/admin/review-architect/${targetDocumentId}`);
       }, 2000);
 
     } catch (err: any) {
@@ -178,31 +187,72 @@ export default function ReviewArchitectPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative glass-panel p-6 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl">
           <div className="mb-8 border-b border-white/5 pb-6">
             <h2 className="text-xl sm:text-3xl font-black text-white flex items-center gap-2">
-              <Database className="w-6 h-6 text-amber-400" /> مهندس المراجعات والكبسولات الوزارية
+              <Database className="w-6 h-6 text-amber-400" /> مهندس المراجعات (نظام الحقن الذكي)
             </h2>
           </div>
 
-          <form onSubmit={handleIngestData} className="space-y-6 relative z-10">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400"><Heading className="inline w-3.5 h-3.5" /> عنوان المستند الجديد</label>
-                <input type="text" required value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: بنك أسئلة الفاينل الشامل" className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-500" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400"><Layers className="inline w-3.5 h-3.5" /> المرحلة الدراسية</label>
-                <select value={stage} onChange={e => setStage(e.target.value)} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none">
-                  <option value="9">الصف التاسع</option><option value="10">الصف العاشر</option><option value="11_scientific">11 علمي</option><option value="12_scientific">12 علمي</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400"><BookOpen className="inline w-3.5 h-3.5" /> المادة الدراسية</label>
-                <input type="text" required value={subject} onChange={e => setSubject(e.target.value)} placeholder="مثال: الفيزياء" className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none" />
-              </div>
+          <form onSubmit={handleIngestData} className="space-y-8 relative z-10">
+            
+            {/* 🚀 أزرار تبديل وضعيات الحقن */}
+            <div className="flex p-1.5 bg-[#02040a]/60 rounded-2xl border border-white/10 w-full md:w-max mx-auto shadow-inner">
+              <button 
+                type="button" 
+                onClick={() => setInjectionMode('new')}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm transition-all ${injectionMode === 'new' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+              >
+                <PlusCircle className="w-4 h-4" /> تأسيس مذكرة جديدة
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setInjectionMode('append')}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm transition-all ${injectionMode === 'append' ? 'bg-amber-500 text-black shadow-lg' : 'text-slate-400 hover:text-white'}`}
+              >
+                <ArrowDownToLine className="w-4 h-4" /> الحقن التراكمي (إضافة لسابقة)
+              </button>
             </div>
+
+            {/* 🚀 حقول الإدخال حسب الوضعية المختارة */}
+            <AnimatePresence mode="wait">
+              {injectionMode === 'new' ? (
+                <motion.div key="new-doc" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-400"><Heading className="inline w-3.5 h-3.5" /> عنوان المستند الجديد</label>
+                    <input type="text" required value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: بنك أسئلة الفاينل الشامل" className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-indigo-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-400"><Layers className="inline w-3.5 h-3.5" /> المرحلة الدراسية</label>
+                    <select value={stage} onChange={e => setStage(e.target.value)} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-indigo-500">
+                      <option value="9">الصف التاسع</option><option value="10">الصف العاشر</option><option value="11_scientific">11 علمي</option><option value="12_scientific">12 علمي</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-400"><BookOpen className="inline w-3.5 h-3.5" /> المادة الدراسية</label>
+                    <input type="text" required value={subject} onChange={e => setSubject(e.target.value)} placeholder="مثال: الفيزياء" className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-indigo-500" />
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div key="append-doc" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-amber-500/5 border border-amber-500/20 p-5 rounded-2xl">
+                  <label className="text-sm font-black text-amber-400 block mb-3"><FolderOpen className="inline w-4 h-4 mr-1" /> اختر المذكرة التي تريد الإضافة إليها:</label>
+                  {existingDocs.length > 0 ? (
+                    <select 
+                      value={selectedDocId} 
+                      onChange={e => setSelectedDocId(e.target.value)} 
+                      className="w-full bg-[#02040a]/80 border border-amber-500/30 rounded-xl p-4 text-white font-bold outline-none focus:border-amber-500"
+                    >
+                      {existingDocs.map(doc => (
+                        <option key={doc.id} value={doc.id}>{doc.title} ({doc.academic_stage} - {doc.subject_name})</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-rose-400 text-sm font-bold">لا يوجد مذكرات سابقة، يرجى إنشاء مذكرة جديدة أولاً.</p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-5 relative">
               <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-black text-indigo-300"><Bot className="inline w-4 h-4" /> البرومبت الذهبي للذكاء الاصطناعي (V4)</label>
+                <label className="text-xs font-black text-indigo-300"><Bot className="inline w-4 h-4" /> البرومبت الذهبي المدرع (V4)</label>
                 <button type="button" onClick={handleCopyPrompt} className="px-3 py-1.5 bg-indigo-500/20 text-indigo-200 text-[10px] font-bold rounded-lg border border-indigo-500/30 hover:bg-indigo-500/40 transition-colors">
                   {isCopied ? 'تم النسخ بنجاح! ✨' : 'نسخ البرومبت'}
                 </button>
@@ -211,7 +261,7 @@ export default function ReviewArchitectPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-black text-emerald-400"><ClipboardCopy className="inline w-3.5 h-3.5" /> الصق ناتج وعاء الـ JSON هنا</label>
+              <label className="text-xs font-black text-emerald-400"><ClipboardCopy className="inline w-3.5 h-3.5" /> الصق دفعة الـ JSON هنا</label>
               <textarea required rows={6} value={jsonInput} onChange={e => setJsonInput(e.target.value)} placeholder="[ { 'category': 'problems', ... } ]" className="w-full bg-[#02040a]/80 border border-white/10 rounded-2xl p-4 text-emerald-400 font-mono text-xs outline-none focus:border-emerald-500 custom-scrollbar" dir="ltr" />
             </div>
 
@@ -223,13 +273,18 @@ export default function ReviewArchitectPage() {
               )}
             </AnimatePresence>
 
-            <button type="submit" disabled={loading || !jsonInput || !title} className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black py-4 rounded-xl hover:opacity-90 flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : <CheckCircle2 className="w-5 h-5" />}
-              <span>{loading ? 'جاري معالجة وتدقيق حزم البيانات...' : 'حقن البيانات وإصدار المراجعة الجديدة'}</span>
+            <button 
+              type="submit" 
+              disabled={loading || !jsonInput || (injectionMode === 'new' && !title) || (injectionMode === 'append' && !selectedDocId)} 
+              className={`w-full text-black font-black py-4 rounded-xl hover:opacity-90 flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50 shadow-xl ${injectionMode === 'new' ? 'bg-gradient-to-r from-indigo-500 to-blue-500 text-white' : 'bg-gradient-to-r from-amber-500 to-amber-600'}`}
+            >
+              {loading ? <Loader2 className={`w-5 h-5 animate-spin ${injectionMode === 'new' ? 'text-white' : 'text-black'}`} /> : <CheckCircle2 className="w-5 h-5" />}
+              <span>{loading ? 'جاري الحقن والتدقيق...' : injectionMode === 'new' ? 'تأسيس وحقن المذكرة الجديدة' : 'حقن ودمج الأسئلة بالمذكرة المحددة'}</span>
             </button>
           </form>
         </motion.div>
 
+        {/* 🗄️ قسم المذكرات الحالية (الأرشيف) */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-2">
             <FolderOpen className="text-indigo-400 w-5 h-5" />
