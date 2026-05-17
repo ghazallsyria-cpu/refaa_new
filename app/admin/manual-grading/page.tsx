@@ -31,7 +31,11 @@ export default function ManualGradingPage() {
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
   
-  const currentClassLevel = sectionsList.find(s => s.id === selectedSectionId)?.classes?.level;
+  // 🚀 استخراج ذكي وآمن لمعلومات الصف
+  const currentSectionObj = sectionsList.find(s => s.id === selectedSectionId);
+  const currentClassObj = Array.isArray(currentSectionObj?.classes) ? currentSectionObj?.classes[0] : currentSectionObj?.classes;
+  const currentClassLevel = Number(currentClassObj?.level || 0);
+
   const isLevelLockedByAdmin = 
     (currentClassLevel === 10 && !levelGating.g10) ||
     (currentClassLevel === 11 && !levelGating.g11) ||
@@ -81,7 +85,9 @@ export default function ManualGradingPage() {
         const { data: secs } = await sectionsQuery;
         if (secs && secs.length > 0) {
           const sortedSecs = secs.sort((a, b) => {
-            if (a.classes.level !== b.classes.level) return a.classes.level - b.classes.level;
+            const levelA = Number(Array.isArray(a.classes) ? a.classes[0]?.level : a.classes?.level || 0);
+            const levelB = Number(Array.isArray(b.classes) ? b.classes[0]?.level : b.classes?.level || 0);
+            if (levelA !== levelB) return levelA - levelB;
             return a.name.localeCompare(b.name);
           });
           setSectionsList(sortedSecs); setSelectedSectionId(sortedSecs[0].id);
@@ -126,13 +132,14 @@ export default function ManualGradingPage() {
       
       try {
         const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
-        const className = sectionObj?.classes?.name || '';
+        const classObj = Array.isArray(sectionObj?.classes) ? sectionObj?.classes[0] : sectionObj?.classes;
+        const className = classObj?.name || '';
         const sectionName = sectionObj?.name || '';
-        const cLevel = sectionObj?.classes?.level;
+        const cLevel = Number(classObj?.level || 0);
 
-        const cleanSubjectName = selectedSubject.trim();
+        // 🚀 معالجة احترافية لاسم المادة لتجاهل أي مسافات زائدة في قاعدة البيانات
+        const cleanSubjectName = selectedSubject.trim().replace(/\s+/g, '%');
 
-        // 🚀 1. هجوم شامل: نجلب جميع أوزان المادة من كل الصفوف دون فلترة الصف لتجنب أخطاء التسميات
         const { data: rulesData } = await supabase
           .from('kuwait_grading_rules')
           .select('academic_stage, coursework_max, exam_max')
@@ -141,28 +148,28 @@ export default function ManualGradingPage() {
         let finalCw = 40;
         let finalEx = 60;
 
-        // 🚀 2. فلترة ذكية في الواجهة: نبحث عن الكلمات المفتاحية الدقيقة للصف
+        // 🚀 الذكاء الاصطناعي في الفلترة لضمان تطابق أوزان المدير والمعلم 100%
         if (rulesData && rulesData.length > 0) {
           let matchedRule = rulesData.find(rule => {
             const stageStr = String(rule.academic_stage || '');
             if (cLevel === 10) return stageStr.includes('10') || stageStr.includes('عاشر');
             if (cLevel === 11) return stageStr.includes('11') || stageStr.includes('حادي');
             if (cLevel === 12) return stageStr.includes('12') || stageStr.includes('ثاني');
-            return false;
+            return stageStr.includes(className);
           });
 
-          // إذا لم يجد تطابقاً (المادة وزنها ثابت لكل الصفوف)، يأخذ أول نتيجة
           if (!matchedRule) {
-            matchedRule = rulesData[0];
+            matchedRule = rulesData.find(r => String(r.academic_stage || '').includes(className));
           }
 
-          finalCw = matchedRule.coursework_max;
-          finalEx = matchedRule.exam_max;
+          if (!matchedRule) matchedRule = rulesData[0];
+
+          finalCw = Number(matchedRule.coursework_max || 40);
+          finalEx = Number(matchedRule.exam_max || 60);
         }
 
         setSubjectLimits({ cw_max: finalCw, ex_max: finalEx });
 
-        // تنبيه البوابات للإدارة
         if ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12)) {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية. يمكنك عرض وطباعة الكشف فقط.' });
         }
@@ -183,7 +190,7 @@ export default function ManualGradingPage() {
       } catch (err: any) { setStatus({ type: 'error', msg: 'فشل جلب البيانات.' }); } finally { setLoading(false); }
     };
     if (!optionsLoading && selectedSubject && selectedYear) fetchGradesAndLimits();
-  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading, levelGating]);
+  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, optionsLoading, levelGating, sectionsList]);
 
   const handleGradeChange = (index: number, field: string, value: string) => {
     if (isInputDisabled) return; 
@@ -227,8 +234,10 @@ export default function ManualGradingPage() {
     setLoading(true); setStatus(null);
     try {
       const sectionObj = sectionsList.find(s => s.id === selectedSectionId);
+      const classObj = Array.isArray(sectionObj?.classes) ? sectionObj?.classes[0] : sectionObj?.classes;
+      
       const payload = rows.map(row => ({
-        student_name: row.student_name, grade_level: sectionObj?.classes?.name || '', section: sectionObj?.name || '',
+        student_name: row.student_name, grade_level: classObj?.name || '', section: sectionObj?.name || '',
         subject_name: selectedSubject, academic_year: selectedYear, semester: selectedSemester,
         p1_coursework: Number(row.p1_coursework) || 0, p1_exam: Number(row.p1_exam) || 0, p2_coursework: Number(row.p2_coursework) || 0, p2_exam: Number(row.p2_exam) || 0, is_locked: true 
       }));
@@ -272,7 +281,15 @@ export default function ManualGradingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div className="space-y-2"><label className="text-xs font-black text-slate-400">العام الدراسي</label><select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>)}</select></div>
             <div className="space-y-2"><label className="text-xs font-black text-slate-400">الفصل الدراسي</label><select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} disabled={loading} className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 text-indigo-300 outline-none focus:border-amber-500 font-black disabled:opacity-50"><option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option><option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option></select></div>
-            <div className="space-y-2"><label className="text-xs font-black text-slate-400">الصف والشعبة</label><select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading || sectionsList.length===0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{sectionsList.length > 0 ? sectionsList.map(sec => <option key={sec.id} value={sec.id}>{sec.classes?.name} - شعـبة {sec.name}</option>) : <option>غير مكلف بأي فصل</option>}</select></div>
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400">الصف والشعبة</label>
+              <select value={selectedSectionId} onChange={e => setSelectedSectionId(e.target.value)} disabled={loading || sectionsList.length===0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
+                {sectionsList.length > 0 ? sectionsList.map(sec => {
+                  const cls = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
+                  return <option key={sec.id} value={sec.id}>{cls?.name} - شعـبة {sec.name}</option>
+                }) : <option>غير مكلف بأي فصل</option>}
+              </select>
+            </div>
             <div className="space-y-2"><label className="text-xs font-black text-slate-400">المادة الدراسية</label><select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={loading || subjectsList.length === 0} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">{subjectsList.length > 0 ? subjectsList.map(sub => <option key={sub.name} value={sub.name}>{sub.name}</option>) : <option value="">لا يوجد مواد مربوطة بك</option>}</select></div>
           </div>
           {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : status.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
@@ -281,7 +298,11 @@ export default function ManualGradingPage() {
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed"><p>وزارة التربية</p><p>إدارة التعليم الخاص</p><p>العام : {selectedYear}</p></div>
           <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
-          <div className="text-left leading-relaxed"><p>الصف : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.classes?.name}</span></p><p>الشعبة : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.name}</span></p><p className="mt-2">المجال : <span className="font-black">{selectedSubject}</span></p></div>
+          <div className="text-left leading-relaxed">
+            <p>الصف : <span className="font-black">{Array.isArray(sectionsList.find(s => s.id === selectedSectionId)?.classes) ? sectionsList.find(s => s.id === selectedSectionId)?.classes[0]?.name : sectionsList.find(s => s.id === selectedSectionId)?.classes?.name}</span></p>
+            <p>الشعبة : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.name}</span></p>
+            <p className="mt-2">المجال : <span className="font-black">{selectedSubject}</span></p>
+          </div>
         </div>
 
         {rows.length > 0 ? (
