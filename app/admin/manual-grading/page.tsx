@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabase';
 import { Printer, Loader2, AlertCircle, ChevronRight, ShieldCheck, Lock, GraduationCap, Users, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// 🚀 الجدار الإسمنتي للأعوام والفصول
 const ACADEMIC_YEARS = ['2025/2026', '2024/2025', '2023/2024'];
 const SEMESTERS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
 
@@ -46,7 +45,6 @@ export default function ManualGradingPage() {
 
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
-  // التحقق الآمن من مادة VIP
   const isVIPSubject = selectedSubject ? vipSubjectsList.some(vipSub => 
     selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject)
   ) : false;
@@ -107,6 +105,9 @@ export default function ManualGradingPage() {
     bootEngine();
   }, []);
 
+  // ===================================================================================
+  // 🚀 المحرك الثاني المُعدل: حقن (القرآن الكريم) كـ "مادة افتراضية"
+  // ===================================================================================
   useEffect(() => {
     const fetchSubjectsForSection = async () => {
       if (!selectedSectionId) { setSubjectsList([]); setSelectedSubject(''); return; }
@@ -121,7 +122,16 @@ export default function ManualGradingPage() {
         
         const { data: tsData } = await query;
         let subSet = new Set<string>();
-        tsData?.forEach(item => { if (item.subjects?.name) subSet.add(item.subjects.name); });
+        
+        tsData?.forEach(item => { 
+          if (item.subjects?.name) {
+            subSet.add(item.subjects.name);
+            // 🌟 الخدعة الذكية: إذا وجدنا التربية الإسلامية، نحقن مادة القرآن الكريم فوراً!
+            if (item.subjects.name.includes('إسلامية') || item.subjects.name.includes('اسلامية')) {
+              subSet.add('القرآن الكريم');
+            }
+          } 
+        });
 
         if (subSet.size > 0) {
           const arr = Array.from(subSet).map(name => ({ name })).sort((a, b) => a.name.localeCompare(b.name));
@@ -173,6 +183,7 @@ export default function ManualGradingPage() {
         if (!rule) rule = gradingRules.find(r => String(r.academic_stage) === String(cLevel) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
         if (!rule && cLevel >= 10) rule = gradingRules.find(r => !['6','7','8','9'].includes(String(r.academic_stage)) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
 
+        // الأوزان ستصبح تلقائياً 6 لـ Coursework و 14 لـ Exam لأنها ستتطابق مع قاعدة بياناتك
         setSubjectLimits({ cw_max: Number(rule?.coursework_max || 40), ex_max: Number(rule?.exam_max || 60) });
 
         const isCurrentSubVIP = vipSubjectsList.some(vipSub => selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject));
@@ -329,7 +340,7 @@ export default function ManualGradingPage() {
 
         <div className="hidden print-header print:flex">
           <div className="text-right leading-relaxed"><p>وزارة التربية</p><p>إدارة التعليم الخاص</p><p>العام : {selectedYear}</p></div>
-          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (م - ث) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
+          <div className="text-center leading-relaxed"><p className="font-black text-xl mb-1">مدرسة الرفعة النموذجية (ثانوي - متوسط) للبنين</p><p className="text-lg border border-black px-6 py-1 rounded-md bg-gray-100">كشف الرصد اليدوي للمجال الدراسي</p></div>
           <div className="text-left leading-relaxed">
             <p>الصف : <span className="font-black">{Array.isArray(sectionsList.find(s => s.id === selectedSectionId)?.classes) ? sectionsList.find(s => s.id === selectedSectionId)?.classes[0]?.name : sectionsList.find(s => s.id === selectedSectionId)?.classes?.name}</span></p>
             <p>الشعبة : <span className="font-black">{sectionsList.find(s => s.id === selectedSectionId)?.name}</span></p>
