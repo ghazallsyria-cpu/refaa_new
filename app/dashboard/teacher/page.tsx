@@ -24,6 +24,9 @@ import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
 import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
+import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
+// 🚀 استيراد مكون التحفيز للرصد اليدوي
+import TeacherGradingCTA from '@/components/TeacherGradingCTA';
 
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
@@ -644,6 +647,11 @@ export default function TeacherDashboard() {
           </div>
         </motion.div>
 
+        {/* 🚀 زرع مكون إعلان الرصد هنا مباشرة بعد الترحيب 🚀 */}
+        <motion.div variants={itemVariants}>
+          <TeacherGradingCTA />
+        </motion.div>
+        
         {/* نظام الإنذار المبكر للمعلم (زجاجي) */}
         <AnimatePresence>
           {atRiskStudents.length > 0 && (
