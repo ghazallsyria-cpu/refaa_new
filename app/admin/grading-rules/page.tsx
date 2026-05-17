@@ -10,16 +10,15 @@ import { useRouter } from 'next/navigation';
 export default function ManualGradingPage() {
   const router = useRouter();
 
-  // 🚀 وضعنا القيم الافتراضية بشكل صلب لمنع فراغ القائمة
-  const [academicYears, setAcademicYears] = useState<any[]>([{ name: '2025/2026', is_current: true }]);
+  // 🚀 وضعنا العام الدراسي بشكل صلب (Hardcoded) لكسر عناد الآيفون نهائياً!
   const [selectedYear, setSelectedYear] = useState('2025/2026');
-
+  const [selectedSemester, setSelectedSemester] = useState('الفصل الدراسي الثاني');
+  
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [subjectsList, setSubjectsList] = useState<any[]>([]);
   const [gradingRules, setGradingRules] = useState<any[]>([]); 
   const [optionsLoading, setOptionsLoading] = useState(true);
 
-  const [selectedSemester, setSelectedSemester] = useState('الفصل الدراسي الثاني');
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
 
@@ -68,20 +67,11 @@ export default function ManualGradingPage() {
 
         const { data: { user } } = await supabase.auth.getUser();
         
-        let role = 'admin'; // افتراضي للحماية
+        let role = 'admin'; 
         if (user) {
           const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
           if (userData) role = userData.role;
         }
-
-        // محاولة جلب الأعوام برفق (بدون التسبب بانهيار إذا فشلت)
-        try {
-          const { data: years } = await supabase.from('academic_years').select('name, is_current').order('start_date', { ascending: false });
-          if (years && years.length > 0) {
-            setAcademicYears(years);
-            setSelectedYear(years.find(y => y.is_current)?.name || years[0].name);
-          }
-        } catch (yearErr) { /* صمتنا الخطأ لأننا نملك القيمة الافتراضية */ }
 
         let sectionsQuery = supabase.from('sections').select('id, name, classes!inner(id, name, level)').gte('classes.level', 10);
         if (role === 'teacher' && user) {
@@ -138,7 +128,6 @@ export default function ManualGradingPage() {
     if (!optionsLoading) fetchSubjects();
   }, [selectedSectionId, optionsLoading]);
 
-  // 🚀 مترجم المصطلحات الذكي 
   useEffect(() => {
     const fetchGradesAndLimits = async () => {
       if (!selectedSectionId || !selectedSubject || !selectedYear || !selectedSemester || gradingRules.length === 0) { setRows([]); return; }
@@ -301,11 +290,12 @@ export default function ManualGradingPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            {/* 🚀 القوائم المدرعة لتفادي "لا توجد خيارات" على iOS */}
+            {/* 🚀 العام الدراسي مبرمج بشكل صلب لكسر حماية الآيفون */}
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-400">العام الدراسي</label>
               <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} disabled={loading} className="w-full bg-[#02040a]/60 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-amber-500 font-bold disabled:opacity-50">
-                {academicYears.length > 0 ? academicYears.map(y => <option key={y.name} value={y.name}>{y.name}</option>) : <option value="2025/2026">2025/2026</option>}
+                <option value="2025/2026">2025/2026</option>
+                <option value="2024/2025">2024/2025</option>
               </select>
             </div>
             
@@ -334,7 +324,6 @@ export default function ManualGradingPage() {
               </select>
             </div>
           </div>
-          
           {status && <div className={`mt-6 p-4 rounded-xl font-bold text-sm flex items-center gap-2 ${status.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : status.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}><AlertCircle className="w-5 h-5 shrink-0" /> {status.msg}</div>}
         </div>
 
