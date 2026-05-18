@@ -31,7 +31,6 @@ export default function ExamCommitteesControl() {
   const { authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
-  // محرك التوزيع السحّاب (يعمل بالمنطق الصحيح في الخلفية)
   const { isLoading: isEngineLoading, progressMsg, buildCommittees, nukeEverything, generateSeatingAndDistribute } = useExamSeating();
   
   const [committees, setCommittees] = useState<any[]>([]);
@@ -81,7 +80,7 @@ export default function ExamCommitteesControl() {
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  // 🚀 الدالة المعالجة لحل مشكلة عدم ظهور (علمي/أدبي)
+  // 🚀 الدالة المعالجة والمدرعة (تمنع انهيار المتصفح)
   const getFullClassName = (studentData: any) => {
     if (!studentData) return 'غير محدد';
     const secObj = Array.isArray(studentData?.sections) ? studentData?.sections[0] : studentData?.sections;
@@ -92,7 +91,6 @@ export default function ExamCommitteesControl() {
     const sName = String(secObj?.name || '');
     const track = String(studentData?.next_year_track || '').toLowerCase();
 
-    // التحقق من المسار عبر حقل next_year_track أو اسم الشعبة
     const isLiterary = track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي');
     const isScientific = track === 'scientific' || cName.includes('علمي') || cName.includes('علمى') || sName.includes('علمي') || sName.includes('علمى');
 
@@ -107,15 +105,15 @@ export default function ExamCommitteesControl() {
       classNameDisplay = cName || 'صف غير محدد';
     }
 
-    // تنظيف اسم الشعبة ليكون رقماً صافياً (مثل: 1 أو 2)
     const cleanSecName = sName.replace(/أدبي|ادبي|علمي|علمى/g, '').replace(/-/g, '').trim();
 
-    return `${classNameDisplay} ${cleanSecName ? '- ' + cleanSecName : ''}`.trim();
+    return `${classNameDisplay} ${cleanSecName ? '- شعبة ' + cleanSecName : ''}`.trim();
   };
 
   const getSafeName = (userObj: any) => {
     if (!userObj) return 'غير معروف';
-    return Array.isArray(userObj) ? userObj[0]?.full_name : userObj?.full_name || 'غير معروف';
+    const name = Array.isArray(userObj) ? userObj[0]?.full_name : userObj?.full_name;
+    return name || 'غير معروف';
   };
 
   const fetchData = async () => {
@@ -123,19 +121,16 @@ export default function ExamCommitteesControl() {
     try {
       const { data: comms } = await supabase.from('exam_committees').select('*').eq('academic_year', currentYear).eq('semester', currentSemester);
       const sortedComms = (comms || []).sort((a, b) => {
-        const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
-        const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+        const numA = parseInt(String(a.name || '').replace(/\D/g, '')) || 0; // 🛡️ درع برمجي
+        const numB = parseInt(String(b.name || '').replace(/\D/g, '')) || 0;
         return numA - numB;
       });
 
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
-      
-      // 🚀 تم دمج حقل next_year_track هنا لحساب الإحصائيات بدقة
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(next_year_track, sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name), exam_timetables(exam_date, subjects(name))');
-      
       const { data: stds } = await supabase.from('students').select('id, next_year_track, sections(name, classes(level, name))');
 
       const stats: any = {};
@@ -143,7 +138,7 @@ export default function ExamCommitteesControl() {
 
       if (allocs) { 
         allocs.forEach((a: any) => { 
-          stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; 
+          if(a.committee_id) stats[a.committee_id] = (stats[a.committee_id] || 0) + 1; 
           const cName = getFullClassName(a.students);
           if(cName && !cName.includes('غير محدد')) uniqueClassesSet.add(cName);
         }); 
@@ -174,7 +169,7 @@ export default function ExamCommitteesControl() {
       setAvailableClasses(Array.from(uniqueClassesSet).sort());
 
       const datesSet = new Set<string>();
-      (exams || []).forEach(e => datesSet.add(e.exam_date));
+      (exams || []).forEach(e => { if (e.exam_date) datesSet.add(e.exam_date) }); // 🛡️ درع برمجي
       setUniqueExamDates(Array.from(datesSet).sort());
 
       const formattedTeachers = (tchrs || []).map((t: any) => {
@@ -336,7 +331,6 @@ export default function ExamCommitteesControl() {
   const openViewModal = async (committee: any) => {
     setIsLoading(true); setSelectedCommittee(committee);
     try {
-      // 🚀 تم دمج حقل next_year_track هنا لإصلاح العرض في النافذة
       const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
       const commInvigs = invigilators.filter(i => i.committee_id === committee.id);
       setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); setIsViewModalOpen(true);
@@ -368,7 +362,6 @@ export default function ExamCommitteesControl() {
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
-      // 🚀 تم دمج حقل next_year_track هنا لإصلاح العرض في الطباعة والـ PDF
       let query = supabase.from('student_seat_allocations')
         .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( name )`)
         .eq('academic_year', currentYear).eq('semester', currentSemester);
@@ -405,7 +398,22 @@ export default function ExamCommitteesControl() {
           if (pages.length === 0) return;
           const pdf = new jsPDF('p', 'mm', 'a4');
           for (let i = 0; i < pages.length; i++) {
-            const canvas = await html2canvas(pages[i] as HTMLElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff' });
+            const pageElement = pages[i] as HTMLElement;
+            const originalCssText = pageElement.style.cssText;
+            pageElement.style.position = 'fixed';
+            pageElement.style.top = '0';
+            pageElement.style.left = '0';
+            pageElement.style.zIndex = '9999';
+
+            const canvas = await html2canvas(pageElement, { 
+              scale: isMobile ? 1.5 : 2, 
+              useCORS: true, 
+              backgroundColor: '#ffffff',
+              scrollY: 0,
+              scrollX: 0
+            });
+
+            pageElement.style.cssText = originalCssText;
             const imgData = canvas.toDataURL('image/jpeg', 1.0); 
             const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = pdf.internal.pageSize.getHeight(); 
             if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
@@ -432,10 +440,16 @@ export default function ExamCommitteesControl() {
     return Array.from(dates);
   };
 
+  const filteredStaff = availableStaff.filter(s => {
+    const isAlreadyInTeam = teamMembers.some(tm => tm.user_id === s.id);
+    const matchesSearch = String(s.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()); // 🛡️ درع برمجي
+    return !isAlreadyInTeam && matchesSearch;
+  });
+
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
        const term = String(teacherSearchTerm || '').toLowerCase();
-       return String(t?.full_name || '').toLowerCase().includes(term) || String(t?.subjectsStr || '').toLowerCase().includes(term);
+       return String(t?.full_name || '').toLowerCase().includes(term) || String(t?.subjectsStr || '').toLowerCase().includes(term); // 🛡️ درع برمجي
     })
     .sort((a, b) => {
        const aCount = getTeacherAssignments(String(a?.id)).length;
@@ -444,7 +458,7 @@ export default function ExamCommitteesControl() {
        return String(a?.full_name || '').localeCompare(String(b?.full_name || ''), 'ar');
     });
 
-  const alreadyAssignedCommittees = currentHeads.flatMap(h => h.committees_range.split('، '));
+  const alreadyAssignedCommittees = currentHeads.flatMap(h => String(h.committees_range || '').split('، ')); // 🛡️ درع برمجي
   const selectedTeacherData = teachers.find(t => t.id === headAssignment.head_teacher_id);
   const selectedTeacherHeadDates = selectedTeacherData ? getTeacherHeadAssignments(selectedTeacherData.id) : [];
 
@@ -589,7 +603,7 @@ export default function ExamCommitteesControl() {
                     const stdCount = allocationsStats[committee.id] || 0;
                     const commInvigs = invigilators.filter(i => i.committee_id === committee.id);
                     const isFull = stdCount >= committee.capacity;
-                    const isOverflow = committee.name.includes('الفائض');
+                    const isOverflow = String(committee.name || '').includes('الفائض'); // 🛡️ درع برمجي
 
                     return (
                       <div key={committee.id} className={`bg-white rounded-2xl p-5 border ${isOverflow ? 'border-rose-300 bg-rose-50/50' : 'border-slate-200'} shadow-sm flex flex-col`}>
@@ -785,7 +799,7 @@ export default function ExamCommitteesControl() {
                                 <div>
                                    <p className="font-black text-slate-900 text-base">{getSafeName(head.users)}</p>
                                    <div className="flex flex-wrap gap-1 mt-1.5">
-                                      {head.committees_range.split('، ').map((cr:string, i:number) => (
+                                      {String(head.committees_range || '').split('، ').map((cr:string, i:number) => ( // 🛡️ درع برمجي
                                         <span key={i} className="font-bold text-amber-800 text-[11px] bg-amber-50 px-2 py-1 rounded-md border border-amber-200">{cr}</span>
                                       ))}
                                    </div>
@@ -851,7 +865,7 @@ export default function ExamCommitteesControl() {
               </div>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
-                 {teachers.filter(t => t.full_name.includes(teacherSearchTerm) || t.subjectsStr.includes(teacherSearchTerm)).map((t, index) => {
+                 {teachers.filter(t => String(t.full_name || '').includes(teacherSearchTerm) || String(t.subjectsStr || '').includes(teacherSearchTerm)).map((t, index) => { // 🛡️ درع برمجي
                     const tId = String(t?.id || `temp-${index}`);
                     const assignedComms = getTeacherAssignments(tId);
                     const isInThisCommittee = assignedComms.some(c => c?.committee_id === selectedCommittee?.id);
@@ -862,7 +876,7 @@ export default function ExamCommitteesControl() {
                        <div key={tId} onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isInThisCommittee ? "bg-slate-100 opacity-60 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
                           <div className="flex items-center gap-3">
                              <div className="relative group/avatar cursor-pointer" onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(tId); }} title="رفع وتعديل الصورة">
-                               {safeAvatarUrl ? <img src={safeAvatarUrl} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name).charAt(0) || 'م'}</div>}
+                               {safeAvatarUrl ? <img src={safeAvatarUrl} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || '').charAt(0) || 'م'}</div>}
                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity"><Camera className="w-4 h-4 text-white" /></div>
                              </div>
                              <div>
@@ -876,7 +890,7 @@ export default function ExamCommitteesControl() {
                        </div>
                     );
                  })}
-                 {teachers.filter(t => t.full_name.includes(teacherSearchTerm)).length === 0 && <p className="text-center text-sm font-bold text-slate-400 py-8">لا يوجد معلمين.</p>}
+                 {teachers.filter(t => String(t.full_name || '').includes(teacherSearchTerm)).length === 0 && <p className="text-center text-sm font-bold text-slate-400 py-8">لا يوجد معلمين.</p>}
               </div>
 
               {selectedTeacherId && (
@@ -974,7 +988,7 @@ export default function ExamCommitteesControl() {
                            {viewCommitteeDetails.students.map((s, idx) => {
                              const stdAvatar = s.students?.users?.avatar_url || s.students?.users?.[0]?.avatar_url;
                              const stdName = getSafeName(s.students?.users);
-                             const stdInitial = stdName.charAt(0) || 'ط';
+                             const stdInitial = String(stdName || '').charAt(0) || 'ط'; // 🛡️ درع برمجي
                              const fullClassName = getFullClassName(s.students);
                              const safeStdAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
@@ -1020,7 +1034,7 @@ export default function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🖨️ قوالب الطباعة المخفية (كشف الباب المطور = محضر لجنة) */}
+      {/* 🖨️ قوالب الطباعة المخفية */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10 bg-white" dir="rtl">
