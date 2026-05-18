@@ -31,6 +31,7 @@ export default function ExamCommitteesControl() {
   const { authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
+  // محرك التوزيع السحّاب (يعمل بالمنطق الصحيح في الخلفية)
   const { isLoading: isEngineLoading, progressMsg, buildCommittees, nukeEverything, generateSeatingAndDistribute } = useExamSeating();
   
   const [committees, setCommittees] = useState<any[]>([]);
@@ -41,7 +42,6 @@ export default function ExamCommitteesControl() {
   const [allHeads, setAllHeads] = useState<any[]>([]);
   
   const [studentStats, setStudentStats] = useState({ g10: 0, g11_sci: 0, g11_lit: 0, totalAllocated: 0 });
-  
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [uniqueExamDates, setUniqueExamDates] = useState<string[]>([]);
   
@@ -54,7 +54,6 @@ export default function ExamCommitteesControl() {
   const [isHeadsModalOpen, setIsHeadsModalOpen] = useState(false);
   const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false);
   const [isClassPrintModalOpen, setIsClassPrintModalOpen] = useState(false);
-  
   const [isReadExcuseModalOpen, setIsReadExcuseModalOpen] = useState(false);
   const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   
@@ -82,39 +81,36 @@ export default function ExamCommitteesControl() {
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  // 🚀 الدالة السحرية المطورة لمعرفة التخصص (علمي/أدبي) للطباعة والعرض الدقيق
+  // 🚀 الدالة المعالجة لحل مشكلة عدم ظهور (علمي/أدبي)
   const getFullClassName = (studentData: any) => {
+    if (!studentData) return 'غير محدد';
     const secObj = Array.isArray(studentData?.sections) ? studentData?.sections[0] : studentData?.sections;
     const classObj = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
 
     const classLvl = Number(classObj?.level || 0);
     const cName = String(classObj?.name || '');
     const sName = String(secObj?.name || '');
-    const track = String(studentData?.next_year_track || '');
+    const track = String(studentData?.next_year_track || '').toLowerCase();
+
+    // التحقق من المسار عبر حقل next_year_track أو اسم الشعبة
+    const isLiterary = track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي');
+    const isScientific = track === 'scientific' || cName.includes('علمي') || cName.includes('علمى') || sName.includes('علمي') || sName.includes('علمى');
 
     let classNameDisplay = '';
     if (classLvl === 10) {
       classNameDisplay = 'العاشر';
     } else if (classLvl === 11) {
-      if (track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي')) {
-        classNameDisplay = 'الحادي عشر أدبي';
-      } else {
-        classNameDisplay = 'الحادي عشر علمي';
-      }
+      classNameDisplay = isLiterary ? 'الحادي عشر أدبي' : (isScientific ? 'الحادي عشر علمي' : 'الحادي عشر');
     } else if (classLvl === 12) {
-      if (track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي')) {
-        classNameDisplay = 'الثاني عشر أدبي';
-      } else {
-        classNameDisplay = 'الثاني عشر علمي';
-      }
+      classNameDisplay = isLiterary ? 'الثاني عشر أدبي' : (isScientific ? 'الثاني عشر علمي' : 'الثاني عشر');
     } else {
-      classNameDisplay = 'صف غير محدد';
+      classNameDisplay = cName || 'صف غير محدد';
     }
 
-    // تنظيف اسم الشعبة من التكرارات
+    // تنظيف اسم الشعبة ليكون رقماً صافياً (مثل: 1 أو 2)
     const cleanSecName = sName.replace(/أدبي|ادبي|علمي|علمى/g, '').replace(/-/g, '').trim();
 
-    return `${classNameDisplay} ${cleanSecName ? '- شعبة ' + cleanSecName : ''}`;
+    return `${classNameDisplay} ${cleanSecName ? '- ' + cleanSecName : ''}`.trim();
   };
 
   const getSafeName = (userObj: any) => {
@@ -135,7 +131,7 @@ export default function ExamCommitteesControl() {
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
       
-      // 🚀 تم دمج حقل next_year_track هنا لتصحيح العرض
+      // 🚀 تم دمج حقل next_year_track هنا لحساب الإحصائيات بدقة
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(next_year_track, sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name), exam_timetables(exam_date, subjects(name))');
@@ -340,7 +336,7 @@ export default function ExamCommitteesControl() {
   const openViewModal = async (committee: any) => {
     setIsLoading(true); setSelectedCommittee(committee);
     try {
-      // 🚀 تم دمج حقل next_year_track
+      // 🚀 تم دمج حقل next_year_track هنا لإصلاح العرض في النافذة
       const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
       const commInvigs = invigilators.filter(i => i.committee_id === committee.id);
       setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); setIsViewModalOpen(true);
@@ -372,6 +368,7 @@ export default function ExamCommitteesControl() {
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
+      // 🚀 تم دمج حقل next_year_track هنا لإصلاح العرض في الطباعة والـ PDF
       let query = supabase.from('student_seat_allocations')
         .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( name )`)
         .eq('academic_year', currentYear).eq('semester', currentSemester);
