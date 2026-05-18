@@ -16,9 +16,6 @@ import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
-// =========================================================================
-// 1. 🛡️ جدار الحماية (Error Boundary)
-// =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
     super(props);
@@ -38,11 +35,6 @@ class ErrorBoundary extends React.Component {
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
             <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
             <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ داخلي!</h1>
-            <p className="text-slate-600 font-bold mb-6 text-sm">تم اصطياد الخطأ بنجاح ولم ينهار الموقع، الرجاء تصوير هذه الشاشة للمبرمج:</p>
-            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[40vh] text-left text-xs font-mono whitespace-pre-wrap">
-              <p className="text-rose-400 font-bold mb-2">{String(this.state.error)}</p>
-              {this.state.errorInfo?.componentStack}
-            </div>
             <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
               تحديث الصفحة
             </button>
@@ -54,12 +46,8 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء
-// =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
-  
   useEffect(() => {
     const origError = console.error;
     console.error = (...args) => {
@@ -69,25 +57,18 @@ function FloatingConsole() {
     };
     return () => { console.error = origError; };
   }, []);
-
   if (logs.length === 0) return null;
-
   return (
     <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500" dir="ltr">
       <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
         <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Debug Console</span>
         <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
       </div>
-      {logs.map((l, i) => (
-        <div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>
-      ))}
+      {logs.map((l, i) => (<div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>))}
     </div>
   );
 }
 
-// =========================================================================
-// 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
-// =========================================================================
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
   const currentRole = authContext.authRole || authContext.userRole;
@@ -440,7 +421,6 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
-  // 🚀 الطباعة الآمنة (Dynamic Import Libraries to prevent SSR Crash)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -511,6 +491,12 @@ function ExamCommitteesControl() {
     allHeads.forEach(h => { if(String(h?.head_teacher_id) === String(tId) && h?.exam_timetables?.exam_date) dates.add(h.exam_timetables.exam_date); });
     return Array.from(dates);
   };
+
+  const filteredStaff = availableStaff.filter(s => {
+    const isAlreadyInTeam = teamMembers.some(tm => String(tm?.user_id) === String(s?.id));
+    const matchesSearch = String(s?.full_name || '').toLowerCase().includes(String(searchTerm || '').toLowerCase());
+    return !isAlreadyInTeam && matchesSearch;
+  });
 
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
@@ -894,20 +880,20 @@ function ExamCommitteesControl() {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-600 mb-2">اسم اللجنة</label>
-                <input type="text" value={editCommitteeData.name} onChange={e => setEditCommitteeData({...editCommitteeData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: لجنة 1" />
+                <label className="block text-xl font-black text-slate-700 mb-3">اسم اللجنة</label>
+                <input type="text" value={editCommitteeData.name} onChange={e => setEditCommitteeData({...editCommitteeData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-slate-900 outline-none focus:border-indigo-500" placeholder="مثال: لجنة 1" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                  <div>
-                   <label className="block text-sm font-bold text-slate-600 mb-2">السعة القصوى</label>
-                   <input type="number" min="1" max="50" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Math.min(50, Number(e.target.value))})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
+                   <label className="block text-xl font-black text-slate-700 mb-3">السعة القصوى</label>
+                   <input type="number" min="1" max="50" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Math.min(50, Number(e.target.value))})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center text-slate-900 outline-none focus:border-indigo-500" />
                  </div>
                  <div>
-                   <label className="block text-sm font-bold text-slate-600 mb-2">المكان (اختياري)</label>
-                   <input type="text" value={editCommitteeData.location} onChange={e => setEditCommitteeData({...editCommitteeData, location: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500" placeholder="مثال: المسرح" />
+                   <label className="block text-xl font-black text-slate-700 mb-3">المكان (اختياري)</label>
+                   <input type="text" value={editCommitteeData.location} onChange={e => setEditCommitteeData({...editCommitteeData, location: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-slate-900 outline-none focus:border-indigo-500" placeholder="مثال: المسرح" />
                  </div>
               </div>
-              <button onClick={handleSaveCommittee} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md mt-4">حفظ التغييرات</button>
+              <button onClick={handleSaveCommittee} className="w-full py-4 mt-6 bg-emerald-600 text-white text-xl font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md">حفظ التغييرات</button>
             </div>
           </div>
         </div>
