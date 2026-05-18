@@ -1,8 +1,8 @@
 /**
  * ============================================================================
  * @file      hooks/useExamSeating.ts
- * @version   5.1.0 (Smart Load Balancing & Double Radar Sorting)
- * @description محرك التوزيع المتوازن (توزيع عادل للأدبي والعلمي على جميع اللجان)
+ * @version   6.0.0 (Smart Load Balancing & Targeted Literary Zipping)
+ * @description محرك التوزيع المتوازن المطور (توزيع أدبي على آخر لجنتين فقط، وسحاب مزدوج)
  * ============================================================================
  */
 
@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 
 // 🚀 دالة التقسيم العادل رياضياً 
 const distributeEvenly = (array: any[], numChunks: number) => {
+  if (numChunks <= 0 || !array.length) return Array.from({ length: numChunks }, () => []);
   const chunks = [];
   const baseSize = Math.floor(array.length / numChunks);
   let remainder = array.length % numChunks;
@@ -92,7 +93,7 @@ export function useExamSeating() {
     }
   }, []);
 
-  // 🚀 3. السحّاب المُقسم المتوازن (The Balanced Zipper)
+  // 🚀 3. السحّاب المُقسم المتوازن (المُعدّل لآخر لجنتين للأدبي)
   const generateSeatingAndDistribute = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     try {
@@ -112,7 +113,6 @@ export function useExamSeating() {
       if (regularComms.length === 0) throw new Error('يرجى بناء لجان أساسية أولاً!');
 
       setProgressMsg('جاري سحب وتصنيف بيانات الطلاب...');
-      // 🚀 جلبنا اسم الشعبة (section name) لأن كلمة أدبي غالباً تُكتب فيها!
       const { data: studentsData } = await supabase.from('students').select(`id, next_year_track, users!inner(full_name), sections!inner(name, classes!inner(name, level))`);
       
       let grade10: any[] = []; 
@@ -120,7 +120,6 @@ export function useExamSeating() {
       let grade11_lit: any[] = [];
 
       (studentsData || []).forEach((s: any) => {
-        // استخراج آمن للبيانات لتجنب المصفوفات
         const secObj = Array.isArray(s.sections) ? s.sections[0] : s.sections;
         const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
         
@@ -133,8 +132,8 @@ export function useExamSeating() {
         if (level === 10) {
             grade10.push(obj);
         } else if (level === 11) {
-            // 🚀 الرادار المزدوج: نبحث في اسم المرحلة، واسم الشعبة، والمسار!
-            if (track === 'literary' || className.includes('أدبي') || sectionName.includes('أدبي') || sectionName.includes('ادبي')) {
+            // تصنيف دقيق للأدبي
+            if (track === 'literary' || className.includes('أدبي') || className.includes('ادبي') || sectionName.includes('أدبي') || sectionName.includes('ادبي')) {
                 grade11_lit.push(obj);
             } else {
                 grade11_sci.push(obj);
@@ -150,15 +149,32 @@ export function useExamSeating() {
       grade11_sci.sort(sortAr); 
       grade11_lit.sort(sortAr);
 
-      // الترقيم الجميل
       grade10 = grade10.map((s, idx) => ({ ...s, seatNumber: `10${String(idx + 1).padStart(3, '0')}` }));
       grade11_sci = grade11_sci.map((s, idx) => ({ ...s, seatNumber: `111${String(idx + 1).padStart(3, '0')}` }));
       grade11_lit = grade11_lit.map((s, idx) => ({ ...s, seatNumber: `112${String(idx + 1).padStart(3, '0')}` }));
 
-      setProgressMsg('التقسيم العادل على اللجان (Load Balancing)...');
-      const chunks10 = distributeEvenly(grade10, regularComms.length);
-      const chunks11Sci = distributeEvenly(grade11_sci, regularComms.length);
-      const chunks11Lit = distributeEvenly(grade11_lit, regularComms.length);
+      setProgressMsg('التقسيم العادل على اللجان...');
+      
+      const totalCommsCount = regularComms.length;
+      
+      // 🚀 الهندسة الجديدة للتقسيم (Magic Distribution)
+      // 1. العاشر والعلمي يوزعان على جميع اللجان
+      const chunks10 = distributeEvenly(grade10, totalCommsCount);
+      const chunks11Sci = distributeEvenly(grade11_sci, totalCommsCount);
+      
+      // 2. الأدبي يوزع "مناصفة" على آخر لجنتين فقط!
+      // (إذا كان عدد اللجان أقل من 2، نضعهم كلهم في اللجنة المتاحة)
+      const numLitCommsTarget = Math.min(2, totalCommsCount);
+      const chunks11LitTarget = distributeEvenly(grade11_lit, numLitCommsTarget);
+      
+      // نقوم بتكوين مصفوفة كاملة للأدبي (معظم اللجان فارغة، وآخر لجنتين بهما طلاب)
+      const chunks11Lit = Array.from({ length: totalCommsCount }, () => []);
+      if (numLitCommsTarget > 0) {
+         const startIndex = totalCommsCount - numLitCommsTarget;
+         for (let i = 0; i < numLitCommsTarget; i++) {
+             chunks11Lit[startIndex + i] = chunks11LitTarget[i];
+         }
+      }
 
       const allocations: any[] = [];
       const overflowQueue: any[] = [];
@@ -169,16 +185,20 @@ export function useExamSeating() {
          const comm = regularComms[i];
          const c10 = chunks10[i] || [];
          const c11S = chunks11Sci[i] || [];
-         const c11L = chunks11Lit[i] || [];
+         const c11L = chunks11Lit[i] || []; // سيكون ممتلئاً فقط في آخر لجنتين
 
          let p10 = 0, p11S = 0, p11L = 0;
          const committeeZipped = [];
 
-         // السحّاب الثلاثي (عاشر -> 11 أدبي -> 11 علمي) لمنع الغش تماماً
+         // السحّاب الديناميكي:
+         // سيسحب (عاشر ثم أدبي) أو (علمي ثم أدبي) في اللجان الأخيرة.
+         // وسيسحب (عاشر ثم علمي) في اللجان الأولى حيث الأدبي فارغ.
          while (p10 < c10.length || p11S < c11S.length || p11L < c11L.length) {
             if (p10 < c10.length) committeeZipped.push(c10[p10++]);
+            
+            // نعطي الأولوية للأدبي لكي يتسحّب بشكل مباشر في لجانه المخصصة
             if (p11L < c11L.length) committeeZipped.push(c11L[p11L++]);
-            if (p11S < c11S.length) committeeZipped.push(c11S[p11S++]);
+            else if (p11S < c11S.length) committeeZipped.push(c11S[p11S++]);
          }
 
          let seatsFilled = 0;
