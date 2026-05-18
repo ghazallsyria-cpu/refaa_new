@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 
-// 🚀 التصنيفات البرمجية المتوافقة مع قيود قاعدة البيانات
+// 🚀 التصنيفات البرمجية
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
   { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
@@ -92,10 +92,7 @@ export default function ControlTeamManagement() {
     if (!selectedUserId || !selectedBaseRole || !customRoleTitle.trim()) return;
     
     const assignerId = user?.id || user?.user_id;
-    if (!assignerId) {
-      alert("خطأ: لم نتمكن من تحديد معرّف حسابك الإداري.");
-      return;
-    }
+    if (!assignerId) return alert("خطأ: لم نتمكن من تحديد معرّف حسابك الإداري.");
 
     setIsSubmitting(true);
     try {
@@ -108,17 +105,13 @@ export default function ControlTeamManagement() {
         assigned_by: assignerId
       };
 
-      const { data, error } = await supabase.from('exam_control_team').insert([payload]).select();
-      
-      if (error) {
-        console.error("DB Insert Error Details:", error);
-        throw error;
-      }
+      const { error } = await supabase.from('exam_control_team').insert([payload]);
+      if (error) throw error;
 
       setIsAssignModalOpen(false); 
       fetchData();
     } catch (error: any) {
-      alert(`فشل التكليف من قاعدة البيانات ⚠️\n\nتفاصيل الخطأ:\n${error.message || error.details || 'خطأ غير معروف'}`);
+      alert(`فشل التكليف\n${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -127,21 +120,22 @@ export default function ControlTeamManagement() {
   const handleRemove = async (id: string, name: string) => {
     if (!confirm(`هل أنت متأكد من إعفاء (${name}) من فريق الكنترول؟`)) return;
     try {
-      const { error } = await supabase.from('exam_control_team').delete().eq('id', id);
-      if (error) throw error;
+      await supabase.from('exam_control_team').delete().eq('id', id);
       fetchData();
     } catch (err: any) {
       alert(`حدث خطأ أثناء الحذف:\n${err.message}`);
     }
   };
 
-  // 🚀 محرك الطباعة المطور بالخدعة السحرية لمنع قص الصفحات 
+  // 🚀 محرك الطباعة الاحترافي المدجج بالمقاسات الدقيقة
   const printBadges = async () => {
     if (teamMembers.length === 0) { alert('لا يوجد أعضاء لطباعة هوياتهم!'); return; }
     
+    // التمرير لأعلى الشاشة لضمان عدم وجود قص بسبب السكرول
     window.scrollTo(0, 0);
     setIsPrinting(true);
     
+    // إعطاء فرصة للصور وبناء القالب للتحميل الكامل
     setTimeout(async () => {
       if (!printRef.current) {
         setIsPrinting(false);
@@ -155,30 +149,21 @@ export default function ControlTeamManagement() {
         for (let i = 0; i < pages.length; i++) {
           const pageElement = pages[i] as HTMLElement;
           
-          // 🚀 الخدعة: سحب الصفحة لأعلى الشاشة مؤقتاً لتصويرها بالكامل
-          const originalCssText = pageElement.style.cssText;
-          pageElement.style.position = 'fixed';
-          pageElement.style.top = '0';
-          pageElement.style.left = '0';
-          pageElement.style.zIndex = '9999';
-
           const canvas = await html2canvas(pageElement, { 
             scale: 2, 
             useCORS: true, 
             allowTaint: false, 
             logging: false, 
-            width: 794, 
-            height: 1122, 
-            scrollY: 0, 
-            scrollX: 0,
-            backgroundColor: '#ffffff' 
+            backgroundColor: '#ffffff',
+            width: pageElement.offsetWidth,   // إجبار المكتبة على أخذ عرض الورقة بالكامل
+            height: pageElement.offsetHeight, // إجبار المكتبة على أخذ طول الورقة بالكامل
+            windowWidth: pageElement.offsetWidth,
+            windowHeight: pageElement.offsetHeight
           });
-
-          // إرجاع الصفحة لمكانها الطبيعي بعد التصوير
-          pageElement.style.cssText = originalCssText;
           
           const imgData = canvas.toDataURL('image/jpeg', 1.0); 
           if (i > 0) pdf.addPage(); 
+          // مقاس ورقة A4 الدقيق بالمليمتر
           pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
         }
         
@@ -189,7 +174,7 @@ export default function ControlTeamManagement() {
       } finally { 
         setIsPrinting(false); 
       }
-    }, 1500); 
+    }, 2000); 
   };
 
   if (!['admin', 'management'].includes(currentRole)) return null;
@@ -200,6 +185,7 @@ export default function ControlTeamManagement() {
     return !isAlreadyInTeam && matchesSearch;
   });
 
+  // 🚀 السر هنا: تم التعديل إلى 4 لكي تأخذ الهويات مساحتها في ورقة الـ A4 بدون أن تفيض وتقص
   const chunkArray = (arr: any[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
 
   const totalPositions = BASE_ROLES.length;
@@ -214,15 +200,15 @@ export default function ControlTeamManagement() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
       `}} />
 
-      {/* شاشة التحميل */}
+      {/* شاشة التحميل (تغطي الشاشة أثناء طباعة הـ PDF) */}
       <AnimatePresence>
         { (isLoading || isPrinting) && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-white">
             <Loader2 className="w-16 h-16 animate-spin text-rose-500 mb-6" />
             <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">
-              {isPrinting ? 'جاري إنشاء الوثيقة الأمنية متعددة الصفحات...' : 'تجهيز غرفة العمليات...'}
+              {isPrinting ? 'جاري تصوير وبناء الوثيقة الأمنية للمدير...' : 'تجهيز غرفة العمليات...'}
             </h2>
-            {isPrinting && <p className="text-slate-400 mt-2 text-sm font-bold">الرجاء عدم إغلاق الصفحة حتى يكتمل التحميل</p>}
+            {isPrinting && <p className="text-slate-400 mt-2 text-sm font-bold">الرجاء عدم إغلاق الصفحة حتى يتم تنزيل الـ PDF</p>}
           </motion.div>
         )}
       </AnimatePresence>
@@ -311,10 +297,10 @@ export default function ControlTeamManagement() {
         </div>
       </div>
 
-      {/* 🚀 نافذة التكليف */}
+      {/* نافذة التكليف */}
       <AnimatePresence>
         {isAssignModalOpen && selectedBaseRole && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl p-6 sm:p-8 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
@@ -370,13 +356,13 @@ export default function ControlTeamManagement() {
       </AnimatePresence>
 
       {/* ====================================================================================== */}
-      {/* 🖨️ قوالب الطباعة المخفية (سيتم رفعها أعلى الشاشة لحظة التصوير لتفادي القص) */}
+      {/* 🖨️ قوالب الطباعة (موجودة في أعلى الشاشة وتظهر فقط وقت الطباعة ليتم تصويرها بالكامل) */}
       {/* ====================================================================================== */}
-      <div className={cn("absolute top-0 left-0 w-full flex justify-center bg-slate-50", isPrinting ? "z-[50] opacity-100 min-h-screen" : "z-[-1] opacity-0 h-0 overflow-hidden pointer-events-none")}>
-         <div ref={printRef} className="flex flex-col items-center gap-10 py-10 w-full" dir="rtl">
-            {chunkArray(teamMembers, 6).map((chunk, pageIndex) => (
-               <div key={pageIndex} className="print-page-wrapper bg-white shadow-xl relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
-                  <div className="flex flex-wrap gap-8 justify-center content-start">
+      <div className={cn("absolute top-0 left-0 w-full flex flex-col items-center bg-slate-50", isPrinting ? "z-[50] opacity-100" : "z-[-1] opacity-0 h-0 overflow-hidden pointer-events-none")}>
+         <div ref={printRef} className="w-full flex flex-col items-center gap-10 py-10" dir="rtl">
+            {chunkArray(teamMembers, 4).map((chunk, pageIndex) => (
+               <div key={pageIndex} className="print-page-wrapper bg-white shadow-xl relative" style={{ width: '794px', height: '1122px', padding: '50px 40px', boxSizing: 'border-box' }}>
+                  <div className="flex flex-wrap gap-x-12 gap-y-16 justify-center content-start">
                      {chunk.map((member:any) => {
                         const safeAvatar = member.users?.avatar_url ? `${member.users.avatar_url}?t=${new Date().getTime()}` : null;
                         const qrPayload = `raf-control:${member.user_id}`;
