@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info,
-  AlertCircle, Clock, FileKey, MonitorCheck, ClipboardSignature, FileArchive, Fingerprint
+  AlertCircle, Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,10 +16,8 @@ import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
-// 🚀 الكارثة كانت هنا! تم حذف استدعاءات html2canvas و jsPDF من الأعلى نهائياً!
-
 // =========================================================================
-// 1. 🛡️ جدار الحماية (Error Boundary) المطور لتوضيح الأخطاء
+// 1. 🛡️ جدار الحماية (Error Boundary)
 // =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
@@ -92,18 +90,9 @@ function FloatingConsole() {
 // =========================================================================
 // 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
 // =========================================================================
-const BASE_ROLES = [
-  { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-  { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
-  { id: 'data_entry', defaultName: 'مسؤول الرصد والإدخال', icon: MonitorCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  { id: 'auditor', defaultName: 'مراجع ومُدقق الدرجات', icon: ClipboardSignature, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-  { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
-];
-
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
   const currentRole = authContext.authRole || authContext.userRole;
-  const user = authContext.user || null;
 
   const engineContext = useExamSeating() || {};
   const isEngineLoading = engineContext.isLoading || false;
@@ -450,7 +439,6 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
-  // 🚀 الطباعة الآمنة: استدعاء المكتبات ديناميكياً لتجنب الانهيار (Hydration Mismatch)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -485,7 +473,6 @@ function ExamCommitteesControl() {
       setTimeout(async () => {
         if (!printRef.current) { setIsPrinting(false); return; }
         try {
-          // 🚀 استدعاء المكتبات الديناميكي في وقت الطباعة فقط
           const html2canvasModule = await import('html2canvas-pro');
           const html2canvas = html2canvasModule.default || html2canvasModule;
           const { jsPDF } = await import('jspdf');
@@ -522,24 +509,6 @@ function ExamCommitteesControl() {
     allHeads.forEach(h => { if(String(h?.head_teacher_id) === String(tId) && h?.exam_timetables?.exam_date) dates.add(h.exam_timetables.exam_date); });
     return Array.from(dates);
   };
-
-  const filteredStaff = availableStaff.filter(s => {
-    const isAlreadyInTeam = teamMembers.some(tm => String(tm?.user_id) === String(s?.id));
-    const matchesSearch = String(s?.full_name || '').toLowerCase().includes(String(searchTerm || '').toLowerCase());
-    return !isAlreadyInTeam && matchesSearch;
-  });
-
-  const sortedAndFilteredTeachers = teachers
-    .filter(t => {
-       const term = String(teacherSearchTerm || '').toLowerCase();
-       return String(t?.full_name || '').toLowerCase().includes(term) || String(t?.subjectsStr || '').toLowerCase().includes(term);
-    })
-    .sort((a, b) => {
-       const aCount = getTeacherAssignments(String(a?.id)).length;
-       const bCount = getTeacherAssignments(String(b?.id)).length;
-       if (aCount !== bCount) return aCount - bCount; 
-       return String(a?.full_name || '').localeCompare(String(b?.full_name || ''), 'ar');
-    });
 
   const alreadyAssignedCommittees = currentHeads.flatMap(h => String(h?.committees_range || '').split('، '));
   const selectedTeacherData = teachers.find(t => String(t?.id) === String(headAssignment?.head_teacher_id));
