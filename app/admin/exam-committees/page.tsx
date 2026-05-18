@@ -18,6 +18,15 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
+// 🚀 التصنيفات البرمجية المتوافقة مع قيود قاعدة البيانات
+const BASE_ROLES = [
+  { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+  { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+  { id: 'data_entry', defaultName: 'مسؤول الرصد والإدخال', icon: MonitorCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+  { id: 'auditor', defaultName: 'مراجع ومُدقق الدرجات', icon: ClipboardSignature, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
+];
+
 export default function ExamCommitteesControl() {
   const { authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
@@ -31,7 +40,6 @@ export default function ExamCommitteesControl() {
   const [timetables, setTimetables] = useState<any[]>([]);
   const [allHeads, setAllHeads] = useState<any[]>([]);
   
-  // 🚀 الإحصائيات المحدثة
   const [studentStats, setStudentStats] = useState({ g10: 0, g11_sci: 0, g11_lit: 0, totalAllocated: 0 });
   
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
@@ -74,15 +82,39 @@ export default function ExamCommitteesControl() {
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
+  // 🚀 الدالة السحرية المطورة لمعرفة التخصص (علمي/أدبي) للطباعة والعرض الدقيق
   const getFullClassName = (studentData: any) => {
-    const classLvl = studentData?.sections?.classes?.level || studentData?.sections?.[0]?.classes?.level;
-    const secName = studentData?.sections?.name || studentData?.sections?.[0]?.name || '';
+    const secObj = Array.isArray(studentData?.sections) ? studentData?.sections[0] : studentData?.sections;
+    const classObj = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
+
+    const classLvl = Number(classObj?.level || 0);
+    const cName = String(classObj?.name || '');
+    const sName = String(secObj?.name || '');
+    const track = String(studentData?.next_year_track || '');
+
     let classNameDisplay = '';
-    if (classLvl === 10) classNameDisplay = 'العاشر';
-    else if (classLvl === 11) classNameDisplay = 'الحادي عشر';
-    else if (classLvl === 12) classNameDisplay = 'الثاني عشر';
-    else classNameDisplay = 'صف غير محدد';
-    return `${classNameDisplay} ${secName ? '- ' + secName : ''}`;
+    if (classLvl === 10) {
+      classNameDisplay = 'العاشر';
+    } else if (classLvl === 11) {
+      if (track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي')) {
+        classNameDisplay = 'الحادي عشر أدبي';
+      } else {
+        classNameDisplay = 'الحادي عشر علمي';
+      }
+    } else if (classLvl === 12) {
+      if (track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي')) {
+        classNameDisplay = 'الثاني عشر أدبي';
+      } else {
+        classNameDisplay = 'الثاني عشر علمي';
+      }
+    } else {
+      classNameDisplay = 'صف غير محدد';
+    }
+
+    // تنظيف اسم الشعبة من التكرارات
+    const cleanSecName = sName.replace(/أدبي|ادبي|علمي|علمى/g, '').replace(/-/g, '').trim();
+
+    return `${classNameDisplay} ${cleanSecName ? '- شعبة ' + cleanSecName : ''}`;
   };
 
   const getSafeName = (userObj: any) => {
@@ -102,11 +134,12 @@ export default function ExamCommitteesControl() {
 
       const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
-      const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
+      
+      // 🚀 تم دمج حقل next_year_track هنا لتصحيح العرض
+      const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(next_year_track, sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name), exam_timetables(exam_date, subjects(name))');
       
-      // 🚀 جلبنا مسار الطالب واسم الشعبة معاً لتحديد هويته بدقة
       const { data: stds } = await supabase.from('students').select('id, next_year_track, sections(name, classes(level, name))');
 
       const stats: any = {};
@@ -120,7 +153,6 @@ export default function ExamCommitteesControl() {
         }); 
       }
 
-      // 🚀 الفرز الدقيق للعلمي والأدبي
       let g10 = 0, g11_sci = 0, g11_lit = 0;
       (stds || []).forEach((s:any) => {
         const secObj = Array.isArray(s.sections) ? s.sections[0] : s.sections;
@@ -134,7 +166,6 @@ export default function ExamCommitteesControl() {
         if (lvl === 10) {
             g10++; 
         } else if (lvl === 11) {
-            // نبحث عن الأدبي في اسم المرحلة أو الشعبة (بالهمزة وبدونها) أو المسار المستقبلي
             if (track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي')) {
                 g11_lit++;
             } else {
@@ -309,7 +340,8 @@ export default function ExamCommitteesControl() {
   const openViewModal = async (committee: any) => {
     setIsLoading(true); setSelectedCommittee(committee);
     try {
-      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
+      // 🚀 تم دمج حقل next_year_track
+      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
       const commInvigs = invigilators.filter(i => i.committee_id === committee.id);
       setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); setIsViewModalOpen(true);
     } catch (error) { alert('خطأ'); } finally { setIsLoading(false); }
@@ -341,7 +373,7 @@ export default function ExamCommitteesControl() {
     setIsPrinting(true);
     try {
       let query = supabase.from('student_seat_allocations')
-        .select(`seat_number, student_id, students ( id, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( name )`)
+        .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( name )`)
         .eq('academic_year', currentYear).eq('semester', currentSemester);
 
       if (type === 'door_sheet' || type === 'desk_cards') {
@@ -530,7 +562,6 @@ export default function ExamCommitteesControl() {
           {activeTab === 'management' && (
             <div className="animate-in fade-in slide-in-from-bottom-4">
               
-              {/* 🚀 الإحصائيات الجديدة (المفصّلة לעلمي وأدبي) */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-emerald-600 mb-1">عاشر</p><p className="text-2xl font-black text-emerald-800">{studentStats.g10}</p></div>
                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-blue-600 mb-1">11 علمي</p><p className="text-2xl font-black text-blue-800">{studentStats.g11_sci}</p></div>
@@ -1007,7 +1038,6 @@ export default function ExamCommitteesControl() {
                     <p className="text-base font-black text-black mt-3">محضر سير لجان الامتحانات - الفصل الدراسي الثاني 2025/2026</p>
                  </div>
                  
-                 {/* 🚀 إضافة بيانات المادة والتاريخ */}
                  <div className="flex justify-between items-center mb-6 px-4 font-black text-lg text-black border-2 border-slate-300 p-4 rounded-xl">
                     <p>اليوم والتاريخ: ............................................</p>
                     <p>المادة: ............................................</p>
@@ -1034,7 +1064,6 @@ export default function ExamCommitteesControl() {
                    </tbody>
                  </table>
 
-                 {/* 🚀 إضافة تواقيع المراقبين ورئيس اللجنة (مسحوبة من قاعدة البيانات) */}
                  <div className="flex justify-between px-6 text-black border-t-[3px] border-black pt-8">
                     <div className="text-center">
                        <p className="font-black text-lg mb-2">المراقب الأول</p>
@@ -1127,39 +1156,6 @@ export default function ExamCommitteesControl() {
                  })}
               </div>
             ))}
-
-            {/* 📄 4. هويات المراقبين */}
-            {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((invigChunk, pageIndex) => (
-              <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
-                <div className="flex flex-wrap gap-8 justify-center content-start">
-                  {invigChunk.map((invig:any) => {
-                    const invName = getSafeName(invig.users);
-                    const qrPayload = `raf-id:${invig.teacher_id}`;
-                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
-
-                    return (
-                      <div key={invig.id} className="w-[60mm] h-[95mm] border-[3px] border-black rounded-[1.5rem] relative overflow-hidden flex flex-col items-center text-center shadow-lg bg-white" style={{ pageBreakInside: 'avoid' }}>
-                        <div className="absolute top-0 left-0 w-full h-[25mm] bg-black shrink-0 flex flex-col items-center justify-start pt-3">
-                           <p className="text-white font-black text-[14px] mt-1">مدرسة الرفعة النموذجية بنين</p>
-                           <p className="text-slate-300 font-bold text-[10px] mt-1">هوية مراقب معتمد</p>
-                        </div>
-                        <div className="relative z-10 w-[25mm] h-[25mm] mt-[12mm] mb-2 rounded-xl bg-white border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center">
-                           <UserPlus className="w-8 h-8 text-slate-300" />
-                        </div>
-                        <div className="relative z-10 w-full px-3 flex-1 flex flex-col items-center">
-                           <h2 className="text-[16px] font-black text-black mb-1 leading-tight line-clamp-2">{invName}</h2>
-                           <p className="text-[11px] font-bold text-slate-600 mb-2 border-b-2 border-slate-200 pb-2 w-full">إدارة التعليم الخاص</p>
-                           <div className="mt-auto mb-4 flex flex-col items-center">
-                              <div className="w-[20mm] h-[20mm] bg-white p-1 rounded-lg border-2 border-slate-800 mb-1"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
-                           </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-
           </div>
         </div>
       )}
