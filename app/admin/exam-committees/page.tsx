@@ -18,94 +18,6 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
-// =========================================================================
-// 1. 🛡️ جدار الحماية (Error Boundary) لاصطياد الأخطاء ومنع الانهيار
-// =========================================================================
-class ErrorBoundary extends React.Component {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
-  }
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error: any, errorInfo: any) {
-    this.setState({ errorInfo });
-    console.error("🔥 ErrorBoundary Caught:", error, errorInfo);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-rose-100 p-6 flex flex-col items-center justify-center font-sans" dir="ltr">
-          <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-4 border-rose-500">
-            <h1 className="text-3xl font-black text-rose-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-8 h-8"/> Application Crashed!
-            </h1>
-            <p className="text-slate-600 font-bold mb-4">Please take a screenshot of this error and send it to the developer:</p>
-            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[60vh] text-xs font-mono whitespace-pre-wrap">
-              <p className="text-rose-400 font-bold text-sm mb-2">{String(this.state.error)}</p>
-              {this.state.errorInfo?.componentStack}
-            </div>
-            <button onClick={() => window.location.reload()} className="mt-6 w-full py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700">
-              Reload Page
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم (Floating Debug Console)
-// =========================================================================
-function FloatingConsole() {
-  const [logs, setLogs] = useState<string[]>([]);
-  
-  useEffect(() => {
-    const origError = console.error;
-    const origWarn = console.warn;
-
-    console.error = (...args) => {
-      const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-      setLogs(prev => [...prev, `[ERROR] ${msg}`]);
-      origError.apply(console, args);
-    };
-
-    const handleRejection = (event: any) => setLogs(prev => [...prev, `[PROMISE] ${String(event.reason)}`]);
-    const handleError = (event: any) => setLogs(prev => [...prev, `[WINDOW] ${String(event.message)}`]);
-    
-    window.addEventListener('unhandledrejection', handleRejection);
-    window.addEventListener('error', handleError);
-    
-    return () => {
-      console.error = origError;
-      window.removeEventListener('unhandledrejection', handleRejection);
-      window.removeEventListener('error', handleError);
-    };
-  }, []);
-
-  if (logs.length === 0) return null;
-
-  return (
-    <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]" dir="ltr">
-      <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
-        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Live Debug Console</span>
-        <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
-      </div>
-      {logs.map((l, i) => (
-        <div key={i} className={`mb-1 border-b border-emerald-800/30 pb-1 break-words ${l.includes('[ERROR]') ? 'text-rose-400' : 'text-amber-400'}`}>
-          {l}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// =========================================================================
-// 3. 🚀 التطبيق الرئيسي (Main Component)
-// =========================================================================
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
   { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
@@ -114,7 +26,7 @@ const BASE_ROLES = [
   { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
 ];
 
-function ExamCommitteesControl() {
+export default function ExamCommitteesControl() {
   const { authRole, userRole, user } = useAuth() as any;
   const currentRole = authRole || userRole;
 
@@ -957,13 +869,12 @@ function ExamCommitteesControl() {
                     const assignedComms = getTeacherAssignments(tId);
                     const isInThisCommittee = assignedComms.some(c => String(c?.committee_id) === String(selectedCommittee?.id));
                     const isSelected = selectedTeacherId === tId;
-                    const safeAvatarUrl = t?.avatar_url ? `${t.avatar_url}?t=${new Date().getTime()}` : null;
 
                     return (
                        <div key={`ta-${index}`} onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isInThisCommittee ? "bg-slate-100 opacity-60 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
                           <div className="flex items-center gap-3">
                              <div className="relative group/avatar cursor-pointer" onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(tId); }} title="رفع وتعديل الصورة">
-                               {safeAvatarUrl ? <img src={safeAvatarUrl} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
+                               {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity"><Camera className="w-4 h-4 text-white" /></div>
                              </div>
                              <div>
@@ -1077,14 +988,13 @@ function ExamCommitteesControl() {
                              const stdName = getSafeName(s?.students?.users);
                              const stdInitial = String(stdName || 'ط').charAt(0);
                              const fullClassName = getFullClassName(s?.students);
-                             const safeStdAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
                              return (
                                <tr key={`vstd-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
                                  <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s?.seat_number}</td>
                                  <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
-                                    {safeStdAvatar ? (
-                                      <img src={safeStdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
+                                    {stdAvatar ? (
+                                      <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
                                     ) : (
                                       <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
                                     )}
