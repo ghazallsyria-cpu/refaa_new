@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info,
-  AlertCircle, Clock, FileKey, MonitorCheck, ClipboardSignature, FileArchive, Fingerprint // 🚀 هنا تم إضافة الأيقونات الناقصة التي دمرت الصفحة!
+  AlertCircle, Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,10 +55,11 @@ class ErrorBoundary extends React.Component {
 }
 
 // =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم
+// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء
 // =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
+  
   useEffect(() => {
     const origError = console.error;
     console.error = (...args) => {
@@ -68,29 +69,25 @@ function FloatingConsole() {
     };
     return () => { console.error = origError; };
   }, []);
+
   if (logs.length === 0) return null;
+
   return (
     <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500" dir="ltr">
       <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
         <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Debug Console</span>
         <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
       </div>
-      {logs.map((l, i) => (<div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>))}
+      {logs.map((l, i) => (
+        <div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>
+      ))}
     </div>
   );
 }
 
 // =========================================================================
-// 3. 🚀 التطبيق الرئيسي
+// 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
 // =========================================================================
-const BASE_ROLES = [
-  { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-  { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
-  { id: 'data_entry', defaultName: 'مسؤول الرصد والإدخال', icon: MonitorCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  { id: 'auditor', defaultName: 'مراجع ومُدقق الدرجات', icon: ClipboardSignature, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-  { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
-];
-
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
   const currentRole = authContext.authRole || authContext.userRole;
@@ -272,6 +269,8 @@ function ExamCommitteesControl() {
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
 
+  if (currentRole !== 'admin' && currentRole !== 'management') return null;
+
   const fetchHeadsByDate = async (date: string) => {
     if (!date) { setCurrentHeads([]); setSelectedCommitteesForHead([]); return; }
     try {
@@ -441,6 +440,7 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
+  // 🚀 الطباعة الآمنة (Dynamic Import Libraries to prevent SSR Crash)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -511,12 +511,6 @@ function ExamCommitteesControl() {
     allHeads.forEach(h => { if(String(h?.head_teacher_id) === String(tId) && h?.exam_timetables?.exam_date) dates.add(h.exam_timetables.exam_date); });
     return Array.from(dates);
   };
-
-  const filteredStaff = availableStaff.filter(s => {
-    const isAlreadyInTeam = teamMembers.some(tm => String(tm?.user_id) === String(s?.id));
-    const matchesSearch = String(s?.full_name || '').toLowerCase().includes(String(searchTerm || '').toLowerCase());
-    return !isAlreadyInTeam && matchesSearch;
-  });
 
   const sortedAndFilteredTeachers = teachers
     .filter(t => {
