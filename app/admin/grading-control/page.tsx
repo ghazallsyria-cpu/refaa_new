@@ -50,16 +50,11 @@ export default function GradingControlPage() {
         setAvailableSubjects(uniqueSubjects);
       }
 
-      const { data: teacherSections } = await supabase.from('teacher_sections').select('*');
+      // 🚀 جلب البيانات بدقة: يجب جلب اسم المادة المرتبطة بالمعلم!
+      const { data: teacherSections } = await supabase.from('teacher_sections').select('*, subjects(name)');
       const { data: users } = await supabase.from('users').select('id, full_name').eq('role', 'teacher');
       const { data: sections } = await supabase.from('sections').select('id, name, classes(name, level)');
-      
-      // 🚀 جلب حالة القفل وحالة النقل للوزارة
       const { data: lockedGrades, error: gradesError } = await supabase.from('manual_grades').select('grade_level, section, subject_name, is_locked, is_transferred_to_ministry');
-      
-      if (gradesError) {
-        console.warn("Please run the SQL ALTER TABLE to add is_transferred_to_ministry column.");
-      }
 
       if (teacherSections && users && sections) {
         const progressArray: any[] = [];
@@ -67,27 +62,66 @@ export default function GradingControlPage() {
         teacherSections.forEach(ts => {
           const teacher = users.find(u => u.id === ts.teacher_id);
           const sectionObj = sections.find(s => s.id === ts.section_id);
+          const cLevel = Number(sectionObj?.classes?.level || 0);
 
-          if (teacher && sectionObj && sectionObj.classes.level >= 10) { 
-            const subjectRec = lockedGrades?.find(lg => lg.grade_level === sectionObj.classes.name && lg.section === sectionObj.name);
-            const isSubmitted = subjectRec?.is_locked || false;
-            const isTransferred = subjectRec?.is_transferred_to_ministry || false;
+          if (teacher && sectionObj && cLevel >= 10) { 
             
-            progressArray.push({
-              id: `${ts.teacher_id}-${ts.section_id}`,
-              teacherName: teacher.full_name, 
-              className: sectionObj.classes.name, 
-              sectionName: sectionObj.name, 
-              isSubmitted,
-              isTransferred,
-              subjectName: subjectRec?.subject_name || 'غير محدد'
+            // 🚀 بناء قائمة المواد المخصصة لهذا المعلم تحديداً (بما فيها المادة الافتراضية)
+            let teacherSubjectsToTrack = [];
+            if (ts.subjects?.name) {
+              teacherSubjectsToTrack.push(ts.subjects.name);
+              // حقن مادة القرآن لمعلمي الإسلامية
+              if (ts.subjects.name.includes('إسلامية') || ts.subjects.name.includes('اسلامية')) {
+                teacherSubjectsToTrack.push('القرآن الكريم');
+              }
+            }
+
+            // 🚀 معالجة وتصحيح كل مادة يدرسها هذا المعلم لهذه الشعبة
+            teacherSubjectsToTrack.forEach(rawSub => {
+              let standardSubName = rawSub;
+              const targetStage = cLevel === 11 || cLevel === 12 ? (sectionObj.classes.name.includes('ادبي') ? 'literary' : 'scientific') : '';
+
+              if (standardSubName.includes('اجتماعيات') && cLevel === 10) standardSubName = 'تاريخ الكويت';
+              else if (standardSubName.includes('رياضيات') && targetStage === 'literary') standardSubName = 'الرياضيات والاحصاء';
+              else if (standardSubName.includes('بدنية')) standardSubName = 'التربية البدنية';
+              else if (standardSubName.includes('اسلامية') || standardSubName.includes('إسلامية')) standardSubName = 'التربية الإسلامية';
+              else if (standardSubName.includes('انجليزي') || standardSubName.includes('إنجليزي') || standardSubName.includes('انجليزية')) standardSubName = 'اللغة الإنجليزية';
+              else if (standardSubName.includes('عربي') || standardSubName.includes('عربيه')) standardSubName = 'اللغة العربية';
+              else if (standardSubName.includes('حياء')) standardSubName = 'الأحياء'; 
+              else if (standardSubName.includes('فيزياء')) standardSubName = 'الفيزياء';
+              else if (standardSubName.includes('كيمياء')) standardSubName = 'الكيمياء';
+              else if (standardSubName.includes('حاسوب') || standardSubName.includes('حاسب')) standardSubName = 'الحاسوب';
+              else if (standardSubName.includes('قرآن') || standardSubName.includes('قران')) standardSubName = 'القرآن الكريم';
+
+              // 🚀 المطابقة الدقيقة 100%: الصف + الشعبة + المادة
+              const subjectRec = lockedGrades?.find(lg => 
+                lg.grade_level === sectionObj.classes.name && 
+                lg.section === sectionObj.name &&
+                lg.subject_name === standardSubName
+              );
+
+              const isSubmitted = subjectRec?.is_locked || false;
+              const isTransferred = subjectRec?.is_transferred_to_ministry || false;
+              
+              progressArray.push({
+                id: `${ts.teacher_id}-${ts.section_id}-${standardSubName}`,
+                teacherName: teacher.full_name, 
+                className: sectionObj.classes.name, 
+                sectionName: sectionObj.name, 
+                isSubmitted,
+                isTransferred,
+                subjectName: standardSubName
+              });
             });
           }
         });
 
-        const uniqueProgress = progressArray.filter((value, index, self) => index === self.findIndex((t) => (t.teacherName === value.teacherName && t.className === value.className && t.sectionName === value.sectionName)));
-        uniqueProgress.sort((a, b) => a.teacherName.localeCompare(b.teacherName));
+        // 🚀 إزالة أي تكرار مع ضمان اختلاف المواد
+        const uniqueProgress = progressArray.filter((value, index, self) => index === self.findIndex((t) => (
+          t.teacherName === value.teacherName && t.className === value.className && t.sectionName === value.sectionName && t.subjectName === value.subjectName
+        )));
         
+        uniqueProgress.sort((a, b) => a.teacherName.localeCompare(b.teacherName));
         setAllTeacherProgress(uniqueProgress);
       }
     } catch (error) { setStatus({ type: 'error', msg: 'فشل تشغيل الرادار.' }); } finally { setLoading(false); }
@@ -147,22 +181,21 @@ export default function GradingControlPage() {
     } catch (err) { setStatus({ type: 'error', msg: 'فشل إزالة المادة.' }); } finally { setVipLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
-  const handleUnlockSheet = async (className: string, sectionName: string, id: string) => {
-    if (!window.confirm(`⚠️ تأكيد أمني: هل تريد فك الاعتماد لكشف (الصف ${className} - شعبة ${sectionName})؟`)) return;
+  const handleUnlockSheet = async (className: string, sectionName: string, subjectName: string, id: string) => {
+    if (!window.confirm(`⚠️ تأكيد أمني: هل تريد فك الاعتماد لكشف (الصف ${className} - شعبة ${sectionName} - مادة ${subjectName})؟`)) return;
     setActionLoadingId(`unlock-${id}`); setStatus(null);
     try {
-      const { error } = await supabase.from('manual_grades').update({ is_locked: false, is_transferred_to_ministry: false }).eq('grade_level', className).eq('section', sectionName);
+      const { error } = await supabase.from('manual_grades').update({ is_locked: false, is_transferred_to_ministry: false }).eq('grade_level', className).eq('section', sectionName).eq('subject_name', subjectName);
       if (error) throw error;
       setStatus({ type: 'success', msg: 'تم فك الاعتماد بنجاح!' });
       fetchRadarData(); 
     } catch (err: any) { setStatus({ type: 'error', msg: 'حدث خطأ.' }); } finally { setActionLoadingId(null); setTimeout(() => setStatus(null), 4000); }
   };
 
-  // 🚀 دالة جديدة للتحكم في النقل لسجل الوزارة
-  const handleTransferToMinistry = async (className: string, sectionName: string, currentStatus: boolean, id: string) => {
+  const handleTransferToMinistry = async (className: string, sectionName: string, subjectName: string, currentStatus: boolean, id: string) => {
     setActionLoadingId(`transfer-${id}`); setStatus(null);
     try {
-      const { error } = await supabase.from('manual_grades').update({ is_transferred_to_ministry: !currentStatus }).eq('grade_level', className).eq('section', sectionName);
+      const { error } = await supabase.from('manual_grades').update({ is_transferred_to_ministry: !currentStatus }).eq('grade_level', className).eq('section', sectionName).eq('subject_name', subjectName);
       if (error) throw error;
       
       setAllTeacherProgress(prev => prev.map(p => p.id === id ? { ...p, isTransferred: !currentStatus } : p));
@@ -179,7 +212,6 @@ export default function GradingControlPage() {
   return (
     <div className="min-h-screen bg-transparent p-4 sm:p-6 lg:p-8 font-sans" dir="rtl">
       
-      {/* 🚀 إعدادات الطباعة (تخفي كل شيء ما عدا الرادار وتلغي الأشرطة العائمة) */}
       <style dangerouslySetInnerHTML={{__html: ` 
         @media print { 
           @page { size: A4 portrait; margin: 15mm; } 
@@ -190,7 +222,7 @@ export default function GradingControlPage() {
           .print-radar th, .print-radar td { border: 1px solid black !important; padding: 8px; text-align: center; color: black !important; }
           .print-radar th { background-color: #f3f4f6 !important; font-weight: bold; -webkit-print-color-adjust: exact; }
           .print-radar .badge { border: none !important; background: transparent !important; color: black !important; padding: 0 !important; }
-          .print-radar .action-col { display: none !important; } /* نخفي أزرار التحكم في الطباعة */
+          .print-radar .action-col { display: none !important; } 
         } 
       `}} />
 
@@ -225,7 +257,6 @@ export default function GradingControlPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* الألواح الجانبية المخفية أثناء الطباعة */}
           <div className="no-print lg:col-span-1 space-y-6">
             <div className="glass-panel p-6 rounded-[2rem] border border-purple-500/30 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-purple-400 mb-2 flex items-center gap-2"><Star className="w-5 h-5" /> القائمة البيضاء (VIP)</h2>
@@ -292,7 +323,6 @@ export default function GradingControlPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                  {/* زر الطباعة المخصص للرادار */}
                   <button onClick={() => window.print()} className="p-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20 transition-colors" title="تصدير PDF للرادار">
                     <Printer className="w-5 h-5" />
                   </button>
@@ -315,7 +345,6 @@ export default function GradingControlPage() {
                 </div>
               </div>
 
-              {/* الجدول */}
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 max-h-[600px] print:max-h-none print:overflow-visible">
                 <table className="w-full text-right">
                   <thead className="sticky top-0 bg-[#0f1423] z-10 shadow-md print:static print:bg-gray-100">
@@ -337,7 +366,7 @@ export default function GradingControlPage() {
                               {item.className} - {item.sectionName}
                             </span>
                           </td>
-                          <td className="p-4 text-xs font-bold text-slate-300 print:text-black">{item.subjectName}</td>
+                          <td className="p-4 text-xs font-bold text-amber-300 print:text-black">{item.subjectName}</td>
                           <td className="p-4 text-center">
                             {item.isSubmitted ? (
                               <span className="badge inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-black rounded-lg border border-emerald-500/20 print:text-black"><CheckCircle2 className="w-4 h-4 no-print" /> معتمد</span>
@@ -346,19 +375,29 @@ export default function GradingControlPage() {
                             )}
                           </td>
                           
-                          {/* 🚀 عمود النقل للوزارة (أزرار في الشاشة، نص في الطباعة) */}
                           <td className="p-4 text-center action-col">
                             {item.isSubmitted ? (
-                              <button 
-                                onClick={() => handleTransferToMinistry(item.className, item.sectionName, item.isTransferred, item.id)}
-                                disabled={actionLoadingId === `transfer-${item.id}`}
-                                className={`inline-flex items-center justify-center w-full gap-2 px-3 py-2 text-xs font-black rounded-xl border transition-all ${item.isTransferred ? 'bg-indigo-600 text-white border-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-transparent text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10'}`}
-                              >
-                                {actionLoadingId === `transfer-${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : item.isTransferred ? <CheckCircle2 className="w-4 h-4" /> : <ArrowRightLeft className="w-4 h-4" />}
-                                {item.isTransferred ? 'تم النقل' : 'نقل للوزارة'}
-                              </button>
+                              <div className="flex flex-col xl:flex-row items-center justify-center gap-2 w-full max-w-[200px] mx-auto">
+                                <button 
+                                  onClick={() => handleTransferToMinistry(item.className, item.sectionName, item.subjectName, item.isTransferred, item.id)}
+                                  disabled={actionLoadingId === `transfer-${item.id}`}
+                                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-black rounded-xl border transition-all ${item.isTransferred ? 'bg-indigo-600 text-white border-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-transparent text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10'}`}
+                                >
+                                  {actionLoadingId === `transfer-${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : item.isTransferred ? <CheckCircle2 className="w-4 h-4" /> : <ArrowRightLeft className="w-4 h-4" />}
+                                  {item.isTransferred ? 'تم النقل' : 'نقل الوزارة'}
+                                </button>
+                                
+                                <button 
+                                  onClick={() => handleUnlockSheet(item.className, item.sectionName, item.subjectName, item.id)}
+                                  disabled={actionLoadingId === `unlock-${item.id}`}
+                                  className="p-2 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-xl transition-colors border border-rose-500/20"
+                                  title="فك الاعتماد وإعادة الكشف للمعلم"
+                                >
+                                  {actionLoadingId === `unlock-${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
+                                </button>
+                              </div>
                             ) : (
-                              <span className="text-slate-600 text-xs font-bold">- بانتظار الاعتماد -</span>
+                              <span className="text-slate-600 text-[10px] font-bold">- بانتظار الاعتماد -</span>
                             )}
                           </td>
                         </tr>
