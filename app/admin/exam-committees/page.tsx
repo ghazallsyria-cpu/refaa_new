@@ -79,7 +79,7 @@ export default function ExamCommitteesControl() {
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  // 🛡️ درع برمجي صلب للدوال المحورية لمنع الانهيار
+  // 🛡️ دالة التسمية الصريحة المحمية بالكامل
   const getFullClassName = (studentData: any) => {
     if (!studentData) return 'غير محدد';
     try {
@@ -180,11 +180,11 @@ export default function ExamCommitteesControl() {
       (exams || []).forEach(e => { if (e?.exam_date) datesSet.add(e.exam_date) });
       setUniqueExamDates(Array.from(datesSet).sort());
 
-      const formattedTeachers = (tchrs || []).map((t: any) => {
+      const formattedTeachers = (tchrs || []).map((t: any, idx: number) => {
         if (!t) return null;
         const u = Array.isArray(t?.users) ? t.users[0] : t?.users;
         const subjects = Array.isArray(t?.teacher_subjects) ? t.teacher_subjects.map((s:any) => s?.subjects?.name).filter(Boolean).join('، ') : 'غير محدد';
-        return { id: String(t?.id || Math.random()), full_name: String(u?.full_name || 'بدون اسم'), avatar_url: u?.avatar_url || null, subjectsStr: subjects };
+        return { id: String(t?.id || `t-${idx}`), full_name: String(u?.full_name || 'بدون اسم'), avatar_url: u?.avatar_url || null, subjectsStr: subjects };
       }).filter(Boolean);
 
       setCommittees(sortedComms);
@@ -417,7 +417,8 @@ export default function ExamCommitteesControl() {
             const canvas = await html2canvas(pageElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0 });
             pageElement.style.cssText = originalCssText;
             const imgData = canvas.toDataURL('image/jpeg', 1.0); 
-            if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+            const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = pdf.internal.pageSize.getHeight(); 
+            if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
           }
           let fileName = 'مستند';
           if (type === 'door_sheet') fileName = `محضر_لجنة_${committee.name}`;
@@ -503,10 +504,10 @@ export default function ExamCommitteesControl() {
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                   <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة (العدالة والتدوير)</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
-                     {teachers.filter(t => getTeacherAssignments(String(t?.id)).length > 0).map(t => {
+                     {teachers.filter(t => getTeacherAssignments(String(t?.id)).length > 0).map((t, tIndex) => {
                        const invigDuties = getTeacherAssignments(String(t?.id));
                        return (
-                         <div key={t.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col gap-4">
+                         <div key={t?.id || `tr-${tIndex}`} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col gap-4">
                            <div className="flex items-center gap-3">
                              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black shrink-0 text-xl border-2 border-white shadow-sm">
                                {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-full h-full rounded-full object-cover" alt="avatar" /> : String(t?.full_name || 'م').charAt(0)}
@@ -522,7 +523,7 @@ export default function ExamCommitteesControl() {
                                {invigDuties.map((duty, idx) => {
                                   const cName = committees.find(c => String(c?.id) === String(duty?.committee_id))?.name || 'غير معروف';
                                   return (
-                                     <div key={idx} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
+                                     <div key={duty?.id || `dty-${idx}`} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
                                         <span className="text-xs font-black text-slate-700">{String(cName)}</span>
                                         {duty?.status === 'signed' ? <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> استلم</span> :
                                          duty?.status === 'excused' ? <button onClick={() => openReadExcuseModal(duty)} className="text-[9px] font-black text-rose-500 flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md hover:bg-rose-100 transition-colors"><AlertCircle className="w-3 h-3"/> عرض العذر</button> :
@@ -551,8 +552,8 @@ export default function ExamCommitteesControl() {
                          <tr><th className="p-4 border-b border-amber-100">التاريخ</th><th className="p-4 border-b border-amber-100">المادة (اليوم)</th><th className="p-4 border-b border-amber-100">رئيس اللجان</th><th className="p-4 border-b border-amber-100">نطاق اللجان</th></tr>
                        </thead>
                        <tbody>
-                         {allHeads.length > 0 ? allHeads.map(h => (
-                           <tr key={h?.id || Math.random()} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                         {allHeads.length > 0 ? allHeads.map((h, i) => (
+                           <tr key={h?.id || `hd-${i}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                              <td className="p-4 font-black text-slate-600">{String(h?.exam_timetables?.exam_date || '-')}</td>
                              <td className="p-4 font-bold text-slate-700">{String(h?.exam_timetables?.subjects?.name || '-')}</td>
                              <td className="p-4 font-black text-indigo-700 flex items-center gap-2">
@@ -598,14 +599,14 @@ export default function ExamCommitteesControl() {
                 <div className="flex justify-center p-20"><Loader2 className="w-12 h-12 animate-spin text-indigo-500" /></div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                  {committees.map((committee: any) => {
+                  {committees.map((committee: any, idx: number) => {
                     const stdCount = Number(allocationsStats[committee?.id] || 0);
                     const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee?.id));
                     const isFull = stdCount >= Number(committee?.capacity || 0);
                     const isOverflow = String(committee?.name || '').includes('الفائض');
 
                     return (
-                      <div key={committee?.id || Math.random()} className={`bg-white rounded-2xl p-5 border ${isOverflow ? 'border-rose-300 bg-rose-50/50' : 'border-slate-200'} shadow-sm flex flex-col`}>
+                      <div key={committee?.id || `comm-${idx}`} className={`bg-white rounded-2xl p-5 border ${isOverflow ? 'border-rose-300 bg-rose-50/50' : 'border-slate-200'} shadow-sm flex flex-col`}>
                         <div className="flex justify-between items-start mb-3 border-b border-slate-100 pb-3">
                           <div>
                             <h3 className={`text-lg font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{String(committee?.name || 'بدون اسم')}</h3>
@@ -624,10 +625,10 @@ export default function ExamCommitteesControl() {
                              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${isOverflow ? 'bg-rose-200 text-rose-800' : isFull ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{stdCount} طالب</span>
                           </div>
                           <div className="space-y-2">
-                            {commInvigs.map(inv => {
+                            {commInvigs.map((inv, iIdx) => {
                               const tName = getSafeName(inv?.users);
                               return (
-                                <div key={inv?.id || Math.random()} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 gap-1.5">
+                                <div key={inv?.id || `i-${iIdx}`} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 gap-1.5">
                                   <div className="flex justify-between items-center">
                                      <span className="text-xs font-bold text-slate-800 truncate pr-1">{tName}</span>
                                      <button onClick={() => handleRemoveInvigilator(inv?.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
@@ -693,8 +694,8 @@ export default function ExamCommitteesControl() {
               <p className="text-center text-sm font-bold text-slate-500 py-8">لا يوجد طلاب موزعون بعد للطباعة.</p>
             ) : (
               <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
-                 {availableClasses.map(cls => (
-                   <button key={cls} onClick={() => printDocument('', 'class_cards', cls)} className="w-full bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200 p-4 rounded-xl text-right transition-all flex items-center justify-between group">
+                 {availableClasses.map((cls, ci) => (
+                   <button key={`cls-${ci}`} onClick={() => printDocument('', 'class_cards', cls)} className="w-full bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200 p-4 rounded-xl text-right transition-all flex items-center justify-between group">
                      <span className="font-black text-slate-700 group-hover:text-emerald-700">{cls}</span>
                      <PrinterIcon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500" />
                    </button>
@@ -722,9 +723,9 @@ export default function ExamCommitteesControl() {
                    <label className="block text-sm font-black text-slate-700 mb-2">1. حدد اليوم الامتحاني (التاريخ)</label>
                    <select value={headAssignment.date} onChange={(e) => { setHeadAssignment({...headAssignment, date: e.target.value, head_teacher_id: ''}); fetchHeadsByDate(e.target.value); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-amber-500 outline-none shadow-sm cursor-pointer hover:border-amber-300 transition-colors">
                      <option value="">- اضغط لاختيار اليوم الامتحاني -</option>
-                     {uniqueExamDates.map(date => {
+                     {uniqueExamDates.map((date, di) => {
                         const count = timetables.filter(t => t?.exam_date === date).length;
-                        return <option key={date} value={date}>{date} (يتضمن {count} امتحانات)</option>
+                        return <option key={`d-${di}`} value={date}>{date} (يتضمن {count} امتحانات)</option>
                      })}
                    </select>
                  </div>
@@ -733,12 +734,12 @@ export default function ExamCommitteesControl() {
                    <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
                      <label className="block text-sm font-black text-slate-700 mb-2">2. اختر اللجان لتسليمها للرئيس</label>
                      <div className="flex flex-wrap gap-2 mb-4 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
-                        {committees.filter(c => !String(c?.name || '').includes('الفائض')).map(c => {
+                        {committees.filter(c => !String(c?.name || '').includes('الفائض')).map((c, ci) => {
                           const isAssigned = alreadyAssignedCommittees.includes(c?.name);
                           const isSelected = selectedCommitteesForHead.includes(c?.name);
                           return (
                             <button 
-                              key={c?.id || Math.random()} 
+                              key={`hc-${ci}`} 
                               disabled={isAssigned}
                               onClick={() => toggleCommitteeSelectionForHead(c?.name)}
                               className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 border shadow-sm
@@ -761,7 +762,7 @@ export default function ExamCommitteesControl() {
                      <div className="flex flex-col sm:flex-row gap-3">
                        <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-amber-500 outline-none shadow-sm">
                          <option value="">- اختر المعلم من القائمة -</option>
-                         {teachers.map(t => <option key={t?.id} value={t?.id}>{t?.full_name}</option>)}
+                         {teachers.map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>{t?.full_name}</option>)}
                        </select>
                        <button onClick={handleAssignHead} className="bg-amber-500 hover:bg-amber-600 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg">اعتماد التكليف</button>
                      </div>
@@ -789,8 +790,8 @@ export default function ExamCommitteesControl() {
                  <div className="mt-8 border-t border-slate-100 pt-6">
                     <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> التكليفات الحالية لهذا اليوم الامتحاني:</h4>
                     <div className="space-y-3">
-                       {currentHeads.length > 0 ? currentHeads.map(head => (
-                          <div key={head?.id || Math.random()} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
+                       {currentHeads.length > 0 ? currentHeads.map((head, hi) => (
+                          <div key={`h-asg-${hi}`} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
                              <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center font-black shrink-0">
                                    {head?.users?.avatar_url ? <img src={head.users.avatar_url} className="w-full h-full rounded-full object-cover" alt="img" /> : <Crown className="w-6 h-6"/>}
@@ -799,7 +800,7 @@ export default function ExamCommitteesControl() {
                                    <p className="font-black text-slate-900 text-base">{getSafeName(head?.users)}</p>
                                    <div className="flex flex-wrap gap-1 mt-1.5">
                                       {String(head?.committees_range || '').split('، ').filter(Boolean).map((cr:string, i:number) => (
-                                        <span key={i} className="font-bold text-amber-800 text-[11px] bg-amber-50 px-2 py-1 rounded-md border border-amber-200">{cr}</span>
+                                        <span key={`cr-${i}`} className="font-bold text-amber-800 text-[11px] bg-amber-50 px-2 py-1 rounded-md border border-amber-200">{cr}</span>
                                       ))}
                                    </div>
                                 </div>
@@ -869,13 +870,12 @@ export default function ExamCommitteesControl() {
                     const assignedComms = getTeacherAssignments(tId);
                     const isInThisCommittee = assignedComms.some(c => String(c?.committee_id) === String(selectedCommittee?.id));
                     const isSelected = selectedTeacherId === tId;
-                    const safeAvatarUrl = t?.avatar_url ? `${t.avatar_url}?t=${new Date().getTime()}` : null;
 
                     return (
-                       <div key={tId} onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isInThisCommittee ? "bg-slate-100 opacity-60 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
+                       <div key={`ta-${index}`} onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isInThisCommittee ? "bg-slate-100 opacity-60 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
                           <div className="flex items-center gap-3">
                              <div className="relative group/avatar cursor-pointer" onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(tId); }} title="رفع وتعديل الصورة">
-                               {safeAvatarUrl ? <img src={safeAvatarUrl} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
+                               {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity"><Camera className="w-4 h-4 text-white" /></div>
                              </div>
                              <div>
@@ -989,14 +989,13 @@ export default function ExamCommitteesControl() {
                              const stdName = getSafeName(s?.students?.users);
                              const stdInitial = String(stdName || 'ط').charAt(0);
                              const fullClassName = getFullClassName(s?.students);
-                             const safeStdAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
                              return (
-                               <tr key={s?.seat_number || `std-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
+                               <tr key={`vstd-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
                                  <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s?.seat_number}</td>
                                  <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
-                                    {safeStdAvatar ? (
-                                      <img src={safeStdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
+                                    {stdAvatar ? (
+                                      <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
                                     ) : (
                                       <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
                                     )}
@@ -1015,7 +1014,7 @@ export default function ExamCommitteesControl() {
                                     >
                                        <option value="" disabled>🔄 نقل إلى لجنة...</option>
                                        {committees.filter(c => String(c?.id) !== String(selectedCommittee?.id)).map(c => (
-                                         <option key={c.id} value={c.id}>{c.name}</option>
+                                         <option key={`m-${c.id}`} value={c.id}>{c.name}</option>
                                        ))}
                                     </select>
                                  </td>
@@ -1064,7 +1063,7 @@ export default function ExamCommitteesControl() {
                    </thead>
                    <tbody>
                      {printData.students.map((s:any, i:number) => (
-                       <tr key={i} className="border-b-2 border-black h-12 text-black">
+                       <tr key={`p1-${i}`} className="border-b-2 border-black h-12 text-black">
                          <td className="border-l-[3px] border-black p-2 text-center font-bold text-black">{i + 1}</td>
                          <td className="border-l-[3px] border-black p-2 text-center font-black text-xl tracking-widest text-black">{s?.seat_number}</td>
                          <td className="border-l-[3px] border-black p-2 font-bold px-4 text-black text-lg">{getSafeName(s?.students?.users)}</td>
@@ -1096,8 +1095,8 @@ export default function ExamCommitteesControl() {
 
             {/* 📄 2. بطاقات الطاولة العرضية للفصول المفرزة */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={pageIdx} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
-                 {chunk.map((student:any) => {
+              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
+                 {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
                     const commName = student?.exam_committees?.name || 'غير محدد';
@@ -1105,7 +1104,7 @@ export default function ExamCommitteesControl() {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={student?.seat_number || Math.random()} className="w-[85mm] h-[55mm] border-[3px] border-black relative flex flex-col bg-white overflow-hidden rounded-[1rem]" style={{ pageBreakInside: 'avoid' }}>
+                       <div key={`c-${si}`} className="w-[85mm] h-[55mm] border-[3px] border-black relative flex flex-col bg-white overflow-hidden rounded-[1rem]" style={{ pageBreakInside: 'avoid' }}>
                           <div className="bg-slate-100 border-b-[3px] border-black p-2 flex justify-between items-center shrink-0">
                              <div className="text-right">
                                 <h3 className="font-black text-[12px] text-black leading-none">مدرسة الرفعة النموذجية بنين (م-ث)</h3>
@@ -1133,15 +1132,15 @@ export default function ExamCommitteesControl() {
 
             {/* 📄 3. بطاقات الطاولة العادية (مفرزة باللجنة) */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={pageIdx} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
-                 {chunk.map((student:any) => {
+              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
+                 {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
                     const qrPayload = `raf-id:${student?.student_id}`; 
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={student?.seat_number || Math.random()} className="w-[85mm] h-[55mm] border-[3px] border-black relative flex flex-col bg-white overflow-hidden rounded-[1rem]" style={{ pageBreakInside: 'avoid' }}>
+                       <div key={`d-${si}`} className="w-[85mm] h-[55mm] border-[3px] border-black relative flex flex-col bg-white overflow-hidden rounded-[1rem]" style={{ pageBreakInside: 'avoid' }}>
                           <div className="bg-slate-100 border-b-[3px] border-black p-2 flex justify-between items-center shrink-0">
                              <div className="text-right">
                                 <h3 className="font-black text-[12px] text-black leading-none">مدرسة الرفعة النموذجية بنين (م-ث)</h3>
