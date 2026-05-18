@@ -135,14 +135,22 @@ export default function ControlTeamManagement() {
     }
   };
 
+  // 🚀 محرك الطباعة المطور بالكامل
   const printBadges = async () => {
     if (teamMembers.length === 0) { alert('لا يوجد أعضاء لطباعة هوياتهم!'); return; }
+    
+    // إجبار الشاشة على الصعود للأعلى لمنع أخطاء القص
+    window.scrollTo(0, 0);
     setIsPrinting(true);
     
+    // منح المتصفح وقتاً لرسم الهويات تحت شاشة التحميل (خدعة الريندر)
     setTimeout(async () => {
-      if (!printRef.current) return;
+      if (!printRef.current) {
+        setIsPrinting(false);
+        return;
+      }
+      
       try {
-        window.scrollTo(0, 0);
         const pages = printRef.current.querySelectorAll('.print-page-wrapper');
         const pdf = new jsPDF('p', 'mm', 'a4');
         
@@ -154,12 +162,15 @@ export default function ControlTeamManagement() {
             logging: false, 
             width: 794, 
             height: 1122, 
+            scrollY: 0, // 🚀 منع تأثير السكرول تماماً
+            scrollX: 0,
             backgroundColor: '#ffffff' 
           });
           
           const imgData = canvas.toDataURL('image/jpeg', 1.0); 
           if (i > 0) pdf.addPage(); 
-          pdf.addImage(imgData, 'JPEG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
+          // مقاس ورقة A4 دقيق بالمليمتر: 210 x 297
+          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
         }
         pdf.save(`هويات_فريق_الكنترول_VIP_${currentSemester}.pdf`);
       } catch (err: any) { 
@@ -167,7 +178,7 @@ export default function ControlTeamManagement() {
       } finally { 
         setIsPrinting(false); 
       }
-    }, 2000); 
+    }, 1500); 
   };
 
   if (!['admin', 'management'].includes(currentRole)) return null;
@@ -184,22 +195,23 @@ export default function ControlTeamManagement() {
   const filledPositions = new Set(teamMembers.map(m => m.role_id)).size;
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-10 font-cairo pb-20" dir="rtl">
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-10 font-cairo pb-20 relative" dir="rtl">
       
       <AnimatePresence>
         { (isLoading || isPrinting) && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center text-white">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[100] flex flex-col items-center justify-center text-white">
             <Loader2 className="w-16 h-16 animate-spin text-rose-500 mb-6" />
             <h2 className="text-2xl font-black mb-2 animate-pulse text-center px-4">
-              {isPrinting ? 'جاري تجهيز هويات الكنترول السرية (VIP)...' : 'تجهيز غرفة العمليات...'}
+              {isPrinting ? 'جاري تصوير وتجهيز هويات الكنترول السرية (VIP)...' : 'تجهيز غرفة العمليات...'}
             </h2>
+            {isPrinting && <p className="text-slate-400 mt-2 text-sm font-bold">الرجاء عدم إغلاق الصفحة حتى يكتمل التحميل</p>}
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="max-w-7xl mx-auto space-y-6 relative z-10">
         
-        {/* 🚀 لوحة التحكم العلوية الشاملة */}
+        {/* لوحة التحكم العلوية الشاملة */}
         <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-sm border border-slate-200 relative overflow-hidden">
           <div className="absolute -left-10 -top-10 text-rose-50/50 pointer-events-none">
             <ShieldCheck className="w-64 h-64" />
@@ -217,8 +229,8 @@ export default function ControlTeamManagement() {
                  <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-0.5">اكتمال الفريق</p>
                  <p className="text-xl font-black text-rose-700">{filledPositions} / {totalPositions}</p>
               </div>
-              <button onClick={printBadges} disabled={teamMembers.length === 0} className="w-full sm:w-auto px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95">
-                <PrinterIcon className="w-5 h-5" /> طباعة الهويات الأمنية
+              <button onClick={printBadges} disabled={teamMembers.length === 0 || isPrinting} className="w-full sm:w-auto px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95">
+                {isPrinting ? <Loader2 className="w-5 h-5 animate-spin" /> : <PrinterIcon className="w-5 h-5" />} طباعة الهويات الأمنية
               </button>
             </div>
           </div>
@@ -354,16 +366,16 @@ export default function ControlTeamManagement() {
         )}
       </AnimatePresence>
 
-      {/* 🖨️ قوالب الطباعة لهويات الكنترول الأمنية */}
-      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
-         <div ref={printRef} className="flex flex-col gap-10" dir="rtl">
+      {/* ====================================================================================== */}
+      {/* 🖨️ قوالب الطباعة لهويات الكنترول الأمنية (الخدعة البصرية لتصوير المتصفح بدقة عالية) */}
+      {/* ====================================================================================== */}
+      <div className={cn("absolute top-0 left-0 w-full flex justify-center bg-white", isPrinting ? "z-50 opacity-100" : "z-[-1] opacity-0 pointer-events-none h-0 overflow-hidden")}>
+         <div ref={printRef} className="flex flex-col items-center gap-10 py-10" dir="rtl">
             {chunkArray(teamMembers, 6).map((chunk, pageIndex) => (
-               <div key={pageIndex} className="print-page-wrapper bg-white mx-auto relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
+               <div key={pageIndex} className="print-page-wrapper bg-white relative" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box' }}>
                   <div className="flex flex-wrap gap-8 justify-center content-start">
                      {chunk.map((member:any) => {
                         const safeAvatar = member.users?.avatar_url ? `${member.users.avatar_url}?t=${new Date().getTime()}` : null;
-                        
-                        // 🚀 الشفرة الخاصة بالـ VIP لرادار الكنترول
                         const qrPayload = `raf-control:${member.user_id}`;
                         const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
