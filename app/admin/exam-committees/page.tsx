@@ -19,7 +19,7 @@ import { jsPDF } from 'jspdf';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
 // =========================================================================
-// 1. 🛡️ جدار الحماية (Error Boundary) لاصطياد الأخطاء ومنع الانهيار
+// 1. 🛡️ جدار الحماية (Error Boundary) الأقوى
 // =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
@@ -36,18 +36,17 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-rose-100 p-6 flex flex-col items-center justify-center font-sans" dir="ltr">
-          <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-4 border-rose-500">
-            <h1 className="text-3xl font-black text-rose-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-8 h-8"/> Application Crashed!
-            </h1>
-            <p className="text-slate-600 font-bold mb-4">Please take a screenshot of this error and send it to the developer:</p>
-            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[60vh] text-xs font-mono whitespace-pre-wrap">
-              <p className="text-rose-400 font-bold text-sm mb-2">{String(this.state.error)}</p>
+        <div className="min-h-screen bg-rose-50 p-6 flex flex-col items-center justify-center font-cairo" dir="rtl">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
+            <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
+            <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ داخلي!</h1>
+            <p className="text-slate-600 font-bold mb-6 text-sm">تم اصطياد الخطأ بنجاح ولم ينهار الموقع، الرجاء تصوير هذه الشاشة للمبرمج:</p>
+            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[40vh] text-left text-xs font-mono whitespace-pre-wrap">
+              <p className="text-rose-400 font-bold mb-2">{String(this.state.error)}</p>
               {this.state.errorInfo?.componentStack}
             </div>
-            <button onClick={() => window.location.reload()} className="mt-6 w-full py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700">
-              Reload Page
+            <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
+              تحديث الصفحة
             </button>
           </div>
         </div>
@@ -58,52 +57,38 @@ class ErrorBoundary extends React.Component {
 }
 
 // =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم (Floating Debug Console)
+// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء
 // =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
   
   useEffect(() => {
     const origError = console.error;
-
     console.error = (...args) => {
       const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
       setLogs(prev => [...prev, `[ERROR] ${msg}`]);
       origError.apply(console, args);
     };
-
-    const handleRejection = (event: any) => setLogs(prev => [...prev, `[PROMISE] ${String(event.reason)}`]);
-    const handleError = (event: any) => setLogs(prev => [...prev, `[WINDOW] ${String(event.message)}`]);
-    
-    window.addEventListener('unhandledrejection', handleRejection);
-    window.addEventListener('error', handleError);
-    
-    return () => {
-      console.error = origError;
-      window.removeEventListener('unhandledrejection', handleRejection);
-      window.removeEventListener('error', handleError);
-    };
+    return () => { console.error = origError; };
   }, []);
 
   if (logs.length === 0) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]" dir="ltr">
+    <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500" dir="ltr">
       <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
-        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Live Debug Console</span>
+        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Debug Console</span>
         <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
       </div>
       {logs.map((l, i) => (
-        <div key={i} className={`mb-1 border-b border-emerald-800/30 pb-1 break-words ${l.includes('[ERROR]') ? 'text-rose-400' : 'text-amber-400'}`}>
-          {l}
-        </div>
+        <div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>
       ))}
     </div>
   );
 }
 
 // =========================================================================
-// 3. 🚀 التطبيق الرئيسي (Main Component)
+// 3. 🚀 التطبيق الرئيسي (The Core Component)
 // =========================================================================
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
@@ -113,14 +98,19 @@ const BASE_ROLES = [
   { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
 ];
 
-// لاحظ: لا يوجد export default هنا
 function ExamCommitteesControl() {
-  const [isMounted, setIsMounted] = useState(false);
-  const { authRole, userRole, user } = useAuth() as any;
-  const currentRole = authRole || userRole;
+  // 🛡️ التفكيك الآمن (Safe Destructuring) لمنع الانهيار القطعي!
+  const authContext = useAuth() || {};
+  const currentRole = authContext.authRole || authContext.userRole;
+  const user = authContext.user || null;
 
-  const { isLoading: isEngineLoading, progressMsg, buildCommittees, nukeEverything, generateSeatingAndDistribute } = useExamSeating();
-  
+  const engineContext = useExamSeating() || {};
+  const isEngineLoading = engineContext.isLoading || false;
+  const progressMsg = engineContext.progressMsg || 'جاري المعالجة...';
+  const buildCommittees = engineContext.buildCommittees || (async () => false);
+  const nukeEverything = engineContext.nukeEverything || (async () => false);
+  const generateSeatingAndDistribute = engineContext.generateSeatingAndDistribute || (async () => ({success: false}));
+
   const [committees, setCommittees] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [invigilators, setInvigilators] = useState<any[]>([]);
@@ -167,10 +157,6 @@ function ExamCommitteesControl() {
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const getFullClassName = (studentData: any) => {
     if (!studentData) return 'غير محدد';
@@ -292,9 +278,8 @@ function ExamCommitteesControl() {
     }
   };
 
-  useEffect(() => { if (isMounted && ['admin', 'management'].includes(String(currentRole))) fetchData(); }, [isMounted, currentRole]);
+  useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
 
-  if (!isMounted) return null;
   if (currentRole !== 'admin' && currentRole !== 'management') return null;
 
   const fetchHeadsByDate = async (date: string) => {
@@ -1268,6 +1253,10 @@ function ExamCommitteesControl() {
 }
 
 export default function Page() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-cairo"><Loader2 className="w-12 h-12 text-indigo-500 animate-spin" /></div>;
+
   return (
     <ErrorBoundary>
       <FloatingConsole />
