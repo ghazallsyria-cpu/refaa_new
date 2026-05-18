@@ -18,6 +18,94 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
+// =========================================================================
+// 1. 🛡️ جدار الحماية (Error Boundary) لاصطياد الأخطاء ومنع الانهيار
+// =========================================================================
+class ErrorBoundary extends React.Component {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    this.setState({ errorInfo });
+    console.error("🔥 ErrorBoundary Caught:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-rose-100 p-6 flex flex-col items-center justify-center font-sans" dir="ltr">
+          <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-4 border-rose-500">
+            <h1 className="text-3xl font-black text-rose-600 mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-8 h-8"/> Application Crashed!
+            </h1>
+            <p className="text-slate-600 font-bold mb-4">Please take a screenshot of this error and send it to the developer:</p>
+            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[60vh] text-xs font-mono whitespace-pre-wrap">
+              <p className="text-rose-400 font-bold text-sm mb-2">{String(this.state.error)}</p>
+              {this.state.errorInfo?.componentStack}
+            </div>
+            <button onClick={() => window.location.reload()} className="mt-6 w-full py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700">
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// =========================================================================
+// 2. 🕵️‍♂️ الكونسول العائم (Floating Debug Console)
+// =========================================================================
+function FloatingConsole() {
+  const [logs, setLogs] = useState<string[]>([]);
+  
+  useEffect(() => {
+    const origError = console.error;
+    const origWarn = console.warn;
+
+    console.error = (...args) => {
+      const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+      setLogs(prev => [...prev, `[ERROR] ${msg}`]);
+      origError.apply(console, args);
+    };
+
+    const handleRejection = (event: any) => setLogs(prev => [...prev, `[PROMISE] ${String(event.reason)}`]);
+    const handleError = (event: any) => setLogs(prev => [...prev, `[WINDOW] ${String(event.message)}`]);
+    
+    window.addEventListener('unhandledrejection', handleRejection);
+    window.addEventListener('error', handleError);
+    
+    return () => {
+      console.error = origError;
+      window.removeEventListener('unhandledrejection', handleRejection);
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
+
+  if (logs.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]" dir="ltr">
+      <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
+        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Live Debug Console</span>
+        <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
+      </div>
+      {logs.map((l, i) => (
+        <div key={i} className={`mb-1 border-b border-emerald-800/30 pb-1 break-words ${l.includes('[ERROR]') ? 'text-rose-400' : 'text-amber-400'}`}>
+          {l}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// =========================================================================
+// 3. 🚀 التطبيق الرئيسي (Main Component)
+// =========================================================================
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
   { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
@@ -26,7 +114,7 @@ const BASE_ROLES = [
   { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
 ];
 
-export default function ExamCommitteesControl() {
+function ExamCommitteesControl() {
   const { authRole, userRole, user } = useAuth() as any;
   const currentRole = authRole || userRole;
 
@@ -79,7 +167,6 @@ export default function ExamCommitteesControl() {
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  // 🛡️ دالة التسمية الصريحة المحمية بالكامل
   const getFullClassName = (studentData: any) => {
     if (!studentData) return 'غير محدد';
     try {
@@ -507,7 +594,7 @@ export default function ExamCommitteesControl() {
                      {teachers.filter(t => getTeacherAssignments(String(t?.id)).length > 0).map((t, tIndex) => {
                        const invigDuties = getTeacherAssignments(String(t?.id));
                        return (
-                         <div key={t?.id || `tr-${tIndex}`} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col gap-4">
+                         <div key={`tr-${tIndex}`} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col gap-4">
                            <div className="flex items-center gap-3">
                              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black shrink-0 text-xl border-2 border-white shadow-sm">
                                {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-full h-full rounded-full object-cover" alt="avatar" /> : String(t?.full_name || 'م').charAt(0)}
@@ -523,7 +610,7 @@ export default function ExamCommitteesControl() {
                                {invigDuties.map((duty, idx) => {
                                   const cName = committees.find(c => String(c?.id) === String(duty?.committee_id))?.name || 'غير معروف';
                                   return (
-                                     <div key={duty?.id || `dty-${idx}`} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
+                                     <div key={`dty-${idx}`} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
                                         <span className="text-xs font-black text-slate-700">{String(cName)}</span>
                                         {duty?.status === 'signed' ? <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> استلم</span> :
                                          duty?.status === 'excused' ? <button onClick={() => openReadExcuseModal(duty)} className="text-[9px] font-black text-rose-500 flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md hover:bg-rose-100 transition-colors"><AlertCircle className="w-3 h-3"/> عرض العذر</button> :
@@ -553,7 +640,7 @@ export default function ExamCommitteesControl() {
                        </thead>
                        <tbody>
                          {allHeads.length > 0 ? allHeads.map((h, i) => (
-                           <tr key={h?.id || `hd-${i}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                           <tr key={`hd-${i}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                              <td className="p-4 font-black text-slate-600">{String(h?.exam_timetables?.exam_date || '-')}</td>
                              <td className="p-4 font-bold text-slate-700">{String(h?.exam_timetables?.subjects?.name || '-')}</td>
                              <td className="p-4 font-black text-indigo-700 flex items-center gap-2">
@@ -606,7 +693,7 @@ export default function ExamCommitteesControl() {
                     const isOverflow = String(committee?.name || '').includes('الفائض');
 
                     return (
-                      <div key={committee?.id || `comm-${idx}`} className={`bg-white rounded-2xl p-5 border ${isOverflow ? 'border-rose-300 bg-rose-50/50' : 'border-slate-200'} shadow-sm flex flex-col`}>
+                      <div key={`comm-${idx}`} className={`bg-white rounded-2xl p-5 border ${isOverflow ? 'border-rose-300 bg-rose-50/50' : 'border-slate-200'} shadow-sm flex flex-col`}>
                         <div className="flex justify-between items-start mb-3 border-b border-slate-100 pb-3">
                           <div>
                             <h3 className={`text-lg font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{String(committee?.name || 'بدون اسم')}</h3>
@@ -628,7 +715,7 @@ export default function ExamCommitteesControl() {
                             {commInvigs.map((inv, iIdx) => {
                               const tName = getSafeName(inv?.users);
                               return (
-                                <div key={inv?.id || `i-${iIdx}`} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 gap-1.5">
+                                <div key={`i-${iIdx}`} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 gap-1.5">
                                   <div className="flex justify-between items-center">
                                      <span className="text-xs font-bold text-slate-800 truncate pr-1">{tName}</span>
                                      <button onClick={() => handleRemoveInvigilator(inv?.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
@@ -870,12 +957,13 @@ export default function ExamCommitteesControl() {
                     const assignedComms = getTeacherAssignments(tId);
                     const isInThisCommittee = assignedComms.some(c => String(c?.committee_id) === String(selectedCommittee?.id));
                     const isSelected = selectedTeacherId === tId;
+                    const safeAvatarUrl = t?.avatar_url ? `${t.avatar_url}?t=${new Date().getTime()}` : null;
 
                     return (
                        <div key={`ta-${index}`} onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isInThisCommittee ? "bg-slate-100 opacity-60 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
                           <div className="flex items-center gap-3">
                              <div className="relative group/avatar cursor-pointer" onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(tId); }} title="رفع وتعديل الصورة">
-                               {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
+                               {safeAvatarUrl ? <img src={safeAvatarUrl} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity"><Camera className="w-4 h-4 text-white" /></div>
                              </div>
                              <div>
@@ -989,13 +1077,14 @@ export default function ExamCommitteesControl() {
                              const stdName = getSafeName(s?.students?.users);
                              const stdInitial = String(stdName || 'ط').charAt(0);
                              const fullClassName = getFullClassName(s?.students);
+                             const safeStdAvatar = stdAvatar ? `${stdAvatar}?t=${new Date().getTime()}` : null;
 
                              return (
                                <tr key={`vstd-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
                                  <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s?.seat_number}</td>
                                  <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
-                                    {stdAvatar ? (
-                                      <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
+                                    {safeStdAvatar ? (
+                                      <img src={safeStdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
                                     ) : (
                                       <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
                                     )}
@@ -1171,5 +1260,15 @@ export default function ExamCommitteesControl() {
       
       <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }`}</style>
     </div>
+  );
+}
+
+// 🚀 تغليف التطبيق الأساسي بالدروع
+export default function Page() {
+  return (
+    <ErrorBoundary>
+      <FloatingConsole />
+      <ExamCommitteesControl />
+    </ErrorBoundary>
   );
 }
