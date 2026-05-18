@@ -14,12 +14,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
-import html2canvas from 'html2canvas-pro';
-import { jsPDF } from 'jspdf';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
 // =========================================================================
-// 1. 🛡️ جدار الحماية (Error Boundary) الأقوى
+// 1. 🛡️ جدار الحماية (Error Boundary) 
 // =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
@@ -40,10 +38,8 @@ class ErrorBoundary extends React.Component {
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
             <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
             <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ داخلي!</h1>
-            <p className="text-slate-600 font-bold mb-6 text-sm">تم اصطياد الخطأ بنجاح ولم ينهار الموقع، الرجاء تصوير هذه الشاشة للمبرمج:</p>
             <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[40vh] text-left text-xs font-mono whitespace-pre-wrap">
               <p className="text-rose-400 font-bold mb-2">{String(this.state.error)}</p>
-              {this.state.errorInfo?.componentStack}
             </div>
             <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
               تحديث الصفحة
@@ -57,11 +53,10 @@ class ErrorBoundary extends React.Component {
 }
 
 // =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء
+// 2. 🕵️‍♂️ الكونسول العائم
 // =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
-  
   useEffect(() => {
     const origError = console.error;
     console.error = (...args) => {
@@ -71,24 +66,20 @@ function FloatingConsole() {
     };
     return () => { console.error = origError; };
   }, []);
-
   if (logs.length === 0) return null;
-
   return (
     <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500" dir="ltr">
       <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
         <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Debug Console</span>
         <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
       </div>
-      {logs.map((l, i) => (
-        <div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>
-      ))}
+      {logs.map((l, i) => (<div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>))}
     </div>
   );
 }
 
 // =========================================================================
-// 3. 🚀 التطبيق الرئيسي (The Core Component)
+// 3. 🚀 التطبيق الرئيسي
 // =========================================================================
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
@@ -99,7 +90,6 @@ const BASE_ROLES = [
 ];
 
 function ExamCommitteesControl() {
-  // 🛡️ التفكيك الآمن (Safe Destructuring) لمنع الانهيار القطعي!
   const authContext = useAuth() || {};
   const currentRole = authContext.authRole || authContext.userRole;
   const user = authContext.user || null;
@@ -280,8 +270,6 @@ function ExamCommitteesControl() {
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
 
-  if (currentRole !== 'admin' && currentRole !== 'management') return null;
-
   const fetchHeadsByDate = async (date: string) => {
     if (!date) { setCurrentHeads([]); setSelectedCommitteesForHead([]); return; }
     try {
@@ -451,6 +439,7 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
+  // 🚀 دالة الطباعة: الاستيراد الديناميكي لمنع أخطاء المتصفح في Next.js
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -485,10 +474,15 @@ function ExamCommitteesControl() {
       setTimeout(async () => {
         if (!printRef.current) { setIsPrinting(false); return; }
         try {
+          // 🚀 استدعاء المكتبات وقت الحاجة فقط (Dynamic Import)
+          const html2canvas = (await import('html2canvas-pro')).default;
+          const { jsPDF } = await import('jspdf');
+
           window.scrollTo(0, 0); const isMobile = window.innerWidth < 768;
           const pages = printRef.current.querySelectorAll('.print-page-wrapper');
           if (pages.length === 0) { setIsPrinting(false); return; }
           const pdf = new jsPDF('p', 'mm', 'a4');
+          
           for (let i = 0; i < pages.length; i++) {
             const pageElement = pages[i] as HTMLElement;
             const originalCssText = pageElement.style.cssText;
@@ -500,6 +494,7 @@ function ExamCommitteesControl() {
             const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = pdf.internal.pageSize.getHeight(); 
             if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
           }
+          
           let fileName = 'مستند';
           if (type === 'door_sheet') fileName = `محضر_لجنة_${committee.name}`;
           if (type === 'desk_cards') fileName = `بطاقات_طاولة_${committee.name}`;
@@ -767,7 +762,7 @@ function ExamCommitteesControl() {
               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><Layers className="w-6 h-6 text-emerald-600"/> طباعة بطاقات الفصول</h3>
               <button onClick={() => setIsClassPrintModalOpen(false)} className="p-2 bg-slate-50 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
             </div>
-            <p className="text-sm font-bold text-slate-500 mb-4">اختر الصف لطباعة بطاقات جميع طلابه مجمعة لتسليمها لمربي الفصل.</p>
+            <p className="text-sm font-bold text-slate-50 mb-4">اختر الصف لطباعة بطاقات جميع طلابه مجمعة لتسليمها لمربي الفصل.</p>
             {availableClasses.length === 0 ? (
               <p className="text-center text-sm font-bold text-slate-500 py-8">لا يوجد طلاب موزعون بعد للطباعة.</p>
             ) : (
@@ -1252,6 +1247,7 @@ function ExamCommitteesControl() {
   );
 }
 
+// 🚀 تصدير الصفحة مع درع الحماية
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
