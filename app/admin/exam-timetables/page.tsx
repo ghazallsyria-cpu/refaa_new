@@ -1,10 +1,10 @@
 // @ts-nocheck
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   CalendarDays, Clock, BookOpen, Plus, Edit3, Trash2, 
-  ShieldCheck, Loader2, X, CheckCircle2 
+  ShieldCheck, Loader2, X, CheckCircle2, Zap
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +18,7 @@ export default function ExamTimetablesAdmin() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   
   const [subjects, setSubjects] = useState<any[]>([]);
   const [timetables, setTimetables] = useState<any[]>([]);
@@ -97,21 +98,18 @@ export default function ExamTimetablesAdmin() {
     }
   };
 
-  // 🚀 الهدم المتسلسل الذكي (Cascading Manual Delete)
   const handleDelete = async (id: string) => {
     if (!confirm('تحذير خطير: هل أنت متأكد من حذف هذا الاختبار؟ (سيتم حذف أي تكليفات لرؤساء اللجان وسجلات الحضور المرتبطة به تلقائياً)')) return;
     
     try {
       setIsLoading(true);
       
-      // 1. تنظيف الروابط القوية لمنع رفض قاعدة البيانات للحذف
       await supabase.from('exam_committee_heads').delete().eq('timetable_id', id);
       await supabase.from('exam_attendance').delete().eq('timetable_id', id);
       await supabase.from('invigilator_attendance').delete().eq('timetable_id', id);
       await supabase.from('exam_grading_roles').delete().eq('timetable_id', id);
       await supabase.from('exam_pipeline').delete().eq('timetable_id', id);
 
-      // 2. حذف الاختبار نفسه
       const { error } = await supabase.from('exam_timetables').delete().eq('id', id);
       if (error) throw error;
       
@@ -122,6 +120,94 @@ export default function ExamTimetablesAdmin() {
       alert('حدث خطأ أثناء الحذف: ' + error.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 🚀 التوليد السحري متطابق 100% مع قاعدة بياناتك!
+  const handleAutoGenerate = async () => {
+    if (!confirm('هل أنت متأكد من رغبتك في توليد كافة جداول الفترة الدراسية الثانية (عاشر + حادي عشر علمي وأدبي) تلقائياً؟')) return;
+    setIsGenerating(true);
+    
+    try {
+      // 1. التطابق الحرفي مع قاعدة بياناتك المرفقة
+      const schedule = [
+        // --- العاشر ---
+        { date: '2026-06-03', start: '08:00', end: '10:15', level: 10, sub: 'فيزياء' },
+        { date: '2026-06-04', start: '08:00', end: '11:15', level: 10, sub: 'عربي' },
+        { date: '2026-06-07', start: '08:00', end: '10:15', level: 10, sub: 'رياضيات' },
+        { date: '2026-06-08', start: '08:00', end: '10:15', level: 10, sub: 'تاريخ' },
+        { date: '2026-06-10', start: '08:00', end: '10:15', level: 10, sub: 'احياء' },
+        { date: '2026-06-11', start: '08:00', end: '11:15', level: 10, sub: 'انجليزي' },
+        { date: '2026-06-14', start: '08:00', end: '10:15', level: 10, sub: 'كيمياء' },
+        { date: '2026-06-15', start: '08:00', end: '10:15', level: 10, sub: 'اسلامية' },
+
+        // --- الحادي عشر (علمي وأدبي) ---
+        { date: '2026-06-03', start: '08:00', end: '10:45', level: 11, sub: 'رياضيات' }, // علمي
+        { date: '2026-06-03', start: '08:00', end: '10:15', level: 11, sub: 'جغرافيا' }, // أدبي
+        { date: '2026-06-04', start: '08:00', end: '10:15', level: 11, sub: 'كيمياء' }, // علمي
+        { date: '2026-06-04', start: '08:00', end: '10:15', level: 11, sub: 'احصاء' }, // أدبي (سيتم إنشاؤها تلقائياً)
+        { date: '2026-06-07', start: '08:00', end: '10:15', level: 11, sub: 'فيزياء' }, // علمي
+        { date: '2026-06-07', start: '08:00', end: '10:15', level: 11, sub: 'فرنسي' }, // أدبي
+        { date: '2026-06-08', start: '08:00', end: '10:15', level: 11, sub: 'اسلامية' }, // مشترك
+        { date: '2026-06-10', start: '08:00', end: '10:15', level: 11, sub: 'جيولوجيا' }, // علمي
+        { date: '2026-06-10', start: '08:00', end: '10:15', level: 11, sub: 'علم نفس' }, // أدبي
+        { date: '2026-06-11', start: '08:00', end: '11:15', level: 11, sub: 'عربي' }, // مشترك
+        { date: '2026-06-14', start: '08:00', end: '10:15', level: 11, sub: 'احياء' }, // علمي
+        { date: '2026-06-14', start: '08:00', end: '10:15', level: 11, sub: 'تاريخ' }, // أدبي
+        { date: '2026-06-15', start: '08:00', end: '11:15', level: 11, sub: 'انجليزي' }, // مشترك
+      ];
+
+      // 2. تحديث جدول المواد وتوليد المفقود منها (مثل: احصاء)
+      const { data: existSubs } = await supabase.from('subjects').select('id, name');
+      let currentSubs = existSubs || [];
+      const requiredSubNames = [...new Set(schedule.map(s => s.sub))];
+      const missingNames = requiredSubNames.filter(name => !currentSubs.find(s => s.name === name));
+
+      if (missingNames.length > 0) {
+        const newSubjectsToInsert = missingNames.map(n => ({ name: n, code: `SUB_${Math.floor(Math.random() * 10000)}` }));
+        const { data: newSubs, error: subErr } = await supabase.from('subjects').insert(newSubjectsToInsert).select('id, name');
+        if (subErr) throw subErr;
+        currentSubs = [...currentSubs, ...(newSubs || [])];
+      }
+
+      // 3. فلترة لتجنب التكرار 
+      const { data: existingTT } = await supabase.from('exam_timetables')
+        .select('id, exam_date, subject_id, class_level')
+        .eq('academic_year', currentYear)
+        .eq('semester', currentSemester);
+
+      const inserts = [];
+      for (const s of schedule) {
+        const subjectRecord = currentSubs.find(cs => cs.name === s.sub);
+        if (subjectRecord) {
+          const isExist = existingTT?.find(et => et.exam_date === s.date && et.class_level === s.level && et.subject_id === subjectRecord.id);
+          if (!isExist) {
+            inserts.push({
+               academic_year: currentYear,
+               semester: currentSemester,
+               class_level: s.level,
+               exam_date: s.date,
+               start_time: s.start,
+               end_time: s.end,
+               subject_id: subjectRecord.id
+            });
+          }
+        }
+      }
+
+      if (inserts.length > 0) {
+        const { error: insErr } = await supabase.from('exam_timetables').insert(inserts);
+        if (insErr) throw insErr;
+        alert(`تم زرع ${inserts.length} اختبار بنجاح في قاعدة البيانات متطابقة تماماً مع أسماء المواد!`);
+      } else {
+        alert('الجدول مُولد بالفعل ولا توجد اختبارات ناقصة.');
+      }
+      
+      fetchData();
+    } catch (err: any) {
+      alert('خطأ أثناء التوليد: ' + err.message);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -174,6 +260,14 @@ export default function ExamTimetablesAdmin() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo" dir="rtl">
+      
+      {isGenerating && (
+        <div className="fixed inset-0 bg-slate-900/90 z-[100] flex flex-col items-center justify-center text-white backdrop-blur-sm">
+          <Loader2 className="w-16 h-16 animate-spin text-amber-400 mb-6" />
+          <h2 className="text-xl font-black animate-pulse text-center px-4">جاري زرع الجداول والمواد تلقائياً...</h2>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 relative">
         
         <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
@@ -184,9 +278,12 @@ export default function ExamTimetablesAdmin() {
             </h1>
             <p className="text-slate-500 font-bold text-sm">إدارة مواعيد اختبارات الصفين العاشر والحادي عشر لعام {currentYear}</p>
           </div>
-          <div className="relative z-10 w-full md:w-auto">
+          <div className="relative z-10 w-full md:w-auto flex flex-col sm:flex-row gap-3">
+            <button onClick={handleAutoGenerate} disabled={isGenerating} className="w-full md:w-auto px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
+              <Zap className="w-5 h-5" /> توليد الجداول تلقائياً
+            </button>
             <button onClick={() => openModal()} className="w-full md:w-auto px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
-              <Plus className="w-5 h-5" /> إضافة اختبار جديد
+              <Plus className="w-5 h-5" /> إضافة يدوية
             </button>
           </div>
         </div>
@@ -206,7 +303,10 @@ export default function ExamTimetablesAdmin() {
           <div className="text-center p-16 md:p-20 bg-white rounded-3xl border border-slate-200 border-dashed mx-auto max-w-2xl">
             <CalendarDays className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <h3 className="text-xl font-black text-slate-400 mb-2">الجدول فارغ</h3>
-            <p className="text-sm font-bold text-slate-500">لم يتم إضافة أي اختبارات لهذا الصف بعد.</p>
+            <p className="text-sm font-bold text-slate-500 mb-6">لم يتم إضافة أي اختبارات لهذا الصف بعد.</p>
+            <button onClick={handleAutoGenerate} className="px-6 py-3 bg-amber-100 text-amber-700 font-black rounded-xl hover:bg-amber-200 transition-colors inline-flex items-center gap-2">
+              <Zap className="w-4 h-4"/> سحب الجدول تلقائياً
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
@@ -214,7 +314,6 @@ export default function ExamTimetablesAdmin() {
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} key={exam.id} className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-2 h-full bg-indigo-500"></div>
                 
-                {/* 🚀 إظهار الأزرار دائماً لتناسب الموبايل */}
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 gap-4">
                   <div>
                     <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg mb-3 inline-block">
