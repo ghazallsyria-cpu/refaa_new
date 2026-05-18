@@ -18,93 +18,6 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
-// =========================================================================
-// 1. 🛡️ جدار الحماية (Error Boundary) لاصطياد الأخطاء ومنع الانهيار
-// =========================================================================
-class ErrorBoundary extends React.Component {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
-  }
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error: any, errorInfo: any) {
-    this.setState({ errorInfo });
-    console.error("🔥 ErrorBoundary Caught:", error, errorInfo);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-rose-100 p-6 flex flex-col items-center justify-center font-sans" dir="ltr">
-          <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-4 border-rose-500">
-            <h1 className="text-3xl font-black text-rose-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-8 h-8"/> Application Crashed!
-            </h1>
-            <p className="text-slate-600 font-bold mb-4">Please take a screenshot of this error and send it to the developer:</p>
-            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[60vh] text-xs font-mono whitespace-pre-wrap">
-              <p className="text-rose-400 font-bold text-sm mb-2">{String(this.state.error)}</p>
-              {this.state.errorInfo?.componentStack}
-            </div>
-            <button onClick={() => window.location.reload()} className="mt-6 w-full py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700">
-              Reload Page
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم (Floating Debug Console)
-// =========================================================================
-function FloatingConsole() {
-  const [logs, setLogs] = useState<string[]>([]);
-  
-  useEffect(() => {
-    const origError = console.error;
-
-    console.error = (...args) => {
-      const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-      setLogs(prev => [...prev, `[ERROR] ${msg}`]);
-      origError.apply(console, args);
-    };
-
-    const handleRejection = (event: any) => setLogs(prev => [...prev, `[PROMISE] ${String(event.reason)}`]);
-    const handleError = (event: any) => setLogs(prev => [...prev, `[WINDOW] ${String(event.message)}`]);
-    
-    window.addEventListener('unhandledrejection', handleRejection);
-    window.addEventListener('error', handleError);
-    
-    return () => {
-      console.error = origError;
-      window.removeEventListener('unhandledrejection', handleRejection);
-      window.removeEventListener('error', handleError);
-    };
-  }, []);
-
-  if (logs.length === 0) return null;
-
-  return (
-    <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]" dir="ltr">
-      <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
-        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Live Debug Console</span>
-        <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
-      </div>
-      {logs.map((l, i) => (
-        <div key={i} className={`mb-1 border-b border-emerald-800/30 pb-1 break-words ${l.includes('[ERROR]') ? 'text-rose-400' : 'text-amber-400'}`}>
-          {l}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// =========================================================================
-// 3. 🚀 التطبيق الرئيسي (Main Component)
-// =========================================================================
 const BASE_ROLES = [
   { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
   { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
@@ -113,8 +26,8 @@ const BASE_ROLES = [
   { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
 ];
 
-// لاحظ هنا: أزلنا كلمة export default من هذه الدالة
-function ExamCommitteesControl() {
+export default function ExamCommitteesControl() {
+  const [isMounted, setIsMounted] = useState(false);
   const { authRole, userRole, user } = useAuth() as any;
   const currentRole = authRole || userRole;
 
@@ -166,6 +79,11 @@ function ExamCommitteesControl() {
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
+
+  // 🛡️ التخلص من خطأ Hydration بتفعيل التطبيق بعد التحميل فقط
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const getFullClassName = (studentData: any) => {
     if (!studentData) return 'غير محدد';
@@ -287,7 +205,10 @@ function ExamCommitteesControl() {
     }
   };
 
-  useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
+  useEffect(() => { if (isMounted && ['admin', 'management'].includes(String(currentRole))) fetchData(); }, [isMounted, currentRole]);
+
+  if (!isMounted) return null; // 🛡️ هذا السطر يمنع انهيار Hydration Mismatch للأبد
+  if (currentRole !== 'admin' && currentRole !== 'management') return null;
 
   const fetchHeadsByDate = async (date: string) => {
     if (!date) { setCurrentHeads([]); setSelectedCommitteesForHead([]); return; }
@@ -517,8 +438,6 @@ function ExamCommitteesControl() {
       }, 3000); 
     } catch (e) { alert('خطأ في تحضير الطباعة'); setIsPrinting(false); }
   };
-
-  if (currentRole !== 'admin' && currentRole !== 'management') return null;
 
   const getTeacherAssignments = (tId: string) => invigilators.filter(i => String(i?.teacher_id) === String(tId));
   const getTeacherHeadAssignments = (tId: string) => {
