@@ -30,7 +30,6 @@ export default function GradingControlPage() {
   const [radarLevelFilter, setRadarLevelFilter] = useState('all'); 
   const [stats, setStats] = useState({ total: 0, submitted: 0, pending: 0 });
 
-  // 🚀 حالات التحكم بمحرك الطباعة المزدوج
   const [printMode, setPrintMode] = useState<'radar' | 'sheet'>('radar');
   const [printData, setPrintData] = useState<any>(null);
 
@@ -71,35 +70,27 @@ export default function GradingControlPage() {
             let teacherSubjectsToTrack = [];
             if (ts.subjects?.name) {
               teacherSubjectsToTrack.push(ts.subjects.name);
+              // حقن مادة القرآن لمعلمي الإسلامية
               if (ts.subjects.name.includes('إسلامية') || ts.subjects.name.includes('اسلامية')) {
                 teacherSubjectsToTrack.push('القرآن الكريم');
               }
             }
 
+            // 🚀 الحل الجذري: مطابقة حرفية 100% بدون أي تعديل لاسم المادة
             teacherSubjectsToTrack.forEach(rawSub => {
-              let standardSubName = rawSub;
-              const targetStage = cLevel === 11 || cLevel === 12 ? (sectionObj.classes.name.includes('ادبي') ? 'literary' : 'scientific') : '';
-
-              if (standardSubName.includes('اجتماعيات') && cLevel === 10) standardSubName = 'تاريخ الكويت';
-              else if (standardSubName.includes('رياضيات') && targetStage === 'literary') standardSubName = 'الرياضيات والاحصاء';
-              else if (standardSubName.includes('بدنية')) standardSubName = 'التربية البدنية';
-              else if (standardSubName.includes('اسلامية') || standardSubName.includes('إسلامية')) standardSubName = 'التربية الإسلامية';
-              else if (standardSubName.includes('انجليزي') || standardSubName.includes('إنجليزي') || standardSubName.includes('انجليزية')) standardSubName = 'اللغة الإنجليزية';
-              else if (standardSubName.includes('عربي') || standardSubName.includes('عربيه')) standardSubName = 'اللغة العربية';
-              else if (standardSubName.includes('حياء')) standardSubName = 'الأحياء'; 
-              else if (standardSubName.includes('فيزياء')) standardSubName = 'الفيزياء';
-              else if (standardSubName.includes('كيمياء')) standardSubName = 'الكيمياء';
-              else if (standardSubName.includes('حاسوب') || standardSubName.includes('حاسب')) standardSubName = 'الحاسوب';
-              else if (standardSubName.includes('قرآن') || standardSubName.includes('قران')) standardSubName = 'القرآن الكريم';
-
-              const subjectRec = lockedGrades?.find(lg => lg.grade_level === sectionObj.classes.name && lg.section === sectionObj.name && lg.subject_name === standardSubName);
+              const subjectRec = lockedGrades?.find(lg => 
+                lg.grade_level === sectionObj.classes.name && 
+                lg.section === sectionObj.name && 
+                lg.subject_name === rawSub // <--- هنا يكمن السحر، مطابقة دقيقة
+              );
+              
               const isSubmitted = subjectRec?.is_locked || false;
               const isTransferred = subjectRec?.is_transferred_to_ministry || false;
               
               progressArray.push({
-                id: `${ts.teacher_id}-${ts.section_id}-${standardSubName}`,
+                id: `${ts.teacher_id}-${ts.section_id}-${rawSub}`,
                 teacherName: teacher.full_name, className: sectionObj.classes.name, sectionName: sectionObj.name, 
-                isSubmitted, isTransferred, subjectName: standardSubName
+                isSubmitted, isTransferred, subjectName: rawSub
               });
             });
           }
@@ -212,7 +203,6 @@ export default function GradingControlPage() {
     } catch (err) { setStatus({ type: 'error', msg: 'فشل التصدير.' }); } finally { setActionLoadingId(null); setTimeout(() => setStatus(null), 3000); }
   };
 
-  // 🚀 محرك الطباعة لـ (ملف PDF الرسمي لكل كشف)
   const handlePrintSheetPDF = async (item: any) => {
     setActionLoadingId(`pdf-${item.id}`);
     try {
@@ -229,17 +219,14 @@ export default function GradingControlPage() {
         return;
       }
 
-      // ترتيب أسماء الطلاب أبجدياً
       gradesData.sort((a,b) => a.student_name.localeCompare(b.student_name));
       
-      // تعيين البيانات وتبديل وضع الطباعة
       setPrintData({ ...item, grades: gradesData });
       setPrintMode('sheet');
       
-      // إعطاء React فرصة لرسم الكشف قبل فتح نافذة الطباعة
       setTimeout(() => {
         window.print();
-        setPrintMode('radar'); // إرجاع الوضع الطبيعي بعد إغلاق نافذة الطباعة
+        setPrintMode('radar');
       }, 500);
 
     } catch (err) {
@@ -259,14 +246,12 @@ export default function GradingControlPage() {
   return (
     <div className={`min-h-screen bg-transparent p-4 sm:p-6 lg:p-8 font-sans ${printMode === 'sheet' ? 'mode-sheet' : 'mode-radar'}`} dir="rtl">
       
-      {/* 🚀 هندسة CSS الخاصة بالطباعة المزدوجة */}
       <style dangerouslySetInnerHTML={{__html: ` 
         @media print { 
           @page { size: A4 portrait; margin: 15mm; } 
           body { background: white !important; color: black !important; } 
           .no-print, nav, footer, header:not(.print-header), .fixed, .sticky, [class*="fixed bottom"] { display: none !important; }
           
-          /* التحكم في العرض حسب وضع الطباعة */
           .mode-sheet .print-only-radar { display: none !important; }
           .mode-radar .print-only-sheet { display: none !important; }
 
@@ -279,9 +264,6 @@ export default function GradingControlPage() {
         } 
       `}} />
 
-      {/* ========================================================================= */}
-      {/* 📄 قالب الوثيقة الرسمية المخفي (يظهر في وضع طباعة الكشف فقط) */}
-      {/* ========================================================================= */}
       {printData && (
         <div className="hidden print-only-sheet print-area w-full" dir="rtl">
           <div className="text-center mb-8 border-b-2 border-black pb-4">
@@ -340,9 +322,6 @@ export default function GradingControlPage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 🛡️ رادار الإدارة العام */}
-      {/* ========================================================================= */}
       <div className={`max-w-7xl mx-auto space-y-8 pb-32 print-only-radar ${printMode === 'sheet' ? 'hidden' : ''}`}>
         
         <div className="no-print glass-panel p-8 rounded-[2.5rem] border border-amber-500/20 shadow-[0_0_40px_rgba(245,158,11,0.05)] bg-[#0f1423]/80 relative overflow-hidden">
@@ -401,159 +380,4 @@ export default function GradingControlPage() {
             <div className="glass-panel p-6 rounded-[2rem] border border-white/10 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-amber-400 mb-6 flex items-center gap-2"><Power className="w-5 h-5" /> قواطع المواد الأساسية</h2>
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5"><div><p className="font-bold text-slate-200">أعمال ف1</p></div><button onClick={() => handleToggle('p1_cw_active', settings.p1_cw_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p1_cw_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p1_cw_active ? 'left-1' : 'left-7'}`}></div></button></div>
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5"><div><p className="font-bold text-slate-200">اختبار ف1</p></div><button onClick={() => handleToggle('p1_ex_active', settings.p1_ex_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p1_ex_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p1_ex_active ? 'left-1' : 'left-7'}`}></div></button></div>
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5"><div><p className="font-bold text-slate-200">أعمال ف2</p></div><button onClick={() => handleToggle('p2_cw_active', settings.p2_cw_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p2_cw_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p2_cw_active ? 'left-1' : 'left-7'}`}></div></button></div>
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5"><div><p className="font-bold text-slate-200">اختبار ف2</p></div><button onClick={() => handleToggle('p2_ex_active', settings.p2_ex_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p2_ex_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p2_ex_active ? 'left-1' : 'left-7'}`}></div></button></div>
-              </div>
-            </div>
-
-            <div className="glass-panel p-6 rounded-[2rem] border border-blue-500/30 bg-[#0f1423]/80">
-              <h2 className="text-xl font-black text-blue-400 mb-6 flex items-center gap-2"><Filter className="w-5 h-5" /> بوابات الصفوف</h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">العاشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g10_active', settings.g10_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g10_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g10_active ? 'left-1' : 'left-7'}`}></div></button></div>
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">الحادي عشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g11_active', settings.g11_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g11_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g11_active ? 'left-1' : 'left-7'}`}></div></button></div>
-                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-blue-500/20"><div><p className="font-bold text-white">الثاني عشر</p></div><button disabled={toggleLoading} onClick={() => handleToggle('g12_active', settings.g12_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.g12_active ? 'bg-blue-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.g12_active ? 'left-1' : 'left-7'}`}></div></button></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-2 print-area">
-            <div className="hidden print:block print-header text-center mb-8">
-              <h1 className="text-2xl font-bold mb-2">مدرسة الرفعة النموذجية (م - ث) للبنين</h1>
-              <h2 className="text-xl">تقرير إنجاز المعلمين ونقل الدرجات</h2>
-              <p className="mt-2 text-gray-600">المرحلة: {radarLevelFilter === 'all' ? 'الكل' : radarLevelFilter}</p>
-            </div>
-
-            <div className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 bg-[#0f1423]/80 h-full flex flex-col print:border-none print:bg-transparent print:p-0">
-              
-              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 border-b border-white/5 pb-6 no-print">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20"><Activity className="w-5 h-5 text-amber-400" /></div>
-                  <div>
-                    <h2 className="text-xl font-black text-white">رادار الإنجاز والوثائق</h2>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-                  
-                  <button onClick={() => exportGradesToCSV()} disabled={actionLoadingId === 'export-all'} className="flex-1 xl:flex-none p-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold rounded-xl border border-emerald-500/20 transition-colors flex items-center justify-center gap-2" title="تصدير كشوف هذه المرحلة لبرنامج Excel">
-                    {actionLoadingId === 'export-all' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                    <span className="text-xs">تصدير إجمالي</span>
-                  </button>
-
-                  <button onClick={handlePrintRadar} className="flex-1 xl:flex-none p-2.5 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-2" title="طباعة الرادار العام">
-                    <Printer className="w-5 h-5" />
-                    <span className="text-xs">رادار</span>
-                  </button>
-
-                  <div className="relative flex-1 xl:flex-none">
-                    <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <select value={radarLevelFilter} onChange={(e) => setRadarLevelFilter(e.target.value)} className="w-full xl:w-auto bg-black/60 border border-white/10 rounded-xl py-2 pl-4 pr-9 text-xs font-bold text-white outline-none focus:border-amber-500 transition-colors appearance-none">
-                      <option value="all">جميع المراحل</option>
-                      <option value="10">العاشر فقط</option>
-                      <option value="11">الحادي عشر فقط</option>
-                      <option value="12">الثاني عشر فقط</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-xl px-4 py-1.5 shrink-0">
-                    <div className="text-center"><p className="text-lg font-black text-emerald-400 leading-none">{stats.submitted}</p><p className="text-[10px] text-slate-400 font-bold">مكتمل</p></div>
-                    <div className="w-px h-6 bg-white/10"></div>
-                    <div className="text-center"><p className="text-lg font-black text-rose-400 leading-none">{stats.pending}</p><p className="text-[10px] text-slate-400 font-bold">متأخر</p></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 max-h-[600px] print:max-h-none print:overflow-visible">
-                <table className="w-full text-right">
-                  <thead className="sticky top-0 bg-[#0f1423] z-10 shadow-md print:static print:bg-gray-100">
-                    <tr className="border-b border-white/10 print:border-black">
-                      <th className="p-3 text-slate-400 font-bold text-sm print:text-black">المعلم</th>
-                      <th className="p-3 text-slate-400 font-bold text-sm print:text-black">الصف والشعبة</th>
-                      <th className="p-3 text-slate-400 font-bold text-sm print:text-black">المادة</th>
-                      <th className="p-3 text-slate-400 font-bold text-sm text-center print:text-black">حالة الكشف</th>
-                      <th className="p-3 text-slate-400 font-bold text-sm text-center print:text-black action-col">الإدارة والوثائق</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProgress.length > 0 ? (
-                      filteredProgress.map((item) => (
-                        <tr key={item.id} className="border-b border-white/5 hover:bg-white/5 transition-colors print:border-black">
-                          <td className="p-4 font-bold text-slate-200 print:text-black whitespace-nowrap">أ. {item.teacherName}</td>
-                          <td className="p-4">
-                            <span className="badge inline-block px-3 py-1.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded-lg text-xs font-black print:text-black whitespace-nowrap">
-                              {item.className} - {item.sectionName}
-                            </span>
-                          </td>
-                          <td className="p-4 text-xs font-bold text-amber-300 print:text-black">{item.subjectName}</td>
-                          <td className="p-4 text-center">
-                            {item.isSubmitted ? (
-                              <span className="badge inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs font-black rounded-lg border border-emerald-500/20 print:text-black whitespace-nowrap"><CheckCircle2 className="w-4 h-4 no-print" /> معتمد</span>
-                            ) : (
-                              <span className="badge inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-rose-500/10 text-rose-400 text-xs font-black rounded-lg border border-rose-500/20 print:text-black whitespace-nowrap"><Clock className="w-4 h-4 no-print" /> قيد الإدخال</span>
-                            )}
-                          </td>
-                          
-                          <td className="p-4 text-center action-col">
-                            {item.isSubmitted ? (
-                              <div className="flex items-center justify-center gap-2 w-full max-w-[340px] mx-auto">
-                                
-                                {/* زر النقل */}
-                                <button 
-                                  onClick={() => handleTransferToMinistry(item.className, item.sectionName, item.subjectName, item.isTransferred, item.id)}
-                                  disabled={actionLoadingId === `transfer-${item.id}`}
-                                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] font-black rounded-xl border transition-all ${item.isTransferred ? 'bg-indigo-600 text-white border-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-transparent text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10'}`}
-                                >
-                                  {actionLoadingId === `transfer-${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : item.isTransferred ? <CheckCircle2 className="w-4 h-4" /> : <ArrowRightLeft className="w-4 h-4" />}
-                                  {item.isTransferred ? 'منقول' : 'الوزارة'}
-                                </button>
-
-                                {/* 🚀 زر استخراج وثيقة PDF الرسمية للكشف الفردي */}
-                                <button 
-                                  onClick={() => handlePrintSheetPDF(item)}
-                                  disabled={actionLoadingId === `pdf-${item.id}`}
-                                  className="p-1.5 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded-xl transition-colors border border-blue-500/20"
-                                  title="طباعة الوثيقة الرسمية (PDF) لهذا الكشف"
-                                >
-                                  {actionLoadingId === `pdf-${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                                </button>
-                                
-                                {/* زر الإكسيل */}
-                                <button 
-                                  onClick={() => exportGradesToCSV(item.className, item.sectionName, item.subjectName)}
-                                  disabled={actionLoadingId === `export-${item.className}-${item.sectionName}-${item.subjectName}`}
-                                  className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-xl transition-colors border border-emerald-500/20"
-                                  title="تصدير درجات هذا الكشف للإكسيل"
-                                >
-                                  {actionLoadingId === `export-${item.className}-${item.sectionName}-${item.subjectName}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                                </button>
-
-                                {/* زر ফك الاعتماد */}
-                                <button 
-                                  onClick={() => handleUnlockSheet(item.className, item.sectionName, item.subjectName, item.id)}
-                                  disabled={actionLoadingId === `unlock-${item.id}`}
-                                  className="p-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-xl transition-colors border border-rose-500/20"
-                                  title="فك الاعتماد وإعادة الكشف للمعلم"
-                                >
-                                  {actionLoadingId === `unlock-${item.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="text-slate-600 text-[10px] font-bold">- بانتظار الاعتماد -</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (<tr><td colSpan={5} className="p-10 text-center text-slate-500 font-bold">لا يوجد بيانات.</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-  );
-}
+                <div className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5"><div><p className="font-bold text-slate-200">أعمال ف1</p></div><button onClick={() => handleToggle('p1_cw_active', settings.p1_cw_active)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.p1_cw_active ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${settings.p1_cw_active ?
