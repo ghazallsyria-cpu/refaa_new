@@ -4,7 +4,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   CalendarDays, Clock, BookOpen, Plus, Edit3, Trash2, 
-  ShieldCheck, Loader2, X, CheckCircle2, Zap
+  ShieldCheck, Loader2, X, CheckCircle2, Zap, AlertTriangle,
+  Crown, FileKey, MonitorCheck, ClipboardSignature, FileArchive
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -90,7 +91,6 @@ function ExamTimetablesControl() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [timetables, setTimetables] = useState<any[]>([]);
   
-  // 🚀 تحويل المتغير ليقبل 3 حالات (عاشر - 11علمي - 11أدبي)
   const [activeFilter, setActiveFilter] = useState<'10' | '11_sci' | '11_lit'>('10'); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   
@@ -283,7 +283,7 @@ function ExamTimetablesControl() {
       setFormData({
         id: '',
         subject_id: '',
-        class_level: activeFilter === '10' ? 10 : 11, // ربط ذكي بالتبويب الحالي
+        class_level: activeFilter === '10' ? 10 : 11,
         exam_date: '',
         start_time: '08:00',
         end_time: '10:00'
@@ -305,7 +305,6 @@ function ExamTimetablesControl() {
     );
   }
 
-  // 🚀 خوارزمية تمييز مسار المادة (تحديد المشترك والعلمي والأدبي)
   const getSubjectTrack = (subjectName: string = '') => {
     const name = subjectName || '';
     const sciList = ['فيزياء', 'كيمياء', 'احياء', 'أحياء', 'جيولوجيا', 'رياضيات', 'علوم'];
@@ -313,10 +312,9 @@ function ExamTimetablesControl() {
     
     if (sciList.some(s => name.includes(s))) return 'sci';
     if (litList.some(s => name.includes(s))) return 'lit';
-    return 'common'; // إذا لم تكن هنا أو هنا، فهي مشتركة (عربي، إسلامية، إلخ)
+    return 'common'; 
   };
 
-  // 🚀 فلترة الجداول الذكية للتبويبات الثلاثة
   const filteredExams = timetables.filter(exam => {
     if (activeFilter === '10') {
       return exam.class_level === 10;
@@ -372,7 +370,7 @@ function ExamTimetablesControl() {
           </div>
           <div className="relative z-10 w-full md:w-auto flex flex-col sm:flex-row gap-3">
             <button onClick={handleAutoGenerate} disabled={isGenerating} className="w-full md:w-auto px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
-              <Zap className="w-5 h-5" /> توليد الجداول
+              <Zap className="w-5 h-5" /> توليد الجداول تلقائياً
             </button>
             <button onClick={() => openModal()} className="w-full md:w-auto px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
               <Plus className="w-5 h-5" /> إضافة يدوية
@@ -380,7 +378,6 @@ function ExamTimetablesControl() {
           </div>
         </div>
 
-        {/* 🚀 التبويبات الثلاثة المستقلة */}
         <div className="flex bg-white p-2 rounded-2xl border border-slate-200 shadow-sm max-w-2xl mx-auto overflow-x-auto custom-scrollbar">
           <button onClick={() => setActiveFilter('10')} className={`flex-1 min-w-[120px] py-3.5 px-2 rounded-xl font-black text-sm md:text-base transition-all ${activeFilter === '10' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             الصف العاشر
@@ -505,8 +502,16 @@ function ExamTimetablesControl() {
 
 export default function Page() {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-cairo"></div>;
+  
+  useEffect(() => {
+    // 🛡️ التخلص من خطأ Hydration باستخدام setTimeout 
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
+  
+  if (!mounted) {
+    return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-cairo"></div>;
+  }
 
   return (
     <ErrorBoundary>
