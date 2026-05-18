@@ -11,10 +11,77 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-export default function ExamTimetablesAdmin() {
+// =========================================================================
+// 1. 🛡️ جدار الحماية (Error Boundary)
+// =========================================================================
+class ErrorBoundary extends React.Component {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    this.setState({ errorInfo });
+    console.error("🔥 ErrorBoundary Caught:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-rose-50 p-6 flex flex-col items-center justify-center font-cairo" dir="rtl">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
+            <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
+            <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ داخلي!</h1>
+            <p className="text-slate-600 font-bold mb-6 text-sm">تم اصطياد الخطأ بنجاح ولم ينهار الموقع، الرجاء تصوير هذه الشاشة للمبرمج:</p>
+            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[40vh] text-left text-xs font-mono whitespace-pre-wrap" dir="ltr">
+              <p className="text-rose-400 font-bold mb-2">Error: {this.state.error?.message || String(this.state.error)}</p>
+              {this.state.errorInfo?.componentStack}
+            </div>
+            <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
+              تحديث الصفحة
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// =========================================================================
+// 2. 🕵️‍♂️ الكونسول العائم
+// =========================================================================
+function FloatingConsole() {
+  const [logs, setLogs] = useState<string[]>([]);
+  useEffect(() => {
+    const origError = console.error;
+    console.error = (...args) => {
+      const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+      setLogs(prev => [...prev, `[ERROR] ${msg}`]);
+      origError.apply(console, args);
+    };
+    return () => { console.error = origError; };
+  }, []);
+  if (logs.length === 0) return null;
+  return (
+    <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500" dir="ltr">
+      <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
+        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Debug Console</span>
+        <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
+      </div>
+      {logs.map((l, i) => (<div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>))}
+    </div>
+  );
+}
+
+// =========================================================================
+// 3. 🚀 التطبيق الرئيسي (جداول الاختبارات)
+// =========================================================================
+function ExamTimetablesControl() {
   const router = useRouter();
-  const { user, authRole, userRole } = useAuth() as any;
-  const currentRole = authRole || userRole;
+  const authContext = useAuth() || {};
+  const currentRole = authContext.authRole || authContext.userRole;
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -23,7 +90,8 @@ export default function ExamTimetablesAdmin() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [timetables, setTimetables] = useState<any[]>([]);
   
-  const [activeLevel, setActiveLevel] = useState<number>(10); 
+  // 🚀 تحويل المتغير ليقبل 3 حالات (عاشر - 11علمي - 11أدبي)
+  const [activeFilter, setActiveFilter] = useState<'10' | '11_sci' | '11_lit'>('10'); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -60,9 +128,7 @@ export default function ExamTimetablesAdmin() {
   };
 
   useEffect(() => { 
-    if (currentRole === 'admin' || currentRole === 'management') {
-      fetchData(); 
-    }
+    if (['admin', 'management'].includes(String(currentRole))) fetchData(); 
   }, [currentRole]);
 
   const handleSave = async () => {
@@ -99,11 +165,10 @@ export default function ExamTimetablesAdmin() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('تحذير خطير: هل أنت متأكد من حذف هذا الاختبار؟ (سيتم حذف أي تكليفات لرؤساء اللجان وسجلات الحضور المرتبطة به تلقائياً)')) return;
+    if (!confirm('تحذير خطير: هل أنت متأكد من حذف هذا الاختبار؟ (سيتم حذف أي سجلات حضور مرتبطة به تلقائياً)')) return;
     
     try {
       setIsLoading(true);
-      
       await supabase.from('exam_committee_heads').delete().eq('timetable_id', id);
       await supabase.from('exam_attendance').delete().eq('timetable_id', id);
       await supabase.from('invigilator_attendance').delete().eq('timetable_id', id);
@@ -113,10 +178,9 @@ export default function ExamTimetablesAdmin() {
       const { error } = await supabase.from('exam_timetables').delete().eq('id', id);
       if (error) throw error;
       
-      alert('تم حذف الاختبار وتنظيف سجلاته بنجاح!');
+      alert('تم الحذف بنجاح!');
       fetchData();
     } catch (error: any) {
-      console.error(error);
       alert('حدث خطأ أثناء الحذف: ' + error.message);
     } finally {
       setIsLoading(false);
@@ -124,12 +188,11 @@ export default function ExamTimetablesAdmin() {
   };
 
   const handleAutoGenerate = async () => {
-    if (!confirm('هل أنت متأكد من رغبتك في توليد كافة جداول الفترة الدراسية الثانية تلقائياً؟')) return;
+    if (!confirm('هل أنت متأكد من رغبتك في توليد كافة الجداول تلقائياً؟')) return;
     setIsGenerating(true);
     
     try {
       const schedule = [
-        // --- العاشر ---
         { date: '2026-06-03', start: '08:00', end: '10:15', level: 10, sub: 'فيزياء' },
         { date: '2026-06-04', start: '08:00', end: '11:15', level: 10, sub: 'عربي' },
         { date: '2026-06-07', start: '08:00', end: '10:15', level: 10, sub: 'رياضيات' },
@@ -139,7 +202,6 @@ export default function ExamTimetablesAdmin() {
         { date: '2026-06-14', start: '08:00', end: '10:15', level: 10, sub: 'كيمياء' },
         { date: '2026-06-15', start: '08:00', end: '10:15', level: 10, sub: 'اسلامية' },
 
-        // --- الحادي عشر (علمي وأدبي) ---
         { date: '2026-06-03', start: '08:00', end: '10:45', level: 11, sub: 'رياضيات' },
         { date: '2026-06-03', start: '08:00', end: '10:15', level: 11, sub: 'جغرافيا' },
         { date: '2026-06-04', start: '08:00', end: '10:15', level: 11, sub: 'كيمياء' },
@@ -194,7 +256,7 @@ export default function ExamTimetablesAdmin() {
       if (inserts.length > 0) {
         const { error: insErr } = await supabase.from('exam_timetables').insert(inserts);
         if (insErr) throw insErr;
-        alert(`تم زرع ${inserts.length} اختبار بنجاح في قاعدة البيانات متطابقة تماماً مع أسماء المواد!`);
+        alert(`تم زرع ${inserts.length} اختبار بنجاح!`);
       } else {
         alert('الجدول مُولد بالفعل ولا توجد اختبارات ناقصة.');
       }
@@ -221,7 +283,7 @@ export default function ExamTimetablesAdmin() {
       setFormData({
         id: '',
         subject_id: '',
-        class_level: activeLevel,
+        class_level: activeFilter === '10' ? 10 : 11, // ربط ذكي بالتبويب الحالي
         exam_date: '',
         start_time: '08:00',
         end_time: '10:00'
@@ -230,20 +292,54 @@ export default function ExamTimetablesAdmin() {
     setIsModalOpen(true);
   };
 
-  if (currentRole !== 'admin' && currentRole !== 'management') {
+  if (!['admin', 'management'].includes(String(currentRole))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-cairo" dir="rtl">
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center max-w-md w-full">
           <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6"><ShieldCheck className="w-12 h-12 text-rose-500" /></div>
           <h1 className="text-2xl font-black text-slate-800 mb-2">منطقة محظورة! 🛑</h1>
-          <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">عذراً، هذه الغرفة مخصصة لمدير النظام والإدارة العليا فقط.</p>
+          <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">عذراً، هذه الغرفة مخصصة لمدير النظام فقط.</p>
           <button onClick={() => router.back()} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all shadow-md active:scale-95">العودة للخلف</button>
         </div>
       </div>
     );
   }
 
-  const filteredExams = timetables.filter(exam => exam.class_level === activeLevel);
+  // 🚀 خوارزمية تمييز مسار المادة (تحديد المشترك والعلمي والأدبي)
+  const getSubjectTrack = (subjectName: string = '') => {
+    const name = subjectName || '';
+    const sciList = ['فيزياء', 'كيمياء', 'احياء', 'أحياء', 'جيولوجيا', 'رياضيات', 'علوم'];
+    const litList = ['جغرافيا', 'تاريخ', 'علم نفس', 'فرنسي', 'احصاء', 'إحصاء', 'فلسفة', 'اجتماعيات'];
+    
+    if (sciList.some(s => name.includes(s))) return 'sci';
+    if (litList.some(s => name.includes(s))) return 'lit';
+    return 'common'; // إذا لم تكن هنا أو هنا، فهي مشتركة (عربي، إسلامية، إلخ)
+  };
+
+  // 🚀 فلترة الجداول الذكية للتبويبات الثلاثة
+  const filteredExams = timetables.filter(exam => {
+    if (activeFilter === '10') {
+      return exam.class_level === 10;
+    }
+    if (activeFilter === '11_sci') {
+      const track = getSubjectTrack(exam.subjects?.name);
+      return exam.class_level === 11 && (track === 'sci' || track === 'common');
+    }
+    if (activeFilter === '11_lit') {
+      const track = getSubjectTrack(exam.subjects?.name);
+      return exam.class_level === 11 && (track === 'lit' || track === 'common');
+    }
+    return false;
+  });
+
+  const getExamBadgeDetails = (level: number, subjectName: string = '') => {
+    if (level === 10) return { text: 'الصف العاشر', bg: 'bg-emerald-50', textCol: 'text-emerald-700', border: 'border-emerald-200' };
+    
+    const track = getSubjectTrack(subjectName);
+    if (track === 'sci') return { text: 'الحادي عشر (علمي)', bg: 'bg-blue-50', textCol: 'text-blue-700', border: 'border-blue-200' };
+    if (track === 'lit') return { text: 'الحادي عشر (أدبي)', bg: 'bg-fuchsia-50', textCol: 'text-fuchsia-700', border: 'border-fuchsia-200' };
+    return { text: 'الحادي عشر (مشترك)', bg: 'bg-indigo-50', textCol: 'text-indigo-700', border: 'border-indigo-200' };
+  };
 
   const formatArabicDate = (dateString: string) => {
     try {
@@ -252,28 +348,6 @@ export default function ExamTimetablesAdmin() {
     } catch {
       return dateString;
     }
-  };
-
-  // 🚀 خوارزمية التمييز البصري (العلمي والأدبي والمشترك)
-  const getExamBadgeDetails = (level: number, subjectName: string = '') => {
-    const name = subjectName || '';
-    if (level === 10) {
-      return { text: 'الصف العاشر', bg: 'bg-emerald-50', textCol: 'text-emerald-700', border: 'border-emerald-200' };
-    }
-    
-    const sciList = ['فيزياء', 'كيمياء', 'احياء', 'أحياء', 'جيولوجيا', 'رياضيات', 'علوم'];
-    const litList = ['جغرافيا', 'تاريخ', 'علم نفس', 'فرنسي', 'احصاء', 'إحصاء', 'فلسفة', 'اجتماعيات'];
-    
-    const isSci = sciList.some(s => name.includes(s));
-    const isLit = litList.some(s => name.includes(s));
-
-    if (level === 11) {
-      if (isSci) return { text: 'الحادي عشر (علمي)', bg: 'bg-blue-50', textCol: 'text-blue-700', border: 'border-blue-200' };
-      if (isLit) return { text: 'الحادي عشر (أدبي)', bg: 'bg-fuchsia-50', textCol: 'text-fuchsia-700', border: 'border-fuchsia-200' };
-      return { text: 'الحادي عشر (مشترك)', bg: 'bg-indigo-50', textCol: 'text-indigo-700', border: 'border-indigo-200' };
-    }
-    
-    return { text: 'غير محدد', bg: 'bg-slate-50', textCol: 'text-slate-600', border: 'border-slate-200' };
   };
 
   return (
@@ -298,7 +372,7 @@ export default function ExamTimetablesAdmin() {
           </div>
           <div className="relative z-10 w-full md:w-auto flex flex-col sm:flex-row gap-3">
             <button onClick={handleAutoGenerate} disabled={isGenerating} className="w-full md:w-auto px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
-              <Zap className="w-5 h-5" /> توليد الجداول تلقائياً
+              <Zap className="w-5 h-5" /> توليد الجداول
             </button>
             <button onClick={() => openModal()} className="w-full md:w-auto px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-95">
               <Plus className="w-5 h-5" /> إضافة يدوية
@@ -306,12 +380,16 @@ export default function ExamTimetablesAdmin() {
           </div>
         </div>
 
-        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm max-w-md mx-auto">
-          <button onClick={() => setActiveLevel(10)} className={`flex-1 py-3.5 rounded-xl font-black text-base transition-all ${activeLevel === 10 ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+        {/* 🚀 التبويبات الثلاثة المستقلة */}
+        <div className="flex bg-white p-2 rounded-2xl border border-slate-200 shadow-sm max-w-2xl mx-auto overflow-x-auto custom-scrollbar">
+          <button onClick={() => setActiveFilter('10')} className={`flex-1 min-w-[120px] py-3.5 px-2 rounded-xl font-black text-sm md:text-base transition-all ${activeFilter === '10' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             الصف العاشر
           </button>
-          <button onClick={() => setActiveLevel(11)} className={`flex-1 py-3.5 rounded-xl font-black text-base transition-all ${activeLevel === 11 ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            الصف الحادي عشر
+          <button onClick={() => setActiveFilter('11_sci')} className={`flex-1 min-w-[120px] py-3.5 px-2 rounded-xl font-black text-sm md:text-base transition-all ${activeFilter === '11_sci' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            الحادي عشر علمي
+          </button>
+          <button onClick={() => setActiveFilter('11_lit')} className={`flex-1 min-w-[120px] py-3.5 px-2 rounded-xl font-black text-sm md:text-base transition-all ${activeFilter === '11_lit' ? 'bg-fuchsia-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            الحادي عشر أدبي
           </button>
         </div>
 
@@ -321,7 +399,7 @@ export default function ExamTimetablesAdmin() {
           <div className="text-center p-16 md:p-20 bg-white rounded-3xl border border-slate-200 border-dashed mx-auto max-w-2xl">
             <CalendarDays className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <h3 className="text-xl font-black text-slate-400 mb-2">الجدول فارغ</h3>
-            <p className="text-sm font-bold text-slate-500 mb-6">لم يتم إضافة أي اختبارات لهذا الصف بعد.</p>
+            <p className="text-sm font-bold text-slate-500 mb-6">لم يتم إضافة أي اختبارات لهذا المسار بعد.</p>
             <button onClick={handleAutoGenerate} className="px-6 py-3 bg-amber-100 text-amber-700 font-black rounded-xl hover:bg-amber-200 transition-colors inline-flex items-center gap-2">
               <Zap className="w-4 h-4"/> سحب الجدول تلقائياً
             </button>
@@ -337,7 +415,6 @@ export default function ExamTimetablesAdmin() {
                   
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 gap-4">
                     <div>
-                      {/* 🚀 هنا سيظهر الوسام الملون المخصص لكل مسار */}
                       <span className={`text-[12px] font-black px-3 py-1.5 rounded-lg mb-3 inline-block border ${badge.bg} ${badge.textCol} ${badge.border}`}>
                         {badge.text}
                       </span>
@@ -423,5 +500,18 @@ export default function ExamTimetablesAdmin() {
       </AnimatePresence>
 
     </div>
+  );
+}
+
+export default function Page() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-cairo"></div>;
+
+  return (
+    <ErrorBoundary>
+      <FloatingConsole />
+      <ExamTimetablesControl />
+    </ErrorBoundary>
   );
 }
