@@ -123,13 +123,11 @@ export default function ExamTimetablesAdmin() {
     }
   };
 
-  // 🚀 التوليد السحري متطابق 100% مع قاعدة بياناتك!
   const handleAutoGenerate = async () => {
-    if (!confirm('هل أنت متأكد من رغبتك في توليد كافة جداول الفترة الدراسية الثانية (عاشر + حادي عشر علمي وأدبي) تلقائياً؟')) return;
+    if (!confirm('هل أنت متأكد من رغبتك في توليد كافة جداول الفترة الدراسية الثانية تلقائياً؟')) return;
     setIsGenerating(true);
     
     try {
-      // 1. التطابق الحرفي مع قاعدة بياناتك المرفقة
       const schedule = [
         // --- العاشر ---
         { date: '2026-06-03', start: '08:00', end: '10:15', level: 10, sub: 'فيزياء' },
@@ -142,22 +140,21 @@ export default function ExamTimetablesAdmin() {
         { date: '2026-06-15', start: '08:00', end: '10:15', level: 10, sub: 'اسلامية' },
 
         // --- الحادي عشر (علمي وأدبي) ---
-        { date: '2026-06-03', start: '08:00', end: '10:45', level: 11, sub: 'رياضيات' }, // علمي
-        { date: '2026-06-03', start: '08:00', end: '10:15', level: 11, sub: 'جغرافيا' }, // أدبي
-        { date: '2026-06-04', start: '08:00', end: '10:15', level: 11, sub: 'كيمياء' }, // علمي
-        { date: '2026-06-04', start: '08:00', end: '10:15', level: 11, sub: 'احصاء' }, // أدبي (سيتم إنشاؤها تلقائياً)
-        { date: '2026-06-07', start: '08:00', end: '10:15', level: 11, sub: 'فيزياء' }, // علمي
-        { date: '2026-06-07', start: '08:00', end: '10:15', level: 11, sub: 'فرنسي' }, // أدبي
-        { date: '2026-06-08', start: '08:00', end: '10:15', level: 11, sub: 'اسلامية' }, // مشترك
-        { date: '2026-06-10', start: '08:00', end: '10:15', level: 11, sub: 'جيولوجيا' }, // علمي
-        { date: '2026-06-10', start: '08:00', end: '10:15', level: 11, sub: 'علم نفس' }, // أدبي
-        { date: '2026-06-11', start: '08:00', end: '11:15', level: 11, sub: 'عربي' }, // مشترك
-        { date: '2026-06-14', start: '08:00', end: '10:15', level: 11, sub: 'احياء' }, // علمي
-        { date: '2026-06-14', start: '08:00', end: '10:15', level: 11, sub: 'تاريخ' }, // أدبي
-        { date: '2026-06-15', start: '08:00', end: '11:15', level: 11, sub: 'انجليزي' }, // مشترك
+        { date: '2026-06-03', start: '08:00', end: '10:45', level: 11, sub: 'رياضيات' },
+        { date: '2026-06-03', start: '08:00', end: '10:15', level: 11, sub: 'جغرافيا' },
+        { date: '2026-06-04', start: '08:00', end: '10:15', level: 11, sub: 'كيمياء' },
+        { date: '2026-06-04', start: '08:00', end: '10:15', level: 11, sub: 'احصاء' },
+        { date: '2026-06-07', start: '08:00', end: '10:15', level: 11, sub: 'فيزياء' },
+        { date: '2026-06-07', start: '08:00', end: '10:15', level: 11, sub: 'فرنسي' },
+        { date: '2026-06-08', start: '08:00', end: '10:15', level: 11, sub: 'اسلامية' },
+        { date: '2026-06-10', start: '08:00', end: '10:15', level: 11, sub: 'جيولوجيا' },
+        { date: '2026-06-10', start: '08:00', end: '10:15', level: 11, sub: 'علم نفس' },
+        { date: '2026-06-11', start: '08:00', end: '11:15', level: 11, sub: 'عربي' },
+        { date: '2026-06-14', start: '08:00', end: '10:15', level: 11, sub: 'احياء' },
+        { date: '2026-06-14', start: '08:00', end: '10:15', level: 11, sub: 'تاريخ' },
+        { date: '2026-06-15', start: '08:00', end: '11:15', level: 11, sub: 'انجليزي' },
       ];
 
-      // 2. تحديث جدول المواد وتوليد المفقود منها (مثل: احصاء)
       const { data: existSubs } = await supabase.from('subjects').select('id, name');
       let currentSubs = existSubs || [];
       const requiredSubNames = [...new Set(schedule.map(s => s.sub))];
@@ -170,7 +167,6 @@ export default function ExamTimetablesAdmin() {
         currentSubs = [...currentSubs, ...(newSubs || [])];
       }
 
-      // 3. فلترة لتجنب التكرار 
       const { data: existingTT } = await supabase.from('exam_timetables')
         .select('id, exam_date, subject_id, class_level')
         .eq('academic_year', currentYear)
@@ -258,8 +254,30 @@ export default function ExamTimetablesAdmin() {
     }
   };
 
+  // 🚀 خوارزمية التمييز البصري (العلمي والأدبي والمشترك)
+  const getExamBadgeDetails = (level: number, subjectName: string = '') => {
+    const name = subjectName || '';
+    if (level === 10) {
+      return { text: 'الصف العاشر', bg: 'bg-emerald-50', textCol: 'text-emerald-700', border: 'border-emerald-200' };
+    }
+    
+    const sciList = ['فيزياء', 'كيمياء', 'احياء', 'أحياء', 'جيولوجيا', 'رياضيات', 'علوم'];
+    const litList = ['جغرافيا', 'تاريخ', 'علم نفس', 'فرنسي', 'احصاء', 'إحصاء', 'فلسفة', 'اجتماعيات'];
+    
+    const isSci = sciList.some(s => name.includes(s));
+    const isLit = litList.some(s => name.includes(s));
+
+    if (level === 11) {
+      if (isSci) return { text: 'الحادي عشر (علمي)', bg: 'bg-blue-50', textCol: 'text-blue-700', border: 'border-blue-200' };
+      if (isLit) return { text: 'الحادي عشر (أدبي)', bg: 'bg-fuchsia-50', textCol: 'text-fuchsia-700', border: 'border-fuchsia-200' };
+      return { text: 'الحادي عشر (مشترك)', bg: 'bg-indigo-50', textCol: 'text-indigo-700', border: 'border-indigo-200' };
+    }
+    
+    return { text: 'غير محدد', bg: 'bg-slate-50', textCol: 'text-slate-600', border: 'border-slate-200' };
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo" dir="rtl">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo pb-24" dir="rtl">
       
       {isGenerating && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex flex-col items-center justify-center text-white backdrop-blur-sm">
@@ -289,10 +307,10 @@ export default function ExamTimetablesAdmin() {
         </div>
 
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm max-w-md mx-auto">
-          <button onClick={() => setActiveLevel(10)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeLevel === 10 ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <button onClick={() => setActiveLevel(10)} className={`flex-1 py-3.5 rounded-xl font-black text-base transition-all ${activeLevel === 10 ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             الصف العاشر
           </button>
-          <button onClick={() => setActiveLevel(11)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeLevel === 11 ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <button onClick={() => setActiveLevel(11)} className={`flex-1 py-3.5 rounded-xl font-black text-base transition-all ${activeLevel === 11 ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             الصف الحادي عشر
           </button>
         </div>
@@ -310,36 +328,41 @@ export default function ExamTimetablesAdmin() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {filteredExams.map((exam, idx) => (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} key={exam.id} className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-2 h-full bg-indigo-500"></div>
-                
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 gap-4">
-                  <div>
-                    <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg mb-3 inline-block">
-                      {activeLevel === 10 ? 'العاشر' : 'الحادي عشر'}
-                    </span>
-                    <h3 className="text-2xl font-black text-slate-800 leading-tight">{exam.subjects?.name}</h3>
-                  </div>
-                  
-                  <div className="flex gap-2 shrink-0">
-                     <button onClick={() => openModal(exam)} className="p-3 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"><Edit3 className="w-4 h-4"/></button>
-                     <button onClick={() => handleDelete(exam.id)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><Trash2 className="w-4 h-4"/></button>
-                  </div>
-                </div>
+            {filteredExams.map((exam, idx) => {
+              const badge = getExamBadgeDetails(exam.class_level, exam.subjects?.name);
 
-                <div className="space-y-3 mt-auto">
-                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <CalendarDays className="w-5 h-5 text-indigo-400 shrink-0" />
-                    <span className="font-bold text-sm leading-none">{formatArabicDate(exam.exam_date)}</span>
+              return (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} key={exam.id} className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden">
+                  <div className={`absolute top-0 right-0 w-2 h-full ${badge.bg.replace('50', '500')}`}></div>
+                  
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 gap-4">
+                    <div>
+                      {/* 🚀 هنا سيظهر الوسام الملون المخصص لكل مسار */}
+                      <span className={`text-[12px] font-black px-3 py-1.5 rounded-lg mb-3 inline-block border ${badge.bg} ${badge.textCol} ${badge.border}`}>
+                        {badge.text}
+                      </span>
+                      <h3 className="text-3xl font-black text-slate-800 leading-tight">{exam.subjects?.name}</h3>
+                    </div>
+                    
+                    <div className="flex gap-2 shrink-0">
+                       <button onClick={() => openModal(exam)} className="p-3 bg-slate-50 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors shadow-sm"><Edit3 className="w-5 h-5"/></button>
+                       <button onClick={() => handleDelete(exam.id)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shadow-sm"><Trash2 className="w-5 h-5"/></button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <Clock className="w-5 h-5 text-amber-500 shrink-0" />
-                    <span className="font-bold text-sm leading-none" dir="ltr">{exam.start_time?.substring(0,5)} - {exam.end_time?.substring(0,5)}</span>
+
+                  <div className="space-y-3 mt-auto">
+                    <div className="flex items-center gap-3 text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      <CalendarDays className="w-6 h-6 text-indigo-500 shrink-0" />
+                      <span className="font-black text-base leading-none">{formatArabicDate(exam.exam_date)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      <Clock className="w-6 h-6 text-amber-500 shrink-0" />
+                      <span className="font-black text-base leading-none" dir="ltr">{exam.start_time?.substring(0,5)} - {exam.end_time?.substring(0,5)}</span>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -348,49 +371,49 @@ export default function ExamTimetablesAdmin() {
         {isModalOpen && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => !isSaving && setIsModalOpen(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-md bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
-              <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                  <BookOpen className="w-6 h-6 text-indigo-600"/> {formData.id ? 'تعديل الاختبار' : 'إضافة اختبار جديد'}
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-md bg-white rounded-3xl shadow-2xl z-50 p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
+              <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
+                <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                  <BookOpen className="w-7 h-7 text-indigo-600"/> {formData.id ? 'تعديل الاختبار' : 'إضافة اختبار جديد'}
                 </h3>
-                <button onClick={() => !isSaving && setIsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
+                <button onClick={() => !isSaving && setIsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-6 h-6"/></button>
               </div>
               
-              <div className="space-y-5">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-bold text-slate-600 mb-2">المادة الدراسية</label>
-                  <select value={formData.subject_id} onChange={(e) => setFormData({...formData, subject_id: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500">
+                  <label className="block text-base font-black text-slate-700 mb-2">المادة الدراسية</label>
+                  <select value={formData.subject_id} onChange={(e) => setFormData({...formData, subject_id: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-slate-800 outline-none focus:border-indigo-500">
                     <option value="">-- اختر المادة --</option>
                     {subjects.map(s => ( <option key={s.id} value={s.id}>{s.name}</option> ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-600 mb-2">الصف الدراسي</label>
-                  <select value={formData.class_level} onChange={(e) => setFormData({...formData, class_level: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-indigo-500">
+                  <label className="block text-base font-black text-slate-700 mb-2">الصف الدراسي</label>
+                  <select value={formData.class_level} onChange={(e) => setFormData({...formData, class_level: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-slate-800 outline-none focus:border-indigo-500">
                     <option value={10}>الصف العاشر</option>
                     <option value={11}>الصف الحادي عشر</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-600 mb-2">تاريخ الاختبار</label>
-                  <input type="date" value={formData.exam_date} onChange={(e) => setFormData({...formData, exam_date: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-slate-700 outline-none focus:border-indigo-500" dir="ltr" />
+                  <label className="block text-base font-black text-slate-700 mb-2">تاريخ الاختبار</label>
+                  <input type="date" value={formData.exam_date} onChange={(e) => setFormData({...formData, exam_date: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-slate-800 outline-none focus:border-indigo-500" dir="ltr" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                    <div>
-                     <label className="block text-sm font-bold text-slate-600 mb-2">وقت البداية</label>
-                     <input type="time" value={formData.start_time} onChange={(e) => setFormData({...formData, start_time: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
+                     <label className="block text-base font-black text-slate-700 mb-2">وقت البداية</label>
+                     <input type="time" value={formData.start_time} onChange={(e) => setFormData({...formData, start_time: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center text-slate-800 outline-none focus:border-indigo-500" />
                    </div>
                    <div>
-                     <label className="block text-sm font-bold text-slate-600 mb-2">وقت النهاية</label>
-                     <input type="time" value={formData.end_time} onChange={(e) => setFormData({...formData, end_time: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-center text-slate-700 outline-none focus:border-indigo-500" />
+                     <label className="block text-base font-black text-slate-700 mb-2">وقت النهاية</label>
+                     <input type="time" value={formData.end_time} onChange={(e) => setFormData({...formData, end_time: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center text-slate-800 outline-none focus:border-indigo-500" />
                    </div>
                 </div>
 
-                <button onClick={handleSave} disabled={isSaving} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 transition-colors shadow-md mt-2 flex items-center justify-center gap-2">
-                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <CheckCircle2 className="w-5 h-5"/>}
+                <button onClick={handleSave} disabled={isSaving} className="w-full py-5 bg-indigo-600 text-white text-lg font-black rounded-2xl hover:bg-indigo-700 transition-colors shadow-md mt-4 flex items-center justify-center gap-2">
+                  {isSaving ? <Loader2 className="w-6 h-6 animate-spin"/> : <CheckCircle2 className="w-6 h-6"/>}
                   {isSaving ? 'جاري الحفظ...' : 'اعتماد الاختبار'}
                 </button>
               </div>
