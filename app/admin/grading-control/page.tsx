@@ -21,21 +21,20 @@ export default function GradingControlPage() {
     g10_active: true, g11_active: true, g12_active: true 
   });
 
-  // 🚀 ميزة القائمة البيضاء للرصد المبكر
   const [vipSubjects, setVipSubjects] = useState<string[]>([]);
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]); // 🚀 قائمة المواد من الداتابيز
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
   const [newVipSubject, setNewVipSubject] = useState('');
   const [vipLoading, setVipLoading] = useState(false);
 
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [ctaLoading, setCtaLoading] = useState(false);
-  const [teacherProgress, setTeacherProgress] = useState<any[]>([]);
+  // 🚀 حالات الرادار المفلتر الجديدة
+  const [allTeacherProgress, setAllTeacherProgress] = useState<any[]>([]);
+  const [filteredProgress, setFilteredProgress] = useState<any[]>([]);
+  const [radarLevelFilter, setRadarLevelFilter] = useState('all'); // 'all', '10', '11', '12'
   const [stats, setStats] = useState({ total: 0, submitted: 0, pending: 0 });
 
   const fetchRadarData = async () => {
     setLoading(true);
     try {
-      // 1. جلب الإعدادات والمواد المستثناة الحالية
       const { data: schoolSettings } = await supabase.from('school_settings').select('*').single();
       if (schoolSettings) {
         setSettings({
@@ -48,15 +47,12 @@ export default function GradingControlPage() {
         setVipSubjects(schoolSettings.early_grading_subjects || []);
       }
 
-      // 🚀 2. جلب جميع المواد الرسمية من لائحة الدرجات لاستخدامها في القائمة المنسدلة
       const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('subject_name');
       if (rulesData) {
-        // تنظيف التكرارات وترتيبها أبجدياً
         const uniqueSubjects = Array.from(new Set(rulesData.map(r => r.subject_name?.trim()))).filter(Boolean).sort();
         setAvailableSubjects(uniqueSubjects);
       }
 
-      // 3. جلب بيانات الرادار للمستطيل الأيسر
       const { data: teacherSections } = await supabase.from('teacher_sections').select('*');
       const { data: users } = await supabase.from('users').select('id, full_name').eq('role', 'teacher');
       const { data: sections } = await supabase.from('sections').select('id, name, classes(name, level)');
@@ -64,7 +60,6 @@ export default function GradingControlPage() {
 
       if (teacherSections && users && sections) {
         const progressArray: any[] = [];
-        let submittedCount = 0;
 
         teacherSections.forEach(ts => {
           const teacher = users.find(u => u.id === ts.teacher_id);
@@ -72,7 +67,6 @@ export default function GradingControlPage() {
 
           if (teacher && sectionObj && sectionObj.classes.level >= 10) { 
             const isSubmitted = lockedGrades?.some(lg => lg.grade_level === sectionObj.classes.name && lg.section === sectionObj.name);
-            if (isSubmitted) submittedCount++;
             progressArray.push({
               id: `${ts.teacher_id}-${ts.section_id}`,
               teacherName: teacher.full_name, className: sectionObj.classes.name, sectionName: sectionObj.name, isSubmitted,
@@ -84,13 +78,35 @@ export default function GradingControlPage() {
         const uniqueProgress = progressArray.filter((value, index, self) => index === self.findIndex((t) => (t.teacherName === value.teacherName && t.className === value.className && t.sectionName === value.sectionName)));
         uniqueProgress.sort((a, b) => a.teacherName.localeCompare(b.teacherName));
         
-        setTeacherProgress(uniqueProgress);
-        setStats({ total: uniqueProgress.length, submitted: submittedCount, pending: uniqueProgress.length - submittedCount });
+        // 🚀 حفظ كل البيانات في المتغير الشامل
+        setAllTeacherProgress(uniqueProgress);
       }
     } catch (error) { setStatus({ type: 'error', msg: 'فشل تشغيل الرادار.' }); } finally { setLoading(false); }
   };
 
   useEffect(() => { fetchRadarData(); }, []);
+
+  // 🚀 الفلترة الديناميكية للإحصائيات والجدول
+  useEffect(() => {
+    let filtered = allTeacherProgress;
+    
+    if (radarLevelFilter === '10') {
+      filtered = filtered.filter(item => item.className.includes('العاشر') || item.className.includes('10'));
+    } else if (radarLevelFilter === '11') {
+      filtered = filtered.filter(item => item.className.includes('الحادي عشر') || item.className.includes('11'));
+    } else if (radarLevelFilter === '12') {
+      filtered = filtered.filter(item => item.className.includes('الثاني عشر') || item.className.includes('12'));
+    }
+
+    const submittedCount = filtered.filter(item => item.isSubmitted).length;
+    
+    setFilteredProgress(filtered);
+    setStats({
+      total: filtered.length,
+      submitted: submittedCount,
+      pending: filtered.length - submittedCount
+    });
+  }, [allTeacherProgress, radarLevelFilter]);
 
   const handleToggle = async (field: string, currentValue: boolean) => {
     setToggleLoading(true); setStatus(null);
@@ -107,24 +123,18 @@ export default function GradingControlPage() {
     } catch (error) { setStatus({ type: 'error', msg: 'فشل تغيير الإعدادات.' }); } finally { setToggleLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
-  // 🚀 دوال إضافة وحذف مواد الرصد المبكر باستخدام القائمة المنسدلة
   const addVipSubject = async () => {
     if (!newVipSubject.trim()) return;
-    
-    // منع تكرار إضافة نفس المادة
     if (vipSubjects.includes(newVipSubject.trim())) {
       setStatus({ type: 'warning', msg: 'هذه المادة موجودة بالفعل في القائمة البيضاء!' });
-      setTimeout(() => setStatus(null), 3000);
-      return;
+      setTimeout(() => setStatus(null), 3000); return;
     }
-
     setVipLoading(true);
     try {
       const updatedList = [...vipSubjects, newVipSubject.trim()];
       const { error } = await supabase.from('school_settings').update({ early_grading_subjects: updatedList }).eq('id', settings.id);
       if (error) throw error;
-      setVipSubjects(updatedList);
-      setNewVipSubject('');
+      setVipSubjects(updatedList); setNewVipSubject('');
       setStatus({ type: 'success', msg: `تمت إضافة (${newVipSubject}) للقائمة البيضاء بنجاح!` });
     } catch (err) { setStatus({ type: 'error', msg: 'فشل إضافة المادة.' }); } finally { setVipLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
@@ -141,14 +151,14 @@ export default function GradingControlPage() {
   };
 
   const handleUnlockSheet = async (className: string, sectionName: string, subjectName: string, id: string) => {
-    if (!window.confirm(`⚠️ تأكيد أمني: هل تريد فك الاعتماد لكشف (الصف ${className} - شعبة ${sectionName})؟ سيتمكن المعلم من التعديل مجدداً.`)) return;
+    if (!window.confirm(`⚠️ تأكيد أمني: هل تريد فك الاعتماد لكشف (الصف ${className} - شعبة ${sectionName})؟`)) return;
     setActionLoadingId(id); setStatus(null);
     try {
       const { error } = await supabase.from('manual_grades').update({ is_locked: false }).eq('grade_level', className).eq('section', sectionName);
       if (error) throw error;
-      setStatus({ type: 'success', msg: 'تم فك الاعتماد بنجاح! يمكن للمعلم تعديل الدرجات الآن.' });
+      setStatus({ type: 'success', msg: 'تم فك الاعتماد بنجاح! يمكن للمعلم التعديل الآن.' });
       fetchRadarData(); 
-    } catch (err: any) { setStatus({ type: 'error', msg: 'حدث خطأ أثناء فك الاعتماد.' }); } finally { setActionLoadingId(null); setTimeout(() => setStatus(null), 4000); }
+    } catch (err: any) { setStatus({ type: 'error', msg: 'حدث خطأ.' }); } finally { setActionLoadingId(null); setTimeout(() => setStatus(null), 4000); }
   };
 
   if (loading) return (<div className="min-h-screen flex flex-col items-center justify-center bg-[#02040a]"><Activity className="w-16 h-16 text-amber-500 animate-pulse mb-4" /></div>);
@@ -187,7 +197,7 @@ export default function GradingControlPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
             
-            {/* 🚀 القائمة البيضاء (مواد الرصد المبكر VIP) بالقائمة المنسدلة */}
+            {/* القائمة البيضاء */}
             <div className="glass-panel p-6 rounded-[2rem] border border-purple-500/30 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-purple-400 mb-2 flex items-center gap-2"><Star className="w-5 h-5" /> القائمة البيضاء (VIP)</h2>
               <p className="text-xs text-slate-400 mb-6 font-bold">المواد المضافة هنا (مثل الدستور، القرآن) مسموح رصدها <span className="text-purple-300">طوال الوقت</span> بغض النظر عن قواطع الفترات.</p>
@@ -249,23 +259,62 @@ export default function GradingControlPage() {
           </div>
 
           <div className="lg:col-span-2">
-            <div className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 bg-[#0f1423]/80 h-full">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black text-white flex items-center gap-2"><Activity className="w-5 h-5 text-amber-400" /> رادار إنجاز المعلمين</h2>
-                <div className="flex gap-4">
-                  <div className="text-center"><p className="text-xl font-black text-emerald-400">{stats.submitted}</p><p className="text-[10px] text-slate-400">مكتمل</p></div>
-                  <div className="text-center"><p className="text-xl font-black text-rose-400">{stats.pending}</p><p className="text-[10px] text-slate-400">متأخر</p></div>
+            {/* 🚀 رادار المعلمين المطور والمفلتر */}
+            <div className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 bg-[#0f1423]/80 h-full flex flex-col">
+              
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-white/5 pb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20"><Activity className="w-5 h-5 text-amber-400" /></div>
+                  <div>
+                    <h2 className="text-xl font-black text-white">رادار إنجاز المعلمين</h2>
+                    <p className="text-xs text-slate-400 font-bold mt-1">تتبع حالة الاعتماد للفصول</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                  {/* 🚀 فلتر المرحلة لتنظيف التلوث البصري */}
+                  <div className="relative flex-1 sm:flex-none">
+                    <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <select
+                      value={radarLevelFilter}
+                      onChange={(e) => setRadarLevelFilter(e.target.value)}
+                      className="w-full sm:w-auto bg-black/60 border border-white/10 rounded-xl py-2 pl-4 pr-9 text-sm font-bold text-white outline-none focus:border-amber-500 transition-colors appearance-none"
+                    >
+                      <option value="all">جميع المراحل</option>
+                      <option value="10">الصف العاشر فقط</option>
+                      <option value="11">الحادي عشر فقط</option>
+                      <option value="12">الثاني عشر فقط</option>
+                    </select>
+                  </div>
+
+                  {/* 🚀 الإحصائيات تتحدث ديناميكياً مع الفلتر */}
+                  <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-xl px-4 py-1.5 shrink-0">
+                    <div className="text-center"><p className="text-lg font-black text-emerald-400 leading-none">{stats.submitted}</p><p className="text-[10px] text-slate-400 font-bold">مكتمل</p></div>
+                    <div className="w-px h-6 bg-white/10"></div>
+                    <div className="text-center"><p className="text-lg font-black text-rose-400 leading-none">{stats.pending}</p><p className="text-[10px] text-slate-400 font-bold">متأخر</p></div>
+                  </div>
                 </div>
               </div>
-              <div className="overflow-x-auto custom-scrollbar">
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 max-h-[600px]">
                 <table className="w-full text-right">
-                  <thead><tr className="border-b border-white/10"><th className="p-3 text-slate-400 font-bold text-sm">المعلم</th><th className="p-3 text-slate-400 font-bold text-sm">الصف والشعبة</th><th className="p-3 text-slate-400 font-bold text-sm text-center">الاعتماد</th></tr></thead>
+                  <thead className="sticky top-0 bg-[#0f1423] z-10 shadow-md">
+                    <tr className="border-b border-white/10">
+                      <th className="p-3 text-slate-400 font-bold text-sm">المعلم</th>
+                      <th className="p-3 text-slate-400 font-bold text-sm">الصف والشعبة</th>
+                      <th className="p-3 text-slate-400 font-bold text-sm text-center">الاعتماد</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {teacherProgress.length > 0 ? (
-                      teacherProgress.map((item) => (
+                    {filteredProgress.length > 0 ? (
+                      filteredProgress.map((item) => (
                         <tr key={item.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                           <td className="p-4 font-bold text-slate-200">أ. {item.teacherName}</td>
-                          <td className="p-4 text-sm font-bold text-slate-300">{item.className} - شعـبة {item.sectionName}</td>
+                          <td className="p-4">
+                            <span className="inline-block px-3 py-1.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded-lg text-xs font-black">
+                              {item.className} - شعـبة {item.sectionName}
+                            </span>
+                          </td>
                           <td className="p-4 flex items-center justify-center gap-2">
                             {item.isSubmitted ? (
                               <>
@@ -285,7 +334,7 @@ export default function GradingControlPage() {
                           </td>
                         </tr>
                       ))
-                    ) : (<tr><td colSpan={3} className="p-10 text-center text-slate-500 font-bold">لا يوجد تكليفات مسجلة.</td></tr>)}
+                    ) : (<tr><td colSpan={3} className="p-10 text-center text-slate-500 font-bold">لا يوجد بيانات لهذه المرحلة.</td></tr>)}
                   </tbody>
                 </table>
               </div>
