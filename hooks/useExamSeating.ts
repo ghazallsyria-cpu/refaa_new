@@ -1,8 +1,8 @@
 /**
  * ============================================================================
  * @file      hooks/useExamSeating.ts
- * @version   6.1.0 (Smart Load Balancing & Targeted Literary Zipping - TS Fix)
- * @description محرك التوزيع المتوازن المطور (توزيع أدبي على آخر لجنتين فقط، وسحاب مزدوج)
+ * @version   7.0.0 (Strict Mutually Exclusive Zipping - No Overflow)
+ * @description محرك التوزيع الذكي: يمنع اجتماع 3 مراحل، يفصل العلمي عن الأدبي، ويلغي الفائض
  * ============================================================================
  */
 
@@ -68,9 +68,7 @@ export function useExamSeating() {
       setProgressMsg('إخلاء مقاعد الطلاب...');
       await supabase.from('student_seat_allocations').delete().eq('academic_year', academicYear).eq('semester', semester);
 
-      setProgressMsg('إلغاء تكاليف المراقبين والحضور...');
-      await supabase.from('invigilator_attendance').delete().in('committee_id', commIds);
-      await supabase.from('exam_attendance').delete().in('committee_id', commIds);
+      setProgressMsg('إلغاء تكاليف المراقبين...');
       await supabase.from('committee_invigilators').delete().in('committee_id', commIds);
 
       setProgressMsg('إلغاء تكاليف رؤساء اللجان...');
@@ -93,7 +91,7 @@ export function useExamSeating() {
     }
   }, []);
 
-  // 🚀 3. السحّاب المُقسم المتوازن (المُعدّل لآخر لجنتين للأدبي)
+  // 🚀 3. السحّاب الذكي المفصول (بدون لجنة فائض، وبدون دمج 3 مراحل)
   const generateSeatingAndDistribute = useCallback(async (academicYear: string, semester: string) => {
     setIsLoading(true);
     try {
@@ -102,8 +100,9 @@ export function useExamSeating() {
         .select('id, name, capacity')
         .eq('academic_year', academicYear).eq('semester', semester);
 
-      if (commError || !fetchedCommittees || fetchedCommittees.length === 0) throw new Error('لا يوجد لجان!');
+      if (commError || !fetchedCommittees || fetchedCommittees.length === 0) throw new Error('لا توجد لجان! الرجاء البناء أولاً.');
 
+      // تجاهل لجنة الفائض القديمة إن وُجدت
       const regularComms = fetchedCommittees.filter(c => !c.name.includes('الفائض')).sort((a, b) => {
         const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
@@ -132,7 +131,6 @@ export function useExamSeating() {
         if (level === 10) {
             grade10.push(obj);
         } else if (level === 11) {
-            // تصنيف دقيق للأدبي
             if (track === 'literary' || className.includes('أدبي') || className.includes('ادبي') || sectionName.includes('أدبي') || sectionName.includes('ادبي')) {
                 grade11_lit.push(obj);
             } else {
@@ -153,75 +151,63 @@ export function useExamSeating() {
       grade11_sci = grade11_sci.map((s, idx) => ({ ...s, seatNumber: `111${String(idx + 1).padStart(3, '0')}` }));
       grade11_lit = grade11_lit.map((s, idx) => ({ ...s, seatNumber: `112${String(idx + 1).padStart(3, '0')}` }));
 
-      setProgressMsg('التقسيم العادل على اللجان...');
+      setProgressMsg('الحساب الرياضي لتخصيص اللجان...');
       
       const totalCommsCount = regularComms.length;
+      const totalG11 = grade11_sci.length + grade11_lit.length;
       
-      // 🚀 الهندسة الجديدة للتقسيم (Magic Distribution)
+      // 🚀 الهندسة الذكية: كم لجنة يحتاج العلمي؟ وكم لجنة يحتاج الأدبي؟ (بالنسبة والتناسب)
+      let numSciComms = Math.round(totalCommsCount * (grade11_sci.length / totalG11));
+      if (grade11_sci.length > 0 && numSciComms === 0) numSciComms = 1;
+      if (grade11_lit.length > 0 && numSciComms === totalCommsCount) numSciComms = totalCommsCount - 1;
+      
+      const numLitComms = totalCommsCount - numSciComms;
+
+      // 🚀 التقسيم: العاشر يتوزع على الكل، العلمي على لجانه، والأدبي على لجانه
       const chunks10 = distributeEvenly(grade10, totalCommsCount);
-      const chunks11Sci = distributeEvenly(grade11_sci, totalCommsCount);
+      const chunks11Sci = distributeEvenly(grade11_sci, numSciComms);
+      const chunks11LitTarget = distributeEvenly(grade11_lit, numLitComms);
       
-      const numLitCommsTarget = Math.min(2, totalCommsCount);
-      const chunks11LitTarget = distributeEvenly(grade11_lit, numLitCommsTarget);
-      
-      // 🛡️ الإصلاح الجذري لمشكلة TypeScript (تحديد النوع كـ مصفوفة تقبل مصفوفات بداخلها)
+      // تجهيز مصفوفة أدبي لتطابق ترتيب اللجان (الأدبي دائماً في اللجان الأخيرة)
       const chunks11Lit: any[][] = Array.from({ length: totalCommsCount }, () => []);
-      if (numLitCommsTarget > 0) {
-         const startIndex = totalCommsCount - numLitCommsTarget;
-         for (let i = 0; i < numLitCommsTarget; i++) {
-             chunks11Lit[startIndex + i] = chunks11LitTarget[i];
-         }
+      for (let i = 0; i < numLitComms; i++) {
+         chunks11Lit[numSciComms + i] = chunks11LitTarget[i];
       }
 
       const allocations: any[] = [];
-      const overflowQueue: any[] = [];
 
-      setProgressMsg('ترصيص اللجان بالسحّاب المتداخل...');
+      setProgressMsg('ترصيص اللجان بالسحّاب المتناوب الذكي...');
       
-      for (let i = 0; i < regularComms.length; i++) {
+      for (let i = 0; i < totalCommsCount; i++) {
          const comm = regularComms[i];
          const c10 = chunks10[i] || [];
-         const c11S = chunks11Sci[i] || [];
-         const c11L = chunks11Lit[i] || [];
+         
+         // إذا كانت لجنة علمي سنسحب من مصفوفة العلمي، وإلا سنسحب من الأدبي
+         const isLitComm = i >= numSciComms;
+         const c11 = isLitComm ? (chunks11Lit[i] || []) : (chunks11Sci[i] || []);
 
-         let p10 = 0, p11S = 0, p11L = 0;
+         let p10 = 0, p11 = 0;
          const committeeZipped = [];
 
-         while (p10 < c10.length || p11S < c11S.length || p11L < c11L.length) {
+         // 🚀 السحّاب (عاشر - علمي) أو (عاشر - أدبي) ولن يجتمع الثلاثة أبداً
+         while (p10 < c10.length || p11 < c11.length) {
             if (p10 < c10.length) committeeZipped.push(c10[p10++]);
-            
-            if (p11L < c11L.length) committeeZipped.push(c11L[p11L++]);
-            else if (p11S < c11S.length) committeeZipped.push(c11S[p11S++]);
+            if (p11 < c11.length) committeeZipped.push(c11[p11++]);
          }
 
-         let seatsFilled = 0;
+         // 🚀 إجبار التوزيع: بدون لجنة فائض، كل من في المصفوفة يدخل لجنته حتى لو تجاوز السعة قليلاً
          for (const student of committeeZipped) {
-            if (seatsFilled < comm.capacity) {
-               allocations.push({ student_id: student.id, committee_id: comm.id, seat_number: student.seatNumber, academic_year: academicYear, semester: semester });
-               seatsFilled++;
-            } else {
-               overflowQueue.push(student);
-            }
+            allocations.push({
+               student_id: student.id,
+               committee_id: comm.id,
+               seat_number: student.seatNumber,
+               academic_year: academicYear,
+               semester: semester
+            });
          }
       }
 
-      // معالجة الفائض 
-      if (overflowQueue.length > 0) {
-        setProgressMsg('إنشاء لجنة الفائض للاحتياط...');
-        let overflowComm = fetchedCommittees.find(c => c.name.includes('الفائض'));
-        if (!overflowComm) {
-          const { data: newO, error: err } = await supabase.from('exam_committees')
-            .insert({ name: 'لجنة الفائض (للتوزيع اليدوي)', capacity: overflowQueue.length, academic_year: academicYear, semester: semester, location: 'الانتظار' })
-            .select('id, name, capacity').single();
-          if (err) throw err;
-          overflowComm = newO;
-        }
-        for (const student of overflowQueue) {
-          allocations.push({ student_id: student.id, committee_id: overflowComm.id, seat_number: student.seatNumber, academic_year: academicYear, semester: semester });
-        }
-      }
-
-      setProgressMsg('اعتماد التوزيع في قاعدة البيانات...');
+      setProgressMsg('اعتماد التوزيع النهائي في قاعدة البيانات...');
       await supabase.from('student_seat_allocations').delete().eq('academic_year', academicYear).eq('semester', semester);
       
       const chunkSize = 100;
@@ -229,7 +215,7 @@ export function useExamSeating() {
         await supabase.from('student_seat_allocations').insert(allocations.slice(i, i + chunkSize));
       }
 
-      setProgressMsg('تحديث هويات الطلاب...');
+      setProgressMsg('تحديث سجلات الطلاب...');
       for (const a of allocations) {
         await supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', a.student_id);
       }
