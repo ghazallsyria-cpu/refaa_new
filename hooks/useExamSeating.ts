@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * @file      hooks/useExamSeating.ts
- * @version   6.0.0 (Smart Load Balancing & Targeted Literary Zipping)
+ * @version   6.1.0 (Smart Load Balancing & Targeted Literary Zipping - TS Fix)
  * @description محرك التوزيع المتوازن المطور (توزيع أدبي على آخر لجنتين فقط، وسحاب مزدوج)
  * ============================================================================
  */
@@ -12,9 +12,9 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
 // 🚀 دالة التقسيم العادل رياضياً 
-const distributeEvenly = (array: any[], numChunks: number) => {
+const distributeEvenly = (array: any[], numChunks: number): any[][] => {
   if (numChunks <= 0 || !array.length) return Array.from({ length: numChunks }, () => []);
-  const chunks = [];
+  const chunks: any[][] = [];
   const baseSize = Math.floor(array.length / numChunks);
   let remainder = array.length % numChunks;
   let offset = 0;
@@ -158,17 +158,14 @@ export function useExamSeating() {
       const totalCommsCount = regularComms.length;
       
       // 🚀 الهندسة الجديدة للتقسيم (Magic Distribution)
-      // 1. العاشر والعلمي يوزعان على جميع اللجان
       const chunks10 = distributeEvenly(grade10, totalCommsCount);
       const chunks11Sci = distributeEvenly(grade11_sci, totalCommsCount);
       
-      // 2. الأدبي يوزع "مناصفة" على آخر لجنتين فقط!
-      // (إذا كان عدد اللجان أقل من 2، نضعهم كلهم في اللجنة المتاحة)
       const numLitCommsTarget = Math.min(2, totalCommsCount);
       const chunks11LitTarget = distributeEvenly(grade11_lit, numLitCommsTarget);
       
-      // نقوم بتكوين مصفوفة كاملة للأدبي (معظم اللجان فارغة، وآخر لجنتين بهما طلاب)
-      const chunks11Lit = Array.from({ length: totalCommsCount }, () => []);
+      // 🛡️ الإصلاح الجذري لمشكلة TypeScript (تحديد النوع كـ مصفوفة تقبل مصفوفات بداخلها)
+      const chunks11Lit: any[][] = Array.from({ length: totalCommsCount }, () => []);
       if (numLitCommsTarget > 0) {
          const startIndex = totalCommsCount - numLitCommsTarget;
          for (let i = 0; i < numLitCommsTarget; i++) {
@@ -185,18 +182,14 @@ export function useExamSeating() {
          const comm = regularComms[i];
          const c10 = chunks10[i] || [];
          const c11S = chunks11Sci[i] || [];
-         const c11L = chunks11Lit[i] || []; // سيكون ممتلئاً فقط في آخر لجنتين
+         const c11L = chunks11Lit[i] || [];
 
          let p10 = 0, p11S = 0, p11L = 0;
          const committeeZipped = [];
 
-         // السحّاب الديناميكي:
-         // سيسحب (عاشر ثم أدبي) أو (علمي ثم أدبي) في اللجان الأخيرة.
-         // وسيسحب (عاشر ثم علمي) في اللجان الأولى حيث الأدبي فارغ.
          while (p10 < c10.length || p11S < c11S.length || p11L < c11L.length) {
             if (p10 < c10.length) committeeZipped.push(c10[p10++]);
             
-            // نعطي الأولوية للأدبي لكي يتسحّب بشكل مباشر في لجانه المخصصة
             if (p11L < c11L.length) committeeZipped.push(c11L[p11L++]);
             else if (p11S < c11S.length) committeeZipped.push(c11S[p11S++]);
          }
