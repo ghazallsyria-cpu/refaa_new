@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info,
-  AlertCircle, Clock
+  AlertCircle, Clock, FileKey, MonitorCheck, ClipboardSignature, FileArchive, Fingerprint
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +16,11 @@ import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
+// 🚀 الكارثة كانت هنا! تم حذف استدعاءات html2canvas و jsPDF من الأعلى نهائياً!
+
+// =========================================================================
+// 1. 🛡️ جدار الحماية (Error Boundary) المطور لتوضيح الأخطاء
+// =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
     super(props);
@@ -35,6 +40,11 @@ class ErrorBoundary extends React.Component {
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
             <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
             <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ داخلي!</h1>
+            <p className="text-slate-600 font-bold mb-6 text-sm">تم اصطياد الخطأ بنجاح ولم ينهار الموقع بالكامل، الرجاء تصوير هذه الشاشة للمبرمج:</p>
+            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[40vh] text-left text-xs font-mono whitespace-pre-wrap" dir="ltr">
+              <p className="text-rose-400 font-bold mb-2">Error: {this.state.error?.message || String(this.state.error)}</p>
+              {this.state.errorInfo?.componentStack}
+            </div>
             <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
               تحديث الصفحة
             </button>
@@ -46,8 +56,12 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// =========================================================================
+// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء على الموبايل
+// =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
+  
   useEffect(() => {
     const origError = console.error;
     console.error = (...args) => {
@@ -57,17 +71,34 @@ function FloatingConsole() {
     };
     return () => { console.error = origError; };
   }, []);
+
   if (logs.length === 0) return null;
+
   return (
     <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500" dir="ltr">
       <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
         <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Debug Console</span>
         <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
       </div>
-      {logs.map((l, i) => (<div key={i} className="mb-1 border-b border-emerald-800/30 pb-1 break-words text-rose-400">{l}</div>))}
+      {logs.map((l, i) => (
+        <div key={i} className={`mb-1 border-b border-emerald-800/30 pb-1 break-words ${l.includes('[ERROR]') ? 'text-rose-400' : 'text-amber-400'}`}>
+          {l}
+        </div>
+      ))}
     </div>
   );
 }
+
+// =========================================================================
+// 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
+// =========================================================================
+const BASE_ROLES = [
+  { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+  { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+  { id: 'data_entry', defaultName: 'مسؤول الرصد والإدخال', icon: MonitorCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+  { id: 'auditor', defaultName: 'مراجع ومُدقق الدرجات', icon: ClipboardSignature, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
+];
 
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
@@ -250,8 +281,6 @@ function ExamCommitteesControl() {
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
 
-  if (currentRole !== 'admin' && currentRole !== 'management') return null;
-
   const fetchHeadsByDate = async (date: string) => {
     if (!date) { setCurrentHeads([]); setSelectedCommitteesForHead([]); return; }
     try {
@@ -421,6 +450,7 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
+  // 🚀 الطباعة الآمنة: استدعاء المكتبات ديناميكياً لتجنب الانهيار (Hydration Mismatch)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -455,6 +485,7 @@ function ExamCommitteesControl() {
       setTimeout(async () => {
         if (!printRef.current) { setIsPrinting(false); return; }
         try {
+          // 🚀 استدعاء المكتبات الديناميكي في وقت الطباعة فقط
           const html2canvasModule = await import('html2canvas-pro');
           const html2canvas = html2canvasModule.default || html2canvasModule;
           const { jsPDF } = await import('jspdf');
