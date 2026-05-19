@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
-  Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock
+  Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -52,7 +52,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء على الموبايل
+// 2. 🕵️‍♂️ الكونسول العائم
 // =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -106,6 +106,7 @@ function ExamCommitteesControl() {
   const [activeExamDate, setActiveExamDate] = useState<string>(''); 
   
   const [isLoading, setIsLoading] = useState(true);
+  const [isAutoAssigning, setIsAutoAssigning] = useState(false); // حالة التوزيع الآلي
   const [activeTab, setActiveTab] = useState<'management' | 'invigilators_radar' | 'heads_radar' | 'daily_stats'>('management');
   
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -186,7 +187,6 @@ function ExamCommitteesControl() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. جلب اللجان
       const { data: comms } = await supabase.from('exam_committees').select('*').eq('academic_year', currentYear).eq('semester', currentSemester);
       const sortedComms = (comms || []).sort((a, b) => {
         const numA = parseInt(String(a?.name || '').replace(/\D/g, '')) || 0;
@@ -194,7 +194,6 @@ function ExamCommitteesControl() {
         return numA - numB;
       });
 
-      // 2. جلب جداول الامتحانات المخزنة في قاعدة البيانات وتحديد الأيام الفريدة
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
       setTimetables(Array.isArray(exams) ? exams : []);
       
@@ -203,14 +202,12 @@ function ExamCommitteesControl() {
       const datesArr = Array.from(datesSet).sort();
       setUniqueExamDates(datesArr);
       
-      // تعيين أول يوم كافتراضي إذا لم يتم تعيين يوم
       let currentDateToFetch = activeExamDate;
       if (!currentDateToFetch && datesArr.length > 0) {
          currentDateToFetch = datesArr[0];
          setActiveExamDate(currentDateToFetch);
       }
 
-      // 3. جلب المعلمين وحالة الإعفاء
       let finalTchrs = [];
       const { data: tchrsWithExclusion, error: tchrErr } = await supabase.from('teachers').select('id, is_excluded_from_exams, users(full_name, avatar_url), teacher_subjects(subjects(name))');
       if (tchrErr && String(tchrErr.message).includes('is_excluded_from_exams')) {
@@ -230,7 +227,6 @@ function ExamCommitteesControl() {
         };
       }).filter(Boolean);
 
-      // 4. جلب المراقبين ورؤساء اللجان، وتوزيع الطلاب
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, exam_date, users(full_name, avatar_url)');
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(next_year_track, sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name, avatar_url), exam_timetables(exam_date, subjects(name))');
@@ -470,6 +466,123 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
+  // 🚀 الخوارزمية الذكية للتوزيع التلقائي للمراقبين (Auto-Assign Invigilators)
+  const handleAutoAssignInvigilators = async () => {
+    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين (غير المعفيين) بواقع 2 لكل لجنة على جميع أيام الامتحانات، مع ضمان عدم تكرار المعلم لنفس اللجنة. هل أنت متأكد؟')) return;
+    
+    setIsAutoAssigning(true);
+    try {
+      if (committees.length === 0 || uniqueExamDates.length === 0 || teachers.length === 0) {
+        throw new Error("تأكد من وجود لجان، جداول امتحانات، ومعلمين قبل التوزيع!");
+      }
+
+      // تجهيز المتغيرات للتتبع
+      const nonExemptTeachers = teachers.filter(t => !t.is_excluded_from_exams);
+      if (nonExemptTeachers.length === 0) throw new Error("لا يوجد معلمين متاحين للمراقبة!");
+
+      // Map لمعرفة عدد المرات التي راقب فيها المعلم (للعدالة)
+      const teacherTotalShifts = new Map<string, number>();
+      // Map لمعرفة اللجان التي راقب فيها المعلم (لمنع التكرار)
+      const teacherCommittees = new Map<string, Set<string>>();
+      // Map لمعرفة من يراقب في أي يوم (لمنع التعارض في نفس اليوم)
+      const dailyTeacherAssignments = new Map<string, Set<string>>();
+      // Map لعدد المراقبين الحاليين في اللجنة في هذا اليوم (للحفاظ على التعيين اليدوي)
+      const dailyCommitteeCount = new Map<string, number>();
+
+      // ملء المتغيرات بالبيانات الحالية (التعيينات اليدوية السابقة)
+      invigilators.forEach(inv => {
+         const tId = String(inv.teacher_id);
+         const cId = String(inv.committee_id);
+         const date = String(inv.exam_date);
+
+         teacherTotalShifts.set(tId, (teacherTotalShifts.get(tId) || 0) + 1);
+         
+         if (!teacherCommittees.has(tId)) teacherCommittees.set(tId, new Set());
+         teacherCommittees.get(tId)?.add(cId);
+
+         if (!dailyTeacherAssignments.has(date)) dailyTeacherAssignments.set(date, new Set());
+         dailyTeacherAssignments.get(date)?.add(tId);
+
+         const commKey = `${date}_${cId}`;
+         dailyCommitteeCount.set(commKey, (dailyCommitteeCount.get(commKey) || 0) + 1);
+      });
+
+      const newAssignments: any[] = [];
+
+      // خوارزمية التوزيع الأساسية
+      for (const date of uniqueExamDates) {
+         for (const comm of committees) {
+            const commKey = `${date}_${comm.id}`;
+            let currentCount = dailyCommitteeCount.get(commKey) || 0;
+
+            // نحتاج أن نكمل العدد إلى 2
+            while (currentCount < 2) {
+               let bestTeacher: any = null;
+               let minShifts = Infinity;
+
+               // خلط بسيط للمعلمين لكسر الترتيب الأبجدي دائماً
+               const shuffledTeachers = [...nonExemptTeachers].sort(() => Math.random() - 0.5);
+
+               for (const teacher of shuffledTeachers) {
+                  const tId = String(teacher.id);
+                  const isAssignedToday = dailyTeacherAssignments.get(date)?.has(tId);
+                  const hasSupervisedThisCommBefore = teacherCommittees.get(tId)?.has(String(comm.id));
+
+                  // إذا كان متاحاً اليوم، ولم يراقب هذه اللجنة إطلاقاً في أي يوم
+                  if (!isAssignedToday && !hasSupervisedThisCommBefore) {
+                     const shifts = teacherTotalShifts.get(tId) || 0;
+                     if (shifts < minShifts) {
+                        minShifts = shifts;
+                        bestTeacher = teacher;
+                     }
+                  }
+               }
+
+               if (!bestTeacher) {
+                  // لا يوجد معلم يحقق الشروط (ربما عدد المعلمين قليل جداً)
+                  console.warn(`لم نتمكن من إيجاد مراقب للجنة ${comm.name} في يوم ${date}`);
+                  break; 
+               }
+
+               const tId = String(bestTeacher.id);
+               newAssignments.push({
+                  committee_id: comm.id,
+                  teacher_id: tId,
+                  exam_date: date,
+                  status: 'pending'
+               });
+
+               // تحديث عدادات التتبع فوراً لكي لا نختاره مجدداً عن طريق الخطأ
+               teacherTotalShifts.set(tId, (teacherTotalShifts.get(tId) || 0) + 1);
+               if (!teacherCommittees.has(tId)) teacherCommittees.set(tId, new Set());
+               teacherCommittees.get(tId)?.add(String(comm.id));
+               if (!dailyTeacherAssignments.has(date)) dailyTeacherAssignments.set(date, new Set());
+               dailyTeacherAssignments.get(date)?.add(tId);
+
+               currentCount++;
+            }
+         }
+      }
+
+      if (newAssignments.length > 0) {
+         // رفع التكليفات الجديدة إلى قاعدة البيانات (على دفعات لتجنب الضغط)
+         const chunkSize = 100;
+         for (let i = 0; i < newAssignments.length; i += chunkSize) {
+            await supabase.from('committee_invigilators').insert(newAssignments.slice(i, i + chunkSize));
+         }
+         alert(`تم التوزيع بنجاح! تم إضافة ${newAssignments.length} تكليف جديد للمراقبة وفقاً للشروط.`);
+         fetchData();
+      } else {
+         alert('جميع اللجان مكتملة أو لا يوجد معلمين إضافيين يحققون شروط عدم التكرار!');
+      }
+
+    } catch (err: any) {
+      alert('حدث خطأ أثناء التوزيع الآلي: ' + err.message);
+    } finally {
+      setIsAutoAssigning(false);
+    }
+  };
+
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -551,10 +664,12 @@ function ExamCommitteesControl() {
       
       <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
 
-      { (isEngineLoading || isPrinting) && (
+      { (isEngineLoading || isPrinting || isAutoAssigning) && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex flex-col items-center justify-center text-white backdrop-blur-sm">
           <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
-          <h2 className="text-xl font-black animate-pulse text-center px-4">{isPrinting ? 'جاري رسم ومعالجة قوالب الطباعة عالية الدقة...' : String(progressMsg || 'جاري التحميل')}</h2>
+          <h2 className="text-xl font-black animate-pulse text-center px-4">
+             {isPrinting ? 'جاري رسم ومعالجة قوالب الطباعة عالية الدقة...' : isAutoAssigning ? 'جاري تشغيل خوارزمية التوزيع الذكي للمراقبين...' : String(progressMsg || 'جاري التحميل')}
+          </h2>
         </div>
       )}
 
@@ -608,7 +723,14 @@ function ExamCommitteesControl() {
           {activeTab === 'invigilators_radar' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
-                  <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة (العدالة والتدوير لجميع الأيام)</h3>
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة (العدالة والتدوير لجميع الأيام)</h3>
+                     {/* 🚀 الزر السحري لتوزيع المراقبين آلياً */}
+                     <button onClick={handleAutoAssignInvigilators} disabled={isAutoAssigning} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md transition-all flex items-center gap-2">
+                        <Wand2 className="w-5 h-5"/> التوزيع الآلي الذكي
+                     </button>
+                  </div>
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
                      {teachers.filter(t => getTeacherTotalAssignments(String(t?.id)).length > 0).map((t, tIndex) => {
                        const totalDuties = getTeacherTotalAssignments(String(t?.id));
@@ -789,6 +911,7 @@ function ExamCommitteesControl() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {committees.map((committee: any, idx: number) => {
                     const stdCount = Number(allocationsStats[committee?.id] || 0);
+                    // 🚀 فلترة المراقبين بناءً على اللجنة وتاريخ اليوم المحدد
                     const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee?.id) && i.exam_date === activeExamDate);
                     const isFull = stdCount >= Number(committee?.capacity || 0);
                     const isOverflow = String(committee?.name || '').includes('الفائض');
@@ -809,7 +932,7 @@ function ExamCommitteesControl() {
 
                         <div className="flex-1 mb-4">
                           <div className="flex justify-between items-center mb-2">
-                             <p className="text-xs font-black text-slate-500">المراقبون ({commInvigs.length}/2)</p>
+                             <p className="text-xs font-black text-slate-500">المراقبون ({commInvigs.length}/2) - {activeExamDate}</p>
                              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${isOverflow ? 'bg-rose-200 text-rose-800' : isFull ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{stdCount} طالب</span>
                           </div>
                           <div className="space-y-2">
@@ -869,7 +992,7 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🚀 نافذة إدارة الإعفاءات للمراقبين */}
+      {/* 🚀 نافذة إدارة الإعفاءات */}
       <AnimatePresence>
         {isExemptionsModalOpen && (
            <>
@@ -1083,7 +1206,7 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 👤 نافذة تعيين المراقبين */}
+      {/* 👤 نافذة تعيين المراقبين (يدوياً للجنة واحدة في يوم واحد) */}
       {isAssignModalOpen && selectedCommittee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}>
           <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -1414,18 +1537,11 @@ function ExamCommitteesControl() {
   );
 }
 
-// 🚀 تصدير الصفحة مع درع الحماية
+// 🚀 تصدير الصفحة
 export default function Page() {
   const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(timer);
-  }, []);
-  
-  if (!mounted) {
-    return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-cairo"></div>;
-  }
+  useEffect(() => { const timer = setTimeout(() => setMounted(true), 0); return () => clearTimeout(timer); }, []);
+  if (!mounted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-cairo"></div>;
 
   return (
     <ErrorBoundary>
