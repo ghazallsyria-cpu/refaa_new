@@ -7,7 +7,8 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, BarChart2, Camera, UploadCloud, Crown, Layers, Filter, CheckSquare, Info,
-  AlertCircle, Clock
+  AlertCircle, Clock, FileKey, MonitorCheck, ClipboardSignature, FileArchive, Fingerprint,
+  UserMinus // 🚀 الأيقونة الجديدة الخاصة بإدارة الإعفاءات
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,11 +56,10 @@ class ErrorBoundary extends React.Component {
 }
 
 // =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء على الموبايل
+// 2. 🕵️‍♂️ الكونسول العائم
 // =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
-  
   useEffect(() => {
     const origError = console.error;
     console.error = (...args) => {
@@ -69,20 +69,14 @@ function FloatingConsole() {
     };
     return () => { console.error = origError; };
   }, []);
-
   if (logs.length === 0) return null;
-
   return (
     <div className="fixed bottom-0 left-0 w-full max-h-48 overflow-y-auto bg-black/95 text-emerald-400 p-4 z-[9999] text-[10px] sm:text-xs font-mono border-t-2 border-emerald-500" dir="ltr">
       <div className="flex justify-between items-center text-white font-bold mb-2 sticky top-0 bg-black pb-2">
         <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Debug Console</span>
         <button onClick={() => setLogs([])} className="text-rose-400 bg-rose-500/20 px-3 py-1 rounded hover:bg-rose-500 hover:text-white transition-colors">Clear</button>
       </div>
-      {logs.map((l, i) => (
-        <div key={i} className={`mb-1 border-b border-emerald-800/30 pb-1 break-words ${l.includes('[ERROR]') ? 'text-rose-400' : 'text-amber-400'}`}>
-          {l}
-        </div>
-      ))}
+      {logs.map((l, i) => (<div key={i} className={`mb-1 border-b border-emerald-800/30 pb-1 break-words ${l.includes('[ERROR]') ? 'text-rose-400' : 'text-amber-400'}`}>{l}</div>))}
     </div>
   );
 }
@@ -90,6 +84,14 @@ function FloatingConsole() {
 // =========================================================================
 // 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
 // =========================================================================
+const BASE_ROLES = [
+  { id: 'head', defaultName: 'رئيس الكنترول', icon: Crown, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+  { id: 'secret_numbering', defaultName: 'مسؤول الأرقام السرية', icon: FileKey, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+  { id: 'data_entry', defaultName: 'مسؤول الرصد والإدخال', icon: MonitorCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+  { id: 'auditor', defaultName: 'مراجع ومُدقق الدرجات', icon: ClipboardSignature, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  { id: 'archiver', defaultName: 'مسؤول الحفظ والأرشيف', icon: FileArchive, color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20' }
+];
+
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
   const currentRole = authContext.authRole || authContext.userRole;
@@ -122,8 +124,12 @@ function ExamCommitteesControl() {
   const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false);
   const [isClassPrintModalOpen, setIsClassPrintModalOpen] = useState(false);
   const [isReadExcuseModalOpen, setIsReadExcuseModalOpen] = useState(false);
-  const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   
+  // 🚀 نوافذ الإعفاءات
+  const [isExemptionsModalOpen, setIsExemptionsModalOpen] = useState(false);
+  const [exemptionSearchTerm, setExemptionSearchTerm] = useState('');
+  
+  const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<any>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [teacherSearchTerm, setTeacherSearchTerm] = useState(''); 
@@ -153,7 +159,6 @@ function ExamCommitteesControl() {
     try {
       const secObj = Array.isArray(studentData?.sections) ? studentData?.sections[0] : studentData?.sections;
       const classObj = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
-
       const classLvl = Number(classObj?.level || 0);
       const cName = String(classObj?.name || '');
       const sName = String(secObj?.name || '');
@@ -169,7 +174,6 @@ function ExamCommitteesControl() {
       else classNameDisplay = cName || 'صف غير محدد';
 
       const cleanSecName = sName.replace(/أدبي|ادبي|علمي|علمى/g, '').replace(/-/g, '').trim();
-
       return `${classNameDisplay} ${cleanSecName ? '- شعبة ' + cleanSecName : ''}`.trim();
     } catch (e) {
       return 'غير محدد';
@@ -201,7 +205,17 @@ function ExamCommitteesControl() {
         return numA - numB;
       });
 
-      const { data: tchrs } = await supabase.from('teachers').select(`id, users(full_name, avatar_url), teacher_subjects(subjects(name))`);
+      // 🛡️ درع حماية استرجاع المعلمين (إذا لم يقم المستخدم بإضافة عمود الإعفاء لن ينهار الموقع)
+      let finalTchrs = [];
+      const { data: tchrsWithExclusion, error: tchrErr } = await supabase.from('teachers').select('id, is_excluded_from_exams, users(full_name, avatar_url), teacher_subjects(subjects(name))');
+      if (tchrErr && String(tchrErr.message).includes('is_excluded_from_exams')) {
+         console.warn("⚠️ عمود is_excluded_from_exams غير موجود. الرجاء تشغيل استعلام الـ SQL.");
+         const { data: fallbackTchrs } = await supabase.from('teachers').select('id, users(full_name, avatar_url), teacher_subjects(subjects(name))');
+         finalTchrs = fallbackTchrs || [];
+      } else {
+         finalTchrs = tchrsWithExclusion || [];
+      }
+
       const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, users(full_name, avatar_url)');
       const { data: allocs } = await supabase.from('student_seat_allocations').select('committee_id, student_id, students(next_year_track, sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: exams } = await supabase.from('exam_timetables').select('id, exam_date, subjects(name), class_level').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date');
@@ -248,11 +262,17 @@ function ExamCommitteesControl() {
       (exams || []).forEach(e => { if (e?.exam_date) datesSet.add(e.exam_date) });
       setUniqueExamDates(Array.from(datesSet).sort());
 
-      const formattedTeachers = (tchrs || []).map((t: any, idx: number) => {
+      const formattedTeachers = (finalTchrs || []).map((t: any, idx: number) => {
         if (!t) return null;
         const u = Array.isArray(t?.users) ? t.users[0] : t?.users;
         const subjects = Array.isArray(t?.teacher_subjects) ? t.teacher_subjects.map((s:any) => s?.subjects?.name).filter(Boolean).join('، ') : 'غير محدد';
-        return { id: String(t?.id || `t-${idx}`), full_name: String(u?.full_name || 'بدون اسم'), avatar_url: u?.avatar_url || null, subjectsStr: subjects };
+        return { 
+          id: String(t?.id || `t-${idx}`), 
+          full_name: String(u?.full_name || 'بدون اسم'), 
+          avatar_url: u?.avatar_url || null, 
+          subjectsStr: subjects,
+          is_excluded_from_exams: t?.is_excluded_from_exams || false // 🚀 ربط حالة الإعفاء
+        };
       }).filter(Boolean);
 
       setCommittees(sortedComms);
@@ -269,6 +289,28 @@ function ExamCommitteesControl() {
   };
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
+
+  // 🚀 دالة تبديل الإعفاء الفوري للمعلم
+  const handleToggleExemption = async (tId: string, currentStatus: boolean) => {
+    try {
+       // التحديث البصري السريع (Optimistic UI)
+       setTeachers(prev => prev.map(t => String(t.id) === tId ? { ...t, is_excluded_from_exams: !currentStatus } : t));
+       
+       // التحديث في قاعدة البيانات
+       const { error } = await supabase.from('teachers').update({ is_excluded_from_exams: !currentStatus }).eq('id', tId);
+       
+       if (error) {
+          if (error.message.includes('is_excluded_from_exams')) {
+             alert('⚠️ تحذير: يرجى أولاً إضافة العمود "is_excluded_from_exams" في قاعدة البيانات كما هو موضح في دليل الإعداد، وإلا لن يتم الحفظ الدائم.');
+          } else {
+             throw error;
+          }
+       }
+    } catch (err) {
+       alert('حدث خطأ أثناء تعديل الإعفاء. سيتم إعادة تحميل البيانات.');
+       fetchData(); 
+    }
+  };
 
   const fetchHeadsByDate = async (date: string) => {
     if (!date) { setCurrentHeads([]); setSelectedCommitteesForHead([]); return; }
@@ -510,6 +552,18 @@ function ExamCommitteesControl() {
     return Array.from(dates);
   };
 
+  const sortedAndFilteredTeachers = teachers
+    .filter(t => {
+       const term = String(teacherSearchTerm || '').toLowerCase();
+       return String(t?.full_name || '').toLowerCase().includes(term) || String(t?.subjectsStr || '').toLowerCase().includes(term);
+    })
+    .sort((a, b) => {
+       const aCount = getTeacherAssignments(String(a?.id)).length;
+       const bCount = getTeacherAssignments(String(b?.id)).length;
+       if (aCount !== bCount) return aCount - bCount; 
+       return String(a?.full_name || '').localeCompare(String(b?.full_name || ''), 'ar');
+    });
+
   const alreadyAssignedCommittees = currentHeads.flatMap(h => String(h?.committees_range || '').split('، '));
   const selectedTeacherData = teachers.find(t => String(t?.id) === String(headAssignment?.head_teacher_id));
   const selectedTeacherHeadDates = selectedTeacherData ? getTeacherHeadAssignments(selectedTeacherData.id) : [];
@@ -640,6 +694,10 @@ function ExamCommitteesControl() {
                     <button onClick={handleDistribute} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Users className="w-5 h-5" /> توزيع السحّاب</button>
                     <button onClick={() => setIsClassPrintModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md border border-emerald-600"><Layers className="w-5 h-5" /> طباعة بطاقات الفصول</button>
                     <button onClick={() => setIsHeadsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-amber-100 hover:bg-amber-200 text-amber-800 font-black rounded-xl flex justify-center items-center gap-2"><Crown className="w-5 h-5" /> تكليف الرؤساء</button>
+                    
+                    {/* 🚀 الزر الإداري الجديد: إدارة الإعفاءات */}
+                    <button onClick={() => setIsExemptionsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 shadow-sm border border-rose-100"><UserMinus className="w-5 h-5" /> إعفاء معلمين</button>
+                    
                     <button onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة</button>
                     <button onClick={handleSoftReset} className="flex-1 sm:flex-none px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-black rounded-xl flex justify-center items-center gap-2"><Trash2 className="w-5 h-5" /> تفريغ</button>
                     <button onClick={handleNuclear} className="flex-1 sm:flex-none px-6 py-3 bg-rose-100 hover:bg-rose-200 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 mr-auto"><AlertTriangle className="w-5 h-5" /> هدم</button>
@@ -733,6 +791,54 @@ function ExamCommitteesControl() {
         </div>
       )}
 
+      {/* 🚀 نافذة إدارة الإعفاءات للمراقبين (الجديدة كلياً) */}
+      <AnimatePresence>
+        {isExemptionsModalOpen && (
+           <>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsExemptionsModalOpen(false)} />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
+                 <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
+                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                       <UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين
+                    </h3>
+                    <button onClick={() => setIsExemptionsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+                 </div>
+                 
+                 <div className="relative mb-4 shrink-0">
+                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
+                    <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-rose-500 transition-colors" placeholder="ابحث عن معلم لإعفائه من المراقبة..." value={exemptionSearchTerm} onChange={(e) => setExemptionSearchTerm(e.target.value)} />
+                 </div>
+                 
+                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
+                     {teachers.filter(t => String(t?.full_name || '').includes(exemptionSearchTerm) || String(t?.subjectsStr || '').includes(exemptionSearchTerm)).map((t, index) => {
+                         const isExcluded = t?.is_excluded_from_exams;
+                         return (
+                            <div key={`exm-${index}`} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isExcluded ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                               <div className="flex items-center gap-3">
+                                   <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0 overflow-hidden">
+                                       {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-full h-full object-cover" alt="av" /> : String(t?.full_name || 'م').charAt(0)}
+                                   </div>
+                                   <div>
+                                       <p className={`text-sm font-black ${isExcluded ? 'text-rose-700' : 'text-slate-800'}`}>{t?.full_name}</p>
+                                       <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate max-w-[150px]">{t?.subjectsStr}</p>
+                                   </div>
+                               </div>
+                               <button 
+                                   onClick={() => handleToggleExemption(String(t?.id), isExcluded)}
+                                   className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isExcluded ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
+                               >
+                                   {isExcluded ? 'إلغاء الإعفاء' : 'إعفاء من المراقبة'}
+                               </button>
+                            </div>
+                         )
+                     })}
+                     {teachers.filter(t => String(t?.full_name || '').includes(exemptionSearchTerm)).length === 0 && <p className="text-center text-sm font-bold text-slate-400 py-8">لا يوجد معلمين.</p>}
+                 </div>
+              </motion.div>
+           </>
+        )}
+      </AnimatePresence>
+
       {/* 🚀 نافذة طباعة الفصول */}
       {isClassPrintModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsClassPrintModalOpen(false)}>
@@ -814,7 +920,7 @@ function ExamCommitteesControl() {
                      <div className="flex flex-col sm:flex-row gap-3">
                        <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-amber-500 outline-none shadow-sm">
                          <option value="">- اختر المعلم من القائمة -</option>
-                         {teachers.map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>{t?.full_name}</option>)}
+                         {teachers.filter(t => !t.is_excluded_from_exams).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>{t?.full_name}</option>)}
                        </select>
                        <button onClick={handleAssignHead} className="bg-amber-500 hover:bg-amber-600 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg">اعتماد التكليف</button>
                      </div>
@@ -899,7 +1005,7 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 👤 نافذة تعيين المراقبين */}
+      {/* 👤 نافذة تعيين المراقبين (مع علامة الإعفاء) */}
       {isAssignModalOpen && selectedCommittee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}>
           <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -922,21 +1028,23 @@ function ExamCommitteesControl() {
                     const assignedComms = getTeacherAssignments(tId);
                     const isInThisCommittee = assignedComms.some(c => String(c?.committee_id) === String(selectedCommittee?.id));
                     const isSelected = selectedTeacherId === tId;
+                    const isExcluded = t?.is_excluded_from_exams; // 🚀 قراءة حالة الإعفاء
 
                     return (
-                       <div key={`ta-${index}`} onClick={() => !isInThisCommittee && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isInThisCommittee ? "bg-slate-100 opacity-60 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
+                       <div key={`ta-${index}`} onClick={() => !isInThisCommittee && !isExcluded && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isExcluded ? "bg-rose-50 opacity-60 border-rose-200 cursor-not-allowed" : isInThisCommittee ? "bg-slate-100 opacity-60 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
                           <div className="flex items-center gap-3">
                              <div className="relative group/avatar cursor-pointer" onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(tId); }} title="رفع وتعديل الصورة">
                                {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity"><Camera className="w-4 h-4 text-white" /></div>
                              </div>
                              <div>
-                                <p className="text-sm font-black text-slate-800">{t?.full_name}</p>
+                                <p className={`text-sm font-black ${isExcluded ? 'text-rose-800' : 'text-slate-800'}`}>{t?.full_name}</p>
                                 <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate max-w-[150px]">المواد: {t?.subjectsStr}</p>
                              </div>
                           </div>
                           <div className="shrink-0 text-left">
-                             {isInThisCommittee ? <span className="text-[10px] font-black text-slate-500 bg-slate-200 px-2 py-1 rounded">موجود باللجنة</span> : assignedComms.length === 0 ? <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded">🟢 متاح</span> : <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded">🟠 مكلف بـ {assignedComms.length} لجنة</span>}
+                             {/* 🚀 إظهار ختم الإعفاء */}
+                             {isExcluded ? <span className="text-[10px] font-black text-rose-600 bg-rose-100 px-2 py-1 rounded">🚫 مُعفى إدارياً</span> : isInThisCommittee ? <span className="text-[10px] font-black text-slate-500 bg-slate-200 px-2 py-1 rounded">موجود باللجنة</span> : assignedComms.length === 0 ? <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded">🟢 متاح</span> : <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded">🟠 مكلف بـ {assignedComms.length} لجنة</span>}
                           </div>
                        </div>
                     );
@@ -1226,11 +1334,13 @@ function ExamCommitteesControl() {
   );
 }
 
+// 🚀 تصدير الصفحة
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
   }, []);
   
   if (!mounted) {
