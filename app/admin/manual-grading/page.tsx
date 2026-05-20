@@ -31,7 +31,6 @@ export default function ManualGradingPage() {
   const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
   
-  // 🚀 استقبال الـ VIP Objects بدلاً من النصوص العادية
   const [vipSubjectsList, setVipSubjectsList] = useState<any[]>([]);
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
@@ -39,14 +38,13 @@ export default function ManualGradingPage() {
   const currentClassObj = Array.isArray(currentSectionObj?.classes) ? currentSectionObj?.classes[0] : currentSectionObj?.classes;
   const currentClassLevel = Number(currentClassObj?.level || 0);
   
+  // هل الصف مغلق بالكامل من قبل الإدارة المركزية؟
   const isLevelLockedByAdmin = 
     (currentClassLevel === 10 && !levelGating.g10) ||
     (currentClassLevel === 11 && !levelGating.g11) ||
     (currentClassLevel === 12 && !levelGating.g12);
 
-  const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
-
-  // 🚀 خوارزمية الأبواب الذكية لتحديد ما إذا كانت المادة (VIP) وفي أي جزء تحديداً
+  // 🚀 خوارزمية الاختراق الذكية (VIP Override)
   const vipAccess = { p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false };
   let isCurrentSubVIP = false;
 
@@ -70,6 +68,15 @@ export default function ManualGradingPage() {
         }
      });
   }
+
+  // 🚀 تحديد الصلاحيات النهائية لكل خانة (إذا كانت مفتوحة للجميع، أو الصف مفتوح، أو إذا كان VIP يكسر القفل)
+  const canEditP1Cw = (gradingToggles.p1_cw && !isLevelLockedByAdmin) || vipAccess.p1_cw;
+  const canEditP1Ex = (gradingToggles.p1_ex && !isLevelLockedByAdmin) || vipAccess.p1_ex;
+  const canEditP2Cw = (gradingToggles.p2_cw && !isLevelLockedByAdmin) || vipAccess.p2_cw;
+  const canEditP2Ex = (gradingToggles.p2_ex && !isLevelLockedByAdmin) || vipAccess.p2_ex;
+
+  // هل هناك أي خانة مفتوحة للتعديل؟ (لتفعيل زر الحفظ)
+  const canEditAnything = (!isSheetLocked) && (canEditP1Cw || canEditP1Ex || canEditP2Cw || canEditP2Ex);
 
   useEffect(() => {
     const bootEngine = async () => {
@@ -203,12 +210,6 @@ export default function ManualGradingPage() {
 
         setSubjectLimits({ cw_max: Number(rule?.coursework_max || 40), ex_max: Number(rule?.exam_max || 60) });
 
-        if (!isCurrentSubVIP && ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12))) {
-          setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية.' });
-        } else if (isCurrentSubVIP) {
-          setStatus({ type: 'success', msg: '🌟 هذه مادة استثنائية (VIP): الرصد متاح لها بشكل مبكر وفق الصلاحيات المحددة.' });
-        }
-
         const { data: studentsData } = await supabase.from('students').select('id, users!inner(full_name)').eq('section_id', selectedSectionId);
         const { data: gradesData } = await supabase.from('manual_grades').select('*').eq('grade_level', className).eq('section', sectionName).eq('subject_name', selectedSubject).eq('academic_year', selectedYear).eq('semester', selectedSemester);
 
@@ -221,13 +222,32 @@ export default function ManualGradingPage() {
         });
 
         setRows(grid);
-        if (grid.some(r => r.is_locked)) setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل مسبقاً.' });
+
+        // 🚀 توليد الرسالة الصحيحة للإشعارات العلوية
+        if (grid.some(r => r.is_locked)) {
+           setStatus({ type: 'warning', msg: 'هذا الكشف معتمد ومقفل مسبقاً.' });
+        } else if (isCurrentSubVIP) {
+           setStatus({ type: 'success', msg: '🌟 هذه مادة استثنائية (VIP): الرصد متاح لها بشكل مبكر وفق الصلاحيات المحددة.' });
+        } else if (isLevelLockedByAdmin) {
+           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية.' });
+        } else {
+           setStatus(null);
+        }
+
       } catch (err) { setStatus({ type: 'error', msg: 'فشل بناء الكشف.' }); } finally { setIsGridLoading(false); }
     };
     if (!isInitializing && selectedSubject && selectedSectionId) buildGradeGrid();
-  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, isInitializing, gradingRules, levelGating, sectionsList, vipSubjectsList]);
+  }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, isInitializing, gradingRules, levelGating, sectionsList, vipSubjectsList, isCurrentSubVIP, isLevelLockedByAdmin]);
 
   const handleGradeChange = (index: number, field: string, value: string) => {
+    if (isSheetLocked) return; 
+
+    // منع الإدخال يدوياً من الشفرة لمن يتلاعب بـ HTML
+    if (field === 'p1_coursework' && !canEditP1Cw) return;
+    if (field === 'p1_exam' && !canEditP1Ex) return;
+    if (field === 'p2_coursework' && !canEditP2Cw) return;
+    if (field === 'p2_exam' && !canEditP2Ex) return;
+
     if (value !== '') {
       const numValue = Number(value);
       let maxMark = (field.includes('coursework')) ? subjectLimits.cw_max : subjectLimits.ex_max;
@@ -240,22 +260,26 @@ export default function ManualGradingPage() {
   };
 
   const saveAndLockGrades = async () => {
-    if (rows.length === 0 || isInputDisabled) return;
+    if (rows.length === 0 || !canEditAnything) return;
     
-    // 🚀 التحقق من الخانات النشطة فقط لاعتمادها، بناءً على التوافق بين القواطع الأساسية وصلاحيات الـ VIP
+    // 🚀 التحقق فقط من الخانات التي يُسمح للمعلم بتعديلها حالياً
     const activeFields = [];
-    if (gradingToggles.p1_cw || vipAccess.p1_cw) activeFields.push({ key: 'p1_coursework' });
-    if (gradingToggles.p1_ex || vipAccess.p1_ex) activeFields.push({ key: 'p1_exam' });
-    if (gradingToggles.p2_cw || vipAccess.p2_cw) activeFields.push({ key: 'p2_coursework' });
-    if (gradingToggles.p2_ex || vipAccess.p2_ex) activeFields.push({ key: 'p2_exam' });
+    if (canEditP1Cw) activeFields.push({ key: 'p1_coursework' });
+    if (canEditP1Ex) activeFields.push({ key: 'p1_exam' });
+    if (canEditP2Cw) activeFields.push({ key: 'p2_coursework' });
+    if (canEditP2Ex) activeFields.push({ key: 'p2_exam' });
 
     let hasEmpty = false;
     for (const row of rows) {
-      for (const field of activeFields) { if (row[field.key] === '' || row[field.key] === null || row[field.key] === undefined) { hasEmpty = true; break; } }
+      for (const field of activeFields) { 
+         if (row[field.key] === '' || row[field.key] === null || row[field.key] === undefined) { 
+            hasEmpty = true; break; 
+         } 
+      }
       if (hasEmpty) break;
     }
 
-    if (hasEmpty) { setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة في الأعمدة النشطة. يرجى وضع (0) للغائب.' }); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (hasEmpty) { setStatus({ type: 'error', msg: '❌ عذراً! يوجد خانات فارغة في الأعمدة المفتوحة للرصد. يرجى وضع (0) للغائب.' }); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (!window.confirm('⚠️ هل أنت متأكد من اعتماد الدرجات؟ لن تتمكن من التعديل بعد ذلك.')) return;
     
     setIsGridLoading(true); setStatus(null);
@@ -296,7 +320,7 @@ export default function ManualGradingPage() {
 
       <div className="no-print fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-[#0f1423]/95 backdrop-blur-xl p-4 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
         <button onClick={() => router.back()} className="p-4 bg-white/5 hover:bg-white/10 text-white rounded-full transition-colors"><ChevronRight /></button>
-        {!isInputDisabled && rows.length > 0 && (
+        {!isSheetLocked && canEditAnything && rows.length > 0 && (
           <button onClick={saveAndLockGrades} disabled={isGridLoading} className="px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
             {isGridLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lock className="w-5 h-5" />} اعتماد وقفل
           </button>
@@ -315,7 +339,7 @@ export default function ManualGradingPage() {
               <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي</h1><p className="text-xs text-slate-400 font-bold mt-1">آلية مطورة لضمان توافق الدرجات العظمى مع التخصص</p></div>
             </div>
             {isSheetLocked && <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black animate-pulse"><ShieldCheck className="w-5 h-5" /> كشف معتمد مسبقاً</div>}
-            {isCurrentSubVIP && <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-xl text-sm font-black animate-pulse"><Star className="w-5 h-5" /> مادة مستثناة (مفتوحة)</div>}
+            {isCurrentSubVIP && !isSheetLocked && <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-xl text-sm font-black animate-pulse"><Star className="w-5 h-5" /> مادة مستثناة (مفتوحة)</div>}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -367,7 +391,7 @@ export default function ManualGradingPage() {
            <div className="flex flex-col items-center justify-center p-20 bg-[#0f1423]/40 border border-white/5 rounded-[2rem]"><Loader2 className="w-10 h-10 text-amber-500 animate-spin" /><p className="mt-4 text-slate-400 font-bold">جاري بناء كشف الدرجات...</p></div>
         ) : rows.length > 0 ? (
           <div className="overflow-x-auto bg-[#0f1423]/40 print:bg-transparent rounded-2xl print:rounded-none border border-white/10 print:border-none p-1 print:p-0 relative">
-            {isInputDisabled && !isCurrentSubVIP && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
+            {!canEditAnything && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
             <table className="w-full text-center official-table relative z-0">
               <thead>
                 <tr className="bg-white/5 border-b border-white/10">
@@ -392,11 +416,11 @@ export default function ManualGradingPage() {
                   const p2Sum = (Number(row.p2_coursework) || 0) + (Number(row.p2_exam) || 0);
                   const finalSum = p1Sum + p2Sum;
 
-                  // 🚀 التحكم الذكي في قفل الخانات بناءً على الإدارة المركزية والـ VIP
-                  const disableP1Cw = isInputDisabled || (!gradingToggles.p1_cw && !vipAccess.p1_cw);
-                  const disableP1Ex = isInputDisabled || (!gradingToggles.p1_ex && !vipAccess.p1_ex);
-                  const disableP2Cw = isInputDisabled || (!gradingToggles.p2_cw && !vipAccess.p2_cw);
-                  const disableP2Ex = isInputDisabled || (!gradingToggles.p2_ex && !vipAccess.p2_ex);
+                  // 🚀 التحكم الذكي في قفل كل خانة على حدة بناءً على الإدارة المركزية والـ VIP
+                  const disableP1Cw = isSheetLocked || !canEditP1Cw;
+                  const disableP1Ex = isSheetLocked || !canEditP1Ex;
+                  const disableP2Cw = isSheetLocked || !canEditP2Cw;
+                  const disableP2Ex = isSheetLocked || !canEditP2Ex;
 
                   return (
                     <tr key={idx} className="border-b border-white/5 hover:bg-white/5 print:hover:bg-transparent transition-colors">
