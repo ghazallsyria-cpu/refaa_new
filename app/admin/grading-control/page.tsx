@@ -20,9 +20,14 @@ export default function GradingControlPage() {
     g10_active: true, g11_active: true, g12_active: true 
   });
 
-  const [vipSubjects, setVipSubjects] = useState<string[]>([]);
+  // 🚀 الهيكل الجديد للـ VIP (أصبح Objects بدلاً من Strings)
+  const [vipSubjects, setVipSubjects] = useState<any[]>([]);
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  
+  // 🚀 حالات التحكم للإضافة في قائمة الـ VIP
   const [newVipSubject, setNewVipSubject] = useState('');
+  const [newVipPeriod, setNewVipPeriod] = useState('p1'); // p1 or p2
+  const [newVipMode, setNewVipMode] = useState('both'); // cw, ex, or both
   const [vipLoading, setVipLoading] = useState(false);
 
   const [allTeacherProgress, setAllTeacherProgress] = useState<any[]>([]);
@@ -44,7 +49,10 @@ export default function GradingControlPage() {
           p2_cw_active: schoolSettings.grading_p2_cw_active || false, p2_ex_active: schoolSettings.grading_p2_ex_active || false,
           g10_active: schoolSettings.grading_g10_active ?? true, g11_active: schoolSettings.grading_g11_active ?? true, g12_active: schoolSettings.grading_g12_active ?? true,
         });
-        setVipSubjects(schoolSettings.early_grading_subjects || []);
+        // التأكد من أن المصفوفة تحتوي كائنات وليس نصوصاً قديمة
+        const savedVip = schoolSettings.early_grading_subjects || [];
+        const normalizedVip = savedVip.map(sub => typeof sub === 'string' ? { name: sub, period: 'p1', mode: 'both' } : sub);
+        setVipSubjects(normalizedVip);
       }
 
       const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('subject_name');
@@ -125,25 +133,41 @@ export default function GradingControlPage() {
     } catch (error) { setStatus({ type: 'error', msg: 'فشل التحديث.' }); } finally { setToggleLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
+  // 🚀 تحديث دالة إضافة مادة للـ VIP لتدعم الخيارات الجديدة
   const addVipSubject = async () => {
     if (!newVipSubject.trim()) return;
-    if (vipSubjects.includes(newVipSubject.trim())) { setStatus({ type: 'warning', msg: 'موجودة بالفعل!' }); setTimeout(() => setStatus(null), 3000); return; }
+    
+    // نتحقق إذا كانت المادة مضافة مسبقاً بنفس الخصائص
+    const isExist = vipSubjects.some(v => v.name === newVipSubject.trim() && v.period === newVipPeriod && v.mode === newVipMode);
+    if (isExist) { 
+       setStatus({ type: 'warning', msg: 'موجودة بالفعل بنفس الصلاحيات!' }); 
+       setTimeout(() => setStatus(null), 3000); 
+       return; 
+    }
+
     setVipLoading(true);
     try {
-      const updatedList = [...vipSubjects, newVipSubject.trim()];
+      const newVipObj = {
+         name: newVipSubject.trim(),
+         period: newVipPeriod,
+         mode: newVipMode
+      };
+      
+      const updatedList = [...vipSubjects, newVipObj];
       await supabase.from('school_settings').update({ early_grading_subjects: updatedList }).eq('id', settings.id);
-      setVipSubjects(updatedList); setNewVipSubject('');
-      setStatus({ type: 'success', msg: `تمت الإضافة بنجاح!` });
+      setVipSubjects(updatedList); 
+      setNewVipSubject('');
+      setStatus({ type: 'success', msg: `تمت إضافة المادة للصلاحيات الاستثنائية بنجاح!` });
     } catch (err) { setStatus({ type: 'error', msg: 'فشل الإضافة.' }); } finally { setVipLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
-  const removeVipSubject = async (subjectToRemove: string) => {
+  const removeVipSubject = async (indexToRemove: number) => {
     setVipLoading(true);
     try {
-      const updatedList = vipSubjects.filter(sub => sub !== subjectToRemove);
+      const updatedList = vipSubjects.filter((_, idx) => idx !== indexToRemove);
       await supabase.from('school_settings').update({ early_grading_subjects: updatedList }).eq('id', settings.id);
       setVipSubjects(updatedList);
-      setStatus({ type: 'success', msg: `تمت الإزالة.` });
+      setStatus({ type: 'success', msg: `تمت إزالة الصلاحية.` });
     } catch (err) { setStatus({ type: 'error', msg: 'فشل الإزالة.' }); } finally { setVipLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
@@ -350,28 +374,52 @@ export default function GradingControlPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           <div className="no-print lg:col-span-1 space-y-6">
+            
+            {/* 🚀 القائمة البيضاء الجديدة */}
             <div className="glass-panel p-6 rounded-[2rem] border border-purple-500/30 bg-[#0f1423]/80">
-              <h2 className="text-xl font-black text-purple-400 mb-2 flex items-center gap-2"><Star className="w-5 h-5" /> القائمة البيضاء (VIP)</h2>
-              <div className="space-y-4">
-                <div className="flex gap-2 relative">
-                  <div className="relative flex-1">
-                    <ListChecks className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400 opacity-60 pointer-events-none" />
-                    <select value={newVipSubject} onChange={(e) => setNewVipSubject(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl py-3 pl-3 pr-10 text-white text-sm outline-none focus:border-purple-500 font-bold appearance-none">
-                      <option value="" disabled>اختر المادة...</option>
-                      {availableSubjects.map((sub, idx) => (<option key={idx} value={sub}>{sub}</option>))}
-                    </select>
+              <h2 className="text-xl font-black text-purple-400 mb-4 flex items-center gap-2"><Star className="w-5 h-5" /> القائمة البيضاء للاستثناء (VIP)</h2>
+              <p className="text-[10px] font-bold text-slate-400 mb-4">تتيح لك هذه القائمة منح استثناءات محددة لبعض المواد للرصد المبكر، حتى لو كانت القواطع الأساسية مغلقة.</p>
+              
+              <div className="space-y-3 mb-6 bg-black/40 p-4 rounded-2xl border border-white/5">
+                <div className="relative">
+                  <ListChecks className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400 opacity-60 pointer-events-none" />
+                  <select value={newVipSubject} onChange={(e) => setNewVipSubject(e.target.value)} className="w-full bg-black/60 border border-purple-500/20 rounded-xl py-3 pl-3 pr-10 text-white text-sm outline-none focus:border-purple-500 font-bold appearance-none">
+                    <option value="" disabled>1. اختر المادة المستثناة...</option>
+                    {availableSubjects.map((sub, idx) => (<option key={idx} value={sub}>{sub}</option>))}
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                   <select value={newVipPeriod} onChange={(e) => setNewVipPeriod(e.target.value)} className="bg-black/60 border border-purple-500/20 rounded-xl py-2 px-3 text-white text-[11px] outline-none focus:border-purple-500 font-bold">
+                      <option value="p1">الفترة الأولى</option>
+                      <option value="p2">الفترة الثانية</option>
+                   </select>
+                   <select value={newVipMode} onChange={(e) => setNewVipMode(e.target.value)} className="bg-black/60 border border-purple-500/20 rounded-xl py-2 px-3 text-white text-[11px] outline-none focus:border-purple-500 font-bold">
+                      <option value="cw">الأعمال فقط</option>
+                      <option value="ex">الاختبار فقط</option>
+                      <option value="both">كلاهما معاً</option>
+                   </select>
+                </div>
+
+                <button onClick={addVipSubject} disabled={vipLoading || !newVipSubject} className="w-full py-3 bg-purple-500 hover:bg-purple-400 text-white font-black text-sm rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 mt-2">
+                  {vipLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} إضافة الصلاحية
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {vipSubjects.length > 0 ? vipSubjects.map((subObj, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-purple-500/10 border border-purple-500/30 text-purple-300 px-4 py-2.5 rounded-xl">
+                     <div>
+                        <p className="font-black text-sm">{subObj.name}</p>
+                        <p className="text-[10px] font-bold text-purple-400/70 mt-0.5">
+                           مسموح: {subObj.period === 'p1' ? 'ف1' : 'ف2'} 
+                           <span className="mx-1">•</span> 
+                           {subObj.mode === 'cw' ? 'أعمال' : subObj.mode === 'ex' ? 'اختبار' : 'أعمال واختبار'}
+                        </p>
+                     </div>
+                     <button onClick={() => removeVipSubject(idx)} className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white rounded-lg transition-colors"><X className="w-4 h-4" /></button>
                   </div>
-                  <button onClick={addVipSubject} disabled={vipLoading || !newVipSubject} className="p-3 bg-purple-500 hover:bg-purple-400 text-white rounded-xl transition-colors disabled:opacity-50">
-                    {vipLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {vipSubjects.length > 0 ? vipSubjects.map((sub, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-purple-500/10 border border-purple-500/30 text-purple-300 px-3 py-1.5 rounded-lg text-xs font-black">
-                      {sub} <button onClick={() => removeVipSubject(sub)} className="text-purple-400 hover:text-rose-400 transition-colors"><X className="w-3 h-3" /></button>
-                    </div>
-                  )) : (<p className="text-xs text-slate-500 font-bold w-full text-center py-2">لا يوجد استثناء.</p>)}
-                </div>
+                )) : (<p className="text-xs text-slate-500 font-bold w-full text-center py-4 bg-black/20 rounded-xl border border-dashed border-white/5">لا توجد استثناءات حالياً.</p>)}
               </div>
             </div>
 
