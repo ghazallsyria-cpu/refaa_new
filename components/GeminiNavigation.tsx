@@ -19,7 +19,7 @@ import {
   MonitorPlay, Target, Wand2, MonitorUp, ShieldCheck, FileKey, 
   ScanLine, FileSignature, UserSearch, CreditCard, ClipboardList, 
   Globe, ScrollText, Star, Shield, LogOut, Search, ChevronDown,
-  FileSpreadsheet, Unlock // 🚀 تم استيراد أيقونة فك الاعتماد بنجاح
+  FileSpreadsheet, Unlock 
 } from 'lucide-react';
 
 // ==========================================
@@ -65,7 +65,7 @@ const navigationGroups = [
       { name: 'كنترول اللجان', href: '/admin/exam-committees', icon: ShieldCheck },
       { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
       { name: 'غرفة عمليات الرصد', href: '/admin/grading-control', icon: Activity }, 
-      { name: 'الخزنة المركزية', href: '/admin/grading-unlock', icon: Unlock }, // 🚀 تم زرع الباب السري للخزنة هنا بنجاح
+      { name: 'الخزنة المركزية', href: '/admin/grading-unlock', icon: Unlock }, 
       { name: 'محرك الرصد اليدوي', href: '/admin/manual-grading', icon: FileSpreadsheet }, 
       { name: 'اللوائح الأكاديمية', href: '/admin/grading-rules', icon: Scale },
       { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature },
@@ -166,15 +166,11 @@ export default function GeminiNavigation() {
   useEffect(() => { setMounted(true); }, []);
   if (!mounted || isChecking || !authRole) return null;
 
-  // ==========================================
-  // 🛡️ فلترة الصلاحيات الهجينة (Hybrid RBAC Logic)
-  // ==========================================
   const isItemVisible = (item: any) => {
     const r = authRole;
     const n = item.name;
 
     if (['الرئيسية (الحرم)', 'لوحة التحكم', 'الرسائل', 'الإعلانات'].includes(n)) return true;
-
     if (r === 'admin' || r === 'management' || isGlobalWatcher) return true;
 
     if (dynamicRolePermissions && dynamicRolePermissions[r]) {
@@ -213,9 +209,6 @@ export default function GeminiNavigation() {
     ...group, items: group.items.filter(isItemVisible)
   })).filter(group => group.items.length > 0);
 
-  // ==========================================
-  // ⚡ الروابط السريعة (Quick Links Dock)
-  // ==========================================
   const getQuickLinks = () => {
     let dashboardHref = '/';
     if (authRole === 'student') dashboardHref = '/dashboard/student'; 
@@ -243,11 +236,15 @@ export default function GeminiNavigation() {
   };
   const quickLinks = getQuickLinks();
 
+  const roleDisplayNames: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر', 'staff': 'كادر إداري/مساند' };
+  let roleDisplayName = roleDisplayNames[authRole] || roleDisplayNames[userRole] || 'مستخدم';
+  if (isGlobalWatcher) roleDisplayName = 'مشرف إداري (مراقبة)';
+
   return (
     <>
       {/* 💻 الكبسولة الطافية (Desktop) */}
       <motion.div 
-        initial={false} animate={{ width: isExpanded ? 240 : 80 }}
+         Sherwood={false} animate={{ width: isExpanded ? 240 : 80 }}
         onHoverStart={() => setIsExpanded(true)} onHoverEnd={() => setIsExpanded(false)}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="hidden md:flex fixed top-6 bottom-6 right-6 z-40 flex-col bg-[#02040a]/60 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden"
@@ -345,12 +342,28 @@ export default function GeminiNavigation() {
                           <h3 className="text-base font-black text-white">{group.title}</h3>
                         </div>
                         <div className="flex flex-col gap-1.5 flex-1">
-                          {searchedItems.map((item) => (
-                            <Link key={item.name} href={item.href} onClick={() => setIsHubOpen(false)} className="group/link flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10 transition-all">
-                              <item.icon className="w-4 h-4 text-slate-500 group-hover/link:text-white" />
-                              <span className="text-sm font-bold text-slate-300 group-hover/link:text-white">{item.name}</span>
-                            </Link>
-                          ))}
+                          {searchedItems.map((item) => {
+                            // 🚀 تم حقن معالجة الروابط الديناميكية هنا لتصحيح التوجيه كلياً
+                            let itemHref = item.href;
+                            
+                            if (item.name === 'لوحة التحكم') {
+                              if (authRole === 'student') itemHref = '/dashboard/student'; 
+                              else if (authRole === 'teacher') itemHref = '/dashboard/teacher'; 
+                              else if (authRole === 'parent') itemHref = '/dashboard/parent'; 
+                              else if (userRole === 'staff') itemHref = '/dashboard/staff'; 
+                              else if (authRole === 'admin' || authRole === 'management') itemHref = '/dashboard';
+                            } 
+                            else if (item.name === 'ملفي الشخصي (CV)') { 
+                              itemHref = `/teachers/${user?.id || user?.user_id}`; 
+                            }
+
+                            return (
+                              <Link key={item.name} href={itemHref} onClick={() => setIsHubOpen(false)} className="group/link flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10 transition-all">
+                                <item.icon className="w-4 h-4 text-slate-500 group-hover/link:text-white" />
+                                <span className="text-sm font-bold text-slate-300 group-hover/link:text-white">{item.name}</span>
+                              </Link>
+                            );
+                          })}
                         </div>
                       </motion.div>
                     );
