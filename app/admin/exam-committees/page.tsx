@@ -6,7 +6,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
-  Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2
+  Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2,
+  CheckSquare // 🚀 تم إضافة الأيقونة الناقصة هنا لحل المشكلة تماماً!
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -52,7 +53,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم
+// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء على الموبايل
 // =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -78,7 +79,7 @@ function FloatingConsole() {
 }
 
 // =========================================================================
-// 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
+// 3. 🚀 الإدارة الرئيسية للجان
 // =========================================================================
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
@@ -101,12 +102,11 @@ function ExamCommitteesControl() {
   const [studentStats, setStudentStats] = useState({ g10: 0, g11_sci: 0, g11_lit: 0, totalAllocated: 0 });
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   
-  // 🚀 الفلترة اليومية
   const [uniqueExamDates, setUniqueExamDates] = useState<string[]>([]);
   const [activeExamDate, setActiveExamDate] = useState<string>(''); 
   
   const [isLoading, setIsLoading] = useState(true);
-  const [isAutoAssigning, setIsAutoAssigning] = useState(false); // حالة التوزيع الآلي
+  const [isAutoAssigning, setIsAutoAssigning] = useState(false);
   const [activeTab, setActiveTab] = useState<'management' | 'invigilators_radar' | 'heads_radar' | 'daily_stats'>('management');
   
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -286,7 +286,7 @@ function ExamCommitteesControl() {
        const { error } = await supabase.from('teachers').update({ is_excluded_from_exams: !currentStatus }).eq('id', tId);
        if (error) throw error;
     } catch (err) {
-       alert('حدث خطأ. تأكد من تشغيل أمر SQL الخاص بعمود is_excluded_from_exams في جدول teachers.');
+       alert('حدث خطأ. تأكد من تشغيل أمر SQL الخاص بعمود is_excluded_from_exams in teachers.');
        fetchData(); 
     }
   };
@@ -476,20 +476,14 @@ function ExamCommitteesControl() {
         throw new Error("تأكد من وجود لجان، جداول امتحانات، ومعلمين قبل التوزيع!");
       }
 
-      // تجهيز المتغيرات للتتبع
       const nonExemptTeachers = teachers.filter(t => !t.is_excluded_from_exams);
       if (nonExemptTeachers.length === 0) throw new Error("لا يوجد معلمين متاحين للمراقبة!");
 
-      // Map لمعرفة عدد المرات التي راقب فيها المعلم (للعدالة)
       const teacherTotalShifts = new Map<string, number>();
-      // Map لمعرفة اللجان التي راقب فيها المعلم (لمنع التكرار)
       const teacherCommittees = new Map<string, Set<string>>();
-      // Map لمعرفة من يراقب في أي يوم (لمنع التعارض في نفس اليوم)
       const dailyTeacherAssignments = new Map<string, Set<string>>();
-      // Map لعدد المراقبين الحاليين في اللجنة في هذا اليوم (للحفاظ على التعيين اليدوي)
       const dailyCommitteeCount = new Map<string, number>();
 
-      // ملء المتغيرات بالبيانات الحالية (التعيينات اليدوية السابقة)
       invigilators.forEach(inv => {
          const tId = String(inv.teacher_id);
          const cId = String(inv.committee_id);
@@ -509,18 +503,15 @@ function ExamCommitteesControl() {
 
       const newAssignments: any[] = [];
 
-      // خوارزمية التوزيع الأساسية
       for (const date of uniqueExamDates) {
          for (const comm of committees) {
             const commKey = `${date}_${comm.id}`;
             let currentCount = dailyCommitteeCount.get(commKey) || 0;
 
-            // نحتاج أن نكمل العدد إلى 2
             while (currentCount < 2) {
                let bestTeacher: any = null;
                let minShifts = Infinity;
 
-               // خلط بسيط للمعلمين لكسر الترتيب الأبجدي دائماً
                const shuffledTeachers = [...nonExemptTeachers].sort(() => Math.random() - 0.5);
 
                for (const teacher of shuffledTeachers) {
@@ -528,7 +519,6 @@ function ExamCommitteesControl() {
                   const isAssignedToday = dailyTeacherAssignments.get(date)?.has(tId);
                   const hasSupervisedThisCommBefore = teacherCommittees.get(tId)?.has(String(comm.id));
 
-                  // إذا كان متاحاً اليوم، ولم يراقب هذه اللجنة إطلاقاً في أي يوم
                   if (!isAssignedToday && !hasSupervisedThisCommBefore) {
                      const shifts = teacherTotalShifts.get(tId) || 0;
                      if (shifts < minShifts) {
@@ -539,7 +529,6 @@ function ExamCommitteesControl() {
                }
 
                if (!bestTeacher) {
-                  // لا يوجد معلم يحقق الشروط (ربما عدد المعلمين قليل جداً)
                   console.warn(`لم نتمكن من إيجاد مراقب للجنة ${comm.name} في يوم ${date}`);
                   break; 
                }
@@ -552,7 +541,6 @@ function ExamCommitteesControl() {
                   status: 'pending'
                });
 
-               // تحديث عدادات التتبع فوراً لكي لا نختاره مجدداً عن طريق الخطأ
                teacherTotalShifts.set(tId, (teacherTotalShifts.get(tId) || 0) + 1);
                if (!teacherCommittees.has(tId)) teacherCommittees.set(tId, new Set());
                teacherCommittees.get(tId)?.add(String(comm.id));
@@ -565,7 +553,6 @@ function ExamCommitteesControl() {
       }
 
       if (newAssignments.length > 0) {
-         // رفع التكليفات الجديدة إلى قاعدة البيانات (على دفعات لتجنب الضغط)
          const chunkSize = 100;
          for (let i = 0; i < newAssignments.length; i += chunkSize) {
             await supabase.from('committee_invigilators').insert(newAssignments.slice(i, i + chunkSize));
@@ -725,7 +712,6 @@ function ExamCommitteesControl() {
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                      <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة (العدالة والتدوير لجميع الأيام)</h3>
-                     {/* 🚀 الزر السحري لتوزيع المراقبين آلياً */}
                      <button onClick={handleAutoAssignInvigilators} disabled={isAutoAssigning} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md transition-all flex items-center gap-2">
                         <Wand2 className="w-5 h-5"/> التوزيع الآلي الذكي
                      </button>
@@ -911,7 +897,6 @@ function ExamCommitteesControl() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {committees.map((committee: any, idx: number) => {
                     const stdCount = Number(allocationsStats[committee?.id] || 0);
-                    // 🚀 فلترة المراقبين بناءً على اللجنة وتاريخ اليوم المحدد
                     const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee?.id) && i.exam_date === activeExamDate);
                     const isFull = stdCount >= Number(committee?.capacity || 0);
                     const isOverflow = String(committee?.name || '').includes('الفائض');
@@ -984,7 +969,7 @@ function ExamCommitteesControl() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-emerald-600"/> هندسة اللجان</h3>
             <div className="space-y-4">
-              <div><label className="text-sm font-bold text-slate-600">كم عدد اللجان الإجمالي؟</label><input type="number" min="1" max="100" value={builderData.count} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, count: isNaN(v) ? 1 : Math.min(100, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /></div>
+              <div><label className="text-sm font-bold text-slate-600">كم عدد اللجان الإجمالي?</label><input type="number" min="1" max="100" value={builderData.count} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, count: isNaN(v) ? 1 : Math.min(100, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /></div>
               <div><label className="text-sm font-bold text-slate-600">سعة اللجنة الواحدة؟</label><input type="number" min="1" max="50" value={builderData.capacity} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, capacity: isNaN(v) ? 1 : Math.min(50, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /><p className="text-[10px] text-slate-400 text-center mt-1">السعة القصوى 50 طالب للجنة.</p></div>
               <div className="flex gap-2 pt-2"><button onClick={handleBuild} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700">بناء واعتماد</button><button onClick={() => setIsBuilderModalOpen(false)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black hover:bg-slate-200">إلغاء</button></div>
             </div>
@@ -997,7 +982,7 @@ function ExamCommitteesControl() {
         {isExemptionsModalOpen && (
            <>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsExemptionsModalOpen(false)} />
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-[500px] bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
                  <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                        <UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين
@@ -1206,7 +1191,7 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 👤 نافذة تعيين المراقبين (يدوياً للجنة واحدة في يوم واحد) */}
+      {/* 👤 نافذة تعيين المراقبين */}
       {isAssignModalOpen && selectedCommittee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}>
           <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -1259,7 +1244,7 @@ function ExamCommitteesControl() {
                     <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                     <div>
                        <p className="text-xs font-black text-amber-800 mb-1">معلومات للإدارة:</p>
-                       <p className="text-[11px] font-bold text-amber-700 leading-relaxed">هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{teachers.find(t=>String(t?.id)===String(selectedTeacherId))?.subjectsStr || 'غير محدد'}</span>.</p>
+                       <p className="text-[11px] font-bold text-amber-700 leading-relaxed">هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{teachers.find(t=>String(t=>t.id===selectedTeacherId))?.subjectsStr || 'غير محدد'}</span>.</p>
                        <p className="text-[10px] font-bold text-indigo-600 mt-1">سيتم التكليف ليوم: {activeExamDate}</p>
                     </div>
                  </div>
