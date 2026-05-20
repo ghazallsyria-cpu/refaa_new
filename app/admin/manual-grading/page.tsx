@@ -31,7 +31,8 @@ export default function ManualGradingPage() {
   const [levelGating, setLevelGating] = useState({ g10: true, g11: true, g12: true });
   const [subjectLimits, setSubjectLimits] = useState({ cw_max: 40, ex_max: 60 });
   
-  const [vipSubjectsList, setVipSubjectsList] = useState<string[]>([]);
+  // 🚀 استقبال الـ VIP Objects بدلاً من النصوص العادية
+  const [vipSubjectsList, setVipSubjectsList] = useState<any[]>([]);
 
   const isSheetLocked = rows.length > 0 && rows.some(row => row.is_locked);
   const currentSectionObj = sectionsList.find(s => s.id === selectedSectionId);
@@ -45,9 +46,30 @@ export default function ManualGradingPage() {
 
   const isInputDisabled = isSheetLocked || isLevelLockedByAdmin;
 
-  const isVIPSubject = selectedSubject ? vipSubjectsList.some(vipSub => 
-    selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject)
-  ) : false;
+  // 🚀 خوارزمية الأبواب الذكية لتحديد ما إذا كانت المادة (VIP) وفي أي جزء تحديداً
+  const vipAccess = { p1_cw: false, p1_ex: false, p2_cw: false, p2_ex: false };
+  let isCurrentSubVIP = false;
+
+  if (selectedSubject && vipSubjectsList.length > 0) {
+     vipSubjectsList.forEach(vip => {
+        let vObj = vip;
+        if (typeof vip === 'string') {
+           try { vObj = JSON.parse(vip); } 
+           catch(e) { vObj = { name: vip, period: 'p1', mode: 'both' }; }
+        }
+        if (vObj && vObj.name && (selectedSubject.includes(vObj.name) || vObj.name.includes(selectedSubject))) {
+           isCurrentSubVIP = true;
+           if (vObj.period === 'p1') {
+              if (vObj.mode === 'cw' || vObj.mode === 'both') vipAccess.p1_cw = true;
+              if (vObj.mode === 'ex' || vObj.mode === 'both') vipAccess.p1_ex = true;
+           }
+           if (vObj.period === 'p2') {
+              if (vObj.mode === 'cw' || vObj.mode === 'both') vipAccess.p2_cw = true;
+              if (vObj.mode === 'ex' || vObj.mode === 'both') vipAccess.p2_ex = true;
+           }
+        }
+     });
+  }
 
   useEffect(() => {
     const bootEngine = async () => {
@@ -105,9 +127,6 @@ export default function ManualGradingPage() {
     bootEngine();
   }, []);
 
-  // ===================================================================================
-  // 🚀 المحرك الثاني المُعدل: حقن (القرآن الكريم) كـ "مادة افتراضية"
-  // ===================================================================================
   useEffect(() => {
     const fetchSubjectsForSection = async () => {
       if (!selectedSectionId) { setSubjectsList([]); setSelectedSubject(''); return; }
@@ -126,7 +145,6 @@ export default function ManualGradingPage() {
         tsData?.forEach(item => { 
           if (item.subjects?.name) {
             subSet.add(item.subjects.name);
-            // 🌟 الخدعة الذكية: إذا وجدنا التربية الإسلامية، نحقن مادة القرآن الكريم فوراً!
             if (item.subjects.name.includes('إسلامية') || item.subjects.name.includes('اسلامية')) {
               subSet.add('القرآن الكريم');
             }
@@ -183,15 +201,12 @@ export default function ManualGradingPage() {
         if (!rule) rule = gradingRules.find(r => String(r.academic_stage) === String(cLevel) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
         if (!rule && cLevel >= 10) rule = gradingRules.find(r => !['6','7','8','9'].includes(String(r.academic_stage)) && (r.subject_name === searchSub || searchSub.includes(r.subject_name) || r.subject_name.includes(searchSub)));
 
-        // الأوزان ستصبح تلقائياً 6 لـ Coursework و 14 لـ Exam لأنها ستتطابق مع قاعدة بياناتك
         setSubjectLimits({ cw_max: Number(rule?.coursework_max || 40), ex_max: Number(rule?.exam_max || 60) });
-
-        const isCurrentSubVIP = vipSubjectsList.some(vipSub => selectedSubject.includes(vipSub) || vipSub.includes(selectedSubject));
 
         if (!isCurrentSubVIP && ((cLevel === 10 && !levelGating.g10) || (cLevel === 11 && !levelGating.g11) || (cLevel === 12 && !levelGating.g12))) {
           setStatus({ type: 'warning', msg: 'عذراً! الرصد مغلق لهذا الصف حالياً من قبل الإدارة المركزية.' });
         } else if (isCurrentSubVIP) {
-          setStatus({ type: 'success', msg: '🌟 هذه مادة استثنائية (VIP): الرصد متاح لها بشكل مبكر طوال الوقت.' });
+          setStatus({ type: 'success', msg: '🌟 هذه مادة استثنائية (VIP): الرصد متاح لها بشكل مبكر وفق الصلاحيات المحددة.' });
         }
 
         const { data: studentsData } = await supabase.from('students').select('id, users!inner(full_name)').eq('section_id', selectedSectionId);
@@ -213,7 +228,6 @@ export default function ManualGradingPage() {
   }, [selectedSectionId, selectedSubject, selectedYear, selectedSemester, isInitializing, gradingRules, levelGating, sectionsList, vipSubjectsList]);
 
   const handleGradeChange = (index: number, field: string, value: string) => {
-    if (isInputDisabled) return; 
     if (value !== '') {
       const numValue = Number(value);
       let maxMark = (field.includes('coursework')) ? subjectLimits.cw_max : subjectLimits.ex_max;
@@ -228,11 +242,12 @@ export default function ManualGradingPage() {
   const saveAndLockGrades = async () => {
     if (rows.length === 0 || isInputDisabled) return;
     
+    // 🚀 التحقق من الخانات النشطة فقط لاعتمادها، بناءً على التوافق بين القواطع الأساسية وصلاحيات الـ VIP
     const activeFields = [];
-    if (gradingToggles.p1_cw || isVIPSubject) activeFields.push({ key: 'p1_coursework' });
-    if (gradingToggles.p1_ex || isVIPSubject) activeFields.push({ key: 'p1_exam' });
-    if (gradingToggles.p2_cw || isVIPSubject) activeFields.push({ key: 'p2_coursework' });
-    if (gradingToggles.p2_ex || isVIPSubject) activeFields.push({ key: 'p2_exam' });
+    if (gradingToggles.p1_cw || vipAccess.p1_cw) activeFields.push({ key: 'p1_coursework' });
+    if (gradingToggles.p1_ex || vipAccess.p1_ex) activeFields.push({ key: 'p1_exam' });
+    if (gradingToggles.p2_cw || vipAccess.p2_cw) activeFields.push({ key: 'p2_coursework' });
+    if (gradingToggles.p2_ex || vipAccess.p2_ex) activeFields.push({ key: 'p2_exam' });
 
     let hasEmpty = false;
     for (const row of rows) {
@@ -240,7 +255,7 @@ export default function ManualGradingPage() {
       if (hasEmpty) break;
     }
 
-    if (hasEmpty) { setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة. يرجى وضع (0) للغائب.' }); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (hasEmpty) { setStatus({ type: 'error', msg: '❌ عذراً! لا يمكنك الاعتماد ويوجد خانات فارغة في الأعمدة النشطة. يرجى وضع (0) للغائب.' }); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (!window.confirm('⚠️ هل أنت متأكد من اعتماد الدرجات؟ لن تتمكن من التعديل بعد ذلك.')) return;
     
     setIsGridLoading(true); setStatus(null);
@@ -300,7 +315,7 @@ export default function ManualGradingPage() {
               <div><h1 className="text-2xl font-black text-white">محرك الرصد اليدوي</h1><p className="text-xs text-slate-400 font-bold mt-1">آلية مطورة لضمان توافق الدرجات العظمى مع التخصص</p></div>
             </div>
             {isSheetLocked && <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-sm font-black animate-pulse"><ShieldCheck className="w-5 h-5" /> كشف معتمد مسبقاً</div>}
-            {isVIPSubject && <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-xl text-sm font-black animate-pulse"><Star className="w-5 h-5" /> مادة مستثناة (مفتوحة)</div>}
+            {isCurrentSubVIP && <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-xl text-sm font-black animate-pulse"><Star className="w-5 h-5" /> مادة مستثناة (مفتوحة)</div>}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -352,7 +367,7 @@ export default function ManualGradingPage() {
            <div className="flex flex-col items-center justify-center p-20 bg-[#0f1423]/40 border border-white/5 rounded-[2rem]"><Loader2 className="w-10 h-10 text-amber-500 animate-spin" /><p className="mt-4 text-slate-400 font-bold">جاري بناء كشف الدرجات...</p></div>
         ) : rows.length > 0 ? (
           <div className="overflow-x-auto bg-[#0f1423]/40 print:bg-transparent rounded-2xl print:rounded-none border border-white/10 print:border-none p-1 print:p-0 relative">
-            {isInputDisabled && !isVIPSubject && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
+            {isInputDisabled && !isCurrentSubVIP && <div className="absolute inset-0 z-10 bg-black/10 print:hidden cursor-not-allowed rounded-2xl"></div>}
             <table className="w-full text-center official-table relative z-0">
               <thead>
                 <tr className="bg-white/5 border-b border-white/10">
@@ -377,10 +392,11 @@ export default function ManualGradingPage() {
                   const p2Sum = (Number(row.p2_coursework) || 0) + (Number(row.p2_exam) || 0);
                   const finalSum = p1Sum + p2Sum;
 
-                  const disableP1Cw = (!isVIPSubject && !gradingToggles.p1_cw) || (isInputDisabled && !isVIPSubject);
-                  const disableP1Ex = (!isVIPSubject && !gradingToggles.p1_ex) || (isInputDisabled && !isVIPSubject);
-                  const disableP2Cw = (!isVIPSubject && !gradingToggles.p2_cw) || (isInputDisabled && !isVIPSubject);
-                  const disableP2Ex = (!isVIPSubject && !gradingToggles.p2_ex) || (isInputDisabled && !isVIPSubject);
+                  // 🚀 التحكم الذكي في قفل الخانات بناءً على الإدارة المركزية والـ VIP
+                  const disableP1Cw = isInputDisabled || (!gradingToggles.p1_cw && !vipAccess.p1_cw);
+                  const disableP1Ex = isInputDisabled || (!gradingToggles.p1_ex && !vipAccess.p1_ex);
+                  const disableP2Cw = isInputDisabled || (!gradingToggles.p2_cw && !vipAccess.p2_cw);
+                  const disableP2Ex = isInputDisabled || (!gradingToggles.p2_ex && !vipAccess.p2_ex);
 
                   return (
                     <tr key={idx} className="border-b border-white/5 hover:bg-white/5 print:hover:bg-transparent transition-colors">
