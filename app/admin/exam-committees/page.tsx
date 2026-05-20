@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2,
-  CheckSquare
+  CheckSquare, UserCheck
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -79,7 +79,7 @@ function FloatingConsole() {
 }
 
 // =========================================================================
-// 3. 🚀 الإدارة الرئيسية للجان
+// 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
 // =========================================================================
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
@@ -112,13 +112,13 @@ function ExamCommitteesControl() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [isHeadsModalOpen, setIsHeadsModalOpen] = useState(false);
   const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false);
   const [isClassPrintModalOpen, setIsClassPrintModalOpen] = useState(false);
   const [isReadExcuseModalOpen, setIsReadExcuseModalOpen] = useState(false);
   const [isExemptionsModalOpen, setIsExemptionsModalOpen] = useState(false);
   
   const [exemptionSearchTerm, setExemptionSearchTerm] = useState('');
+  const [headSearchTerm, setHeadSearchTerm] = useState(''); // 🚀 بحث تعيين الرؤساء
   const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<any>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -208,13 +208,22 @@ function ExamCommitteesControl() {
          setActiveExamDate(currentDateToFetch);
       }
 
+      // 🛡️ درع حماية استرجاع المعلمين (مع إضافة is_committee_head)
       let finalTchrs = [];
-      const { data: tchrsWithExclusion, error: tchrErr } = await supabase.from('teachers').select('id, is_excluded_from_exams, users(full_name, avatar_url), teacher_subjects(subjects(name))');
-      if (tchrErr && String(tchrErr.message).includes('is_excluded_from_exams')) {
-         const { data: fallbackTchrs } = await supabase.from('teachers').select('id, users(full_name, avatar_url), teacher_subjects(subjects(name))');
-         finalTchrs = fallbackTchrs || [];
+      const { data: tchrsWithCols, error: tchrErr } = await supabase.from('teachers').select('id, is_excluded_from_exams, is_committee_head, users(full_name, avatar_url), teacher_subjects(subjects(name))');
+      
+      if (tchrErr) {
+         // Fallback 1: بدون is_committee_head
+         const { data: fb1, error: e1 } = await supabase.from('teachers').select('id, is_excluded_from_exams, users(full_name, avatar_url), teacher_subjects(subjects(name))');
+         if (e1) {
+             // Fallback 2: أساسي
+             const { data: fb2 } = await supabase.from('teachers').select('id, users(full_name, avatar_url), teacher_subjects(subjects(name))');
+             finalTchrs = fb2 || [];
+         } else {
+             finalTchrs = fb1 || [];
+         }
       } else {
-         finalTchrs = tchrsWithExclusion || [];
+         finalTchrs = tchrsWithCols || [];
       }
 
       const formattedTeachers = (finalTchrs || []).map((t: any, idx: number) => {
@@ -222,8 +231,12 @@ function ExamCommitteesControl() {
         const u = Array.isArray(t?.users) ? t.users[0] : t?.users;
         const subjects = Array.isArray(t?.teacher_subjects) ? t.teacher_subjects.map((s:any) => s?.subjects?.name).filter(Boolean).join('، ') : 'غير محدد';
         return { 
-          id: String(t?.id || `t-${idx}`), full_name: String(u?.full_name || 'بدون اسم'), avatar_url: u?.avatar_url || null, 
-          subjectsStr: subjects, is_excluded_from_exams: t?.is_excluded_from_exams || false
+          id: String(t?.id || `t-${idx}`), 
+          full_name: String(u?.full_name || 'بدون اسم'), 
+          avatar_url: u?.avatar_url || null, 
+          subjectsStr: subjects, 
+          is_excluded_from_exams: t?.is_excluded_from_exams || false,
+          is_committee_head: t?.is_committee_head || false // 🚀 جلب صفة رئيس اللجان
         };
       }).filter(Boolean);
 
@@ -280,13 +293,25 @@ function ExamCommitteesControl() {
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
 
+  // 🚀 دوال الاعفاء وتعيين رؤساء اللجان
   const handleToggleExemption = async (tId: string, currentStatus: boolean) => {
     try {
        setTeachers(prev => prev.map(t => String(t.id) === tId ? { ...t, is_excluded_from_exams: !currentStatus } : t));
        const { error } = await supabase.from('teachers').update({ is_excluded_from_exams: !currentStatus }).eq('id', tId);
        if (error) throw error;
     } catch (err) {
-       alert('حدث خطأ. تأكد من تشغيل أمر SQL الخاص بعمود is_excluded_from_exams in teachers.');
+       alert('حدث خطأ. تأكد من تشغيل أمر SQL الخاص بعمود is_excluded_from_exams في جدول teachers.');
+       fetchData(); 
+    }
+  };
+
+  const handleToggleCommitteeHead = async (tId: string, currentStatus: boolean) => {
+    try {
+       setTeachers(prev => prev.map(t => String(t.id) === tId ? { ...t, is_committee_head: !currentStatus } : t));
+       const { error } = await supabase.from('teachers').update({ is_committee_head: !currentStatus }).eq('id', tId);
+       if (error) throw error;
+    } catch (err) {
+       alert('حدث خطأ. تأكد من إضافة عمود is_committee_head في قاعدة البيانات.');
        fetchData(); 
     }
   };
@@ -321,7 +346,7 @@ function ExamCommitteesControl() {
 
   const handleAssignHead = async () => {
     if (!headAssignment.date || !headAssignment.head_teacher_id || selectedCommitteesForHead.length === 0) {
-      alert('يرجى اختيار التاريخ، المعلم، وتحديد اللجان المسؤولة!'); return;
+      alert('يرجى اختيار التاريخ، تحديد اللجان، ثم اختيار رئيس اللجان!'); return;
     }
     try {
       setIsLoading(true);
@@ -466,8 +491,9 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
+  // 🚀 الخوارزمية الذكية (تستثني رؤساء اللجان والمعفيين من المراقبة)
   const handleAutoAssignInvigilators = async () => {
-    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين (غير المعفيين) بواقع 2 لكل لجنة على جميع أيام الامتحانات، مع ضمان عدم تكرار المعلم لنفس اللجنة. هل أنت متأكد؟')) return;
+    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع 2 لكل لجنة على جميع أيام الامتحانات، مع استبعاد المعفيين ورؤساء اللجان، وضمان عدم تكرار المعلم لنفس اللجنة. هل أنت متأكد؟')) return;
     
     setIsAutoAssigning(true);
     try {
@@ -475,8 +501,9 @@ function ExamCommitteesControl() {
         throw new Error("تأكد من وجود لجان، جداول امتحانات، ومعلمين قبل التوزيع!");
       }
 
-      const nonExemptTeachers = teachers.filter(t => !t.is_excluded_from_exams);
-      if (nonExemptTeachers.length === 0) throw new Error("لا يوجد معلمين متاحين للمراقبة!");
+      // 🛡️ استبعاد المُعفيين ورؤساء اللجان المعتمدين من عملية المراقبة العادية
+      const eligibleTeachers = teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head);
+      if (eligibleTeachers.length === 0) throw new Error("لا يوجد معلمين متاحين للمراقبة العادية!");
 
       const teacherTotalShifts = new Map<string, number>();
       const teacherCommittees = new Map<string, Set<string>>();
@@ -511,7 +538,7 @@ function ExamCommitteesControl() {
                let bestTeacher: any = null;
                let minShifts = Infinity;
 
-               const shuffledTeachers = [...nonExemptTeachers].sort(() => Math.random() - 0.5);
+               const shuffledTeachers = [...eligibleTeachers].sort(() => Math.random() - 0.5);
 
                for (const teacher of shuffledTeachers) {
                   const tId = String(teacher.id);
@@ -635,15 +662,6 @@ function ExamCommitteesControl() {
 
   const getTeacherAssignmentsForDate = (tId: string, date: string) => invigilators.filter(i => String(i?.teacher_id) === String(tId) && i.exam_date === date);
   const getTeacherTotalAssignments = (tId: string) => invigilators.filter(i => String(i?.teacher_id) === String(tId));
-  const getTeacherHeadAssignments = (tId: string) => {
-    const dates = new Set<string>();
-    allHeads.forEach(h => { if(String(h?.head_teacher_id) === String(tId) && h?.exam_timetables?.exam_date) dates.add(h.exam_timetables.exam_date); });
-    return Array.from(dates);
-  };
-
-  const alreadyAssignedCommittees = currentHeads.flatMap(h => String(h?.committees_range || '').split('، '));
-  const selectedTeacherData = teachers.find(t => String(t?.id) === String(headAssignment?.head_teacher_id));
-  const selectedTeacherHeadDates = selectedTeacherData ? getTeacherHeadAssignments(selectedTeacherData.id) : [];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo pb-24" dir="rtl">
@@ -830,30 +848,134 @@ function ExamCommitteesControl() {
           )}
 
           {activeTab === 'heads_radar' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+               
+               {/* 🚀 القسم الأول: اعتماد رؤساء اللجان وتخزينهم */}
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
-                  <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Crown className="w-6 h-6 text-amber-500"/> سجل وتاريخ رؤساء اللجان</h3>
-                  <div className="overflow-x-auto">
-                     <table className="w-full text-right text-sm">
-                       <thead className="bg-amber-50 text-amber-800">
-                         <tr><th className="p-4 border-b border-amber-100">التاريخ</th><th className="p-4 border-b border-amber-100">المادة (اليوم)</th><th className="p-4 border-b border-amber-100">رئيس اللجان</th><th className="p-4 border-b border-amber-100">نطاق اللجان</th></tr>
-                       </thead>
-                       <tbody>
-                         {allHeads.length > 0 ? allHeads.map((h, i) => (
-                           <tr key={`hd-${i}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                             <td className="p-4 font-black text-slate-600">{String(h?.exam_timetables?.exam_date || '-')}</td>
-                             <td className="p-4 font-bold text-slate-700">{String(h?.exam_timetables?.subjects?.name || '-')}</td>
-                             <td className="p-4 font-black text-indigo-700 flex items-center gap-2">
-                               <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden shrink-0">{h?.users?.avatar_url ? <img src={h.users.avatar_url} className="w-full h-full object-cover"/> : <Crown className="w-4 h-4 m-2 text-slate-400"/>}</div>
-                               {getSafeName(h?.users)}
-                             </td>
-                             <td className="p-4 text-xs font-bold text-amber-700">{String(h?.committees_range || '-')}</td>
-                           </tr>
-                         )) : <tr><td colSpan={4} className="text-center py-10 font-bold text-slate-400">لا توجد سجلات لرؤساء اللجان بعد.</td></tr>}
-                       </tbody>
-                     </table>
-                  </div>
+                 <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                    <UserCheck className="w-6 h-6 text-emerald-600"/> 1. تعيين رؤساء اللجان (اعتماد الفريق الدائم)
+                 </h3>
+                 <p className="text-xs font-bold text-slate-500 mb-6">ابحث عن المعلم، واعتمد كونه "رئيس لجنة". بمجرد الاعتماد سيتم استبعاده من المراقبات التلقائية اليومية ليتفرغ للرئاسة.</p>
+                 
+                 <div className="relative mb-4">
+                    <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500 transition-colors shadow-inner" placeholder="ابحث عن اسم المعلم لتعيينه رئيساً..." value={headSearchTerm} onChange={(e) => setHeadSearchTerm(e.target.value)} />
+                 </div>
+
+                 <div className="max-h-56 overflow-y-auto custom-scrollbar p-2 bg-slate-50/50 border border-slate-100 rounded-2xl space-y-2">
+                    {teachers.filter(t => String(t?.full_name || '').includes(headSearchTerm)).map((t, idx) => {
+                       const isHead = t.is_committee_head;
+                       return (
+                          <div key={`hdl-${idx}`} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isHead ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                             <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0 overflow-hidden">
+                                     {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-full h-full object-cover" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
+                                 </div>
+                                 <div>
+                                     <p className={`text-sm font-black ${isHead ? 'text-amber-800' : 'text-slate-800'}`}>{t?.full_name}</p>
+                                     <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate max-w-[150px]">{t?.subjectsStr}</p>
+                                 </div>
+                             </div>
+                             <button 
+                                 onClick={() => handleToggleCommitteeHead(String(t?.id), isHead)}
+                                 className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isHead ? 'bg-rose-100 text-rose-600 hover:bg-rose-200' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
+                             >
+                                 {isHead ? 'إلغاء صفة الرئاسة' : 'تعيين كرئيس لجنة'}
+                             </button>
+                          </div>
+                       )
+                    })}
+                 </div>
                </div>
+
+               {/* 🚀 القسم الثاني: التكليف اليومي للرؤساء */}
+               <div className="bg-white border border-slate-200 rounded-3xl p-6">
+                 <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                   <CalendarDays className="w-6 h-6 text-indigo-500"/> 2. التكليف اليومي لرؤساء اللجان المعتمدين
+                 </h3>
+                 
+                 <div className="space-y-6">
+                   <div>
+                     <label className="block text-sm font-black text-slate-700 mb-2">أ) حدد اليوم الامتحاني</label>
+                     <select value={headAssignment.date} onChange={(e) => { setHeadAssignment({...headAssignment, date: e.target.value, head_teacher_id: ''}); fetchHeadsByDate(e.target.value); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
+                       <option value="">- اضغط لاختيار اليوم الامتحاني -</option>
+                       {uniqueExamDates.map((date, di) => {
+                          const count = timetables.filter(t => t?.exam_date === date).length;
+                          return <option key={`d-${di}`} value={date}>{date} (يتضمن {count} امتحانات)</option>
+                       })}
+                     </select>
+                   </div>
+                   
+                   {headAssignment.date && (
+                     <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
+                       <label className="block text-sm font-black text-slate-700 mb-2">ب) اختر اللجان (يمكنك تحديد عدة لجان لرئيس واحد)</label>
+                       <div className="flex flex-wrap gap-2 mb-4 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
+                          {committees.filter(c => !String(c?.name || '').includes('الفائض')).map((c, ci) => {
+                            const isAssigned = alreadyAssignedCommittees.includes(c?.name);
+                            const isSelected = selectedCommitteesForHead.includes(c?.name);
+                            return (
+                              <button 
+                                key={`hc-${ci}`} 
+                                disabled={isAssigned}
+                                onClick={() => toggleCommitteeSelectionForHead(c?.name)}
+                                className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 border shadow-sm
+                                  ${isAssigned ? 'bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed' : 
+                                    isSelected ? 'bg-indigo-600 text-white border-indigo-700 scale-105' : 
+                                    'bg-white text-slate-700 border-slate-300 hover:border-indigo-400 hover:text-indigo-700'}`}
+                              >
+                                {isAssigned ? <X className="w-4 h-4"/> : isSelected ? <CheckSquare className="w-4 h-4"/> : <Plus className="w-4 h-4"/>}
+                                {String(c?.name || '')}
+                              </button>
+                            )
+                          })}
+                       </div>
+                     </motion.div>
+                   )}
+
+                   {headAssignment.date && selectedCommitteesForHead.length > 0 && (
+                     <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
+                       <label className="block text-sm font-black text-slate-700 mb-2">ج) من سيتولى رئاسة هذه اللجان المحددة؟</label>
+                       <div className="flex flex-col sm:flex-row gap-3">
+                         <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm">
+                           <option value="">- اختر رئيس اللجان المعتمد -</option>
+                           {/* 🚀 نعرض فقط من تم اعتمادهم في الخطوة 1 */}
+                           {teachers.filter(t => t.is_committee_head).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>👑 {t?.full_name}</option>)}
+                         </select>
+                         <button onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg flex items-center gap-2 justify-center">
+                            <CheckCircle2 className="w-5 h-5"/> اعتماد التكليف
+                         </button>
+                       </div>
+                     </motion.div>
+                   )}
+                 </div>
+               </div>
+
+               {/* 🚀 القسم الثالث: سجل التكليفات للرؤساء */}
+               {headAssignment.date && (
+                 <div className="bg-white border border-slate-200 rounded-3xl p-6">
+                    <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> تكليفات رؤساء اللجان لليوم الامتحاني المحدد:</h4>
+                    <div className="space-y-3">
+                       {currentHeads.length > 0 ? currentHeads.map((head, hi) => (
+                          <div key={`h-asg-${hi}`} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-slate-50 shadow-sm hover:shadow-md transition-shadow">
+                             <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center font-black shrink-0">
+                                   {head?.users?.avatar_url ? <img src={head.users.avatar_url} className="w-full h-full rounded-full object-cover" alt="img" /> : <Crown className="w-6 h-6"/>}
+                                </div>
+                                <div>
+                                   <p className="font-black text-slate-900 text-base">{getSafeName(head?.users)}</p>
+                                   <div className="flex flex-wrap gap-1 mt-1.5">
+                                      {String(head?.committees_range || '').split('، ').filter(Boolean).map((cr:string, i:number) => (
+                                        <span key={`cr-${i}`} className="font-bold text-amber-800 text-[11px] bg-amber-100 px-2 py-1 rounded-md border border-amber-200">{cr}</span>
+                                      ))}
+                                   </div>
+                                </div>
+                             </div>
+                             <button onClick={() => handleDeleteHead(head?.head_teacher_id, headAssignment.date)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm" title="إزالة التكليف"><Trash2 className="w-5 h-5"/></button>
+                          </div>
+                       )) : <p className="text-center text-sm font-bold text-slate-400 py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">لم يتم تكليف أي رئيس لهذا اليوم الامتحاني بعد.</p>}
+                    </div>
+                 </div>
+               )}
             </div>
           )}
 
@@ -874,7 +996,6 @@ function ExamCommitteesControl() {
                   <>
                     <button onClick={handleDistribute} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Users className="w-5 h-5" /> توزيع السحّاب</button>
                     <button onClick={() => setIsClassPrintModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md border border-emerald-600"><Layers className="w-5 h-5" /> طباعة بطاقات الفصول</button>
-                    <button onClick={() => setIsHeadsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-amber-100 hover:bg-amber-200 text-amber-800 font-black rounded-xl flex justify-center items-center gap-2"><Crown className="w-5 h-5" /> تكليف الرؤساء</button>
                     
                     <button onClick={() => setIsExemptionsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 shadow-sm border border-rose-100"><UserMinus className="w-5 h-5" /> إعفاء معلمين</button>
                     
@@ -1050,342 +1171,10 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 👑 نافذة التكليف الذكي لرؤساء اللجان */}
-      {isHeadsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsHeadsModalOpen(false)}>
-          <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
-              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                <Crown className="w-6 h-6 text-amber-500"/> التكليف الذكي للرؤساء (حسب اليوم الامتحاني)
-              </h3>
-              <button onClick={() => setIsHeadsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
-               <div className="grid grid-cols-1 gap-5">
-                 <div>
-                   <label className="block text-sm font-black text-slate-700 mb-2">1. حدد اليوم الامتحاني (التاريخ)</label>
-                   <select value={headAssignment.date} onChange={(e) => { setHeadAssignment({...headAssignment, date: e.target.value, head_teacher_id: ''}); fetchHeadsByDate(e.target.value); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-amber-500 outline-none shadow-sm cursor-pointer hover:border-amber-300 transition-colors">
-                     <option value="">- اضغط لاختيار اليوم الامتحاني -</option>
-                     {uniqueExamDates.map((date, di) => {
-                        const count = timetables.filter(t => t?.exam_date === date).length;
-                        return <option key={`d-${di}`} value={date}>{date} (يتضمن {count} امتحانات)</option>
-                     })}
-                   </select>
-                 </div>
-                 
-                 {headAssignment.date && (
-                   <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
-                     <label className="block text-sm font-black text-slate-700 mb-2">2. اختر اللجان لتسليمها للرئيس</label>
-                     <div className="flex flex-wrap gap-2 mb-4 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
-                        {committees.filter(c => !String(c?.name || '').includes('الفائض')).map((c, ci) => {
-                          const isAssigned = alreadyAssignedCommittees.includes(c?.name);
-                          const isSelected = selectedCommitteesForHead.includes(c?.name);
-                          return (
-                            <button 
-                              key={`hc-${ci}`} 
-                              disabled={isAssigned}
-                              onClick={() => toggleCommitteeSelectionForHead(c?.name)}
-                              className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 border shadow-sm
-                                ${isAssigned ? 'bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed' : 
-                                  isSelected ? 'bg-amber-500 text-white border-amber-600 scale-105' : 
-                                  'bg-white text-slate-700 border-slate-300 hover:border-amber-400 hover:text-amber-700'}`}
-                            >
-                              {isAssigned ? <X className="w-4 h-4"/> : isSelected ? <CheckSquare className="w-4 h-4"/> : <Plus className="w-4 h-4"/>}
-                              {String(c?.name || '')}
-                            </button>
-                          )
-                        })}
-                     </div>
-                   </motion.div>
-                 )}
-
-                 {headAssignment.date && selectedCommitteesForHead.length > 0 && (
-                   <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
-                     <label className="block text-sm font-black text-slate-700 mb-2">3. حدد المعلم الذي سيتولى المسؤولية</label>
-                     <div className="flex flex-col sm:flex-row gap-3">
-                       <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-amber-500 outline-none shadow-sm">
-                         <option value="">- اختر المعلم من القائمة -</option>
-                         {/* 🚀 هنا تم حل المشكلة: إظهار جميع المعلمين في القائمة، مع تمييز المُفرغ للرئاسة */}
-                         {teachers.map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>{t?.full_name} {t?.is_excluded_from_exams ? '⭐ (مُفرغ للرئاسة)' : ''}</option>)}
-                       </select>
-                       <button onClick={handleAssignHead} className="bg-amber-500 hover:bg-amber-600 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg">اعتماد التكليف</button>
-                     </div>
-                     {headAssignment.head_teacher_id && (() => {
-                        const selectedTeacherHeadDates = getTeacherHeadAssignments(headAssignment.head_teacher_id);
-                        if(selectedTeacherHeadDates.length > 0) {
-                          return (
-                            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-                              <Info className="w-5 h-5 text-amber-500 shrink-0"/>
-                              <p className="text-xs font-bold text-amber-800 leading-relaxed">
-                                <span className="font-black text-amber-900 block mb-1">تنبيه لضمان التدوير:</span>
-                                هذا المعلم كُلف برئاسة اللجان مسبقاً في ({selectedTeacherHeadDates.length}) أيام، وهي: 
-                                <span className="font-black"> {selectedTeacherHeadDates.join('، ')}</span>. النظام يسمح بالتكليف لكن يُنصح باختيار معلم آخر لتحقيق العدالة.
-                              </p>
-                            </div>
-                          )
-                        }
-                        return null;
-                     })()}
-                   </motion.div>
-                 )}
-               </div>
-
-               {headAssignment.date && (
-                 <div className="mt-8 border-t border-slate-100 pt-6">
-                    <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> التكليفات الحالية لهذا اليوم الامتحاني:</h4>
-                    <div className="space-y-3">
-                       {currentHeads.length > 0 ? currentHeads.map((head, hi) => (
-                          <div key={`h-asg-${hi}`} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center font-black shrink-0">
-                                   {head?.users?.avatar_url ? <img src={head.users.avatar_url} className="w-full h-full rounded-full object-cover" alt="img" /> : <Crown className="w-6 h-6"/>}
-                                </div>
-                                <div>
-                                   <p className="font-black text-slate-900 text-base">{getSafeName(head?.users)}</p>
-                                   <div className="flex flex-wrap gap-1 mt-1.5">
-                                      {String(head?.committees_range || '').split('، ').filter(Boolean).map((cr:string, i:number) => (
-                                        <span key={`cr-${i}`} className="font-bold text-amber-800 text-[11px] bg-amber-50 px-2 py-1 rounded-md border border-amber-200">{cr}</span>
-                                      ))}
-                                   </div>
-                                </div>
-                             </div>
-                             <button onClick={() => handleDeleteHead(head?.head_teacher_id, headAssignment.date)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm" title="إزالة التكليف"><Trash2 className="w-5 h-5"/></button>
-                          </div>
-                       )) : <p className="text-center text-sm font-bold text-slate-400 py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">لم يتم تكليف أي رئيس لهذا اليوم الامتحاني بعد.</p>}
-                    </div>
-                 </div>
-               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ⚙️ نافذة إعدادات اللجنة */}
-      {isCommitteeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
-          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                <Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'إعدادات اللجنة' : 'لجنة جديدة'}
-              </h3>
-              <button onClick={() => setIsCommitteeModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xl font-black text-slate-700 mb-3">اسم اللجنة</label>
-                <input type="text" value={editCommitteeData.name} onChange={e => setEditCommitteeData({...editCommitteeData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-slate-900 outline-none focus:border-indigo-500" placeholder="مثال: لجنة 1" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                   <label className="block text-xl font-black text-slate-700 mb-3">السعة القصوى</label>
-                   <input type="number" min="1" max="50" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: Math.min(50, Number(e.target.value))})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center text-slate-900 outline-none focus:border-indigo-500" />
-                 </div>
-                 <div>
-                   <label className="block text-xl font-black text-slate-700 mb-3">المكان (اختياري)</label>
-                   <input type="text" value={editCommitteeData.location} onChange={e => setEditCommitteeData({...editCommitteeData, location: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-slate-900 outline-none focus:border-indigo-500" placeholder="مثال: المسرح" />
-                 </div>
-              </div>
-              <button onClick={handleSaveCommittee} className="w-full py-4 mt-6 bg-emerald-600 text-white text-xl font-black rounded-2xl hover:bg-emerald-700 transition-colors shadow-md">حفظ التغييرات</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 👤 نافذة تعيين المراقبين (يدوياً للجنة واحدة في يوم واحد) */}
-      {isAssignModalOpen && selectedCommittee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}>
-          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6 shrink-0">
-              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                <UserPlus className="w-6 h-6 text-indigo-600"/> تكليف مراقب ({selectedCommittee?.name})
-              </h3>
-              <button onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
-            </div>
-            
-            <div className="flex-1 overflow-hidden flex flex-col min-h-[400px]">
-              <div className="relative mb-4 shrink-0">
-                 <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
-                 <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-indigo-500" placeholder="ابحث عن اسم معلم، أو مادة يدرسها..." value={teacherSearchTerm} onChange={(e) => setTeacherSearchTerm(e.target.value)} />
-              </div>
-
-              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
-                 {teachers.filter(t => String(t?.full_name || '').includes(teacherSearchTerm) || String(t?.subjectsStr || '').includes(teacherSearchTerm)).map((t, index) => {
-                    const tId = String(t?.id || `temp-${index}`);
-                    
-                    const assignedCommsForToday = getTeacherAssignmentsForDate(tId, activeExamDate);
-                    const isInThisCommitteeToday = assignedCommsForToday.some(c => String(c?.committee_id) === String(selectedCommittee?.id));
-                    
-                    const isSelected = selectedTeacherId === tId;
-                    const isExcluded = t?.is_excluded_from_exams;
-
-                    return (
-                       <div key={`ta-${index}`} onClick={() => !isInThisCommitteeToday && !isExcluded && assignedCommsForToday.length === 0 && setSelectedTeacherId(tId)} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isExcluded ? "bg-rose-50 opacity-60 border-rose-200 cursor-not-allowed" : isInThisCommitteeToday ? "bg-slate-100 opacity-60 cursor-not-allowed" : assignedCommsForToday.length > 0 ? "bg-amber-50 opacity-60 border-amber-200 cursor-not-allowed" : isSelected ? "bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500" : "bg-white hover:border-indigo-300 cursor-pointer"}`}>
-                          <div className="flex items-center gap-3">
-                             <div className="relative group/avatar cursor-pointer" onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(tId); }} title="رفع وتعديل الصورة">
-                               {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-10 h-10 rounded-full object-cover shrink-0" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
-                               <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity"><Camera className="w-4 h-4 text-white" /></div>
-                             </div>
-                             <div>
-                                <p className={`text-sm font-black ${isExcluded ? 'text-rose-800' : 'text-slate-800'}`}>{t?.full_name}</p>
-                                <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate max-w-[150px]">المواد: {t?.subjectsStr}</p>
-                             </div>
-                          </div>
-                          <div className="shrink-0 text-left">
-                             {isExcluded ? <span className="text-[10px] font-black text-rose-600 bg-rose-100 px-2 py-1 rounded">🚫 مُعفى</span> : isInThisCommitteeToday ? <span className="text-[10px] font-black text-slate-500 bg-slate-200 px-2 py-1 rounded">بهذه اللجنة اليوم</span> : assignedCommsForToday.length > 0 ? <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded">مراقب بلجنة أخرى اليوم</span> : <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded">🟢 متاح اليوم</span>}
-                          </div>
-                       </div>
-                    );
-                 })}
-                 {teachers.filter(t => String(t?.full_name || '').includes(teacherSearchTerm)).length === 0 && <p className="text-center text-sm font-bold text-slate-400 py-8">لا يوجد معلمين.</p>}
-              </div>
-
-              {selectedTeacherId && (
-                 <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start gap-3 mt-4 shrink-0 overflow-hidden">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                    <div>
-                       <p className="text-xs font-black text-amber-800 mb-1">معلومات للإدارة:</p>
-                       <p className="text-[11px] font-bold text-amber-700 leading-relaxed">هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{teachers.find(t=>String(t.id)===String(selectedTeacherId))?.subjectsStr || 'غير محدد'}</span>.</p>
-                       <p className="text-[10px] font-bold text-indigo-600 mt-1">سيتم التكليف ليوم: {activeExamDate}</p>
-                    </div>
-                 </div>
-              )}
-
-              <div className="pt-4 shrink-0">
-                <button onClick={handleAddInvigilator} disabled={!selectedTeacherId} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 disabled:opacity-50 shadow-md flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-5 h-5" /> تكليف لليوم المحدد
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🚀 نافذة (Modal) قراءة عذر المراقب */}
-      <AnimatePresence>
-        {isReadExcuseModalOpen && selectedExcuseData && (
-          <Dialog.Root open={isReadExcuseModalOpen} onOpenChange={setIsReadExcuseModalOpen}>
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border border-slate-200 rounded-3xl w-[95%] max-w-md shadow-2xl z-50 p-6 sm:p-8" dir="rtl">
-                
-                <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                  <div className="flex items-center gap-3">
-                     <div className="p-3 bg-rose-50 rounded-xl text-rose-500"><AlertCircle className="w-6 h-6" /></div>
-                     <div>
-                       <Dialog.Title className="text-xl font-black text-slate-800">عذر مراقبة مقدّم</Dialog.Title>
-                       <p className="text-[10px] font-bold text-slate-400 mt-1">المعلم: {getSafeName(selectedExcuseData?.users)}</p>
-                     </div>
-                  </div>
-                  <Dialog.Close className="text-slate-400 hover:text-rose-500 bg-slate-50 p-2 rounded-full transition-colors active:scale-90" onClick={() => setIsReadExcuseModalOpen(false)}>
-                    <X className="w-5 h-5" />
-                  </Dialog.Close>
-                </div>
-
-                <div className="space-y-4 mb-8">
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                     <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">نص الاعتذار المرفوع:</p>
-                     <p className="text-sm font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">{selectedExcuseData?.excuse_reason || 'لا يوجد نص مرفق.'}</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button onClick={() => handleRemoveInvigilator(selectedExcuseData?.id, getSafeName(selectedExcuseData?.users))} className="flex-1 py-3.5 sm:py-4 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-500 hover:text-white font-black rounded-xl transition-all flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95 shadow-sm">
-                    <Trash2 className="w-5 h-5" /> إعفاء المعلم من اللجنة
-                  </button>
-                </div>
-
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-        )}
-      </AnimatePresence>
-
-      {/* 👁️ نافذة استعراض اللجنة ونقل الطلاب */}
-      {isViewModalOpen && selectedCommittee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)}>
-           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
-                 <div>
-                    <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-                       <DoorOpen className="w-6 h-6 text-indigo-600"/> استعراض {selectedCommittee?.name}
-                    </h3>
-                    <p className="text-xs font-bold text-slate-400 mt-1">السعة: {selectedCommittee?.capacity} | إجمالي الطلاب: {viewCommitteeDetails.students.length}</p>
-                 </div>
-                 <button onClick={() => setIsViewModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-6 h-6"/></button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
-                 <div>
-                    <h4 className="text-sm font-black text-emerald-900 bg-emerald-50 px-3 py-2 rounded-lg flex justify-between items-center mb-3">
-                       <span>قائمة الطلاب الموزعين وإجراءات النقل</span>
-                       <span className="text-xs font-bold text-emerald-600">{viewCommitteeDetails.students.length} طالب</span>
-                    </h4>
-                    
-                    {viewCommitteeDetails.students.length > 0 ? (
-                       <table className="w-full border-collapse border border-slate-200 text-right text-sm rounded-xl overflow-hidden shadow-sm">
-                         <thead className="bg-slate-100">
-                           <tr>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">رقم الجلوس</th>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">اسم الطالب</th>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700">الصف</th>
-                             <th className="p-3 border-b border-slate-200 font-black text-slate-700 text-center">إجراء النقل اليدوي</th>
-                           </tr>
-                         </thead>
-                         <tbody>
-                           {viewCommitteeDetails.students.map((s, idx) => {
-                             const stdAvatar = s?.students?.users?.avatar_url || s?.students?.users?.[0]?.avatar_url;
-                             const stdName = getSafeName(s?.students?.users);
-                             const stdInitial = String(stdName || 'ط').charAt(0);
-                             const fullClassName = getFullClassName(s?.students);
-
-                             return (
-                               <tr key={`vstd-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
-                                 <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s?.seat_number}</td>
-                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
-                                    {stdAvatar ? (
-                                      <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
-                                    ) : (
-                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
-                                    )}
-                                    <span className="truncate">{stdName}</span>
-                                 </td>
-                                 <td className="p-3 border-b border-slate-100 font-bold text-slate-500 text-xs">{fullClassName}</td>
-                                 <td className="p-3 border-b border-slate-100 text-center">
-                                    <select 
-                                       className="bg-white border border-slate-200 text-indigo-700 text-[10px] font-black rounded-lg px-2 py-1.5 outline-none hover:border-indigo-400 cursor-pointer shadow-sm transition-all"
-                                       onChange={(e) => {
-                                         if(e.target.value && confirm('تأكيد نقل هذا الطالب إلى ' + e.target.options[e.target.selectedIndex].text + '؟')) {
-                                           handleMoveStudent(s?.student_id, e.target.value);
-                                         }
-                                       }}
-                                       defaultValue=""
-                                    >
-                                       <option value="" disabled>🔄 نقل إلى لجنة...</option>
-                                       {committees.filter(c => String(c?.id) !== String(selectedCommittee?.id)).map(c => (
-                                         <option key={`m-${c.id}`} value={c.id}>{c.name}</option>
-                                       ))}
-                                    </select>
-                                 </td>
-                               </tr>
-                             )
-                           })}
-                         </tbody>
-                       </table>
-                    ) : (
-                       <p className="text-sm font-bold text-slate-500 text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">هذه اللجنة فارغة، لم يتم توزيع الطلاب بعد.</p>
-                    )}
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
-
       {/* 🖨️ قوالب الطباعة المخفية */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10 bg-white" dir="rtl">
-            
             {/* 📄 1. محضر اللجنة / كشف الباب الرسمي */}
             {printType === 'door_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px', height: '1122px' }}>
