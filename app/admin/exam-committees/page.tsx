@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2,
-  CheckSquare // 🚀 تم إضافة الأيقونة الناقصة هنا لحل المشكلة تماماً!
+  CheckSquare
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -466,7 +466,6 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
-  // 🚀 الخوارزمية الذكية للتوزيع التلقائي للمراقبين (Auto-Assign Invigilators)
   const handleAutoAssignInvigilators = async () => {
     if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين (غير المعفيين) بواقع 2 لكل لجنة على جميع أيام الامتحانات، مع ضمان عدم تكرار المعلم لنفس اللجنة. هل أنت متأكد؟')) return;
     
@@ -897,6 +896,7 @@ function ExamCommitteesControl() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {committees.map((committee: any, idx: number) => {
                     const stdCount = Number(allocationsStats[committee?.id] || 0);
+                    // 🚀 فلترة المراقبين بناءً على اللجنة وتاريخ اليوم المحدد
                     const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee?.id) && i.exam_date === activeExamDate);
                     const isFull = stdCount >= Number(committee?.capacity || 0);
                     const isOverflow = String(committee?.name || '').includes('الفائض');
@@ -969,7 +969,7 @@ function ExamCommitteesControl() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-emerald-600"/> هندسة اللجان</h3>
             <div className="space-y-4">
-              <div><label className="text-sm font-bold text-slate-600">كم عدد اللجان الإجمالي?</label><input type="number" min="1" max="100" value={builderData.count} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, count: isNaN(v) ? 1 : Math.min(100, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /></div>
+              <div><label className="text-sm font-bold text-slate-600">كم عدد اللجان الإجمالي؟</label><input type="number" min="1" max="100" value={builderData.count} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, count: isNaN(v) ? 1 : Math.min(100, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /></div>
               <div><label className="text-sm font-bold text-slate-600">سعة اللجنة الواحدة؟</label><input type="number" min="1" max="50" value={builderData.capacity} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, capacity: isNaN(v) ? 1 : Math.min(50, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /><p className="text-[10px] text-slate-400 text-center mt-1">السعة القصوى 50 طالب للجنة.</p></div>
               <div className="flex gap-2 pt-2"><button onClick={handleBuild} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700">بناء واعتماد</button><button onClick={() => setIsBuilderModalOpen(false)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black hover:bg-slate-200">إلغاء</button></div>
             </div>
@@ -982,7 +982,7 @@ function ExamCommitteesControl() {
         {isExemptionsModalOpen && (
            <>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsExemptionsModalOpen(false)} />
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-[500px] bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
                  <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                        <UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين
@@ -1106,7 +1106,8 @@ function ExamCommitteesControl() {
                      <div className="flex flex-col sm:flex-row gap-3">
                        <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-amber-500 outline-none shadow-sm">
                          <option value="">- اختر المعلم من القائمة -</option>
-                         {teachers.filter(t => !t.is_excluded_from_exams).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>{t?.full_name}</option>)}
+                         {/* 🚀 هنا تم حل المشكلة: إظهار جميع المعلمين في القائمة، مع تمييز المُفرغ للرئاسة */}
+                         {teachers.map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>{t?.full_name} {t?.is_excluded_from_exams ? '⭐ (مُفرغ للرئاسة)' : ''}</option>)}
                        </select>
                        <button onClick={handleAssignHead} className="bg-amber-500 hover:bg-amber-600 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg">اعتماد التكليف</button>
                      </div>
@@ -1191,7 +1192,7 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 👤 نافذة تعيين المراقبين */}
+      {/* 👤 نافذة تعيين المراقبين (يدوياً للجنة واحدة في يوم واحد) */}
       {isAssignModalOpen && selectedCommittee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => {setIsAssignModalOpen(false); setTeacherSearchTerm(''); setSelectedTeacherId('');}}>
           <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -1244,7 +1245,7 @@ function ExamCommitteesControl() {
                     <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                     <div>
                        <p className="text-xs font-black text-amber-800 mb-1">معلومات للإدارة:</p>
-                       <p className="text-[11px] font-bold text-amber-700 leading-relaxed">هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{teachers.find(t=>String(t=>t.id===selectedTeacherId))?.subjectsStr || 'غير محدد'}</span>.</p>
+                       <p className="text-[11px] font-bold text-amber-700 leading-relaxed">هذا المعلم يقوم بتدريس: <span className="font-black bg-amber-100 px-1.5 rounded">{teachers.find(t=>String(t.id)===String(selectedTeacherId))?.subjectsStr || 'غير محدد'}</span>.</p>
                        <p className="text-[10px] font-bold text-indigo-600 mt-1">سيتم التكليف ليوم: {activeExamDate}</p>
                     </div>
                  </div>
