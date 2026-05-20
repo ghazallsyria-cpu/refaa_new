@@ -79,7 +79,7 @@ function FloatingConsole() {
 }
 
 // =========================================================================
-// 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
+// 3. 🚀 الإدارة الرئيسية للجان
 // =========================================================================
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
@@ -112,13 +112,14 @@ function ExamCommitteesControl() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isHeadsModalOpen, setIsHeadsModalOpen] = useState(false);
   const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false);
   const [isClassPrintModalOpen, setIsClassPrintModalOpen] = useState(false);
   const [isReadExcuseModalOpen, setIsReadExcuseModalOpen] = useState(false);
   const [isExemptionsModalOpen, setIsExemptionsModalOpen] = useState(false);
   
   const [exemptionSearchTerm, setExemptionSearchTerm] = useState('');
-  const [headSearchTerm, setHeadSearchTerm] = useState(''); // 🚀 بحث تعيين الرؤساء
+  const [headSearchTerm, setHeadSearchTerm] = useState(''); 
   const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<any>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -208,15 +209,12 @@ function ExamCommitteesControl() {
          setActiveExamDate(currentDateToFetch);
       }
 
-      // 🛡️ درع حماية استرجاع المعلمين (مع إضافة is_committee_head)
       let finalTchrs = [];
       const { data: tchrsWithCols, error: tchrErr } = await supabase.from('teachers').select('id, is_excluded_from_exams, is_committee_head, users(full_name, avatar_url), teacher_subjects(subjects(name))');
       
       if (tchrErr) {
-         // Fallback 1: بدون is_committee_head
          const { data: fb1, error: e1 } = await supabase.from('teachers').select('id, is_excluded_from_exams, users(full_name, avatar_url), teacher_subjects(subjects(name))');
          if (e1) {
-             // Fallback 2: أساسي
              const { data: fb2 } = await supabase.from('teachers').select('id, users(full_name, avatar_url), teacher_subjects(subjects(name))');
              finalTchrs = fb2 || [];
          } else {
@@ -236,7 +234,7 @@ function ExamCommitteesControl() {
           avatar_url: u?.avatar_url || null, 
           subjectsStr: subjects, 
           is_excluded_from_exams: t?.is_excluded_from_exams || false,
-          is_committee_head: t?.is_committee_head || false // 🚀 جلب صفة رئيس اللجان
+          is_committee_head: t?.is_committee_head || false 
         };
       }).filter(Boolean);
 
@@ -293,7 +291,6 @@ function ExamCommitteesControl() {
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
 
-  // 🚀 دوال الاعفاء وتعيين رؤساء اللجان
   const handleToggleExemption = async (tId: string, currentStatus: boolean) => {
     try {
        setTeachers(prev => prev.map(t => String(t.id) === tId ? { ...t, is_excluded_from_exams: !currentStatus } : t));
@@ -491,7 +488,6 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
-  // 🚀 الخوارزمية الذكية (تستثني رؤساء اللجان والمعفيين من المراقبة)
   const handleAutoAssignInvigilators = async () => {
     if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع 2 لكل لجنة على جميع أيام الامتحانات، مع استبعاد المعفيين ورؤساء اللجان، وضمان عدم تكرار المعلم لنفس اللجنة. هل أنت متأكد؟')) return;
     
@@ -501,7 +497,6 @@ function ExamCommitteesControl() {
         throw new Error("تأكد من وجود لجان، جداول امتحانات، ومعلمين قبل التوزيع!");
       }
 
-      // 🛡️ استبعاد المُعفيين ورؤساء اللجان المعتمدين من عملية المراقبة العادية
       const eligibleTeachers = teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head);
       if (eligibleTeachers.length === 0) throw new Error("لا يوجد معلمين متاحين للمراقبة العادية!");
 
@@ -662,6 +657,17 @@ function ExamCommitteesControl() {
 
   const getTeacherAssignmentsForDate = (tId: string, date: string) => invigilators.filter(i => String(i?.teacher_id) === String(tId) && i.exam_date === date);
   const getTeacherTotalAssignments = (tId: string) => invigilators.filter(i => String(i?.teacher_id) === String(tId));
+  const getTeacherHeadAssignments = (tId: string) => {
+    const dates = new Set<string>();
+    allHeads.forEach(h => { if(String(h?.head_teacher_id) === String(tId) && h?.exam_timetables?.exam_date) dates.add(h.exam_timetables.exam_date); });
+    return Array.from(dates);
+  };
+
+  // 🚀 تعريف المتغير المحذوف لضمان عدم تكرار اللجان عند التكليف اليومي لرؤساء اللجان
+  const alreadyAssignedCommittees = currentHeads.flatMap(h => String(h?.committees_range || '').split('، '));
+  
+  const selectedTeacherData = teachers.find(t => String(t?.id) === String(headAssignment?.head_teacher_id));
+  const selectedTeacherHeadDates = selectedTeacherData ? getTeacherHeadAssignments(selectedTeacherData.id) : [];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo pb-24" dir="rtl">
@@ -850,7 +856,6 @@ function ExamCommitteesControl() {
           {activeTab === 'heads_radar' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                
-               {/* 🚀 القسم الأول: اعتماد رؤساء اللجان وتخزينهم */}
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                  <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
                     <UserCheck className="w-6 h-6 text-emerald-600"/> 1. تعيين رؤساء اللجان (اعتماد الفريق الدائم)
@@ -888,7 +893,6 @@ function ExamCommitteesControl() {
                  </div>
                </div>
 
-               {/* 🚀 القسم الثاني: التكليف اليومي للرؤساء */}
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                  <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
                    <CalendarDays className="w-6 h-6 text-indigo-500"/> 2. التكليف اليومي لرؤساء اللجان المعتمدين
@@ -938,7 +942,6 @@ function ExamCommitteesControl() {
                        <div className="flex flex-col sm:flex-row gap-3">
                          <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm">
                            <option value="">- اختر رئيس اللجان المعتمد -</option>
-                           {/* 🚀 نعرض فقط من تم اعتمادهم في الخطوة 1 */}
                            {teachers.filter(t => t.is_committee_head).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>👑 {t?.full_name}</option>)}
                          </select>
                          <button onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg flex items-center gap-2 justify-center">
@@ -950,7 +953,6 @@ function ExamCommitteesControl() {
                  </div>
                </div>
 
-               {/* 🚀 القسم الثالث: سجل التكليفات للرؤساء */}
                {headAssignment.date && (
                  <div className="bg-white border border-slate-200 rounded-3xl p-6">
                     <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> تكليفات رؤساء اللجان لليوم الامتحاني المحدد:</h4>
@@ -1017,7 +1019,6 @@ function ExamCommitteesControl() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {committees.map((committee: any, idx: number) => {
                     const stdCount = Number(allocationsStats[committee?.id] || 0);
-                    // 🚀 فلترة المراقبين بناءً على اللجنة وتاريخ اليوم المحدد
                     const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee?.id) && i.exam_date === activeExamDate);
                     const isFull = stdCount >= Number(committee?.capacity || 0);
                     const isOverflow = String(committee?.name || '').includes('الفائض');
@@ -1175,6 +1176,7 @@ function ExamCommitteesControl() {
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10 bg-white" dir="rtl">
+            
             {/* 📄 1. محضر اللجنة / كشف الباب الرسمي */}
             {printType === 'door_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px', height: '1122px' }}>
