@@ -20,14 +20,11 @@ export default function GradingControlPage() {
     g10_active: true, g11_active: true, g12_active: true 
   });
 
-  // 🚀 الهيكل الجديد للـ VIP (أصبح Objects بدلاً من Strings)
   const [vipSubjects, setVipSubjects] = useState<any[]>([]);
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
-  
-  // 🚀 حالات التحكم للإضافة في قائمة الـ VIP
   const [newVipSubject, setNewVipSubject] = useState('');
-  const [newVipPeriod, setNewVipPeriod] = useState('p1'); // p1 or p2
-  const [newVipMode, setNewVipMode] = useState('both'); // cw, ex, or both
+  const [newVipPeriod, setNewVipPeriod] = useState('p1');
+  const [newVipMode, setNewVipMode] = useState('both');
   const [vipLoading, setVipLoading] = useState(false);
 
   const [allTeacherProgress, setAllTeacherProgress] = useState<any[]>([]);
@@ -37,6 +34,21 @@ export default function GradingControlPage() {
 
   const [printMode, setPrintMode] = useState<'radar' | 'sheet'>('radar');
   const [printData, setPrintData] = useState<any>(null);
+
+  // 🚀 معالج ذكي لقراءة البيانات مهما كان نوعها في قاعدة البيانات
+  const parseVipData = (data: any[]) => {
+    return data.map(item => {
+       if (typeof item === 'string') {
+          try {
+             const parsed = JSON.parse(item);
+             return parsed.name ? parsed : { name: item, period: 'p1', mode: 'both' };
+          } catch(e) {
+             return { name: item, period: 'p1', mode: 'both' };
+          }
+       }
+       return item;
+    });
+  };
 
   const fetchRadarData = async () => {
     setLoading(true);
@@ -49,10 +61,8 @@ export default function GradingControlPage() {
           p2_cw_active: schoolSettings.grading_p2_cw_active || false, p2_ex_active: schoolSettings.grading_p2_ex_active || false,
           g10_active: schoolSettings.grading_g10_active ?? true, g11_active: schoolSettings.grading_g11_active ?? true, g12_active: schoolSettings.grading_g12_active ?? true,
         });
-        // التأكد من أن المصفوفة تحتوي كائنات وليس نصوصاً قديمة
         const savedVip = schoolSettings.early_grading_subjects || [];
-        const normalizedVip = savedVip.map(sub => typeof sub === 'string' ? { name: sub, period: 'p1', mode: 'both' } : sub);
-        setVipSubjects(normalizedVip);
+        setVipSubjects(parseVipData(savedVip));
       }
 
       const { data: rulesData } = await supabase.from('kuwait_grading_rules').select('subject_name');
@@ -133,11 +143,9 @@ export default function GradingControlPage() {
     } catch (error) { setStatus({ type: 'error', msg: 'فشل التحديث.' }); } finally { setToggleLoading(false); setTimeout(() => setStatus(null), 3000); }
   };
 
-  // 🚀 تحديث دالة إضافة مادة للـ VIP لتدعم الخيارات الجديدة
   const addVipSubject = async () => {
     if (!newVipSubject.trim()) return;
     
-    // نتحقق إذا كانت المادة مضافة مسبقاً بنفس الخصائص
     const isExist = vipSubjects.some(v => v.name === newVipSubject.trim() && v.period === newVipPeriod && v.mode === newVipMode);
     if (isExist) { 
        setStatus({ type: 'warning', msg: 'موجودة بالفعل بنفس الصلاحيات!' }); 
@@ -154,7 +162,10 @@ export default function GradingControlPage() {
       };
       
       const updatedList = [...vipSubjects, newVipObj];
-      await supabase.from('school_settings').update({ early_grading_subjects: updatedList }).eq('id', settings.id);
+      // 🚀 نقوم بحفظها كنصوص مُهيكلة (Stringified) لتجنب أخطاء نوع البيانات في قاعدة البيانات
+      const stringifiedList = updatedList.map(item => JSON.stringify(item));
+      await supabase.from('school_settings').update({ early_grading_subjects: stringifiedList }).eq('id', settings.id);
+      
       setVipSubjects(updatedList); 
       setNewVipSubject('');
       setStatus({ type: 'success', msg: `تمت إضافة المادة للصلاحيات الاستثنائية بنجاح!` });
@@ -165,7 +176,8 @@ export default function GradingControlPage() {
     setVipLoading(true);
     try {
       const updatedList = vipSubjects.filter((_, idx) => idx !== indexToRemove);
-      await supabase.from('school_settings').update({ early_grading_subjects: updatedList }).eq('id', settings.id);
+      const stringifiedList = updatedList.map(item => JSON.stringify(item));
+      await supabase.from('school_settings').update({ early_grading_subjects: stringifiedList }).eq('id', settings.id);
       setVipSubjects(updatedList);
       setStatus({ type: 'success', msg: `تمت إزالة الصلاحية.` });
     } catch (err) { setStatus({ type: 'error', msg: 'فشل الإزالة.' }); } finally { setVipLoading(false); setTimeout(() => setStatus(null), 3000); }
@@ -273,10 +285,8 @@ export default function GradingControlPage() {
           @page { size: A4 portrait; margin: 15mm; } 
           body { background: white !important; color: black !important; } 
           .no-print, nav, footer, header:not(.print-header), .fixed, .sticky, [class*="fixed bottom"] { display: none !important; }
-          
           .mode-sheet .print-only-radar { display: none !important; }
           .mode-radar .print-only-sheet { display: none !important; }
-
           .print-area { display: block !important; width: 100% !important; max-height: none !important; overflow: visible !important; border: none !important; box-shadow: none !important; background: transparent !important;}
           .print-area table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
           .print-area th, .print-area td { border: 1px solid black !important; padding: 8px; text-align: center; color: black !important; }
@@ -375,7 +385,6 @@ export default function GradingControlPage() {
           
           <div className="no-print lg:col-span-1 space-y-6">
             
-            {/* 🚀 القائمة البيضاء الجديدة */}
             <div className="glass-panel p-6 rounded-[2rem] border border-purple-500/30 bg-[#0f1423]/80">
               <h2 className="text-xl font-black text-purple-400 mb-4 flex items-center gap-2"><Star className="w-5 h-5" /> القائمة البيضاء للاستثناء (VIP)</h2>
               <p className="text-[10px] font-bold text-slate-400 mb-4">تتيح لك هذه القائمة منح استثناءات محددة لبعض المواد للرصد المبكر، حتى لو كانت القواطع الأساسية مغلقة.</p>
