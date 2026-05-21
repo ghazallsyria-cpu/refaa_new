@@ -35,7 +35,7 @@ import type {
   ActiveTab,
   PrintType,
   PrintPayload,
-  ViewCommitteeDetails,
+
 } from '@/types/exam';
 
 import {
@@ -208,9 +208,14 @@ function ExamCommitteesControl() {
   });
 
   // View
-  const [viewDetails, setViewDetails] = useState<ViewCommitteeDetails>({
-    students: [], invigs: [], loading: false,
-  });
+const [viewDetails, setViewDetails] = useState<{
+  students: StudentAllocationRow[];
+  invigs: InvigilatorWithRelations[];
+  loading: boolean;
+}>({
+  students: [], invigs: [], loading: false,
+});
+
 
   // Heads
   const [headAssignment, setHeadAssignment] = useState({ date: '', head_teacher_id: '' });
