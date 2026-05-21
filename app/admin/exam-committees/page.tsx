@@ -17,30 +17,23 @@ import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
 // =========================================================================
-// 1. 🛡️ جدار الحماية (Error Boundary)
+// 1. 🛡️ جدار الحماية المبسط (بدون حلقات لا نهائية)
 // =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null };
   }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
-  componentDidCatch(error: any, errorInfo: any) {
-    this.setState({ errorInfo });
-    console.error("🔥 ErrorBoundary Caught:", error, errorInfo);
-  }
   render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-rose-50 p-6 flex flex-col items-center justify-center font-cairo" dir="rtl">
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
             <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
-            <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ داخلي!</h1>
-            <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-auto max-h-[40vh] text-left text-xs font-mono whitespace-pre-wrap" dir="ltr">
-              <p className="text-rose-400 font-bold mb-2">Error: {this.state.error?.message || String(this.state.error)}</p>
-            </div>
+            <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ في عرض الصفحة</h1>
             <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
-              تحديث الصفحة
+              تحديث الصفحة وإعادة المحاولة
             </button>
           </div>
         </div>
@@ -79,6 +72,8 @@ function ExamCommitteesControl() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  
   const [activeTab, setActiveTab] = useState<'management' | 'invigilators_radar' | 'heads_radar' | 'daily_stats'>('management');
   
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -98,8 +93,6 @@ function ExamCommitteesControl() {
   const [teacherSearchTerm, setTeacherSearchTerm] = useState(''); 
   const [builderData, setBuilderData] = useState({ count: 21, capacity: 14 });
   const [editCommitteeData, setEditCommitteeData] = useState({ id: '', name: '', capacity: 14, location: '' });
-  
-  // 🚀 أضفنا حالة loading لمعرفة متى يتم جلب بيانات الطلاب للنافذة
   const [viewCommitteeDetails, setViewCommitteeDetails] = useState<{ students: any[], invigs: any[], loading: boolean }>({ students: [], invigs: [], loading: false });
 
   const [headAssignment, setHeadAssignment] = useState({ date: '', head_teacher_id: '' });
@@ -185,6 +178,7 @@ function ExamCommitteesControl() {
 
       let finalTchrs = [];
       const { data: tchrsWithCols, error: tchrErr } = await supabase.from('teachers').select('id, is_excluded_from_exams, is_committee_head, users(full_name, avatar_url), teacher_subjects(subjects(name))');
+      
       if (tchrErr) {
          const { data: fb1, error: e1 } = await supabase.from('teachers').select('id, is_excluded_from_exams, users(full_name, avatar_url), teacher_subjects(subjects(name))');
          if (e1) {
@@ -232,6 +226,7 @@ function ExamCommitteesControl() {
         if (!s) return;
         const secObj = Array.isArray(s?.sections) ? s.sections[0] : s?.sections;
         const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
+
         const lvl = Number(classObj?.level || 0);
         const cName = String(classObj?.name || '');
         const sName = String(secObj?.name || '');
@@ -263,7 +258,6 @@ function ExamCommitteesControl() {
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
 
-  // باقي الدوال الإدارية...
   const handleToggleExemption = async (tId: string, currentStatus: boolean) => {
     try {
        setTeachers(prev => prev.map(t => String(t.id) === tId ? { ...t, is_excluded_from_exams: !currentStatus } : t));
@@ -291,6 +285,7 @@ function ExamCommitteesControl() {
             uniqueHeadsMap.set(h.head_teacher_id, h);
          }
       });
+
       setCurrentHeads(Array.from(uniqueHeadsMap.values()));
       setSelectedCommitteesForHead([]); 
     } catch (e) {}
@@ -321,7 +316,9 @@ function ExamCommitteesControl() {
         committees_range: committeesRangeStr
       })).filter(i => i.timetable_id);
       
-      await supabase.from('exam_committee_heads').insert(inserts);
+      const { error } = await supabase.from('exam_committee_heads').insert(inserts);
+      if (error) throw error;
+
       setHeadAssignment({...headAssignment, head_teacher_id: ''});
       setSelectedCommitteesForHead([]); 
       fetchHeadsByDate(headAssignment.date);
@@ -378,11 +375,11 @@ function ExamCommitteesControl() {
 
   const handleDeleteCommittee = async (id: string) => {
     if (!confirm('تأكيد الحذف نهائياً لهذه اللجنة؟')) return;
+    setActionLoadingId(`del-${id}`);
     try { 
-       setIsLoading(true); // استخدام التحميل العام ليختفي المكون
        await supabase.from('exam_committees').delete().eq('id', id); 
        fetchData(); 
-    } catch (error) { alert('خطأ في الحذف'); setIsLoading(false); }
+    } catch (error) { alert('خطأ في الحذف'); } finally { setActionLoadingId(null); }
   };
 
   const handleNuclear = async () => {
@@ -414,19 +411,18 @@ function ExamCommitteesControl() {
     setIsCommitteeModalOpen(true);
   };
 
-  // 🚀 حل مشكلة أزرار المشاهدة: فتح النافذة فوراً وعرض مؤشر التحميل بداخلها
   const openViewModal = async (committee: any) => {
     if (!committee) return;
     setSelectedCommittee(committee);
-    setViewCommitteeDetails({ students: [], invigs: [], loading: true }); // تعيين حالة التحميل
-    setIsViewModalOpen(true); // فتح النافذة فوراً!
+    setViewCommitteeDetails({ students: [], invigs: [], loading: true }); 
+    setIsViewModalOpen(true); 
     
     try {
       const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
       const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee.id) && i.exam_date === activeExamDate);
       setViewCommitteeDetails({ students: students || [], invigs: commInvigs, loading: false }); 
     } catch (error) { 
-      alert('خطأ في جلب البيانات.');
+      alert('خطأ في جلب بيانات الطلاب. سيتم فتح اللجنة فارغة.');
       setViewCommitteeDetails({ students: [], invigs: [], loading: false }); 
     }
   };
@@ -542,7 +538,6 @@ function ExamCommitteesControl() {
     } catch (err: any) { alert('حدث خطأ أثناء التوزيع الآلي: ' + err.message); } finally { setIsAutoAssigning(false); }
   };
 
-  // 🚀 خوارزمية طباعة الـ PDF الذكية والمحدثة (منع التقطيع وحل مشكلة الصفحات المتعددة)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -591,12 +586,11 @@ function ExamCommitteesControl() {
 
           for (let i = 0; i < pages.length; i++) {
             const pageElement = pages[i] as HTMLElement;
-            // إعطاء الحاوية عرض ثابت لضمان عدم تغيير المقاسات أثناء الالتقاط
             const originalCssText = pageElement.style.cssText;
             pageElement.style.position = 'fixed'; 
             pageElement.style.top = '0'; 
             pageElement.style.left = '0'; 
-            pageElement.style.width = '794px'; // عرض A4 بالبيكسل
+            pageElement.style.width = '794px'; 
             pageElement.style.zIndex = '-9999';
 
             const canvas = await html2canvas(pageElement, { 
@@ -607,10 +601,9 @@ function ExamCommitteesControl() {
                 scrollX: 0 
             });
             pageElement.style.cssText = originalCssText;
-            
             const imgData = canvas.toDataURL('image/jpeg', 1.0); 
             
-            // 🚀 هندسة الصفحات المتعددة (محضر اللجان) - تقطيع الكانفاس إذا تجاوز الصفحة
+            // 🚀 خوارزمية التقطيع التلقائي للصفحات الطويلة جداً
             const imgProps = pdf.getImageProperties(imgData);
             const totalImgHeightInMm = (imgProps.height * pdfWidth) / imgProps.width;
             
@@ -618,20 +611,19 @@ function ExamCommitteesControl() {
                 let heightLeft = totalImgHeightInMm;
                 let position = 0;
                 
-                // الصفحة الأولى من المحضر
                 if (i > 0) pdf.addPage();
                 pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalImgHeightInMm);
                 heightLeft -= pdfHeight;
                 
-                // الصفحات التالية من نفس المحضر (تتم الإضافة للأسفل)
-                while (heightLeft > 0) {
-                    position = heightLeft - totalImgHeightInMm;
+                let loopGuard = 0;
+                while (heightLeft > 0 && loopGuard < 15) {
+                    position = position - pdfHeight;
                     pdf.addPage();
                     pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalImgHeightInMm);
                     heightLeft -= pdfHeight;
+                    loopGuard++;
                 }
             } else {
-                // البطاقات العادية (ثابتة الطول مسبقاً)
                 if (i > 0) pdf.addPage(); 
                 pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, totalImgHeightInMm);
             }
@@ -659,7 +651,6 @@ function ExamCommitteesControl() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo pb-24" dir="rtl">
-      
       <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
 
       { (isEngineLoading || isPrinting || isAutoAssigning) && (
@@ -1020,15 +1011,15 @@ function ExamCommitteesControl() {
                             <h3 className={`text-lg font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{String(committee?.name || 'بدون اسم')}</h3>
                             <p className="text-[10px] font-bold text-slate-400 mt-1">السعة: {Number(committee?.capacity || 0)} {committee?.location && `| ${String(committee.location)}`}</p>
                           </div>
-                          {/* 🚀 الأزرار الآن تعمل بدون تحديث الشاشة */}
+                          {/* 🚀 الحل الجذري للأزرار مع منع التداخل stopPropagation */}
                           <div className="flex gap-2">
-                             <button type="button" onClick={() => openViewModal(committee)} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
-                               <Eye className="w-5 h-5"/>
+                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openViewModal(committee); }} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
+                               {actionLoadingId === `view-${committee.id}` ? <Loader2 className="w-5 h-5 animate-spin"/> : <Eye className="w-5 h-5"/>}
                              </button>
-                             <button type="button" onClick={() => openCommitteeModal(committee)} className="p-2 bg-slate-50 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
+                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCommitteeModal(committee); }} className="p-2 bg-slate-50 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
                                <Edit3 className="w-5 h-5"/>
                              </button>
-                             <button type="button" onClick={() => handleDeleteCommittee(committee?.id)} disabled={actionLoadingId === `del-${committee.id}`} className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
+                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteCommittee(committee?.id); }} disabled={actionLoadingId === `del-${committee.id}`} className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
                                {actionLoadingId === `del-${committee.id}` ? <Loader2 className="w-5 h-5 animate-spin"/> : <Trash2 className="w-5 h-5"/>}
                              </button>
                           </div>
@@ -1185,7 +1176,6 @@ function ExamCommitteesControl() {
               </div>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
-                 {/* 🚀 إظهار مؤشر التحميل الخاص بالنافذة فقط */}
                  {viewCommitteeDetails.loading ? (
                     <div className="flex flex-col items-center justify-center py-20">
                        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
@@ -1258,14 +1248,13 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🖨️ قوالب الطباعة المخفية (تمت هندسة قص الأسماء الطويلة بداخلها وتقسيم الصفحات) */}
+      {/* 🖨️ قوالب الطباعة المخفية (تمت هندسة تقسيم الصفحات للمحاضر وقص الأسماء بدقة للبطاقات) */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl">
             
             {/* 📄 1. محضر اللجنة / كشف الباب الرسمي */}
             {printType === 'door_sheet' && (
-              // إزالة الارتفاع الثابت للمحضر لكي يسمح للكانفاس بأخذ كل الطلاب
               <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px' }}>
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
@@ -1331,8 +1320,8 @@ function ExamCommitteesControl() {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={`c-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', pageBreakInside: 'avoid' }}>
-                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div key={`c-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
+                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة جلوس اختبارات نهاية العام</div>
@@ -1340,18 +1329,19 @@ function ExamCommitteesControl() {
                              <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{commName}</div>
                           </div>
                           
-                          {/* 🚀 هندسة الكلاسيك HTML لضمان قراءة html2canvas للعربي دون تقطيع */}
-                          <div style={{ padding: '10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
+                          {/* 🚀 هندسة الكلاسيك CSS لضمان عدم القص والترتيب السليم */}
+                          <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
                              <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                              </div>
                              
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
-                                <div style={{ fontSize: '12px', fontWeight: '900', color: 'black', lineHeight: '1.2', marginBottom: '4px', wordWrap: 'break-word', whiteSpace: 'normal' }}>
-                                   {stdName}
+                                <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
+                                   {/* استخدام display: block يضمن الالتفاف الطبيعي دون تكسير الحروف */}
+                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0, display: 'block' }}>{stdName}</h2>
                                 </div>
-                                <div>
+                                <div style={{ marginTop: '2px' }}>
                                    <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{fullClassName}</span>
                                 </div>
                              </div>
@@ -1377,8 +1367,8 @@ function ExamCommitteesControl() {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={`d-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', pageBreakInside: 'avoid' }}>
-                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div key={`d-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
+                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة جلوس اختبارات نهاية العام</div>
@@ -1386,18 +1376,19 @@ function ExamCommitteesControl() {
                              <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{printData.committee?.name || 'غير محدد'}</div>
                           </div>
                           
-                          {/* 🚀 هندسة الكلاسيك HTML لضمان قراءة html2canvas للعربي دون تقطيع */}
-                          <div style={{ padding: '10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
+                          {/* 🚀 هندسة الكلاسيك CSS لضمان عدم القص والترتيب السليم */}
+                          <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
                              <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                              </div>
                              
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
-                                <div style={{ fontSize: '12px', fontWeight: '900', color: 'black', lineHeight: '1.2', marginBottom: '4px', wordWrap: 'break-word', whiteSpace: 'normal' }}>
-                                   {stdName}
+                                <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
+                                   {/* استخدام display: block يضمن الالتفاف الطبيعي دون تكسير الحروف */}
+                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0, display: 'block' }}>{stdName}</h2>
                                 </div>
-                                <div>
+                                <div style={{ marginTop: '2px' }}>
                                    <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{fullClassName}</span>
                                 </div>
                              </div>
@@ -1429,7 +1420,6 @@ export default function Page() {
 
   return (
     <ErrorBoundary>
-      <FloatingConsole />
       <ExamCommitteesControl />
     </ErrorBoundary>
   );
