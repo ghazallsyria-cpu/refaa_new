@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * @file      app/admin/exam-committees/page.tsx
- * @version   8.1.1 (ESLint Errors Fixed)
+ * @version   8.1.2 (Zero any — Type Strict)
  * @description كنترول الامتحانات — TypeScript Strict، Zero `any`، مُقسّم،
  *              مع Batch Operations وطباعة احترافية.
  * ============================================================================
@@ -30,12 +30,13 @@ import type {
   InvigilatorWithRelations,
   HeadWithRelations,
   StudentAllocationRow,
+  StudentSeatAllocationRow,
   FormattedTeacher,
   StudentStats,
   ActiveTab,
   PrintType,
   PrintPayload,
-
+  StudentWithRelations,
 } from '@/types/exam';
 
 import {
@@ -165,12 +166,12 @@ function ExamCommitteesControl() {
   const engine = useExamSeating();
 
   /* ── State ─────────────────────────────────────────────────────────── */
-  const [committees, setCommittees] = useState<ExamCommittee[]>([]);
-  const [teachers, setTeachers] = useState<FormattedTeacher[]>([]);
-  const [invigilators, setInvigilators] = useState<InvigilatorWithRelations[]>([]);
-  const [timetables, setTimetables] = useState<ExamTimetable[]>([]);
-  const [allHeads, setAllHeads] = useState<HeadWithRelations[]>([]);
-  const [studentStats, setStudentStats] = useState<StudentStats>({
+  const [committees, setCommittees] = useState<<ExamCommittee[]>([]);
+  const [teachers, setTeachers] = useState<<FormattedTeacher[]>([]);
+  const [invigilators, setInvigilators] = useState<<InvigilatorWithRelations[]>([]);
+  const [timetables, setTimetables] = useState<<ExamTimetable[]>([]);
+  const [allHeads, setAllHeads] = useState<<HeadWithRelations[]>([]);
+  const [studentStats, setStudentStats] = useState<<StudentStats>({
     g10: 0, g11_sci: 0, g11_lit: 0, totalAllocated: 0,
   });
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
@@ -182,7 +183,7 @@ function ExamCommitteesControl() {
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('management');
+  const [activeTab, setActiveTab] = useState<<ActiveTab>('management');
 
   // Modals
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -196,40 +197,39 @@ function ExamCommitteesControl() {
   // Search & Selection
   const [exemptionSearchTerm, setExemptionSearchTerm] = useState('');
   const [headSearchTerm, setHeadSearchTerm] = useState('');
-  const [selectedExcuseData, setSelectedExcuseData] = useState<InvigilatorWithRelations | null>(null);
-  const [selectedCommittee, setSelectedCommittee] = useState<ExamCommittee | null>(null);
+  const [selectedExcuseData, setSelectedExcuseData] = useState<<InvigilatorWithRelations | null>(null);
+  const [selectedCommittee, setSelectedCommittee] = useState<<ExamCommittee | null>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [teacherSearchTerm, setTeacherSearchTerm] = useState('');
 
   // Builder & Editor
   const [builderData, setBuilderData] = useState({ count: 21, capacity: 14 });
-  const [editCommitteeData, setEditCommitteeData] = useState<Partial<ExamCommittee>>({
+  const [editCommitteeData, setEditCommitteeData] = useState<<Partial<<ExamCommittee>>({
     id: '', name: '', capacity: 14, location: '',
   });
 
   // View
-const [viewDetails, setViewDetails] = useState<{
-  students: StudentAllocationRow[];
-  invigs: InvigilatorWithRelations[];
-  loading: boolean;
-}>({
-  students: [], invigs: [], loading: false,
-});
-
+  const [viewDetails, setViewDetails] = useState<<{
+    students: StudentAllocationRow[];
+    invigs: InvigilatorWithRelations[];
+    loading: boolean;
+  }>({
+    students: [], invigs: [], loading: false,
+  });
 
   // Heads
   const [headAssignment, setHeadAssignment] = useState({ date: '', head_teacher_id: '' });
   const [selectedCommitteesForHead, setSelectedCommitteesForHead] = useState<string[]>([]);
-  const [currentHeads, setCurrentHeads] = useState<HeadWithRelations[]>([]);
+  const [currentHeads, setCurrentHeads] = useState<<HeadWithRelations[]>([]);
 
   // Print
   const [isPrinting, setIsPrinting] = useState(false);
-  const [printPayload, setPrintPayload] = useState<PrintPayload | null>(null);
-  const [printType, setPrintType] = useState<PrintType | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
+  const [printPayload, setPrintPayload] = useState<<PrintPayload | null>(null);
+  const [printType, setPrintType] = useState<<PrintType | null>(null);
+  const printRef = useRef<<HTMLDivElement>(null);
 
   // Avatar Upload
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<<HTMLInputElement>(null);
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
@@ -280,14 +280,13 @@ const [viewDetails, setViewDetails] = useState<{
       ]);
 
       const rawComms = (commsRes.data || []) as ExamCommittee[];
-      const rawExams = (examsRes.data || []) as unknown as ExamTimetable[];
+      const rawExams = (examsRes.data || []) as ExamTimetable[];
 
       const rawTchrs = (tchrsRes.data || []) as unknown as TeacherWithRelations[];
-const rawInvigs = (invigsRes.data || []) as unknown as InvigilatorWithRelations[];
-const rawAllocs = (allocsRes.data || []) as unknown as Record<string, unknown>[];
-const rawHeads = (hdsRes.data || []) as unknown as HeadWithRelations[];
-const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
-
+      const rawInvigs = (invigsRes.data || []) as unknown as InvigilatorWithRelations[];
+      const rawAllocs = (allocsRes.data || []) as unknown as StudentSeatAllocationRow[];
+      const rawHeads = (hdsRes.data || []) as unknown as HeadWithRelations[];
+      const rawStds = (stdsRes.data || []) as unknown as StudentWithRelations[];
 
       // Sort committees
       const sortedComms = sortCommittees(rawComms);
@@ -314,21 +313,21 @@ const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
       const uniqueClasses = new Set<string>();
       let g10 = 0, g11_sci = 0, g11_lit = 0;
 
-      (rawAllocs as any[]).forEach((a: any) => {
+      rawAllocs.forEach((a) => {
         if (a?.committee_id) {
-          // allocationsStats
+          // allocationsStats placeholder
         }
-        const cName = getFullClassName(a?.students);
+        const cName = getFullClassName(normalizeRelation(a.students));
         if (cName && !cName.includes('غير محدد')) uniqueClasses.add(cName);
       });
 
-      (rawStds as any[]).forEach((s: any) => {
-        const sec = normalizeRelation(s?.sections);
+      rawStds.forEach((s) => {
+        const sec = normalizeRelation(s.sections);
         const cls = normalizeRelation(sec?.classes);
         const lvl = Number(cls?.level || 0);
         const cName = String(cls?.name || '');
         const sName = String(sec?.name || '');
-        const track = String(s?.next_year_track || '').toLowerCase();
+        const track = String(s.next_year_track || '').toLowerCase();
 
         if (lvl === 10) g10++;
         else if (lvl === 11) {
@@ -338,7 +337,7 @@ const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
       });
 
       setStudentStats({
-        g10, g11_sci, g11_lit, totalAllocated: rawAllocs?.length || 0,
+        g10, g11_sci, g11_lit, totalAllocated: rawAllocs.length || 0,
       });
       setAvailableClasses(Array.from(uniqueClasses).sort());
       setCommittees(sortedComms);
@@ -456,7 +455,7 @@ const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetUserId) return;
     setIsUploadingAvatar(true);
@@ -601,7 +600,7 @@ const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
     try {
       const { data } = await supabase
         .from('student_seat_allocations')
-        .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`)
+        .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( name )`)
         .eq('committee_id', committee.id)
         .order('seat_number', { ascending: true });
 
@@ -772,25 +771,25 @@ const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
 
       const { data } = await query;
       let rows = (data || []) as StudentAllocationRow[];
-const committee = (committees.find((c) => c.id === committeeId) || { 
-  name: 'لجنة غير محددة', 
-  capacity: 14, 
-  id: '',
-  location: '',
-  academic_year: CURRENT_YEAR,
-  semester: CURRENT_SEMESTER,
-  created_at: '',
-}) as ExamCommittee;
+      const committee = committees.find((c) => c.id === committeeId) || {
+        name: 'لجنة غير محددة',
+        capacity: 14,
+        id: '',
+        location: '',
+        academic_year: CURRENT_YEAR,
+        semester: CURRENT_SEMESTER,
+        created_at: '',
+      };
 
       const commInvigs = committeeId
         ? invigilators.filter((i) => i.committee_id === committeeId && i.exam_date === activeExamDate)
         : [];
 
       if (type === 'class_cards' && classNameToPrint) {
-        rows = rows.filter((s) => getFullClassName(normalizeRelation(s?.students) as any) === classNameToPrint);
+        rows = rows.filter((s) => getFullClassName(normalizeRelation(s.students)) === classNameToPrint);
         rows.sort((a, b) => {
-          const na = getSafeName(normalizeRelation(a?.students)?.users);
-          const nb = getSafeName(normalizeRelation(b?.students)?.users);
+          const na = getSafeName(normalizeRelation(a.students)?.users);
+          const nb = getSafeName(normalizeRelation(b.students)?.users);
           return na.localeCompare(nb, 'ar');
         });
       }
@@ -866,7 +865,7 @@ const committee = (committees.find((c) => c.id === committeeId) || {
             }
           }
 
-          const names: Record<PrintType, string> = {
+          const names: Record<<PrintType, string> = {
             door_sheet: `محضر_${printPayload.committee.name}_يوم_${activeExamDate}`,
             desk_cards: `بطاقات_طاولة_${printPayload.committee.name}`,
             class_cards: `بطاقات_طلاب_${printPayload.className || ''}`,
@@ -1320,7 +1319,6 @@ const committee = (committees.find((c) => c.id === committeeId) || {
                 <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
                   <UserCheck className="w-6 h-6 text-emerald-600" /> 1. تعيين رؤساء اللجان (الفريق الدائم)
                 </h3>
-                {/* FIX 1: escaped quotes using &quot; */}
                 <p className="text-xs font-bold text-slate-500 mb-6">
                   ابحث عن المعلم واعتمد كونه &quot;رئيس لجنة&quot;.
                 </p>
@@ -1725,7 +1723,7 @@ const committee = (committees.find((c) => c.id === committeeId) || {
                           const student = normalizeRelation(s.students);
                           const stdName = getSafeName(student?.users);
                           const stdAvatar = getSafeAvatar(student?.users);
-                          const clsName = getFullClassName(student as any);
+                          const clsName = getFullClassName(student);
                           return (
                             <tr key={idx} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
                               <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s.seat_number}</td>
@@ -1974,7 +1972,7 @@ const committee = (committees.find((c) => c.id === committeeId) || {
                     {printPayload.students.map((s, i) => {
                       const std = normalizeRelation(s.students);
                       const stdName = getSafeName(std?.users);
-                      const clsName = getFullClassName(std as any);
+                      const clsName = getFullClassName(std);
                       const seatNum = s.seat_number || '';
                       const isGrade10 = seatNum.startsWith('10');
                       const isSci = seatNum.startsWith('111');
@@ -2062,7 +2060,7 @@ const committee = (committees.find((c) => c.id === committeeId) || {
                   {chunk.map((student, si) => {
                     const std = normalizeRelation(student.students);
                     const stdName = getSafeName(std?.users);
-                    const clsName = getFullClassName(std as any);
+                    const clsName = getFullClassName(std);
                     const seatNum = student.seat_number || '---';
                     const commName = printPayload.committee.name;
                     const isGrade10 = seatNum.startsWith('10');
