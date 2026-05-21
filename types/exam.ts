@@ -51,6 +51,8 @@ export interface ExamTimetable {
   academic_year: string | null;
   semester: string | null;
   created_at: string | null;
+  /** يُملأ فقط عند الاستعلام مع JOIN على subjects */
+  subjects?: SubjectMeta | SubjectMeta[] | null;
 }
 
 export interface ExamCommitteeHead {
@@ -172,6 +174,11 @@ export interface StudentAllocationRow {
   student_id: string | null;
   students: StudentWithRelations | StudentWithRelations[] | null;
   exam_committees?: ExamCommittee | ExamCommittee[] | null;
+}
+
+/** صف من استعلام student_seat_allocations مع JOIN على students */
+export interface StudentSeatAllocationRow extends StudentSeatAllocation {
+  students: StudentWithRelations | StudentWithRelations[] | null;
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
