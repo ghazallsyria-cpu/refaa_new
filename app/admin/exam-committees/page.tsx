@@ -772,7 +772,16 @@ const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
 
       const { data } = await query;
       let rows = (data || []) as StudentAllocationRow[];
-      const committee = committees.find((c) => c.id === committeeId) || { name: 'لجنة غير محددة', capacity: 14, id: '' };
+const committee = (committees.find((c) => c.id === committeeId) || { 
+  name: 'لجنة غير محددة', 
+  capacity: 14, 
+  id: '',
+  location: '',
+  academic_year: CURRENT_YEAR,
+  semester: CURRENT_SEMESTER,
+  created_at: '',
+}) as ExamCommittee;
+
       const commInvigs = committeeId
         ? invigilators.filter((i) => i.committee_id === committeeId && i.exam_date === activeExamDate)
         : [];
