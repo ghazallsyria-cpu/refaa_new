@@ -1,7 +1,7 @@
 /**
  * ============================================================================
- * @file      app/exam-committees/page.tsx
- * @version   8.1.0 (Professional Refactor + Enhanced Print)
+ * @file      app/admin/exam-committees/page.tsx
+ * @version   8.1.1 (ESLint Errors Fixed)
  * @description كنترول الامتحانات — TypeScript Strict، Zero `any`، مُقسّم،
  *              مع Batch Operations وطباعة احترافية.
  * ============================================================================
@@ -1304,9 +1304,10 @@ function ExamCommitteesControl() {
                 <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
                   <UserCheck className="w-6 h-6 text-emerald-600" /> 1. تعيين رؤساء اللجان (الفريق الدائم)
                 </h3>
-<p className="text-xs font-bold text-slate-500 mb-6">
-  ابحث عن المعلم واعتمد كونه &quot;رئيس لجنة&quot;.
-</p>
+                {/* FIX 1: escaped quotes using &quot; */}
+                <p className="text-xs font-bold text-slate-500 mb-6">
+                  ابحث عن المعلم واعتمد كونه &quot;رئيس لجنة&quot;.
+                </p>
                 <div className="relative mb-4">
                   <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input
@@ -1422,9 +1423,6 @@ function ExamCommitteesControl() {
                           className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm"
                         >
                           <option value="">- اختر رئيس معتمد -</option>
-
-
-
                           {teachers.filter((t) => t.is_committee_head).map((t) => (
                             <option key={t.id} value={t.id}>👑 {t.full_name}</option>
                           ))}
@@ -1493,10 +1491,10 @@ function ExamCommitteesControl() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-{/* MODALS */}
+      {/* MODALS */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
 
-{/* Builder Modal */}
+      {/* Builder Modal */}
       {isBuilderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
@@ -1899,12 +1897,12 @@ function ExamCommitteesControl() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      /* HIDDEN PRINT CONTAINER — Professional Templates                       */
+      {/* HIDDEN PRINT CONTAINER — Professional Templates */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {printPayload && (
         <div className="fixed top-0 left-0 -z-50 opacity-[0.01] pointer-events-none" dir="rtl">
           <div ref={printRef} className="flex flex-col bg-white">
-            
+
             {/* ── 1. محضر اللجنة الرسمي (Official Attendance Sheet) ───────── */}
             {printType === 'door_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative" style={{ width: '210mm', minHeight: '297mm', padding: '15mm' }}>
@@ -2035,9 +2033,9 @@ function ExamCommitteesControl() {
                 <div
                   key={pageIdx}
                   className="print-page-wrapper bg-white mx-auto"
-                  style={{ 
-                    width: '210mm', 
-                    minHeight: '297mm', 
+                  style={{
+                    width: '210mm',
+                    minHeight: '297mm',
                     padding: '10mm',
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr',
@@ -2053,11 +2051,11 @@ function ExamCommitteesControl() {
                     const commName = printPayload.committee.name;
                     const isGrade10 = seatNum.startsWith('10');
                     const isSci = seatNum.startsWith('111');
-                    
+
                     const accentColor = isGrade10 ? '#1e40af' : isSci ? '#047857' : '#7c3aed';
-                    const bgGradient = isGrade10 
+                    const bgGradient = isGrade10
                       ? 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)'
-                      : isSci 
+                      : isSci
                         ? 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)'
                         : 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)';
 
@@ -2123,9 +2121,9 @@ function ExamCommitteesControl() {
                         </div>
 
                         {/* Body */}
-                        <div style={{ 
-                          flex: 1, 
-                          display: 'flex', 
+                        <div style={{
+                          flex: 1,
+                          display: 'flex',
                           padding: '3mm',
                           gap: '3mm',
                         }}>
@@ -2145,11 +2143,11 @@ function ExamCommitteesControl() {
                               padding: '1mm',
                               border: `1px solid ${accentColor}30`,
                             }}>
-                              <img 
-                                src={qrUrl} 
-                                crossOrigin="anonymous" 
-                                alt="QR" 
-                                style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                              <img
+                                src={qrUrl}
+                                crossOrigin="anonymous"
+                                alt="QR"
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                               />
                             </div>
                             <div style={{
@@ -2253,7 +2251,7 @@ function ExamCommitteesControl() {
                   <h1 className="text-2xl font-black text-indigo-900 mb-2">هويات المراقبين الرسمية</h1>
                   <p className="text-sm font-bold text-slate-500">{printPayload.committee.name} — {activeExamDate}</p>
                 </div>
-                
+
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
@@ -2319,7 +2317,7 @@ function ExamCommitteesControl() {
                           <div style={{ fontSize: '5mm', fontWeight: 900, color: '#1e293b', marginBottom: '2mm', lineHeight: 1.2 }}>
                             {name}
                           </div>
-                          
+
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5mm' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '2mm' }}>
                               <div style={{ width: '2mm', height: '2mm', background: '#10b981', borderRadius: '50%' }}></div>
@@ -2371,6 +2369,7 @@ function ExamCommitteesControl() {
 
 export default function Page() {
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
   if (!mounted) return <div className="min-h-screen bg-slate-50" />;
 
