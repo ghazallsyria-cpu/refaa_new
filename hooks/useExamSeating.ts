@@ -116,7 +116,7 @@ export function useExamSeating(): UseExamSeatingReturn {
       setProgress('جاري صب القواعد وبناء اللجان...');
 
       try {
-        const newCommittees: Omit<<ExamCommittee, 'id' | 'created_at'>[] = Array.from(
+        const newCommittees: Omit<ExamCommittee, 'id' | 'created_at'>[] = Array.from(
           { length: count },
           (_, i) => ({
             name: `لجنة ${i + 1}`,
