@@ -205,3 +205,24 @@ export interface ViewCommitteeDetails {
   invigilators: InvigilatorWithRelations[];
   loading: boolean;
 }
+export interface UseExamSeatingReturn {
+  isLoading: boolean;
+  progressMsg: string;
+
+  buildCommittees: (
+    academicYear: string,
+    semester: string,
+    count: number,
+    capacity: number
+  ) => Promise<boolean>;
+
+  nukeEverything: (
+    academicYear: string,
+    semester: string
+  ) => Promise<boolean>;
+
+  generateSeatingAndDistribute: (
+    academicYear: string,
+    semester: string
+  ) => Promise<DistributionResult>;
+}
