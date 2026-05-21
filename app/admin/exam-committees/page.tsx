@@ -280,12 +280,14 @@ const [viewDetails, setViewDetails] = useState<{
       ]);
 
       const rawComms = (commsRes.data || []) as ExamCommittee[];
-      const rawExams = (examsRes.data || []) as ExamTimetable[];
-      const rawTchrs = (tchrsRes.data || []) as TeacherWithRelations[];
-      const rawInvigs = (invigsRes.data || []) as InvigilatorWithRelations[];
-      const rawAllocs = allocsRes.data || [];
-      const rawHeads = (hdsRes.data || []) as HeadWithRelations[];
-      const rawStds = stdsRes.data || [];
+      const rawExams = (examsRes.data || []) as unknown as ExamTimetable[];
+
+      const rawTchrs = (tchrsRes.data || []) as unknown as TeacherWithRelations[];
+const rawInvigs = (invigsRes.data || []) as unknown as InvigilatorWithRelations[];
+const rawAllocs = (allocsRes.data || []) as unknown as Record<string, unknown>[];
+const rawHeads = (hdsRes.data || []) as unknown as HeadWithRelations[];
+const rawStds = (stdsRes.data || []) as unknown as Record<string, unknown>[];
+
 
       // Sort committees
       const sortedComms = sortCommittees(rawComms);
