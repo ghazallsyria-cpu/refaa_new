@@ -1304,7 +1304,9 @@ function ExamCommitteesControl() {
                 <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
                   <UserCheck className="w-6 h-6 text-emerald-600" /> 1. تعيين رؤساء اللجان (الفريق الدائم)
                 </h3>
-                <p className="text-xs font-bold text-slate-500 mb-6">ابحث عن المعلم واعتمد كونه "رئيس لجنة".</p>
+<p className="text-xs font-bold text-slate-500 mb-6">
+  ابحث عن المعلم واعتمد كونه &quot;رئيس لجنة&quot;.
+</p>
                 <div className="relative mb-4">
                   <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input
@@ -1491,10 +1493,10 @@ function ExamCommitteesControl() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      /* MODALS                                                               */
+{/* MODALS */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
 
-      {/* Builder Modal */}
+{/* Builder Modal */}
       {isBuilderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
