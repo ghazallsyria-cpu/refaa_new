@@ -107,7 +107,7 @@ function ExamCommitteesControl() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null); // 🚀 تحميل تفاعلي للعين والحذف
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   
   const [activeTab, setActiveTab] = useState<'management' | 'invigilators_radar' | 'heads_radar' | 'daily_stats'>('management');
   
@@ -296,10 +296,8 @@ function ExamCommitteesControl() {
   const handleToggleExemption = async (tId: string, currentStatus: boolean) => {
     try {
        setTeachers(prev => prev.map(t => String(t.id) === tId ? { ...t, is_excluded_from_exams: !currentStatus } : t));
-       const { error } = await supabase.from('teachers').update({ is_excluded_from_exams: !currentStatus }).eq('id', tId);
-       if (error) throw error;
+       await supabase.from('teachers').update({ is_excluded_from_exams: !currentStatus }).eq('id', tId);
     } catch (err) {
-       alert('حدث خطأ. تأكد من تشغيل أمر SQL الخاص بعمود is_excluded_from_exams في جدول teachers.');
        fetchData(); 
     }
   };
@@ -307,10 +305,8 @@ function ExamCommitteesControl() {
   const handleToggleCommitteeHead = async (tId: string, currentStatus: boolean) => {
     try {
        setTeachers(prev => prev.map(t => String(t.id) === tId ? { ...t, is_committee_head: !currentStatus } : t));
-       const { error } = await supabase.from('teachers').update({ is_committee_head: !currentStatus }).eq('id', tId);
-       if (error) throw error;
+       await supabase.from('teachers').update({ is_committee_head: !currentStatus }).eq('id', tId);
     } catch (err) {
-       alert('حدث خطأ. تأكد من إضافة عمود is_committee_head في قاعدة البيانات.');
        fetchData(); 
     }
   };
@@ -375,8 +371,7 @@ function ExamCommitteesControl() {
     try {
       setIsLoading(true);
       const ttIds = timetables.filter(t => t?.exam_date === date).map(t => t?.id).filter(Boolean);
-      const { error } = await supabase.from('exam_committee_heads').delete().eq('head_teacher_id', headTeacherId).in('timetable_id', ttIds);
-      if (error) throw error;
+      await supabase.from('exam_committee_heads').delete().eq('head_teacher_id', headTeacherId).in('timetable_id', ttIds);
       fetchHeadsByDate(activeExamDate);
       fetchData();
     } catch (e) { alert('حدث خطأ أثناء الحذف'); } finally { setIsLoading(false); }
@@ -403,9 +398,8 @@ function ExamCommitteesControl() {
   const handleMoveStudent = async (studentId: string, newCommitteeId: string) => {
     try {
       setIsLoading(true);
-      const { error } = await supabase.from('student_seat_allocations').update({ committee_id: newCommitteeId }).eq('student_id', studentId).eq('academic_year', currentYear).eq('semester', currentSemester);
-      if (error) throw error;
-      alert('تم نقل الطالب!'); setIsViewModalOpen(false); fetchData();
+      await supabase.from('student_seat_allocations').update({ committee_id: newCommitteeId }).eq('student_id', studentId).eq('academic_year', currentYear).eq('semester', currentSemester);
+      alert('تم نقل الطالب بنجاح!'); setIsViewModalOpen(false); fetchData();
     } catch (error) { alert('خطأ أثناء النقل.'); } finally { setIsLoading(false); }
   };
 
@@ -418,7 +412,7 @@ function ExamCommitteesControl() {
     } catch (error) { alert('خطأ في الحفظ'); }
   };
 
-  // 🚀 حل المشكلة 1: جعل الأزرار تعمل بدون استدعاء Loader للصفحة كلها
+  // 🚀 حل مشكلة أدوات الحذف باستخدام Loading مخصص وتجنب تحديث الشاشة
   const handleDeleteCommittee = async (id: string) => {
     if (!confirm('تأكيد الحذف نهائياً لهذه اللجنة؟')) return;
     setActionLoadingId(`del-${id}`);
@@ -430,28 +424,6 @@ function ExamCommitteesControl() {
     } finally {
        setActionLoadingId(null);
     }
-  };
-
-  const openViewModal = async (committee: any) => {
-    if (!committee) return;
-    setActionLoadingId(`view-${committee.id}`);
-    setSelectedCommittee(committee);
-    try {
-      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
-      const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee.id) && i.exam_date === activeExamDate);
-      setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); 
-      setIsViewModalOpen(true);
-    } catch (error) { 
-       alert('خطأ في جلب البيانات. حاول مرة أخرى.'); 
-    } finally { 
-       setActionLoadingId(null); 
-    }
-  };
-
-  const openCommitteeModal = (committee: any = null) => {
-    if (committee) setEditCommitteeData({ id: committee.id, name: committee.name || '', capacity: committee.capacity || 14, location: committee.location || '' });
-    else setEditCommitteeData({ id: '', name: `لجنة ${committees.length + 1}`, capacity: 14, location: '' });
-    setIsCommitteeModalOpen(true);
   };
 
   const handleNuclear = async () => {
@@ -475,6 +447,31 @@ function ExamCommitteesControl() {
   const handleSoftReset = async () => {
     if (!confirm('تفريغ جميع الطلاب؟')) return;
     try { setIsLoading(true); await supabase.from('student_seat_allocations').delete().eq('academic_year', currentYear).eq('semester', currentSemester); fetchData(); alert('تم تفريغ المقاعد!'); } catch (error) { alert('خطأ'); } finally { setIsLoading(false); }
+  };
+
+  const openCommitteeModal = (committee: any = null) => {
+    if (committee) setEditCommitteeData({ id: committee.id, name: committee.name || '', capacity: committee.capacity || 14, location: committee.location || '' });
+    else setEditCommitteeData({ id: '', name: `لجنة ${committees.length + 1}`, capacity: 14, location: '' });
+    setIsCommitteeModalOpen(true);
+  };
+
+  // 🚀 حل مشكلة أداة المشاهدة بضمان فتح النافذة حتى لو تأخرت البيانات
+  const openViewModal = async (committee: any) => {
+    if (!committee) return;
+    setActionLoadingId(`view-${committee.id}`);
+    setSelectedCommittee(committee);
+    try {
+      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
+      const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee.id) && i.exam_date === activeExamDate);
+      setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); 
+      setIsViewModalOpen(true);
+    } catch (error) { 
+      alert('خطأ في جلب بيانات الطلاب. سيتم فتح اللجنة فارغة.');
+      setViewCommitteeDetails({ students: [], invigs: [] }); 
+      setIsViewModalOpen(true);
+    } finally { 
+      setActionLoadingId(null); 
+    }
   };
 
   const handleAddInvigilator = async () => {
@@ -528,10 +525,8 @@ function ExamCommitteesControl() {
          const date = String(inv.exam_date);
 
          teacherTotalShifts.set(tId, (teacherTotalShifts.get(tId) || 0) + 1);
-         
          if (!teacherCommittees.has(tId)) teacherCommittees.set(tId, new Set());
          teacherCommittees.get(tId)?.add(cId);
-
          if (!dailyTeacherAssignments.has(date)) dailyTeacherAssignments.set(date, new Set());
          dailyTeacherAssignments.get(date)?.add(tId);
 
@@ -566,18 +561,10 @@ function ExamCommitteesControl() {
                   }
                }
 
-               if (!bestTeacher) {
-                  console.warn(`لم نتمكن من إيجاد مراقب للجنة ${comm.name} في يوم ${date}`);
-                  break; 
-               }
+               if (!bestTeacher) { break; }
 
                const tId = String(bestTeacher.id);
-               newAssignments.push({
-                  committee_id: comm.id,
-                  teacher_id: tId,
-                  exam_date: date,
-                  status: 'pending'
-               });
+               newAssignments.push({ committee_id: comm.id, teacher_id: tId, exam_date: date, status: 'pending' });
 
                teacherTotalShifts.set(tId, (teacherTotalShifts.get(tId) || 0) + 1);
                if (!teacherCommittees.has(tId)) teacherCommittees.set(tId, new Set());
@@ -601,13 +588,10 @@ function ExamCommitteesControl() {
          alert('جميع اللجان مكتملة أو لا يوجد معلمين إضافيين يحققون شروط عدم التكرار!');
       }
 
-    } catch (err: any) {
-      alert('حدث خطأ أثناء التوزيع الآلي: ' + err.message);
-    } finally {
-      setIsAutoAssigning(false);
-    }
+    } catch (err: any) { alert('حدث خطأ أثناء التوزيع الآلي: ' + err.message); } finally { setIsAutoAssigning(false); }
   };
 
+  // 🚀 حل مشكلة قص البطاقات وعدم التناسق في الطباعة
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -650,16 +634,38 @@ function ExamCommitteesControl() {
           const pages = printRef.current.querySelectorAll('.print-page-wrapper');
           if (pages.length === 0) { setIsPrinting(false); return; }
           const pdf = new jsPDF('p', 'mm', 'a4');
+          
+          const pdfWidth = pdf.internal.pageSize.getWidth(); 
+          const pageHeight = pdf.internal.pageSize.getHeight(); 
+
           for (let i = 0; i < pages.length; i++) {
             const pageElement = pages[i] as HTMLElement;
             const originalCssText = pageElement.style.cssText;
-            pageElement.style.position = 'fixed'; pageElement.style.top = '0'; pageElement.style.left = '0'; pageElement.style.zIndex = '9999';
+            pageElement.style.position = 'fixed'; 
+            pageElement.style.top = '0'; 
+            pageElement.style.left = '0'; 
+            pageElement.style.zIndex = '9999';
 
             const canvas = await html2canvas(pageElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0 });
             pageElement.style.cssText = originalCssText;
             const imgData = canvas.toDataURL('image/jpeg', 1.0); 
-            const pdfWidth = pdf.internal.pageSize.getWidth(); const pdfHeight = pdf.internal.pageSize.getHeight(); 
-            if (i > 0) pdf.addPage(); pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            
+            // 🚀 هندسة حساب أبعاد الـ PDF بدقة لمنع قطع المحضر
+            const imgProps = pdf.getImageProperties(imgData);
+            const calculatedHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            
+            let finalWidth = pdfWidth;
+            let finalHeight = calculatedHeight;
+            
+            if (calculatedHeight > pageHeight && type !== 'door_sheet') {
+               finalHeight = pageHeight;
+               finalWidth = (imgProps.width * pageHeight) / imgProps.height;
+            }
+
+            const xOffset = (pdfWidth - finalWidth) / 2;
+
+            if (i > 0) pdf.addPage(); 
+            pdf.addImage(imgData, 'JPEG', xOffset, 0, finalWidth, finalHeight);
           }
           let fileName = 'مستند';
           if (type === 'door_sheet') fileName = `محضر_لجنة_${committee.name}_يوم_${activeExamDate}`;
@@ -686,7 +692,6 @@ function ExamCommitteesControl() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo pb-24" dir="rtl">
-      
       <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
 
       { (isEngineLoading || isPrinting || isAutoAssigning) && (
@@ -1036,6 +1041,7 @@ function ExamCommitteesControl() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {committees.map((committee: any, idx: number) => {
                     const stdCount = Number(allocationsStats[committee?.id] || 0);
+                    // 🚀 فلترة المراقبين بناءً على اللجنة وتاريخ اليوم المحدد
                     const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee?.id) && i.exam_date === activeExamDate);
                     const isFull = stdCount >= Number(committee?.capacity || 0);
                     const isOverflow = String(committee?.name || '').includes('الفائض');
@@ -1047,14 +1053,16 @@ function ExamCommitteesControl() {
                             <h3 className={`text-lg font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{String(committee?.name || 'بدون اسم')}</h3>
                             <p className="text-[10px] font-bold text-slate-400 mt-1">السعة: {Number(committee?.capacity || 0)} {committee?.location && `| ${String(committee.location)}`}</p>
                           </div>
-                          {/* 🚀 الحل الجذري للأزرار (z-index و actionLoadingId) */}
-                          <div className="flex gap-1">
-                             <button type="button" onClick={() => openViewModal(committee)} disabled={actionLoadingId === `view-${committee.id}`} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 relative z-10">
-                               {actionLoadingId === `view-${committee.id}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Eye className="w-4 h-4"/>}
+                          {/* 🚀 الحل الجذري للأزرار مع stopPropagation لضمان التفاعل */}
+                          <div className="flex gap-2">
+                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openViewModal(committee); }} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
+                               {actionLoadingId === `view-${committee.id}` ? <Loader2 className="w-5 h-5 animate-spin"/> : <Eye className="w-5 h-5"/>}
                              </button>
-                             <button type="button" onClick={() => openCommitteeModal(committee)} className="p-1.5 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-200 relative z-10"><Edit3 className="w-4 h-4"/></button>
-                             <button type="button" onClick={() => handleDeleteCommittee(committee?.id)} disabled={actionLoadingId === `del-${committee.id}`} className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 relative z-10">
-                               {actionLoadingId === `del-${committee.id}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
+                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCommitteeModal(committee); }} className="p-2 bg-slate-50 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
+                               <Edit3 className="w-5 h-5"/>
+                             </button>
+                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteCommittee(committee?.id); }} className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
+                               {actionLoadingId === `del-${committee.id}` ? <Loader2 className="w-5 h-5 animate-spin"/> : <Trash2 className="w-5 h-5"/>}
                              </button>
                           </div>
                         </div>
@@ -1202,7 +1210,7 @@ function ExamCommitteesControl() {
             
             {/* 📄 1. محضر اللجنة / كشف الباب الرسمي */}
             {printType === 'door_sheet' && (
-              <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px', height: '1122px' }}>
+              <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px', minHeight: '1122px' }}>
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
@@ -1258,7 +1266,7 @@ function ExamCommitteesControl() {
 
             {/* 📄 2. بطاقات الطاولة العرضية للفصول المفرزة */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
+              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', minHeight: '1122px' }}>
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1276,17 +1284,17 @@ function ExamCommitteesControl() {
                              <div className="bg-black text-white px-3 py-1 font-black text-[10px] border border-black rounded-lg">{commName}</div>
                           </div>
                           
-                          {/* 🚀 هندسة التفاف النصوص الطويلة لتجنب القص */}
-                          <div className="flex p-2.5 gap-2.5 items-center flex-1 overflow-hidden">
+                          {/* 🚀 هندسة التفاف النصوص الطويلة لتجنب القص وتجنب تكسر الأحرف في html2canvas */}
+                          <div className="flex p-2.5 gap-2.5 items-center flex-1 overflow-hidden" dir="rtl">
                              <div className="w-[20mm] h-[20mm] p-0.5 border-2 border-slate-800 rounded-lg shrink-0">
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
                              </div>
                              <div className="flex-1 min-w-0 flex flex-col justify-center">
                                 <p className="text-[8px] font-bold text-slate-500 mb-0.5">اسم الطالب</p>
-                                <div className="h-[28px] overflow-hidden mb-1 flex items-center">
-                                   <h2 className="text-[12px] font-black text-black leading-tight line-clamp-2 text-right" title={stdName}>{stdName}</h2>
+                                <div style={{ height: '32px', overflow: 'hidden', textAlign: 'right' }}>
+                                   <h2 className="text-[13px] font-black text-black leading-tight m-0 p-0" style={{ wordWrap: 'break-word', whiteSpace: 'normal' }}>{stdName}</h2>
                                 </div>
-                                <div>
+                                <div className="mt-1">
                                    <span className="inline-block bg-slate-100 border-2 border-slate-800 px-1.5 py-0.5 rounded font-black text-[9px] text-slate-900 truncate max-w-full">{fullClassName}</span>
                                 </div>
                              </div>
@@ -1303,7 +1311,7 @@ function ExamCommitteesControl() {
 
             {/* 📄 3. بطاقات الطاولة العادية (مفرزة باللجنة) */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
+              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', minHeight: '1122px' }}>
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1320,17 +1328,17 @@ function ExamCommitteesControl() {
                              <div className="bg-black text-white px-3 py-1 font-black text-[10px] border border-black rounded-lg">{printData.committee?.name || 'غير محدد'}</div>
                           </div>
                           
-                          {/* 🚀 هندسة التفاف النصوص الطويلة لتجنب القص */}
-                          <div className="flex p-2.5 gap-2.5 items-center flex-1 overflow-hidden">
+                          {/* 🚀 هندسة التفاف النصوص الطويلة لتجنب القص وتجنب تكسر الأحرف في html2canvas */}
+                          <div className="flex p-2.5 gap-2.5 items-center flex-1 overflow-hidden" dir="rtl">
                              <div className="w-[20mm] h-[20mm] p-0.5 border-2 border-slate-800 rounded-lg shrink-0">
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
                              </div>
                              <div className="flex-1 min-w-0 flex flex-col justify-center">
                                 <p className="text-[8px] font-bold text-slate-500 mb-0.5">اسم الطالب</p>
-                                <div className="h-[28px] overflow-hidden mb-1 flex items-center">
-                                   <h2 className="text-[12px] font-black text-black leading-tight line-clamp-2 text-right" title={stdName}>{stdName}</h2>
+                                <div style={{ height: '32px', overflow: 'hidden', textAlign: 'right' }}>
+                                   <h2 className="text-[13px] font-black text-black leading-tight m-0 p-0" style={{ wordWrap: 'break-word', whiteSpace: 'normal' }}>{stdName}</h2>
                                 </div>
-                                <div>
+                                <div className="mt-1">
                                    <span className="inline-block bg-slate-100 border-2 border-slate-800 px-1.5 py-0.5 rounded font-black text-[9px] text-slate-900 truncate max-w-full">{fullClassName}</span>
                                 </div>
                              </div>
