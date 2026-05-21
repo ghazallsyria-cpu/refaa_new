@@ -53,7 +53,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // =========================================================================
-// 2. 🕵️‍♂️ الكونسول العائم لتبسيط تتبع الأخطاء على الموبايل
+// 2. 🕵️‍♂️ الكونسول العائم
 // =========================================================================
 function FloatingConsole() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -79,7 +79,7 @@ function FloatingConsole() {
 }
 
 // =========================================================================
-// 3. 🚀 الإدارة الرئيسية للجان
+// 3. 🚀 التطبيق الرئيسي (لجان الامتحانات)
 // =========================================================================
 function ExamCommitteesControl() {
   const authContext = useAuth() || {};
@@ -107,6 +107,8 @@ function ExamCommitteesControl() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null); // 🚀 تحميل تفاعلي للعين والحذف
+  
   const [activeTab, setActiveTab] = useState<'management' | 'invigilators_radar' | 'heads_radar' | 'daily_stats'>('management');
   
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -416,9 +418,40 @@ function ExamCommitteesControl() {
     } catch (error) { alert('خطأ في الحفظ'); }
   };
 
+  // 🚀 حل المشكلة 1: جعل الأزرار تعمل بدون استدعاء Loader للصفحة كلها
   const handleDeleteCommittee = async (id: string) => {
-    if (!confirm('تأكيد الحذف؟')) return;
-    try { await supabase.from('exam_committees').delete().eq('id', id); fetchData(); } catch (error) { alert('خطأ في الحذف'); }
+    if (!confirm('تأكيد الحذف نهائياً لهذه اللجنة؟')) return;
+    setActionLoadingId(`del-${id}`);
+    try { 
+       await supabase.from('exam_committees').delete().eq('id', id); 
+       fetchData(); 
+    } catch (error) { 
+       alert('خطأ في الحذف'); 
+    } finally {
+       setActionLoadingId(null);
+    }
+  };
+
+  const openViewModal = async (committee: any) => {
+    if (!committee) return;
+    setActionLoadingId(`view-${committee.id}`);
+    setSelectedCommittee(committee);
+    try {
+      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
+      const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee.id) && i.exam_date === activeExamDate);
+      setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); 
+      setIsViewModalOpen(true);
+    } catch (error) { 
+       alert('خطأ في جلب البيانات. حاول مرة أخرى.'); 
+    } finally { 
+       setActionLoadingId(null); 
+    }
+  };
+
+  const openCommitteeModal = (committee: any = null) => {
+    if (committee) setEditCommitteeData({ id: committee.id, name: committee.name || '', capacity: committee.capacity || 14, location: committee.location || '' });
+    else setEditCommitteeData({ id: '', name: `لجنة ${committees.length + 1}`, capacity: 14, location: '' });
+    setIsCommitteeModalOpen(true);
   };
 
   const handleNuclear = async () => {
@@ -442,22 +475,6 @@ function ExamCommitteesControl() {
   const handleSoftReset = async () => {
     if (!confirm('تفريغ جميع الطلاب؟')) return;
     try { setIsLoading(true); await supabase.from('student_seat_allocations').delete().eq('academic_year', currentYear).eq('semester', currentSemester); fetchData(); alert('تم تفريغ المقاعد!'); } catch (error) { alert('خطأ'); } finally { setIsLoading(false); }
-  };
-
-  const openCommitteeModal = (committee: any = null) => {
-    if (committee) setEditCommitteeData({ id: committee.id, name: committee.name || '', capacity: committee.capacity || 14, location: committee.location || '' });
-    else setEditCommitteeData({ id: '', name: `لجنة ${committees.length + 1}`, capacity: 14, location: '' });
-    setIsCommitteeModalOpen(true);
-  };
-
-  const openViewModal = async (committee: any) => {
-    if (!committee) return;
-    setIsLoading(true); setSelectedCommittee(committee);
-    try {
-      const { data: students } = await supabase.from('student_seat_allocations').select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) )`).eq('committee_id', committee.id).order('seat_number', { ascending: true });
-      const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(committee.id) && i.exam_date === activeExamDate);
-      setViewCommitteeDetails({ students: students || [], invigs: commInvigs }); setIsViewModalOpen(true);
-    } catch (error) { alert('خطأ في جلب البيانات'); } finally { setIsLoading(false); }
   };
 
   const handleAddInvigilator = async () => {
@@ -663,9 +680,7 @@ function ExamCommitteesControl() {
     return Array.from(dates);
   };
 
-  // 🚀 تعريف المتغير المحذوف لضمان عدم تكرار اللجان عند التكليف اليومي لرؤساء اللجان
   const alreadyAssignedCommittees = currentHeads.flatMap(h => String(h?.committees_range || '').split('، '));
-  
   const selectedTeacherData = teachers.find(t => String(t?.id) === String(headAssignment?.head_teacher_id));
   const selectedTeacherHeadDates = selectedTeacherData ? getTeacherHeadAssignments(selectedTeacherData.id) : [];
 
@@ -882,6 +897,7 @@ function ExamCommitteesControl() {
                                  </div>
                              </div>
                              <button 
+                                 type="button"
                                  onClick={() => handleToggleCommitteeHead(String(t?.id), isHead)}
                                  className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isHead ? 'bg-rose-100 text-rose-600 hover:bg-rose-200' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
                              >
@@ -919,6 +935,7 @@ function ExamCommitteesControl() {
                             const isSelected = selectedCommitteesForHead.includes(c?.name);
                             return (
                               <button 
+                                type="button"
                                 key={`hc-${ci}`} 
                                 disabled={isAssigned}
                                 onClick={() => toggleCommitteeSelectionForHead(c?.name)}
@@ -944,7 +961,7 @@ function ExamCommitteesControl() {
                            <option value="">- اختر رئيس اللجان المعتمد -</option>
                            {teachers.filter(t => t.is_committee_head).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>👑 {t?.full_name}</option>)}
                          </select>
-                         <button onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg flex items-center gap-2 justify-center">
+                         <button type="button" onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg flex items-center gap-2 justify-center">
                             <CheckCircle2 className="w-5 h-5"/> اعتماد التكليف
                          </button>
                        </div>
@@ -972,7 +989,7 @@ function ExamCommitteesControl() {
                                    </div>
                                 </div>
                              </div>
-                             <button onClick={() => handleDeleteHead(head?.head_teacher_id, headAssignment.date)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm" title="إزالة التكليف"><Trash2 className="w-5 h-5"/></button>
+                             <button type="button" onClick={() => handleDeleteHead(head?.head_teacher_id, headAssignment.date)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm" title="إزالة التكليف"><Trash2 className="w-5 h-5"/></button>
                           </div>
                        )) : <p className="text-center text-sm font-bold text-slate-400 py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">لم يتم تكليف أي رئيس لهذا اليوم الامتحاني بعد.</p>}
                     </div>
@@ -993,17 +1010,17 @@ function ExamCommitteesControl() {
 
               <div className="flex flex-wrap gap-3 mb-8 bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 {committees.length === 0 ? (
-                  <button onClick={() => setIsBuilderModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> بناء هندسي للجان</button>
+                  <button type="button" onClick={() => setIsBuilderModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> بناء هندسي للجان</button>
                 ) : (
                   <>
-                    <button onClick={handleDistribute} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Users className="w-5 h-5" /> توزيع السحّاب</button>
-                    <button onClick={() => setIsClassPrintModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md border border-emerald-600"><Layers className="w-5 h-5" /> طباعة بطاقات الفصول</button>
+                    <button type="button" onClick={handleDistribute} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Users className="w-5 h-5" /> توزيع السحّاب</button>
+                    <button type="button" onClick={() => setIsClassPrintModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md border border-emerald-600"><Layers className="w-5 h-5" /> طباعة بطاقات الفصول</button>
                     
-                    <button onClick={() => setIsExemptionsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 shadow-sm border border-rose-100"><UserMinus className="w-5 h-5" /> إعفاء معلمين</button>
+                    <button type="button" onClick={() => setIsExemptionsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 shadow-sm border border-rose-100"><UserMinus className="w-5 h-5" /> إعفاء معلمين</button>
                     
-                    <button onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة</button>
-                    <button onClick={handleSoftReset} className="flex-1 sm:flex-none px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-black rounded-xl flex justify-center items-center gap-2"><Trash2 className="w-5 h-5" /> تفريغ</button>
-                    <button onClick={handleNuclear} className="flex-1 sm:flex-none px-6 py-3 bg-rose-100 hover:bg-rose-200 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 mr-auto"><AlertTriangle className="w-5 h-5" /> هدم</button>
+                    <button type="button" onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة</button>
+                    <button type="button" onClick={handleSoftReset} className="flex-1 sm:flex-none px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-black rounded-xl flex justify-center items-center gap-2"><Trash2 className="w-5 h-5" /> تفريغ</button>
+                    <button type="button" onClick={handleNuclear} className="flex-1 sm:flex-none px-6 py-3 bg-rose-100 hover:bg-rose-200 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 mr-auto"><AlertTriangle className="w-5 h-5" /> هدم</button>
                   </>
                 )}
               </div>
@@ -1030,10 +1047,15 @@ function ExamCommitteesControl() {
                             <h3 className={`text-lg font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{String(committee?.name || 'بدون اسم')}</h3>
                             <p className="text-[10px] font-bold text-slate-400 mt-1">السعة: {Number(committee?.capacity || 0)} {committee?.location && `| ${String(committee.location)}`}</p>
                           </div>
+                          {/* 🚀 الحل الجذري للأزرار (z-index و actionLoadingId) */}
                           <div className="flex gap-1">
-                             <button onClick={() => openViewModal(committee)} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"><Eye className="w-4 h-4"/></button>
-                             <button onClick={() => openCommitteeModal(committee)} className="p-1.5 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-200"><Edit3 className="w-4 h-4"/></button>
-                             <button onClick={() => handleDeleteCommittee(committee?.id)} className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4"/></button>
+                             <button type="button" onClick={() => openViewModal(committee)} disabled={actionLoadingId === `view-${committee.id}`} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 relative z-10">
+                               {actionLoadingId === `view-${committee.id}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Eye className="w-4 h-4"/>}
+                             </button>
+                             <button type="button" onClick={() => openCommitteeModal(committee)} className="p-1.5 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-200 relative z-10"><Edit3 className="w-4 h-4"/></button>
+                             <button type="button" onClick={() => handleDeleteCommittee(committee?.id)} disabled={actionLoadingId === `del-${committee.id}`} className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 relative z-10">
+                               {actionLoadingId === `del-${committee.id}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
+                             </button>
                           </div>
                         </div>
 
@@ -1049,14 +1071,14 @@ function ExamCommitteesControl() {
                                 <div key={`i-${iIdx}`} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 gap-1.5">
                                   <div className="flex justify-between items-center">
                                      <span className="text-xs font-bold text-slate-800 truncate pr-1">{tName}</span>
-                                     <button onClick={() => handleRemoveInvigilator(inv?.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
+                                     <button type="button" onClick={() => handleRemoveInvigilator(inv?.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
                                   </div>
                                   
                                   <div className="flex items-center justify-between border-t border-slate-200/50 pt-1.5 mt-0.5">
                                      {inv?.status === 'signed' ? (
                                         <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> وقع الاستلام</span>
                                      ) : inv?.status === 'excused' ? (
-                                        <button onClick={() => openReadExcuseModal(inv)} className="text-[9px] font-black text-rose-500 bg-rose-100 px-2 py-0.5 rounded flex items-center gap-1 hover:bg-rose-200 transition-colors"><AlertCircle className="w-3 h-3"/> عرض العذر</button>
+                                        <button type="button" onClick={() => openReadExcuseModal(inv)} className="text-[9px] font-black text-rose-500 bg-rose-100 px-2 py-0.5 rounded flex items-center gap-1 hover:bg-rose-200 transition-colors"><AlertCircle className="w-3 h-3"/> عرض العذر</button>
                                      ) : (
                                         <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3"/> قيد الانتظار</span>
                                      )}
@@ -1065,15 +1087,15 @@ function ExamCommitteesControl() {
                               )
                             })}
                             {commInvigs.length < 2 && (
-                              <button onClick={() => { setSelectedCommittee(committee); setIsAssignModalOpen(true); }} className="w-full py-1.5 rounded-lg border border-dashed border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-50 transition-colors mt-2"><UserPlus className="w-3 h-3 inline mr-1" /> إضافة مراقب لليوم</button>
+                              <button type="button" onClick={() => { setSelectedCommittee(committee); setIsAssignModalOpen(true); }} className="w-full py-1.5 rounded-lg border border-dashed border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-50 transition-colors mt-2"><UserPlus className="w-3 h-3 inline mr-1" /> إضافة مراقب لليوم</button>
                             )}
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 mt-auto pt-3 border-t border-slate-100">
-                          <button onClick={() => printDocument(committee?.id, 'door_sheet')} className="col-span-2 bg-slate-800 text-white text-[10px] font-black py-2 rounded-lg hover:bg-slate-700"><PrinterIcon className="w-3 h-3 inline mr-1"/> محضر اللجنة (كشف الحضور)</button>
-                          <button onClick={() => printDocument(committee?.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100"><IdCard className="w-3 h-3 inline mr-1"/> الطاولة</button>
-                          <button onClick={() => printDocument(committee?.id, 'invigilator_ids')} className="bg-emerald-50 text-emerald-700 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100"><Contact className="w-3 h-3 inline mr-1"/> الهويات</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'door_sheet')} className="col-span-2 bg-slate-800 text-white text-[10px] font-black py-2 rounded-lg hover:bg-slate-700"><PrinterIcon className="w-3 h-3 inline mr-1"/> محضر اللجنة (كشف الحضور)</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100"><IdCard className="w-3 h-3 inline mr-1"/> الطاولة</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'invigilator_ids')} className="bg-emerald-50 text-emerald-700 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100"><Contact className="w-3 h-3 inline mr-1"/> الهويات</button>
                         </div>
                       </div>
                     );
@@ -1093,7 +1115,7 @@ function ExamCommitteesControl() {
             <div className="space-y-4">
               <div><label className="text-sm font-bold text-slate-600">كم عدد اللجان الإجمالي؟</label><input type="number" min="1" max="100" value={builderData.count} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, count: isNaN(v) ? 1 : Math.min(100, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /></div>
               <div><label className="text-sm font-bold text-slate-600">سعة اللجنة الواحدة؟</label><input type="number" min="1" max="50" value={builderData.capacity} onChange={e => { const v = parseInt(e.target.value); setBuilderData({...builderData, capacity: isNaN(v) ? 1 : Math.min(50, Math.max(1, v))}) }} className="w-full mt-1 p-3 bg-slate-50 border rounded-xl font-black text-center outline-none focus:border-emerald-500" /><p className="text-[10px] text-slate-400 text-center mt-1">السعة القصوى 50 طالب للجنة.</p></div>
-              <div className="flex gap-2 pt-2"><button onClick={handleBuild} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700">بناء واعتماد</button><button onClick={() => setIsBuilderModalOpen(false)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black hover:bg-slate-200">إلغاء</button></div>
+              <div className="flex gap-2 pt-2"><button type="button" onClick={handleBuild} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700">بناء واعتماد</button><button type="button" onClick={() => setIsBuilderModalOpen(false)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black hover:bg-slate-200">إلغاء</button></div>
             </div>
           </div>
         </div>
@@ -1109,7 +1131,7 @@ function ExamCommitteesControl() {
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                        <UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين
                     </h3>
-                    <button onClick={() => setIsExemptionsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+                    <button type="button" onClick={() => setIsExemptionsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full transition-colors"><X className="w-5 h-5"/></button>
                  </div>
                  
                  <div className="relative mb-4 shrink-0">
@@ -1132,6 +1154,7 @@ function ExamCommitteesControl() {
                                    </div>
                                </div>
                                <button 
+                                   type="button"
                                    onClick={() => handleToggleExemption(String(t?.id), isExcluded)}
                                    className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isExcluded ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
                                >
@@ -1153,7 +1176,7 @@ function ExamCommitteesControl() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><Layers className="w-6 h-6 text-emerald-600"/> طباعة بطاقات الفصول</h3>
-              <button onClick={() => setIsClassPrintModalOpen(false)} className="p-2 bg-slate-50 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
+              <button type="button" onClick={() => setIsClassPrintModalOpen(false)} className="p-2 bg-slate-50 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
             </div>
             <p className="text-sm font-bold text-slate-500 mb-4">اختر الصف لطباعة بطاقات جميع طلابه مجمعة لتسليمها لمربي الفصل.</p>
             {availableClasses.length === 0 ? (
@@ -1161,7 +1184,7 @@ function ExamCommitteesControl() {
             ) : (
               <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
                  {availableClasses.map((cls, ci) => (
-                   <button key={`cls-${ci}`} onClick={() => printDocument('', 'class_cards', cls)} className="w-full bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200 p-4 rounded-xl text-right transition-all flex items-center justify-between group">
+                   <button type="button" key={`cls-${ci}`} onClick={() => printDocument('', 'class_cards', cls)} className="w-full bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200 p-4 rounded-xl text-right transition-all flex items-center justify-between group">
                      <span className="font-black text-slate-700 group-hover:text-emerald-700">{cls}</span>
                      <PrinterIcon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500" />
                    </button>
@@ -1172,7 +1195,7 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🖨️ قوالب الطباعة المخفية */}
+      {/* 🖨️ قوالب الطباعة المخفية (تمت هندسة قص الأسماء الطويلة بداخلها) */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col gap-10 bg-white" dir="rtl">
@@ -1247,21 +1270,29 @@ function ExamCommitteesControl() {
                        <div key={`c-${si}`} className="w-[85mm] h-[55mm] border-[3px] border-black relative flex flex-col bg-white overflow-hidden rounded-[1rem]" style={{ pageBreakInside: 'avoid' }}>
                           <div className="bg-slate-100 border-b-[3px] border-black p-2 flex justify-between items-center shrink-0">
                              <div className="text-right">
-                                <h3 className="font-black text-[12px] text-black leading-none">مدرسة الرفعة النموذجية بنين (م-ث)</h3>
-                                <p className="text-[9px] font-bold text-slate-700 mt-1">بطاقة جلوس اختبارات نهاية العام</p>
+                                <h3 className="font-black text-[11px] text-black leading-none">مدرسة الرفعة النموذجية بنين (م-ث)</h3>
+                                <p className="text-[8px] font-bold text-slate-700 mt-1">بطاقة جلوس اختبارات نهاية العام</p>
                              </div>
-                             <div className="bg-black text-white px-3 py-1.5 font-black text-xs border border-black rounded-lg">{commName}</div>
+                             <div className="bg-black text-white px-3 py-1 font-black text-[10px] border border-black rounded-lg">{commName}</div>
                           </div>
-                          <div className="flex p-3 gap-3 items-center flex-1">
-                             <div className="w-[22mm] h-[22mm] p-0.5 border-2 border-slate-800 rounded-lg shrink-0"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
-                             <div className="flex-1">
-                                <p className="text-[9px] font-bold text-slate-500 mb-0.5">اسم الطالب</p>
-                                <h2 className="text-[13px] font-black text-black mb-2 leading-tight">{stdName}</h2>
-                                <div className="inline-block bg-slate-100 border-2 border-slate-800 px-2 py-1 rounded font-black text-[10px] text-slate-900">{fullClassName}</div>
+                          
+                          {/* 🚀 هندسة التفاف النصوص الطويلة لتجنب القص */}
+                          <div className="flex p-2.5 gap-2.5 items-center flex-1 overflow-hidden">
+                             <div className="w-[20mm] h-[20mm] p-0.5 border-2 border-slate-800 rounded-lg shrink-0">
+                                <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
                              </div>
-                             <div className="shrink-0 text-center border-r-[3px] border-slate-300 pr-3">
-                                <p className="text-[9px] font-bold text-slate-500 mb-1">رقم الجلوس</p>
-                                <p className="text-2xl font-black text-black tracking-widest">{student?.seat_number || '---'}</p>
+                             <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                <p className="text-[8px] font-bold text-slate-500 mb-0.5">اسم الطالب</p>
+                                <div className="h-[28px] overflow-hidden mb-1 flex items-center">
+                                   <h2 className="text-[12px] font-black text-black leading-tight line-clamp-2 text-right" title={stdName}>{stdName}</h2>
+                                </div>
+                                <div>
+                                   <span className="inline-block bg-slate-100 border-2 border-slate-800 px-1.5 py-0.5 rounded font-black text-[9px] text-slate-900 truncate max-w-full">{fullClassName}</span>
+                                </div>
+                             </div>
+                             <div className="shrink-0 text-center border-r-[3px] border-slate-300 pr-2 flex flex-col justify-center h-full min-w-[20mm]">
+                                <p className="text-[8px] font-bold text-slate-500 mb-1">رقم الجلوس</p>
+                                <p className="text-lg font-black text-black tracking-widest leading-none">{student?.seat_number || '---'}</p>
                              </div>
                           </div>
                        </div>
@@ -1283,21 +1314,29 @@ function ExamCommitteesControl() {
                        <div key={`d-${si}`} className="w-[85mm] h-[55mm] border-[3px] border-black relative flex flex-col bg-white overflow-hidden rounded-[1rem]" style={{ pageBreakInside: 'avoid' }}>
                           <div className="bg-slate-100 border-b-[3px] border-black p-2 flex justify-between items-center shrink-0">
                              <div className="text-right">
-                                <h3 className="font-black text-[12px] text-black leading-none">مدرسة الرفعة النموذجية بنين (م-ث)</h3>
-                                <p className="text-[9px] font-bold text-slate-700 mt-1">بطاقة جلوس اختبارات نهاية العام</p>
+                                <h3 className="font-black text-[11px] text-black leading-none">مدرسة الرفعة النموذجية بنين (م-ث)</h3>
+                                <p className="text-[8px] font-bold text-slate-700 mt-1">بطاقة جلوس اختبارات نهاية العام</p>
                              </div>
-                             <div className="bg-black text-white px-3 py-1.5 font-black text-xs border border-black rounded-lg">{printData.committee?.name || 'غير محدد'}</div>
+                             <div className="bg-black text-white px-3 py-1 font-black text-[10px] border border-black rounded-lg">{printData.committee?.name || 'غير محدد'}</div>
                           </div>
-                          <div className="flex p-3 gap-3 items-center flex-1">
-                             <div className="w-[22mm] h-[22mm] p-0.5 border-2 border-slate-800 rounded-lg shrink-0"><img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" /></div>
-                             <div className="flex-1">
-                                <p className="text-[9px] font-bold text-slate-500 mb-0.5">اسم الطالب</p>
-                                <h2 className="text-[13px] font-black text-black mb-2 leading-tight">{stdName}</h2>
-                                <div className="inline-block bg-slate-100 border-2 border-slate-800 px-2 py-1 rounded font-black text-[10px] text-slate-900">{fullClassName}</div>
+                          
+                          {/* 🚀 هندسة التفاف النصوص الطويلة لتجنب القص */}
+                          <div className="flex p-2.5 gap-2.5 items-center flex-1 overflow-hidden">
+                             <div className="w-[20mm] h-[20mm] p-0.5 border-2 border-slate-800 rounded-lg shrink-0">
+                                <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain" />
                              </div>
-                             <div className="shrink-0 text-center border-r-[3px] border-slate-300 pr-3">
-                                <p className="text-[9px] font-bold text-slate-500 mb-1">رقم الجلوس</p>
-                                <p className="text-2xl font-black text-black tracking-widest">{student?.seat_number || '---'}</p>
+                             <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                <p className="text-[8px] font-bold text-slate-500 mb-0.5">اسم الطالب</p>
+                                <div className="h-[28px] overflow-hidden mb-1 flex items-center">
+                                   <h2 className="text-[12px] font-black text-black leading-tight line-clamp-2 text-right" title={stdName}>{stdName}</h2>
+                                </div>
+                                <div>
+                                   <span className="inline-block bg-slate-100 border-2 border-slate-800 px-1.5 py-0.5 rounded font-black text-[9px] text-slate-900 truncate max-w-full">{fullClassName}</span>
+                                </div>
+                             </div>
+                             <div className="shrink-0 text-center border-r-[3px] border-slate-300 pr-2 flex flex-col justify-center h-full min-w-[20mm]">
+                                <p className="text-[8px] font-bold text-slate-500 mb-1">رقم الجلوس</p>
+                                <p className="text-lg font-black text-black tracking-widest leading-none">{student?.seat_number || '---'}</p>
                              </div>
                           </div>
                        </div>
