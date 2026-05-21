@@ -166,12 +166,12 @@ function ExamCommitteesControl() {
   const engine = useExamSeating();
 
   /* ── State ─────────────────────────────────────────────────────────── */
-  const [committees, setCommittees] = useState<<ExamCommittee[]>([]);
-  const [teachers, setTeachers] = useState<<FormattedTeacher[]>([]);
-  const [invigilators, setInvigilators] = useState<<InvigilatorWithRelations[]>([]);
-  const [timetables, setTimetables] = useState<<ExamTimetable[]>([]);
-  const [allHeads, setAllHeads] = useState<<HeadWithRelations[]>([]);
-  const [studentStats, setStudentStats] = useState<<StudentStats>({
+  const [committees, setCommittees] = useState<ExamCommittee[]>([]);
+  const [teachers, setTeachers] = useState<FormattedTeacher[]>([]);
+  const [invigilators, setInvigilators] = useState<InvigilatorWithRelations[]>([]);
+  const [timetables, setTimetables] = useState<ExamTimetable[]>([]);
+  const [allHeads, setAllHeads] = useState<HeadWithRelations[]>([]);
+  const [studentStats, setStudentStats] = useState<StudentStats>({
     g10: 0, g11_sci: 0, g11_lit: 0, totalAllocated: 0,
   });
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
@@ -183,7 +183,7 @@ function ExamCommitteesControl() {
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<<ActiveTab>('management');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('management');
 
   // Modals
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -197,19 +197,19 @@ function ExamCommitteesControl() {
   // Search & Selection
   const [exemptionSearchTerm, setExemptionSearchTerm] = useState('');
   const [headSearchTerm, setHeadSearchTerm] = useState('');
-  const [selectedExcuseData, setSelectedExcuseData] = useState<<InvigilatorWithRelations | null>(null);
-  const [selectedCommittee, setSelectedCommittee] = useState<<ExamCommittee | null>(null);
+  const [selectedExcuseData, setSelectedExcuseData] = useState<InvigilatorWithRelations | null>(null);
+  const [selectedCommittee, setSelectedCommittee] = useState<ExamCommittee | null>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [teacherSearchTerm, setTeacherSearchTerm] = useState('');
 
   // Builder & Editor
   const [builderData, setBuilderData] = useState({ count: 21, capacity: 14 });
-  const [editCommitteeData, setEditCommitteeData] = useState<<Partial<<ExamCommittee>>({
+  const [editCommitteeData, setEditCommitteeData] = useState<Partial<ExamCommittee>>({
     id: '', name: '', capacity: 14, location: '',
   });
 
   // View
-  const [viewDetails, setViewDetails] = useState<<{
+  const [viewDetails, setViewDetails] = useState<{
     students: StudentAllocationRow[];
     invigs: InvigilatorWithRelations[];
     loading: boolean;
@@ -220,16 +220,16 @@ function ExamCommitteesControl() {
   // Heads
   const [headAssignment, setHeadAssignment] = useState({ date: '', head_teacher_id: '' });
   const [selectedCommitteesForHead, setSelectedCommitteesForHead] = useState<string[]>([]);
-  const [currentHeads, setCurrentHeads] = useState<<HeadWithRelations[]>([]);
+  const [currentHeads, setCurrentHeads] = useState<HeadWithRelations[]>([]);
 
   // Print
   const [isPrinting, setIsPrinting] = useState(false);
-  const [printPayload, setPrintPayload] = useState<<PrintPayload | null>(null);
-  const [printType, setPrintType] = useState<<PrintType | null>(null);
-  const printRef = useRef<<HTMLDivElement>(null);
+  const [printPayload, setPrintPayload] = useState<PrintPayload | null>(null);
+  const [printType, setPrintType] = useState<PrintType | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   // Avatar Upload
-  const fileInputRef = useRef<<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
@@ -455,7 +455,7 @@ function ExamCommitteesControl() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetUserId) return;
     setIsUploadingAvatar(true);
@@ -865,7 +865,7 @@ function ExamCommitteesControl() {
             }
           }
 
-          const names: Record<<PrintType, string> = {
+          const names: Record<PrintType, string> = {
             door_sheet: `محضر_${printPayload.committee.name}_يوم_${activeExamDate}`,
             desk_cards: `بطاقات_طاولة_${printPayload.committee.name}`,
             class_cards: `بطاقات_طلاب_${printPayload.className || ''}`,
