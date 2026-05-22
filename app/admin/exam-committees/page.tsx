@@ -17,7 +17,7 @@ import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
 // =========================================================================
-// 1. 🛡️ جدار الحماية المبسط (بدون حلقات لا نهائية)
+// 1. 🛡️ جدار الحماية المبسط
 // =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
@@ -56,6 +56,7 @@ function ExamCommitteesControl() {
   const buildCommittees = engineContext.buildCommittees || (async () => false);
   const nukeEverything = engineContext.nukeEverything || (async () => false);
   const generateSeatingAndDistribute = engineContext.generateSeatingAndDistribute || (async () => ({success: false}));
+  const addInvigilatorToDay = engineContext.addInvigilatorToDay || (async () => false);
 
   const [committees, setCommittees] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
@@ -101,7 +102,7 @@ function ExamCommitteesControl() {
 
   const [isPrinting, setIsPrinting] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
-  const [printType, setPrintType] = useState<'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | null>(null);
+  const [printType, setPrintType] = useState<'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids' | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
@@ -427,15 +428,26 @@ function ExamCommitteesControl() {
     }
   };
 
+  // 🚀 التعديل الأول: تطبيق الهوك الذكي المحدث
   const handleAddInvigilator = async () => {
-    if (!selectedTeacherId || !selectedCommittee?.id || !activeExamDate) { alert('يرجى التأكد من اختيار المعلم واللجنة وتحديد تاريخ الاختبار من الأعلى!'); return; }
+    if (!selectedTeacherId || !selectedCommittee?.id || !activeExamDate) { 
+      alert('يرجى التأكد من اختيار المعلم واللجنة وتحديد تاريخ الاختبار من الأعلى!'); 
+      return; 
+    }
+    
     const currentInvigs = invigilators.filter(i => String(i?.committee_id) === String(selectedCommittee.id) && i.exam_date === activeExamDate);
-    if (currentInvigs.length >= 2) { alert('أقصى حد مراقبين 2 في اليوم الواحد لهذه اللجنة!'); return; }
-    if (invigilators.some(i => String(i?.teacher_id) === String(selectedTeacherId) && i.exam_date === activeExamDate)) { alert('هذا المعلم مكلف بمراقبة لجنة أخرى في هذا اليوم!'); return; }
-    try { 
-      await supabase.from('committee_invigilators').insert({ committee_id: selectedCommittee.id, teacher_id: selectedTeacherId, exam_date: activeExamDate, status: 'pending' }); 
-      setIsAssignModalOpen(false); setSelectedTeacherId(''); setTeacherSearchTerm(''); fetchData(); 
-    } catch (error) { alert('خطأ في التكليف.'); }
+    if (currentInvigs.length >= 2) { 
+      alert('أقصى حد مراقبين 2 في اليوم الواحد لهذه اللجنة!'); 
+      return; 
+    }
+
+    const success = await addInvigilatorToDay(selectedCommittee.id, selectedTeacherId, activeExamDate);
+    if (success) {
+      setIsAssignModalOpen(false); 
+      setSelectedTeacherId(''); 
+      setTeacherSearchTerm(''); 
+      fetchData(); 
+    }
   };
 
   const handleRemoveInvigilator = async (id: string, name: string) => {
@@ -538,11 +550,12 @@ function ExamCommitteesControl() {
     } catch (err: any) { alert('حدث خطأ أثناء التوزيع الآلي: ' + err.message); } finally { setIsAutoAssigning(false); }
   };
 
-  const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards', classNameToPrint?: string) => {
+  // 🚀 التعديل الثاني: تحديث دالة الطباعة بالخيارات المتعددة المتطورة
+  const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
       let query = supabase.from('student_seat_allocations')
-        .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( name )`)
+        .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( id, name )`)
         .eq('academic_year', currentYear).eq('semester', currentSemester);
 
       if (type === 'door_sheet' || type === 'desk_cards') {
@@ -551,22 +564,44 @@ function ExamCommitteesControl() {
 
       const { data } = await query;
       let finalDataToPrint = Array.isArray(data) ? data : [];
-      const committee = committees.find(c => String(c?.id) === String(committeeId)) || { name: 'لجنة غير محددة' };
-      const committeeInvigs = committeeId ? invigilators.filter(i => String(i?.committee_id) === String(committeeId) && i.exam_date === activeExamDate) : [];
+      const committee = committees.find(c => String(c?.id) === String(committeeId)) || { name: 'لجنة عامة' };
       
-      if (type === 'class_cards' && classNameToPrint) {
-        finalDataToPrint = finalDataToPrint.filter(s => getFullClassName(s?.students) === classNameToPrint);
-        finalDataToPrint.sort((a, b) => {
-           const nameA = getSafeName(a?.students?.users);
-           const nameB = getSafeName(b?.students?.users);
-           return nameA.localeCompare(nameB, 'ar');
-        });
+      let currentDayInvigilators = [];
+      if (type === 'invigilator_ids') {
+        const { data: invigData } = await supabase.from('committee_invigilators')
+          .select('id, committee_id, teacher_id, exam_date, users(full_name, avatar_url), exam_committees(name)')
+          .eq('exam_date', activeExamDate);
+        currentDayInvigilators = invigData || [];
       }
 
-      if (type !== 'invigilator_ids' && finalDataToPrint.length === 0) { alert('لا يوجد طلاب للطباعة!'); setIsPrinting(false); return; }
-      if (type === 'invigilator_ids' && committeeInvigs.length === 0) { alert('لا يوجد مراقبون في هذا اليوم!'); setIsPrinting(false); return; }
+      if (type === 'class_cards' && classNameToPrint) {
+        finalDataToPrint = finalDataToPrint.filter(s => getFullClassName(s?.students) === classNameToPrint);
+        finalDataToPrint.sort((a, b) => getSafeName(a?.students?.users).localeCompare(getSafeName(b?.students?.users), 'ar'));
+      }
 
-      setPrintData({ students: finalDataToPrint, committee, invigilators: committeeInvigs, className: classNameToPrint }); 
+      if (type !== 'invigilator_ids' && type !== 'head_ids' && finalDataToPrint.length === 0) { 
+        alert('لا يوجد طلاب للطباعة!'); 
+        setIsPrinting(false); 
+        return; 
+      }
+      if (type === 'invigilator_ids' && currentDayInvigilators.length === 0) { 
+        alert('لا يوجد مراقبون مكلفون في هذا اليوم لطباعة هوياتهم!'); 
+        setIsPrinting(false); 
+        return; 
+      }
+      if (type === 'head_ids' && currentHeads.length === 0) {
+        alert('لا يوجد رؤساء لجان مكلفون في هذا اليوم لطباعة هوياتهم!');
+        setIsPrinting(false);
+        return;
+      }
+
+      setPrintData({ 
+        students: finalDataToPrint, 
+        committee, 
+        invigilators: currentDayInvigilators, 
+        className: classNameToPrint,
+        heads: currentHeads
+      }); 
       setPrintType(type);
 
       setTimeout(async () => {
@@ -603,7 +638,6 @@ function ExamCommitteesControl() {
             pageElement.style.cssText = originalCssText;
             const imgData = canvas.toDataURL('image/jpeg', 1.0); 
             
-            // 🚀 خوارزمية التقطيع التلقائي للصفحات الطويلة جداً
             const imgProps = pdf.getImageProperties(imgData);
             const totalImgHeightInMm = (imgProps.height * pdfWidth) / imgProps.width;
             
@@ -632,7 +666,8 @@ function ExamCommitteesControl() {
           if (type === 'door_sheet') fileName = `محضر_لجنة_${committee.name}_يوم_${activeExamDate}`;
           if (type === 'desk_cards') fileName = `بطاقات_طاولة_${committee.name}`;
           if (type === 'class_cards') fileName = `بطاقات_طلاب_${classNameToPrint}`;
-          if (type === 'invigilator_ids') fileName = `هويات_المراقبين_${committee.name}_يوم_${activeExamDate}`;
+          if (type === 'invigilator_ids') fileName = `هويات_المراقبين_ليوم_${activeExamDate}`;
+          if (type === 'head_ids') fileName = `هويات_رؤساء_اللجان_ليوم_${activeExamDate}`;
           pdf.save(`${fileName}.pdf`);
         } catch (err: any) { alert('حدث خطأ أثناء بناء الـ PDF.'); } finally { setPrintData(null); setPrintType(null); setIsPrinting(false); setIsClassPrintModalOpen(false); }
       }, 3000); 
@@ -984,6 +1019,24 @@ function ExamCommitteesControl() {
                     
                     <button type="button" onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة</button>
                     <button type="button" onClick={handleSoftReset} className="flex-1 sm:flex-none px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-black rounded-xl flex justify-center items-center gap-2"><Trash2 className="w-5 h-5" /> تفريغ</button>
+
+                    {/* 🚀 التعديل الثالث: أزرار طباعة الهوية اليومية الإضافية المدمجة */}
+                    <button 
+                      type="button" 
+                      onClick={() => printDocument('', 'invigilator_ids')} 
+                      className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"
+                    >
+                      <Contact className="w-5 h-5"/> هويات المراقبين اليومية
+                    </button>
+
+                    <button 
+                      type="button" 
+                      onClick={() => printDocument('', 'head_ids')} 
+                      className="flex-1 sm:flex-none px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"
+                    >
+                      <Crown className="w-5 h-5"/> هويات رؤساء اللجان
+                    </button>
+
                     <button type="button" onClick={handleNuclear} className="flex-1 sm:flex-none px-6 py-3 bg-rose-100 hover:bg-rose-200 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 mr-auto"><AlertTriangle className="w-5 h-5" /> هدم</button>
                   </>
                 )}
@@ -1011,7 +1064,6 @@ function ExamCommitteesControl() {
                             <h3 className={`text-lg font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{String(committee?.name || 'بدون اسم')}</h3>
                             <p className="text-[10px] font-bold text-slate-400 mt-1">السعة: {Number(committee?.capacity || 0)} {committee?.location && `| ${String(committee.location)}`}</p>
                           </div>
-                          {/* 🚀 الحل الجذري للأزرار مع منع التداخل stopPropagation */}
                           <div className="flex gap-2">
                              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openViewModal(committee); }} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
                                {actionLoadingId === `view-${committee.id}` ? <Loader2 className="w-5 h-5 animate-spin"/> : <Eye className="w-5 h-5"/>}
@@ -1248,7 +1300,7 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🖨️ قوالب الطباعة المخفية (تمت هندسة تقسيم الصفحات للمحاضر وقص الأسماء بدقة للبطاقات) */}
+      {/* 🚀 التعديل الرابع: تحسين الحاوية ومعالج قوالب الهويات اليومية للامتحانات */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl">
@@ -1315,7 +1367,7 @@ function ExamCommitteesControl() {
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
-                    const commName = student?.exam_committees?.name || 'غير محدد';
+                    const commName = student?.exam_committees?.name || 'غير حدد';
                     const qrPayload = `raf-id:${student?.student_id}`; 
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
@@ -1329,7 +1381,6 @@ function ExamCommitteesControl() {
                              <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{commName}</div>
                           </div>
                           
-                          {/* 🚀 هندسة الكلاسيك CSS لضمان عدم القص والترتيب السليم */}
                           <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
                              <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -1338,7 +1389,6 @@ function ExamCommitteesControl() {
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
                                 <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
-                                   {/* استخدام display: block يضمن الالتفاف الطبيعي دون تكسير الحروف */}
                                    <h2 style={{ fontSize: '13px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0, display: 'block' }}>{stdName}</h2>
                                 </div>
                                 <div style={{ marginTop: '2px' }}>
@@ -1376,7 +1426,6 @@ function ExamCommitteesControl() {
                              <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{printData.committee?.name || 'غير محدد'}</div>
                           </div>
                           
-                          {/* 🚀 هندسة الكلاسيك CSS لضمان عدم القص والترتيب السليم */}
                           <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
                              <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -1385,7 +1434,6 @@ function ExamCommitteesControl() {
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
                                 <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
-                                   {/* استخدام display: block يضمن الالتفاف الطبيعي دون تكسير الحروف */}
                                    <h2 style={{ fontSize: '13px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0, display: 'block' }}>{stdName}</h2>
                                 </div>
                                 <div style={{ marginTop: '2px' }}>
@@ -1403,6 +1451,99 @@ function ExamCommitteesControl() {
                  })}
               </div>
             ))}
+
+            {/* 📄 4. هويات المراقبين الديناميكية المتغيرة (غير مقيدة برقم لجنة ثابت بل اللجنة المتغيرة لليوم) */}
+            {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
+              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+                 {chunk.map((inv: any, si) => {
+                    const teacherName = getSafeName(inv?.users);
+                    const commName = inv?.exam_committees?.name || 'مراقب احتياط';
+                    return (
+                       <div key={`inv-card-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid #10b981', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
+                          <div style={{ backgroundColor: '#f0fdf4', borderBottom: '3px solid #10b981', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '11px', color: '#064e3b' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#10b981', marginTop: '2px' }}>كنترول امتحانات نهاية الفصل الثاني</div>
+                             </div>
+                             <div style={{ backgroundColor: '#10b981', color: 'white', padding: '3px 8px', fontWeight: '900', fontSize: '10px', borderRadius: '6px' }}>{commName}</div>
+                          </div>
+                          
+                          <div style={{ padding: '10px', display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }} dir="rtl">
+                             <div style={{ width: '22mm', height: '22mm', border: '2px solid #10b981', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f3f4f6' }}>
+                                {inv?.users?.avatar_url ? (
+                                  <img src={inv.users.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#10b981', fontSize: '20px' }}>{String(teacherName).charAt(0)}</div>
+                                )}
+                             </div>
+                             
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم المشرّف / المراقب</div>
+                                <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', display: 'block', margin: 0 }}>{teacherName}</h2>
+                                </div>
+                                <div style={{ marginTop: '4px' }}>
+                                   <span style={{ display: 'inline-block', backgroundColor: '#e0f2fe', border: '1px solid #0284c7', padding: '1px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0369a1' }}>مراقب لجان دائم</span>
+                                </div>
+                             </div>
+                             
+                             <div style={{ borderRight: '2px solid #e2e8f0', paddingRight: '8px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '22mm', flexShrink: 0 }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>تاريخ التكليف</div>
+                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#0f172a' }}>{activeExamDate}</div>
+                             </div>
+                          </div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
+            {/* 📄 5. هويات رؤساء اللجان المتوافقة مع التكليف الشامل لليوم */}
+            {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
+              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+                 {chunk.map((head: any, si) => {
+                    const headName = getSafeName(head?.users);
+                    const rangeComms = head?.committees_range || 'جميع اللجان';
+                    return (
+                       <div key={`head-card-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid #d97706', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
+                          <div style={{ backgroundColor: '#fef3c7', borderBottom: '3px solid #d97706', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '11px', color: '#78350f' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#b45309', marginTop: '2px' }}>التكليف الإشرافي العام والقيادي للجان</div>
+                             </div>
+                             <div style={{ backgroundColor: '#d97706', color: 'white', padding: '3px 8px', fontWeight: '900', fontSize: '9px', borderRadius: '6px' }}>رئيس اللجان</div>
+                          </div>
+                          
+                          <div style={{ padding: '10px', display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }} dir="rtl">
+                             <div style={{ width: '22mm', height: '22mm', border: '2px solid #d97706', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f3f4f6' }}>
+                                {head?.users?.avatar_url ? (
+                                  <img src={head.users.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#d97706', fontSize: '20px' }}>👑</div>
+                                )}
+                             </div>
+                             
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>رئيس اللجنة القيادي</div>
+                                <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', display: 'block', margin: 0 }}>{headName}</h2>
+                                </div>
+                                <div style={{ marginTop: '4px' }}>
+                                   <div style={{ fontSize: '8px', fontWeight: 'black', color: '#b45309', backgroundColor: '#fffbeb', padding: '2px 5px', borderRadius: '4px', border: '1px solid #fef3c7', display: 'inline-block' }}>نطاق الإشراف: {rangeComms}</div>
+                                </div>
+                             </div>
+                             
+                             <div style={{ borderRight: '2px solid #e2e8f0', paddingRight: '8px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '22mm', flexShrink: 0 }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اليوم والامتحان</div>
+                                <div style={{ fontSize: '9px', fontWeight: '900', color: '#0f172a' }}>{activeExamDate}</div>
+                             </div>
+                          </div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
           </div>
         </div>
       )}
