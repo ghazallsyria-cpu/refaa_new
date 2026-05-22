@@ -232,7 +232,9 @@ export function useExamSeating() {
         .eq('exam_date', examDate);
 
       if (duplicateCheck && duplicateCheck.length > 0) {
-        const commName = duplicateCheck[0]?.exam_committees?.name || 'لجنة أخرى';
+// نقوم بعمل كاستينج لـ exam_committees كـ any للتعامل مع كونه كائناً أو مصفوفة ديناميكية دون اعتراض من TypeScript
+const commTarget = duplicateCheck[0]?.exam_committees as any;
+const commName = Array.isArray(commTarget) ? commTarget[0]?.name : commTarget?.name || 'لجنة أخرى';
         throw new Error(`هذا المعلم مكلف بالفعل في هذا اليوم بـ (${commName})!`);
       }
 
