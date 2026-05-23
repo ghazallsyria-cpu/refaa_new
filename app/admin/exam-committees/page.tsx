@@ -1316,74 +1316,76 @@ function ExamCommitteesControl() {
       {/* 🖨️ قوالب الطباعة المخفية */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
-          <div ref={printRef} className="flex flex-col bg-white" dir="rtl">
+<div ref={printRef} className="flex flex-col bg-white" dir="rtl">
             
             {/* 📄 1. محضر اللجنة / كشف الباب الرسمي المقسم بالصفحات لمنع التداخل */}
-            {printType === 'door_sheet' && chunkArray(printData.students, 16).map((chunk, pageIdx, chunksArr) => (
-              <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative p-10 flex flex-col" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+            {printType === 'door_sheet' && chunkArray(printData.students, 13).map((chunk, pageIdx, chunksArr) => (
+              <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  
-                 <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0">
+                 <div className="text-center mb-4 border-b-[3px] border-black pb-3 shrink-0">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
-                    <h3 className="text-3xl font-black text-black mt-4 border-2 border-black inline-block px-8 py-2 bg-slate-100 rounded-2xl">{printData.committee?.name || 'لجنة غير محددة'}</h3>
-                    <p className="text-base font-black text-black mt-3">محضر سير لجان الامتحانات - الفصل الدراسي الثاني 2025/2026</p>
+                    <h3 className="text-2xl font-black text-black mt-3 border-2 border-black inline-block px-8 py-1.5 bg-slate-100 rounded-2xl">{printData.committee?.name || 'لجنة غير محددة'}</h3>
+                    <p className="text-sm font-black text-black mt-2">محضر سير لجان الامتحانات - الفصل الدراسي الثاني 2025/2026</p>
                  </div>
                  
-                 <div className="flex justify-between items-center mb-6 px-4 font-black text-lg text-black border-2 border-slate-300 p-4 rounded-xl shrink-0">
+                 <div className="flex justify-between items-center mb-4 px-4 font-black text-base text-black border-2 border-slate-300 p-3 rounded-xl shrink-0">
                     <p>اليوم والتاريخ: ............................................</p>
                     <p>المادة: ............................................</p>
                  </div>
 
-                 <table className="w-full border-collapse border-[3px] border-black text-base text-black flex-1">
+                 <table className="w-full border-collapse border-[3px] border-black text-sm text-black flex-1">
                    <thead>
-                     <tr className="bg-slate-100 border-b-[3px] border-black text-black h-12">
-                       <th className="border-l-[3px] border-black p-2 w-12 text-black">م</th>
-                       <th className="border-l-[3px] border-black p-2 w-32 text-black">رقم الجلوس</th>
-                       <th className="border-l-[3px] border-black p-2 text-black">اسم الطالب الرباعي</th>
-                       <th className="p-2 w-40 text-black">الصف والشعبة</th>
+                     <tr className="bg-slate-100 border-b-[3px] border-black h-10">
+                       <th className="border-l-[3px] border-black p-2 w-10 text-center">م</th>
+                       <th className="border-l-[3px] border-black p-2 w-28 text-center">رقم الجلوس</th>
+                       <th className="border-l-[3px] border-black p-2 text-center">اسم الطالب الرباعي</th>
+                       <th className="p-2 w-36 text-center">الصف والشعبة</th>
                      </tr>
                    </thead>
                    <tbody>
                      {chunk.map((s:any, i:number) => {
-                       const globalIndex = (pageIdx * 16) + i + 1;
+                       const globalIndex = (pageIdx * 13) + i + 1;
                        return (
-                         <tr key={`p1-${i}`} className="border-b-2 border-black h-12 text-black">
-                           <td className="border-l-[3px] border-black p-2 text-center font-bold text-black">{globalIndex}</td>
-                           <td className="border-l-[3px] border-black p-2 text-center font-black text-xl tracking-widest text-black">{s?.seat_number}</td>
-                           <td className="border-l-[3px] border-black p-2 font-bold px-4 text-black text-lg truncate max-w-[300px]">{getSafeName(s?.students?.users)}</td>
-                           <td className="p-2 text-center font-bold text-sm text-black">{getFullClassName(s?.students)}</td>
+                         <tr key={`p1-${i}`} className="border-b-[2px] border-black h-[42px]">
+                           <td className="border-l-[3px] border-black px-2 text-center font-bold">{globalIndex}</td>
+                           <td className="border-l-[3px] border-black px-2 text-center font-black text-lg tracking-widest">{s?.seat_number}</td>
+                           <td className="border-l-[3px] border-black px-3 font-bold text-base">{getSafeName(s?.students?.users)}</td>
+                           <td className="px-2 text-center font-bold text-xs">{getFullClassName(s?.students)}</td>
                          </tr>
                        )
                      })}
                    </tbody>
                  </table>
 
-                 {pageIdx === chunksArr.length - 1 && (
-                   <div className="flex justify-between px-6 text-black mt-8 pt-4 shrink-0">
+                 {pageIdx === chunksArr.length - 1 ? (
+                   <div className="flex justify-between px-6 text-black mt-6 pt-2 shrink-0">
                       <div className="text-center">
-                         <p className="font-black text-lg mb-2">المراقب الأول</p>
-                         <p className="font-bold text-base mb-6 text-slate-800">{printData.invigilators?.[0] ? getSafeName(printData.invigilators[0].users) : '.......................................'}</p>
-                         <p className="font-black">التوقيع: ..........................</p>
+                         <p className="font-black text-base mb-1">المراقب الأول</p>
+                         <p className="font-bold text-sm mb-4 text-slate-800">{printData.invigilators?.[0] ? getSafeName(printData.invigilators[0].users) : '.......................................'}</p>
+                         <p className="font-black text-sm">التوقيع: ..........................</p>
                       </div>
                       <div className="text-center">
-                         <p className="font-black text-lg mb-2">المراقب الثاني</p>
-                         <p className="font-bold text-base mb-6 text-slate-800">{printData.invigilators?.[1] ? getSafeName(printData.invigilators[1].users) : '.......................................'}</p>
-                         <p className="font-black">التوقيع: ..........................</p>
+                         <p className="font-black text-base mb-1">المراقب الثاني</p>
+                         <p className="font-bold text-sm mb-4 text-slate-800">{printData.invigilators?.[1] ? getSafeName(printData.invigilators[1].users) : '.......................................'}</p>
+                         <p className="font-black text-sm">التوقيع: ..........................</p>
                       </div>
                       <div className="text-center">
-                         <p className="font-black text-lg mb-2">رئيس اللجنة الإشرافي</p>
-                         <p className="font-bold text-base mb-6 text-slate-800">.......................................</p>
-                         <p className="font-black">التوقيع: ..........................</p>
+                         <p className="font-black text-base mb-1">رئيس اللجنة الإشرافي</p>
+                         <p className="font-bold text-sm mb-4 text-slate-800">.......................................</p>
+                         <p className="font-black text-sm">التوقيع: ..........................</p>
                       </div>
                    </div>
+                 ) : (
+                   <div className="mt-6 pt-2 shrink-0 h-[80px]"></div> /* مساحة فارغة للحفاظ على التناسق في الصفحات غير الأخيرة */
                  )}
-                 <div className="text-left mt-2 text-[10px] font-bold text-slate-500">صفحة {pageIdx + 1} من {chunksArr.length}</div>
+                 <div className="text-left mt-2 text-[10px] font-bold text-slate-500 shrink-0">صفحة {pageIdx + 1} من {chunksArr.length}</div>
               </div>
             ))}
 
             {/* 📄 2. بطاقات الطاولة العرضية للفصول المفرزة */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1392,7 +1394,7 @@ function ExamCommitteesControl() {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={`c-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
+                       <div key={`c-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box' }}>
                           <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
@@ -1400,12 +1402,10 @@ function ExamCommitteesControl() {
                              </div>
                              <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{commName}</div>
                           </div>
-                          
                           <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
                              <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                              </div>
-                             
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
                                 <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
@@ -1415,7 +1415,6 @@ function ExamCommitteesControl() {
                                    <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{fullClassName}</span>
                                 </div>
                              </div>
-                             
                              <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '10px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '20mm', flexShrink: 0 }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
                                 <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', letterSpacing: '2px', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
@@ -1429,7 +1428,7 @@ function ExamCommitteesControl() {
 
             {/* 📄 3. بطاقات الطاولة العادية (مفرزة باللجنة) */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1437,7 +1436,7 @@ function ExamCommitteesControl() {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={`d-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
+                       <div key={`d-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box' }}>
                           <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
@@ -1445,12 +1444,10 @@ function ExamCommitteesControl() {
                              </div>
                              <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{printData.committee?.name || 'غير محدد'}</div>
                           </div>
-                          
                           <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
                              <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
                                 <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                              </div>
-                             
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
                                 <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
@@ -1460,7 +1457,6 @@ function ExamCommitteesControl() {
                                    <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{fullClassName}</span>
                                 </div>
                              </div>
-                             
                              <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '10px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '20mm', flexShrink: 0 }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
                                 <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', letterSpacing: '2px', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
@@ -1474,11 +1470,11 @@ function ExamCommitteesControl() {
 
             {/* 📄 4. هويات المراقبين الثابتة (تصميم فخم، عامة لكل الأيام واللجان) */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
-              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((inv: any, si) => {
                     const teacherName = getSafeName(inv);
                     return (
-                       <div key={`inv-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #0f172a' }}>
+                       <div key={`inv-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #0f172a' }}>
                           <div style={{ background: 'linear-gradient(to right, #0f172a, #1e293b)', borderBottom: '2px solid #d4af37', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '12px', color: '#f8fafc', letterSpacing: '0.5px' }}>مدرسة الرفعة النموذجية بنين</div>
@@ -1515,11 +1511,11 @@ function ExamCommitteesControl() {
 
             {/* 📄 5. هويات رؤساء اللجان المتوافقة مع التكليف الشامل لليوم */}
             {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
-              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((head: any, si) => {
                     const headName = getSafeName(head);
                     return (
-                       <div key={`head-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #78350f' }}>
+                       <div key={`head-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #78350f' }}>
                           <div style={{ background: 'linear-gradient(to right, #78350f, #92400e)', borderBottom: '2px solid #fcd34d', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '12px', color: '#fffbeb', letterSpacing: '0.5px' }}>مدرسة الرفعة النموذجية بنين</div>
@@ -1555,7 +1551,6 @@ function ExamCommitteesControl() {
             ))}
 
           </div>
-        </div>
       )}
       
       <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }`}</style>
