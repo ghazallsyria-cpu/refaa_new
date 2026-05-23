@@ -14,10 +14,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
-import * as Dialog from '@radix-ui/react-dialog'; 
 
 // =========================================================================
-// 1. 🛡️ جدار الحماية المبسط
+// 1. 🛡️ جدار الحماية المبسط (بدون حلقات لا نهائية)
 // =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
@@ -428,19 +427,11 @@ function ExamCommitteesControl() {
     }
   };
 
-  // 🚀 التعديل الأول: تطبيق الهوك الذكي المحدث
   const handleAddInvigilator = async () => {
-    if (!selectedTeacherId || !selectedCommittee?.id || !activeExamDate) { 
-      alert('يرجى التأكد من اختيار المعلم واللجنة وتحديد تاريخ الاختبار من الأعلى!'); 
-      return; 
-    }
-    
+    if (!selectedTeacherId || !selectedCommittee?.id || !activeExamDate) { alert('يرجى التأكد من اختيار المعلم واللجنة وتحديد تاريخ الاختبار من الأعلى!'); return; }
     const currentInvigs = invigilators.filter(i => String(i?.committee_id) === String(selectedCommittee.id) && i.exam_date === activeExamDate);
-    if (currentInvigs.length >= 2) { 
-      alert('أقصى حد مراقبين 2 في اليوم الواحد لهذه اللجنة!'); 
-      return; 
-    }
-
+    if (currentInvigs.length >= 2) { alert('أقصى حد مراقبين 2 في اليوم الواحد لهذه اللجنة!'); return; }
+    
     const success = await addInvigilatorToDay(selectedCommittee.id, selectedTeacherId, activeExamDate);
     if (success) {
       setIsAssignModalOpen(false); 
@@ -550,7 +541,6 @@ function ExamCommitteesControl() {
     } catch (err: any) { alert('حدث خطأ أثناء التوزيع الآلي: ' + err.message); } finally { setIsAutoAssigning(false); }
   };
 
-  // 🚀 التعديل الثاني: تحديث دالة الطباعة بالخيارات المتعددة المتطورة
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -565,43 +555,39 @@ function ExamCommitteesControl() {
       const { data } = await query;
       let finalDataToPrint = Array.isArray(data) ? data : [];
       const committee = committees.find(c => String(c?.id) === String(committeeId)) || { name: 'لجنة عامة' };
+      const committeeInvigs = committeeId ? invigilators.filter(i => String(i?.committee_id) === String(committeeId) && i.exam_date === activeExamDate) : [];
       
       let currentDayInvigilators = [];
+      let eligibleHeadsForPrint = [];
+
       if (type === 'invigilator_ids') {
-        const { data: invigData } = await supabase.from('committee_invigilators')
-          .select('id, committee_id, teacher_id, exam_date, users(full_name, avatar_url), exam_committees(name)')
-          .eq('exam_date', activeExamDate);
-        currentDayInvigilators = invigData || [];
+        currentDayInvigilators = teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head);
+      }
+      
+      if (type === 'head_ids') {
+        eligibleHeadsForPrint = teachers.filter(t => t.is_committee_head);
       }
 
       if (type === 'class_cards' && classNameToPrint) {
         finalDataToPrint = finalDataToPrint.filter(s => getFullClassName(s?.students) === classNameToPrint);
-        finalDataToPrint.sort((a, b) => getSafeName(a?.students?.users).localeCompare(getSafeName(b?.students?.users), 'ar'));
+        finalDataToPrint.sort((a, b) => {
+           const nameA = getSafeName(a?.students?.users);
+           const nameB = getSafeName(b?.students?.users);
+           return nameA.localeCompare(nameB, 'ar');
+        });
       }
 
       if (type !== 'invigilator_ids' && type !== 'head_ids' && finalDataToPrint.length === 0) { 
-        alert('لا يوجد طلاب للطباعة!'); 
-        setIsPrinting(false); 
-        return; 
+        alert('لا يوجد طلاب للطباعة!'); setIsPrinting(false); return; 
       }
       if (type === 'invigilator_ids' && currentDayInvigilators.length === 0) { 
-        alert('لا يوجد مراقبون مكلفون في هذا اليوم لطباعة هوياتهم!'); 
-        setIsPrinting(false); 
-        return; 
+        alert('لا يوجد مراقبون متاحون لطباعة هوياتهم!'); setIsPrinting(false); return; 
       }
-      if (type === 'head_ids' && currentHeads.length === 0) {
-        alert('لا يوجد رؤساء لجان مكلفون في هذا اليوم لطباعة هوياتهم!');
-        setIsPrinting(false);
-        return;
+      if (type === 'head_ids' && eligibleHeadsForPrint.length === 0) {
+        alert('لا يوجد رؤساء لجان معتمدين لطباعة هوياتهم!'); setIsPrinting(false); return;
       }
 
-      setPrintData({ 
-        students: finalDataToPrint, 
-        committee, 
-        invigilators: currentDayInvigilators, 
-        className: classNameToPrint,
-        heads: currentHeads
-      }); 
+      setPrintData({ students: finalDataToPrint, committee, invigilators: type === 'door_sheet' ? committeeInvigs : currentDayInvigilators, className: classNameToPrint, heads: eligibleHeadsForPrint }); 
       setPrintType(type);
 
       setTimeout(async () => {
@@ -641,33 +627,15 @@ function ExamCommitteesControl() {
             const imgProps = pdf.getImageProperties(imgData);
             const totalImgHeightInMm = (imgProps.height * pdfWidth) / imgProps.width;
             
-            if (type === 'door_sheet' && totalImgHeightInMm > pdfHeight) {
-                let heightLeft = totalImgHeightInMm;
-                let position = 0;
-                
-                if (i > 0) pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalImgHeightInMm);
-                heightLeft -= pdfHeight;
-                
-                let loopGuard = 0;
-                while (heightLeft > 0 && loopGuard < 15) {
-                    position = position - pdfHeight;
-                    pdf.addPage();
-                    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalImgHeightInMm);
-                    heightLeft -= pdfHeight;
-                    loopGuard++;
-                }
-            } else {
-                if (i > 0) pdf.addPage(); 
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, totalImgHeightInMm);
-            }
+            if (i > 0) pdf.addPage(); 
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, totalImgHeightInMm);
           }
           let fileName = 'مستند';
           if (type === 'door_sheet') fileName = `محضر_لجنة_${committee.name}_يوم_${activeExamDate}`;
           if (type === 'desk_cards') fileName = `بطاقات_طاولة_${committee.name}`;
           if (type === 'class_cards') fileName = `بطاقات_طلاب_${classNameToPrint}`;
-          if (type === 'invigilator_ids') fileName = `هويات_المراقبين_ليوم_${activeExamDate}`;
-          if (type === 'head_ids') fileName = `هويات_رؤساء_اللجان_ليوم_${activeExamDate}`;
+          if (type === 'invigilator_ids') fileName = `هويات_المراقبين_الدائمة`;
+          if (type === 'head_ids') fileName = `هويات_رؤساء_اللجان_الدائمة`;
           pdf.save(`${fileName}.pdf`);
         } catch (err: any) { alert('حدث خطأ أثناء بناء الـ PDF.'); } finally { setPrintData(null); setPrintType(null); setIsPrinting(false); setIsClassPrintModalOpen(false); }
       }, 3000); 
@@ -760,8 +728,8 @@ function ExamCommitteesControl() {
                        return (
                          <div key={`tr-${tIndex}`} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col gap-4">
                            <div className="flex items-center gap-3">
-                             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black shrink-0 text-xl border-2 border-white shadow-sm">
-                               {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-full h-full rounded-full object-cover" alt="avatar" /> : String(t?.full_name || 'م').charAt(0)}
+                             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black shrink-0 text-xl border-2 border-white shadow-sm overflow-hidden">
+                               {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-full h-full object-cover" alt="avatar" /> : String(t?.full_name || 'م').charAt(0)}
                              </div>
                              <div>
                                <h4 className="font-black text-slate-800 text-sm">{String(t?.full_name || 'غير معروف')}</h4>
@@ -976,7 +944,7 @@ function ExamCommitteesControl() {
                        {currentHeads.length > 0 ? currentHeads.map((head, hi) => (
                           <div key={`h-asg-${hi}`} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-slate-50 shadow-sm hover:shadow-md transition-shadow">
                              <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center font-black shrink-0">
+                                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center font-black shrink-0 overflow-hidden">
                                    {head?.users?.avatar_url ? <img src={head.users.avatar_url} className="w-full h-full rounded-full object-cover" alt="img" /> : <Crown className="w-6 h-6"/>}
                                 </div>
                                 <div>
@@ -1019,23 +987,10 @@ function ExamCommitteesControl() {
                     
                     <button type="button" onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة</button>
                     <button type="button" onClick={handleSoftReset} className="flex-1 sm:flex-none px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-black rounded-xl flex justify-center items-center gap-2"><Trash2 className="w-5 h-5" /> تفريغ</button>
-
-                    {/* 🚀 التعديل الثالث: أزرار طباعة الهوية اليومية الإضافية المدمجة */}
-                    <button 
-                      type="button" 
-                      onClick={() => printDocument('', 'invigilator_ids')} 
-                      className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"
-                    >
-                      <Contact className="w-5 h-5"/> هويات المراقبين اليومية
-                    </button>
-
-                    <button 
-                      type="button" 
-                      onClick={() => printDocument('', 'head_ids')} 
-                      className="flex-1 sm:flex-none px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"
-                    >
-                      <Crown className="w-5 h-5"/> هويات رؤساء اللجان
-                    </button>
+                    
+                    {/* أزرار الطباعة العامة الفخمة */}
+                    <button type="button" onClick={() => printDocument('', 'invigilator_ids')} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"><Contact className="w-5 h-5"/> هويات المراقبين</button>
+                    <button type="button" onClick={() => printDocument('', 'head_ids')} className="flex-1 sm:flex-none px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"><Crown className="w-5 h-5"/> هويات الرؤساء</button>
 
                     <button type="button" onClick={handleNuclear} className="flex-1 sm:flex-none px-6 py-3 bg-rose-100 hover:bg-rose-200 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 mr-auto"><AlertTriangle className="w-5 h-5" /> هدم</button>
                   </>
@@ -1045,7 +1000,7 @@ function ExamCommitteesControl() {
               {!activeExamDate ? (
                 <div className="flex justify-center p-20 flex-col items-center gap-4 bg-white rounded-3xl border border-dashed border-indigo-200">
                    <CalendarDays className="w-16 h-16 text-indigo-200" />
-                   <h3 className="font-black text-slate-500">يرجى إضافة جداول اختبارات أولاً ليتم عرض اللجان وتوزيع المراقبين حسب الأيام.</h3>
+                   <h3 className="font-black text-slate-500">يرجى إضافة جداول اختبارات وتحديد اليوم الامتحاني لعرض اللجان.</h3>
                 </div>
               ) : isLoading ? (
                 <div className="flex justify-center p-20"><Loader2 className="w-12 h-12 animate-spin text-indigo-500" /></div>
@@ -1112,8 +1067,7 @@ function ExamCommitteesControl() {
 
                         <div className="grid grid-cols-2 gap-2 mt-auto pt-3 border-t border-slate-100">
                           <button type="button" onClick={() => printDocument(committee?.id, 'door_sheet')} className="col-span-2 bg-slate-800 text-white text-[10px] font-black py-2 rounded-lg hover:bg-slate-700"><PrinterIcon className="w-3 h-3 inline mr-1"/> محضر اللجنة (كشف الحضور)</button>
-                          <button type="button" onClick={() => printDocument(committee?.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100"><IdCard className="w-3 h-3 inline mr-1"/> الطاولة</button>
-                          <button type="button" onClick={() => printDocument(committee?.id, 'invigilator_ids')} className="bg-emerald-50 text-emerald-700 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100"><Contact className="w-3 h-3 inline mr-1"/> الهويات</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'desk_cards')} className="col-span-2 bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100"><IdCard className="w-3 h-3 inline mr-1"/> الطاولة</button>
                         </div>
                       </div>
                     );
@@ -1125,7 +1079,7 @@ function ExamCommitteesControl() {
         </div>
       </div>
 
-      {/* 🚀 نافذة بناء اللجان الديناميكية */}
+      {/* 🚀 النوافذ المنبثقة (Modals) توضع هنا بشكل آمن داخل المكون الرئيسي */}
       {isBuilderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
@@ -1300,74 +1254,140 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🚀 التعديل الرابع: تحسين الحاوية ومعالج قوالب الهويات اليومية للامتحانات */}
+      {/* 🚀 نافذة إضافة/تعديل لجنة يدوياً */}
+      <AnimatePresence>
+        {isCommitteeModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'تعديل بيانات اللجنة' : 'إضافة لجنة جديدة يدويّاً'}</h3>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-sm font-bold text-slate-600 mb-1 block">اسم اللجنة (مثال: لجنة الحالات الخاصة)</label>
+                  <input type="text" value={editCommitteeData.name} onChange={e => setEditCommitteeData({...editCommitteeData, name: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-bold text-slate-600 mb-1 block">السعة القصوى</label>
+                    <input type="number" min="1" value={editCommitteeData.capacity} onChange={e => setEditCommitteeData({...editCommitteeData, capacity: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-bold text-slate-600 mb-1 block">المكان (اختياري)</label>
+                    <input type="text" placeholder="رقم الفصل..." value={editCommitteeData.location} onChange={e => setEditCommitteeData({...editCommitteeData, location: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={handleSaveCommittee} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-black shadow-md transition-colors">حفظ واعتماد</button>
+                <button type="button" onClick={() => setIsCommitteeModalOpen(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-black transition-colors">إلغاء</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🚀 نافذة التكليف اليدوي لتعويض مراقب غائب */}
+      <AnimatePresence>
+        {isAssignModalOpen && selectedCommittee && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2"><UserPlus className="w-6 h-6 text-emerald-600"/> تعويض / تكليف مراقب</h3>
+              <p className="text-sm font-bold text-slate-500 mb-6">لجنة: <span className="text-indigo-600">{selectedCommittee.name}</span> | التاريخ: <span className="text-indigo-600">{activeExamDate}</span></p>
+              
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-sm font-bold text-slate-600 mb-2 block">اختر المعلم المتاح للتكليف:</label>
+                  <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-emerald-500">
+                    <option value="">- اختر معلم -</option>
+                    {teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head).map((t, idx) => (
+                      <option key={idx} value={t.id}>{t.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={handleAddInvigilator} disabled={!selectedTeacherId} className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-3 rounded-xl font-black shadow-md transition-colors">اعتماد التكليف</button>
+                <button type="button" onClick={() => setIsAssignModalOpen(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-black transition-colors">إلغاء</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🖨️ قوالب الطباعة المخفية */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl">
             
-            {/* 📄 1. محضر اللجنة / كشف الباب الرسمي */}
-            {printType === 'door_sheet' && (
-              <div className="print-page-wrapper bg-white mx-auto relative p-10" style={{ width: '794px' }}>
-                 <div className="text-center mb-6 border-b-[3px] border-black pb-4">
+            {/* 📄 1. محضر اللجنة / كشف الباب الرسمي المقسم بالصفحات لمنع التداخل */}
+            {printType === 'door_sheet' && chunkArray(printData.students, 16).map((chunk, pageIdx, chunksArr) => (
+              <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative p-10 flex flex-col" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
+                 
+                 <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
                     <h3 className="text-3xl font-black text-black mt-4 border-2 border-black inline-block px-8 py-2 bg-slate-100 rounded-2xl">{printData.committee?.name || 'لجنة غير محددة'}</h3>
                     <p className="text-base font-black text-black mt-3">محضر سير لجان الامتحانات - الفصل الدراسي الثاني 2025/2026</p>
                  </div>
                  
-                 <div className="flex justify-between items-center mb-6 px-4 font-black text-lg text-black border-2 border-slate-300 p-4 rounded-xl">
+                 <div className="flex justify-between items-center mb-6 px-4 font-black text-lg text-black border-2 border-slate-300 p-4 rounded-xl shrink-0">
                     <p>اليوم والتاريخ: ............................................</p>
                     <p>المادة: ............................................</p>
                  </div>
 
-                 <table className="w-full border-collapse border-[3px] border-black text-base text-black mb-8">
+                 <table className="w-full border-collapse border-[3px] border-black text-base text-black flex-1">
                    <thead>
-                     <tr className="bg-slate-100 border-b-[3px] border-black text-black">
-                       <th className="border-l-[3px] border-black p-3 w-12 text-black">م</th>
-                       <th className="border-l-[3px] border-black p-3 w-32 text-black">رقم الجلوس</th>
-                       <th className="border-l-[3px] border-black p-3 text-black">اسم الطالب الرباعي</th>
-                       <th className="p-3 w-40 text-black">الصف والشعبة</th>
+                     <tr className="bg-slate-100 border-b-[3px] border-black text-black h-12">
+                       <th className="border-l-[3px] border-black p-2 w-12 text-black">م</th>
+                       <th className="border-l-[3px] border-black p-2 w-32 text-black">رقم الجلوس</th>
+                       <th className="border-l-[3px] border-black p-2 text-black">اسم الطالب الرباعي</th>
+                       <th className="p-2 w-40 text-black">الصف والشعبة</th>
                      </tr>
                    </thead>
                    <tbody>
-                     {printData.students.map((s:any, i:number) => (
-                       <tr key={`p1-${i}`} className="border-b-2 border-black h-12 text-black">
-                         <td className="border-l-[3px] border-black p-2 text-center font-bold text-black">{i + 1}</td>
-                         <td className="border-l-[3px] border-black p-2 text-center font-black text-xl tracking-widest text-black">{s?.seat_number}</td>
-                         <td className="border-l-[3px] border-black p-2 font-bold px-4 text-black text-lg">{getSafeName(s?.students?.users)}</td>
-                         <td className="p-2 text-center font-bold text-sm text-black">{getFullClassName(s?.students)}</td>
-                       </tr>
-                     ))}
+                     {chunk.map((s:any, i:number) => {
+                       const globalIndex = (pageIdx * 16) + i + 1;
+                       return (
+                         <tr key={`p1-${i}`} className="border-b-2 border-black h-12 text-black">
+                           <td className="border-l-[3px] border-black p-2 text-center font-bold text-black">{globalIndex}</td>
+                           <td className="border-l-[3px] border-black p-2 text-center font-black text-xl tracking-widest text-black">{s?.seat_number}</td>
+                           <td className="border-l-[3px] border-black p-2 font-bold px-4 text-black text-lg truncate max-w-[300px]">{getSafeName(s?.students?.users)}</td>
+                           <td className="p-2 text-center font-bold text-sm text-black">{getFullClassName(s?.students)}</td>
+                         </tr>
+                       )
+                     })}
                    </tbody>
                  </table>
 
-                 <div className="flex justify-between px-6 text-black border-t-[3px] border-black pt-8">
-                    <div className="text-center">
-                       <p className="font-black text-lg mb-2">المراقب الأول</p>
-                       <p className="font-bold text-base mb-6 text-slate-800">{printData.invigilators?.[0] ? getSafeName(printData.invigilators[0].users) : '.......................................'}</p>
-                       <p className="font-black">التوقيع: ..........................</p>
-                    </div>
-                    <div className="text-center">
-                       <p className="font-black text-lg mb-2">المراقب الثاني</p>
-                       <p className="font-bold text-base mb-6 text-slate-800">{printData.invigilators?.[1] ? getSafeName(printData.invigilators[1].users) : '.......................................'}</p>
-                       <p className="font-black">التوقيع: ..........................</p>
-                    </div>
-                    <div className="text-center">
-                       <p className="font-black text-lg mb-2">رئيس اللجنة الإشرافي</p>
-                       <p className="font-bold text-base mb-6 text-slate-800">.......................................</p>
-                       <p className="font-black">التوقيع: ..........................</p>
-                    </div>
-                 </div>
+                 {pageIdx === chunksArr.length - 1 && (
+                   <div className="flex justify-between px-6 text-black mt-8 pt-4 shrink-0">
+                      <div className="text-center">
+                         <p className="font-black text-lg mb-2">المراقب الأول</p>
+                         <p className="font-bold text-base mb-6 text-slate-800">{printData.invigilators?.[0] ? getSafeName(printData.invigilators[0].users) : '.......................................'}</p>
+                         <p className="font-black">التوقيع: ..........................</p>
+                      </div>
+                      <div className="text-center">
+                         <p className="font-black text-lg mb-2">المراقب الثاني</p>
+                         <p className="font-bold text-base mb-6 text-slate-800">{printData.invigilators?.[1] ? getSafeName(printData.invigilators[1].users) : '.......................................'}</p>
+                         <p className="font-black">التوقيع: ..........................</p>
+                      </div>
+                      <div className="text-center">
+                         <p className="font-black text-lg mb-2">رئيس اللجنة الإشرافي</p>
+                         <p className="font-bold text-base mb-6 text-slate-800">.......................................</p>
+                         <p className="font-black">التوقيع: ..........................</p>
+                      </div>
+                   </div>
+                 )}
+                 <div className="text-left mt-2 text-[10px] font-bold text-slate-500">صفحة {pageIdx + 1} من {chunksArr.length}</div>
               </div>
-            )}
+            ))}
 
             {/* 📄 2. بطاقات الطاولة العرضية للفصول المفرزة */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
+              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
-                    const commName = student?.exam_committees?.name || 'غير حدد';
+                    const commName = student?.exam_committees?.name || 'غير محدد';
                     const qrPayload = `raf-id:${student?.student_id}`; 
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
@@ -1409,7 +1429,7 @@ function ExamCommitteesControl() {
 
             {/* 📄 3. بطاقات الطاولة العادية (مفرزة باللجنة) */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px' }}>
+              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1452,46 +1472,41 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 4. هويات المراقبين الديناميكية المتغيرة (غير مقيدة برقم لجنة ثابت بل اللجنة المتغيرة لليوم) */}
+            {/* 📄 4. هويات المراقبين الثابتة (تصميم فخم، عامة لكل الأيام واللجان) */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
               <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
                  {chunk.map((inv: any, si) => {
-                    const teacherName = getSafeName(inv?.users);
-                    const commName = inv?.exam_committees?.name || 'مراقب احتياط';
+                    const teacherName = getSafeName(inv);
                     return (
-                       <div key={`inv-card-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid #10b981', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
-                          <div style={{ backgroundColor: '#f0fdf4', borderBottom: '3px solid #10b981', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div key={`inv-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #0f172a' }}>
+                          <div style={{ background: 'linear-gradient(to right, #0f172a, #1e293b)', borderBottom: '2px solid #d4af37', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: '900', fontSize: '11px', color: '#064e3b' }}>مدرسة الرفعة النموذجية بنين</div>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#10b981', marginTop: '2px' }}>كنترول امتحانات نهاية الفصل الثاني</div>
+                                <div style={{ fontWeight: '900', fontSize: '12px', color: '#f8fafc', letterSpacing: '0.5px' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#d4af37', marginTop: '2px' }}>كنترول امتحانات نهاية العام</div>
                              </div>
-                             <div style={{ backgroundColor: '#10b981', color: 'white', padding: '3px 8px', fontWeight: '900', fontSize: '10px', borderRadius: '6px' }}>{commName}</div>
+                             <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px solid #d4af37', color: '#d4af37', padding: '4px 10px', fontWeight: '900', fontSize: '10px', borderRadius: '8px' }}>2025-2026</div>
                           </div>
-                          
-                          <div style={{ padding: '10px', display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }} dir="rtl">
-                             <div style={{ width: '22mm', height: '22mm', border: '2px solid #10b981', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f3f4f6' }}>
-                                {inv?.users?.avatar_url ? (
-                                  <img src={inv.users.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#10b981', fontSize: '20px' }}>{String(teacherName).charAt(0)}</div>
-                                )}
+                          <div style={{ padding: '12px', display: 'flex', gap: '14px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
+                             <div style={{ width: '24mm', height: '24mm', border: '2px solid #d4af37', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f1f5f9', padding: '2px' }}>
+                                <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {inv?.avatar_url ? (
+                                    <img src={inv.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ fontWeight: '900', color: '#0f172a', fontSize: '24px' }}>{String(teacherName).charAt(0)}</div>
+                                  )}
+                                </div>
                              </div>
-                             
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم المشرّف / المراقب</div>
-                                <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
-                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', display: 'block', margin: 0 }}>{teacherName}</h2>
+                                <div style={{ fontSize: '9px', fontWeight: 'black', color: '#64748b', marginBottom: '2px', textTransform: 'uppercase' }}>عضو لجنة المراقبة</div>
+                                <div style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '14px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', display: 'block', margin: 0 }}>{teacherName}</h2>
                                 </div>
-                                <div style={{ marginTop: '4px' }}>
-                                   <span style={{ display: 'inline-block', backgroundColor: '#e0f2fe', border: '1px solid #0284c7', padding: '1px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0369a1' }}>مراقب لجان دائم</span>
+                                <div style={{ marginTop: '6px' }}>
+                                   <span style={{ display: 'inline-block', backgroundColor: '#0f172a', border: '1px solid #d4af37', padding: '3px 8px', borderRadius: '6px', fontWeight: '900', fontSize: '10px', color: '#f8fafc', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>مُراقب معتمد</span>
                                 </div>
-                             </div>
-                             
-                             <div style={{ borderRight: '2px solid #e2e8f0', paddingRight: '8px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '22mm', flexShrink: 0 }}>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>تاريخ التكليف</div>
-                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#0f172a' }}>{activeExamDate}</div>
                              </div>
                           </div>
+                          <div style={{ height: '4px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
                        </div>
                     )
                  })}
@@ -1502,42 +1517,37 @@ function ExamCommitteesControl() {
             {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
               <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', pageBreakAfter: 'always' }}>
                  {chunk.map((head: any, si) => {
-                    const headName = getSafeName(head?.users);
-                    const rangeComms = head?.committees_range || 'جميع اللجان';
+                    const headName = getSafeName(head);
                     return (
-                       <div key={`head-card-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid #d97706', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box' }}>
-                          <div style={{ backgroundColor: '#fef3c7', borderBottom: '3px solid #d97706', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div key={`head-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', pageBreakInside: 'avoid', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #78350f' }}>
+                          <div style={{ background: 'linear-gradient(to right, #78350f, #92400e)', borderBottom: '2px solid #fcd34d', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: '900', fontSize: '11px', color: '#78350f' }}>مدرسة الرفعة النموذجية بنين</div>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#b45309', marginTop: '2px' }}>التكليف الإشرافي العام والقيادي للجان</div>
+                                <div style={{ fontWeight: '900', fontSize: '12px', color: '#fffbeb', letterSpacing: '0.5px' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#fcd34d', marginTop: '2px' }}>التكليف الإشرافي العام والقيادي للجان</div>
                              </div>
-                             <div style={{ backgroundColor: '#d97706', color: 'white', padding: '3px 8px', fontWeight: '900', fontSize: '9px', borderRadius: '6px' }}>رئيس اللجان</div>
+                             <div style={{ backgroundColor: '#b45309', border: '1px solid #fcd34d', color: '#fffbeb', padding: '4px 10px', fontWeight: '900', fontSize: '10px', borderRadius: '8px' }}>رئيس اللجان</div>
                           </div>
-                          
-                          <div style={{ padding: '10px', display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }} dir="rtl">
-                             <div style={{ width: '22mm', height: '22mm', border: '2px solid #d97706', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f3f4f6' }}>
-                                {head?.users?.avatar_url ? (
-                                  <img src={head.users.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#d97706', fontSize: '20px' }}>👑</div>
-                                )}
+                          <div style={{ padding: '12px', display: 'flex', gap: '14px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
+                             <div style={{ width: '24mm', height: '24mm', border: '2px solid #b45309', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#fffbeb', padding: '2px' }}>
+                                <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {head?.avatar_url ? (
+                                    <img src={head.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ fontWeight: '900', color: '#b45309', fontSize: '24px' }}>👑</div>
+                                  )}
+                                </div>
                              </div>
-                             
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>رئيس اللجنة القيادي</div>
-                                <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
-                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', display: 'block', margin: 0 }}>{headName}</h2>
+                                <div style={{ fontSize: '9px', fontWeight: 'black', color: '#92400e', marginBottom: '2px' }}>رئيس اللجنة القيادي</div>
+                                <div style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '14px', fontWeight: '900', color: '#451a03', lineHeight: '1.3', display: 'block', margin: 0 }}>{headName}</h2>
                                 </div>
-                                <div style={{ marginTop: '4px' }}>
-                                   <div style={{ fontSize: '8px', fontWeight: 'black', color: '#b45309', backgroundColor: '#fffbeb', padding: '2px 5px', borderRadius: '4px', border: '1px solid #fef3c7', display: 'inline-block' }}>نطاق الإشراف: {rangeComms}</div>
+                                <div style={{ marginTop: '6px' }}>
+                                   <div style={{ fontSize: '9px', fontWeight: 'black', color: '#b45309', backgroundColor: '#fffbeb', padding: '3px 8px', borderRadius: '6px', border: '1px solid #fcd34d', display: 'inline-block' }}>نطاق الإشراف: الشامل</div>
                                 </div>
-                             </div>
-                             
-                             <div style={{ borderRight: '2px solid #e2e8f0', paddingRight: '8px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '22mm', flexShrink: 0 }}>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اليوم والامتحان</div>
-                                <div style={{ fontSize: '9px', fontWeight: '900', color: '#0f172a' }}>{activeExamDate}</div>
                              </div>
                           </div>
+                          <div style={{ height: '4px', width: '100%', background: 'linear-gradient(to right, #b45309, #fde68a, #b45309)' }}></div>
                        </div>
                     )
                  })}
@@ -1553,7 +1563,9 @@ function ExamCommitteesControl() {
   );
 }
 
-// 🚀 تصدير الصفحة
+// =========================================================================
+// 3. 🚀 التصدير النهائي للصفحة
+// =========================================================================
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { const timer = setTimeout(() => setMounted(true), 0); return () => clearTimeout(timer); }, []);
