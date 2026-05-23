@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2,
-  CheckSquare, UserCheck, FileSignature, QrCode, Lock
+  CheckSquare, UserCheck, QrCode, Lock, FileCheck
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,6 +31,7 @@ class ErrorBoundary extends React.Component {
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
             <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
             <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ في عرض الصفحة</h1>
+            <p className="text-slate-500 font-bold mb-6">الرجاء تحديث الصفحة لمعالجة المشكلة.</p>
             <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
               تحديث الصفحة وإعادة المحاولة
             </button>
@@ -118,14 +119,14 @@ function ExamCommitteesControl() {
     try {
       const finalizedState = localStorage.getItem('committees_finalized');
       if (finalizedState === 'true') setIsFinalized(true);
-    } catch(e) {}
+    } catch (e) { }
   }, []);
 
   const handleToggleFinalize = () => {
     const newState = !isFinalized;
     if (newState && !confirm('اعتماد اللجان سيضيف ختم "معتمد رسمياً" على جميع المطبوعات، هل أنت متأكد؟')) return;
     setIsFinalized(newState);
-    try { localStorage.setItem('committees_finalized', newState ? 'true' : 'false'); } catch(e) {}
+    try { localStorage.setItem('committees_finalized', newState ? 'true' : 'false'); } catch (e) {}
   };
 
   const getFullClassName = (studentData: any) => {
@@ -717,7 +718,15 @@ function ExamCommitteesControl() {
 
           for (let i = 0; i < pages.length; i++) {
             const pageElement = pages[i] as HTMLElement;
+            const originalCssText = pageElement.style.cssText;
+            pageElement.style.position = 'fixed'; 
+            pageElement.style.top = '0'; 
+            pageElement.style.left = '0'; 
+            pageElement.style.width = '794px'; 
+            pageElement.style.zIndex = '-9999';
+
             const canvas = await html2canvas(pageElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0, logging: false });
+            pageElement.style.cssText = originalCssText;
             const imgData = canvas.toDataURL('image/jpeg', 1.0); 
             
             const imgProps = pdf.getImageProperties(imgData);
@@ -1109,6 +1118,10 @@ function ExamCommitteesControl() {
                  
                  {committees.length > 0 && (
                    <div className="flex gap-2">
+                     {/* أزرار الطباعة العامة موجودة هنا */}
+                     <button type="button" onClick={() => printDocument('', 'invigilator_ids')} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl shadow-md flex items-center gap-2"><Contact className="w-4 h-4"/> هويات المراقبين</button>
+                     <button type="button" onClick={() => printDocument('', 'head_ids')} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm rounded-xl shadow-md flex items-center gap-2"><Crown className="w-4 h-4"/> هويات الرؤساء</button>
+
                      <button onClick={handleToggleFinalize} className={`px-6 py-3 font-black rounded-xl border flex items-center gap-2 shadow-sm transition-all ${isFinalized ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'}`}>
                         {isFinalized ? <Lock className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
                         {isFinalized ? 'إلغاء الاعتماد النهائي' : 'اعتماد اللجان النهائي'}
@@ -1184,9 +1197,10 @@ function ExamCommitteesControl() {
                           </div>
                         </div>
 
+                        {/* أزرار الطباعة الشاملة للجنة المعينة */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-auto pt-3 border-t border-slate-100">
                           <button type="button" onClick={() => printDocument(committee?.id, 'door_sheet')} className="bg-slate-800 text-white text-[10px] font-black py-2 rounded-lg hover:bg-slate-700 flex justify-center items-center"><Users className="w-3 h-3 mr-1"/> كشف الطلاب</button>
-                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileSignature className="w-3 h-3 mr-1"/> التوقيعات</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileCheck className="w-3 h-3 mr-1"/> التوقيعات</button>
                           <button type="button" onClick={() => printDocument(committee?.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100 flex justify-center items-center"><IdCard className="w-3 h-3 mr-1"/> الطاولة</button>
                         </div>
 
@@ -1435,7 +1449,7 @@ function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
-      {/* 🖨️ قوالب الطباعة المعالجة لدعم اللغة العربية والـ QR بدقة تامة */}
+      {/* 🖨️ قوالب الطباعة المعالجة لدعم اللغة العربية بدقة تامة */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl" style={{ fontFamily: '"Cairo", sans-serif', textRendering: 'optimizeLegibility' }}>
@@ -1444,7 +1458,6 @@ function ExamCommitteesControl() {
                <div style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '140px', color: 'rgba(16, 185, 129, 0.07)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>
             )}
 
-            {/* 📄 1. محضر اللجنة / كشف أسماء الطلاب النظيف المفرغ من التوقيعات */}
             {printType === 'door_sheet' && chunkArray(printData.students, 16).map((chunk, pageIdx, chunksArr) => (
               <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
@@ -1481,7 +1494,6 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 2. سجل توقيعات اللجنة المخصص */}
             {printType === 'signatures_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
@@ -1531,7 +1543,6 @@ function ExamCommitteesControl() {
               </div>
             )}
 
-            {/* 📄 3. بطاقات الطلاب للفصول */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
@@ -1574,7 +1585,6 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 4. بطاقات الطاولة */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
@@ -1616,7 +1626,6 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 5. هويات المراقبين الثابتة (تصميم فخم مدمج مع QR) */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
               <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((inv: any, si) => {
@@ -1661,7 +1670,6 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 6. هويات رؤساء اللجان المتوافقة مع QR */}
             {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
               <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((head: any, si) => {
@@ -1706,7 +1714,6 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 7. الهويات الإدارية المخصصة */}
             {printType === 'custom_ids' && chunkArray(printData.customIds, 6).map((chunk, pageIdx) => (
               <div key={`p-cstm-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((item: any, si: number) => {
