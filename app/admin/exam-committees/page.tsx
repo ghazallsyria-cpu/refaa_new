@@ -710,6 +710,10 @@ function ExamCommitteesControl() {
           )}
 
           {activeTab === 'invigilators_radar' && (
+
+{/* 🚨 شريط الطوارئ: رادار الاعتذارات المباشر للمدير 🚨 */}
+
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
 {/* 🚨 شريط الطوارئ: رادار الاعتذارات المباشر للمدير 🚨 */}
           {activeTab === 'invigilators_radar' && invigilators.filter(i => i.status === 'excused' && i.exam_date === activeExamDate).length > 0 && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 bg-rose-50 border-2 border-rose-200 p-6 rounded-3xl shadow-sm">
@@ -738,9 +742,6 @@ function ExamCommitteesControl() {
                </div>
             </motion.div>
           )}
-
-
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                      <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة</h3>
