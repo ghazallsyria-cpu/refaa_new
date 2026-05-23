@@ -710,6 +710,36 @@ function ExamCommitteesControl() {
           )}
 
           {activeTab === 'invigilators_radar' && (
+{/* 🚨 شريط الطوارئ: رادار الاعتذارات المباشر للمدير 🚨 */}
+          {activeTab === 'invigilators_radar' && invigilators.filter(i => i.status === 'excused' && i.exam_date === activeExamDate).length > 0 && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 bg-rose-50 border-2 border-rose-200 p-6 rounded-3xl shadow-sm">
+               <h3 className="text-xl font-black text-rose-600 mb-4 flex items-center gap-2"><AlertCircle className="w-6 h-6 animate-pulse"/> طلبات اعتذار قيد الانتظار ({activeExamDate})</h3>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {invigilators.filter(i => i.status === 'excused' && i.exam_date === activeExamDate).map((excuse, idx) => {
+                     const committeeName = committees.find(c => c.id === excuse.committee_id)?.name;
+                     return (
+                        <div key={idx} className="bg-white p-4 rounded-xl border border-rose-100 shadow-sm flex flex-col gap-3">
+                           <div className="flex justify-between items-start">
+                              <div>
+                                 <p className="font-black text-slate-800 text-lg">{getSafeName(excuse.users)}</p>
+                                 <p className="text-xs font-bold text-slate-500 mt-1">كان مكلفاً بـ: <span className="text-indigo-600 font-black">{committeeName}</span></p>
+                              </div>
+                              <span className="bg-rose-100 text-rose-600 px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest">اعتذار طارئ</span>
+                           </div>
+                           <div className="bg-rose-50/50 p-3 rounded-lg border border-rose-50 text-xs font-bold text-rose-900 leading-relaxed">
+                              " {excuse.excuse_reason} "
+                           </div>
+                           <div className="flex gap-2 mt-2">
+                              <button onClick={() => handleRemoveInvigilator(excuse.id, getSafeName(excuse.users))} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2 rounded-lg text-xs transition-colors">إعفاء المعلم وإلغاء تكليفه</button>
+                           </div>
+                        </div>
+                     )
+                  })}
+               </div>
+            </motion.div>
+          )}
+
+
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
