@@ -24,8 +24,6 @@ import { useAuth } from '@/context/auth-context';
 import * as Dialog from '@radix-ui/react-dialog';
 import MemorialShieldDisplay from '@/components/MemorialShieldDisplay';
 import DigitalLibraryWidget from '@/components/DigitalLibraryWidget';
-
-// 🚀 استيراد مكون التحفيز للرصد اليدوي
 import TeacherGradingCTA from '@/components/TeacherGradingCTA';
 
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
@@ -44,20 +42,17 @@ export default function TeacherDashboard() {
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
 
-  // حالات المنظومة الامتحانية
   const [invigilationDuties, setInvigilationDuties] = useState<any[]>([]);
   const [headDuties, setHeadDuties] = useState<any[]>([]);
   const [controlTeamRole, setControlTeamRole] = useState<any>(null);
   const [finalExamsTimetable, setFinalExamsTimetable] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
-  // حالات الاعتذار
   const [isDutyExcuseModalOpen, setIsDutyExcuseModalOpen] = useState(false);
   const [selectedDutyId, setSelectedDutyId] = useState('');
   const [dutyExcuseText, setDutyExcuseText] = useState('');
   const [isProcessingDuty, setIsProcessingDuty] = useState(false);
 
-  // حالات الاعتذار الطبي
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -87,8 +82,6 @@ export default function TeacherDashboard() {
   const [mounted, setMounted] = useState(false);
   
   const { fetchTeacherDashboardData } = useDashboardSystem();
-  
-  // 🛡️ قفل الجلب لمنع الحلقة المفرغة (Infinite Loop)
   const isFetchedRef = useRef(false);
 
   useEffect(() => {
@@ -122,13 +115,11 @@ export default function TeacherDashboard() {
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
   };
 
-  // 🛡️ هندسة جلب البيانات الجديدة المنيعة
   useEffect(() => {
     if (isChecking || !user || isFetchedRef.current) return;
     if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') return;
 
     const loadDashboardData = async () => {
-      // نغلق القفل فوراً ولا نعيد فتحه أبداً لتجنب أي تكرار لا نهائي
       isFetchedRef.current = true;
       
       try {
@@ -147,7 +138,6 @@ export default function TeacherDashboard() {
           if (data.assignmentStats) setAssignmentStats(data.assignmentStats);
 
           if (data.teacher?.id) {
-              // جلب الغيابات المنذرة
               const { data: absences } = await supabase
                 .from('attendance_records')
                 .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -174,7 +164,6 @@ export default function TeacherDashboard() {
                 setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
               }
 
-              // جلب المنظومة الامتحانية
               try {
                  const currentYear = '2025-2026';
                  const currentSemester = 'الفصل الدراسي الثاني';
@@ -185,15 +174,25 @@ export default function TeacherDashboard() {
                  if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
                  mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); 
 
-                 const [invigRes, finalExamsRes, headRes, controlRes] = await Promise.all([
-                    supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_committees(name, location, capacity)').eq('teacher_id', data.teacher.id),
-                    supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5),
-                    supabase.from('exam_committee_heads').select('committees_range, exam_timetables(exam_date, subjects(name), class_level)').eq('head_teacher_id', data.teacher.id),
+                 // جلب جدول الامتحانات
+                 const { data: finalExamsRes } = await supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true });
+                 if (finalExamsRes) setFinalExamsTimetable(finalExamsRes.slice(0, 5)); // عرض أول 5 لجمالية التصميم
+
+                 // 🌟 التعديل الجوهري: تحديد تاريخ اليوم الفعلي لجلب لجنة المراقبة الخاصة باليوم فقط
+                 const todayDateStr = format(new Date(), 'yyyy-MM-dd'); // تاريخ اليوم الحالي
+                 // كبديل يمكنك جلب أقرب تاريخ امتحان قادم إذا لم يكن اليوم امتحان، لكن الأصح عرض لجنة اليوم
+                 // const activeExamDateToFetch = finalExamsRes && finalExamsRes.length > 0 ? finalExamsRes[0].exam_date : todayDateStr;
+
+                 const [invigRes, headRes, controlRes] = await Promise.all([
+                    // 🌟 هنا نقوم بالفلترة بواسطة exam_date لليوم النشط فقط ليظهر للمُعلم لجنة واحدة
+                    supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_date, exam_committees(name, location, capacity)')
+                      .eq('teacher_id', data.teacher.id)
+                      .eq('exam_date', todayDateStr), // 👈 الفلترة بتاريخ اليوم فقط
+                    supabase.from('exam_committee_heads').select('committees_range, exam_timetables!inner(exam_date, subjects(name), class_level)').eq('head_teacher_id', data.teacher.id).eq('exam_timetables.exam_date', todayDateStr),
                     supabase.from('exam_control_team').select('role_name').eq('user_id', user.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle()
                  ]);
 
                  if (invigRes.data) setInvigilationDuties(invigRes.data);
-                 if (finalExamsRes.data) setFinalExamsTimetable(finalExamsRes.data);
                  if (headRes.data) setHeadDuties(headRes.data);
                  if (controlRes.data) setControlTeamRole(controlRes.data);
 
@@ -208,7 +207,6 @@ export default function TeacherDashboard() {
                  }
               } catch (examErr) { console.error("Error fetching exam system data:", examErr); }
 
-              // حالة تسجيل الحضور
               const now = new Date();
               if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
                 const todayStr = format(now, 'yyyy-MM-dd');
@@ -344,7 +342,7 @@ export default function TeacherDashboard() {
       alert('تم تقديم العذر بنجاح!');
       setIsExcuseModalOpen(false);
       setExcuseForm({ absent_dates: [format(new Date(), 'yyyy-MM-dd')], duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' });
-      window.location.reload(); // تحديث الصفحة لرؤية الحالة الجديدة
+      window.location.reload(); 
     } catch (error: any) { alert('حدث خطأ أثناء التقديم: ' + error.message); } finally { setIsSubmittingExcuse(false); }
   };
 
@@ -412,7 +410,6 @@ export default function TeacherDashboard() {
            <MemorialShieldDisplay userId={teacherData.id} role="teacher" />
         )}
 
-        {/* هرم القيادة: 1. بانر أعضاء الكنترول */}
         <AnimatePresence>
           {controlTeamRole && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.5, type: 'spring' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 md:p-10 border-purple-500/30 group">
@@ -440,7 +437,6 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* هرم القيادة: 2. بانر رؤساء اللجان */}
         <AnimatePresence>
           {headDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.6, type: 'spring' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 md:p-10 border-amber-500/30 group">
@@ -474,7 +470,6 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* هرم القيادة: 3. بانر تكليف المراقبة */}
         <AnimatePresence>
           {invigilationDuties.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 md:p-10 border-emerald-500/30 group">
@@ -489,7 +484,7 @@ export default function TeacherDashboard() {
                        أنتم <span className="text-transparent bg-clip-text bg-gradient-to-l from-emerald-400 to-teal-200">صمام الأمان</span> وعماد المنظومة!
                      </h2>
                      <p className="text-slate-200 text-sm sm:text-lg font-bold leading-relaxed mb-6 max-w-2xl mx-auto lg:mx-0 opacity-90 drop-shadow-sm">
-                       أستاذي الفاضل، ثقةً منا في حرصكم وعدالتكم، تم اختياركم لضمان نزاهة سير الاختبارات. يرجى التوقيع الإلكتروني بالاستلام أدناه.
+                       أستاذي الفاضل، ثقةً منا في حرصكم وعدالتكم، تم اختياركم لضمان نزاهة سير الاختبارات لليوم الامتحاني الفعال. يرجى التوقيع الإلكتروني بالاستلام أدناه.
                      </p>
                      
                      <div className="flex flex-col gap-4 mb-6 w-full lg:w-3/4">
@@ -500,7 +495,7 @@ export default function TeacherDashboard() {
                                    <ShieldCheck className="w-6 h-6" />
                                  </div>
                                  <div className="text-right flex-1">
-                                   <p className={`text-[10px] font-bold mb-1 uppercase tracking-widest ${duty.status === 'excused' ? 'text-rose-300/80' : 'text-emerald-300/80'}`}>اللجنة المخصصة لك:</p>
+                                   <p className={`text-[10px] font-bold mb-1 uppercase tracking-widest ${duty.status === 'excused' ? 'text-rose-300/80' : 'text-emerald-300/80'}`}>اللجنة المخصصة لك في {duty.exam_date}:</p>
                                    <h3 className="text-lg sm:text-xl font-black text-white drop-shadow-md">{duty.exam_committees?.name}</h3>
                                  </div>
                              </div>
@@ -552,7 +547,6 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* نظام التنبيهات الزجاجي (Attendance Status) */}
         <AnimatePresence>
           {attendanceStatus.isActive && attendanceStatus.totalToday > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="w-full">
@@ -605,7 +599,6 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 Teacher Welcome Hero (Holographic Card) */}
         <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] glass-panel p-8 sm:p-12 text-white border-amber-500/20 group">
           <div className="absolute inset-0 bg-amber-500/5 blur-[100px] pointer-events-none mix-blend-screen transition-opacity group-hover:opacity-100 opacity-50"></div>
           <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
@@ -639,7 +632,6 @@ export default function TeacherDashboard() {
               <Link href="/attendance" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/5 backdrop-blur-md px-6 py-4 text-sm font-black text-white hover:bg-white/10 transition-all border border-white/10 active:scale-95 shadow-inner w-full sm:w-auto">
                 <UserCheck className="h-5 w-5 text-amber-400 drop-shadow-sm" /> رصد الحضور
               </Link>
-              {/* 🚀 الزر الذي يعتمد النظام الكلاسيكي (بدون ذكاء اصطناعي) */}
               <Link href="/assignments" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500/80 to-yellow-500/80 backdrop-blur-md px-6 py-4 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:from-amber-500 hover:to-yellow-500 transition-all active:scale-95 border border-amber-400/50 w-full sm:w-auto">
                 <BookOpen className="h-5 w-5" /> إدارة الواجبات
               </Link>
@@ -647,12 +639,10 @@ export default function TeacherDashboard() {
           </div>
         </motion.div>
 
-        {/* 🚀 زرع مكون إعلان الرصد هنا مباشرة بعد الترحيب 🚀 */}
         <motion.div variants={itemVariants}>
           <TeacherGradingCTA />
         </motion.div>
         
-        {/* نظام الإنذار المبكر للمعلم (زجاجي) */}
         <AnimatePresence>
           {atRiskStudents.length > 0 && (
             <motion.div initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-rose-500/20">
@@ -703,7 +693,6 @@ export default function TeacherDashboard() {
           )}
         </AnimatePresence>
 
-        {/* Stats Grid (Holographic Orbs) */}
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
           {[
             { label: 'إجمالي الطلاب', value: stats.totalStudents, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
@@ -725,7 +714,6 @@ export default function TeacherDashboard() {
           ))}
         </div>
 
-        {/* Main Grids (Gemini Rebalance) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           
           <div className="lg:col-span-7 xl:col-span-8 space-y-6 lg:space-y-8 w-full">
@@ -734,7 +722,6 @@ export default function TeacherDashboard() {
               <DigitalLibraryWidget userRole="teacher" />
             </motion.div>
 
-            {/* Today's Schedule (Live Pulse) */}
             <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden p-0">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none mix-blend-screen"></div>
               <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-transparent relative z-10 gap-4 text-center sm:text-right">
@@ -845,7 +832,6 @@ export default function TeacherDashboard() {
               </div>
             </motion.div>
 
-            {/* Recent Exams */}
             <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden p-0">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
@@ -882,14 +868,12 @@ export default function TeacherDashboard() {
 
           </div>
 
-          {/* 🚀 العمود الأيسر (5/12) */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:space-y-8 w-full">
             
             <motion.div variants={itemVariants}>
                <AnnouncementsWidget authRole="teacher" />
             </motion.div>
 
-            {/* Recent Assignments */}
             <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden p-0">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
@@ -923,7 +907,6 @@ export default function TeacherDashboard() {
               </div>
             </motion.div>
 
-            {/* 🔑 خزانة نماذج الإجابات */}
             {answerKeys.length > 0 && (
                 <motion.div variants={itemVariants} className="glass-panel border-emerald-500/30 rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.05)] p-0">
                   <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full pointer-events-none mix-blend-screen"></div>
@@ -950,7 +933,6 @@ export default function TeacherDashboard() {
                 </motion.div>
             )}
 
-            {/* Messages */}
             <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden p-0">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right">
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
@@ -1000,7 +982,6 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة (Modal) تقديم عذر طبي غياب عادي */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
@@ -1115,7 +1096,6 @@ export default function TeacherDashboard() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 نافذة (Modal) تقديم اعتذار عن مهمة المراقبة */}
       <AnimatePresence>
         {isDutyExcuseModalOpen && (
           <Dialog.Root open={isDutyExcuseModalOpen} onOpenChange={setIsDutyExcuseModalOpen}>
