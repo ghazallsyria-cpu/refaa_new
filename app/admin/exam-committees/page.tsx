@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2,
-  CheckSquare, UserCheck, QrCode, Lock, FileCheck
+  CheckSquare, UserCheck, FileSignature, QrCode, Lock, FileCheck
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -681,7 +681,6 @@ function ExamCommitteesControl() {
       
       setPrintType(type);
 
-      // 🛡️ Safe timeout logic to ensure render
       setTimeout(async () => {
         if (!printRef.current) { 
             alert('الرجاء المحاولة مرة أخرى.');
@@ -690,7 +689,6 @@ function ExamCommitteesControl() {
         }
         
         try {
-          // 🛡️ Safe Promise Race to avoid hanging fonts
           try { await Promise.race([document.fonts.ready, new Promise(res => setTimeout(res, 1000))]); } catch(e) {}
           
           let html2canvasModule;
@@ -1118,13 +1116,12 @@ function ExamCommitteesControl() {
                  
                  {committees.length > 0 && (
                    <div className="flex gap-2">
-                     {/* أزرار الطباعة العامة موجودة هنا */}
                      <button type="button" onClick={() => printDocument('', 'invigilator_ids')} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl shadow-md flex items-center gap-2"><Contact className="w-4 h-4"/> هويات المراقبين</button>
                      <button type="button" onClick={() => printDocument('', 'head_ids')} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm rounded-xl shadow-md flex items-center gap-2"><Crown className="w-4 h-4"/> هويات الرؤساء</button>
 
                      <button onClick={handleToggleFinalize} className={`px-6 py-3 font-black rounded-xl border flex items-center gap-2 shadow-sm transition-all ${isFinalized ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'}`}>
                         {isFinalized ? <Lock className="w-5 h-5"/> : <CheckCircle2 className="w-5 h-5"/>}
-                        {isFinalized ? 'إلغاء الاعتماد النهائي' : 'اعتماد اللجان النهائي'}
+                        {isFinalized ? 'إلغاء الاعتماد النهائي' : 'اعتماد اللجان'}
                      </button>
                    </div>
                  )}
@@ -1200,7 +1197,7 @@ function ExamCommitteesControl() {
                         {/* أزرار الطباعة الشاملة للجنة المعينة */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-auto pt-3 border-t border-slate-100">
                           <button type="button" onClick={() => printDocument(committee?.id, 'door_sheet')} className="bg-slate-800 text-white text-[10px] font-black py-2 rounded-lg hover:bg-slate-700 flex justify-center items-center"><Users className="w-3 h-3 mr-1"/> كشف الطلاب</button>
-                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileCheck className="w-3 h-3 mr-1"/> التوقيعات</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileSignature className="w-3 h-3 mr-1"/> التوقيعات</button>
                           <button type="button" onClick={() => printDocument(committee?.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100 flex justify-center items-center"><IdCard className="w-3 h-3 mr-1"/> الطاولة</button>
                         </div>
 
@@ -1449,17 +1446,16 @@ function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
-      {/* 🖨️ قوالب الطباعة المعالجة لدعم اللغة العربية بدقة تامة */}
+      {/* 🖨️ قوالب الطباعة المعالجة لدعم اللغة العربية والـ QR بدقة تامة */}
       {printData && (
-        <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+        <div style={{ position: 'fixed', top: '-9999px', left: 0, zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl" style={{ fontFamily: '"Cairo", sans-serif', textRendering: 'optimizeLegibility' }}>
             
-            {isFinalized && (
-               <div style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '140px', color: 'rgba(16, 185, 129, 0.07)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>
-            )}
-
+            {/* 📄 1. محضر اللجنة / كشف أسماء الطلاب النظيف المفرغ من التوقيعات */}
             {printType === 'door_sheet' && chunkArray(printData.students, 16).map((chunk, pageIdx, chunksArr) => (
               <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
@@ -1490,12 +1486,15 @@ function ExamCommitteesControl() {
                    </tbody>
                  </table>
                  <div className="flex-1"></div>
-                 <div className="text-left mt-4 text-[10px] font-bold text-slate-500 shrink-0">صفحة {pageIdx + 1} من {chunksArr.length}</div>
+                 <div className="text-left mt-4 text-[10px] font-bold text-slate-500 shrink-0 relative z-10">صفحة {pageIdx + 1} من {chunksArr.length}</div>
               </div>
             ))}
 
+            {/* 📄 2. سجل توقيعات اللجنة الجديد */}
             {printType === 'signatures_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
@@ -1543,8 +1542,11 @@ function ExamCommitteesControl() {
               </div>
             )}
 
+            {/* 📄 3. بطاقات الطلاب للفصول */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start relative" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1553,7 +1555,7 @@ function ExamCommitteesControl() {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={`c-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box' }}>
+                       <div key={`c-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box', zIndex: 10 }}>
                           <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
@@ -1585,8 +1587,11 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 📄 4. بطاقات الطاولة */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
-              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start relative" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1594,7 +1599,7 @@ function ExamCommitteesControl() {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
 
                     return (
-                       <div key={`d-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box' }}>
+                       <div key={`d-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box', zIndex: 10 }}>
                           <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
@@ -1626,13 +1631,16 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 📄 5. هويات المراقبين الثابتة (تصميم فخم مدمج مع QR) */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
-              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
                  {chunk.map((inv: any, si) => {
                     const teacherName = getSafeName(inv);
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-staff:${inv.id}&margin=0`;
                     return (
-                       <div key={`inv-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #0f172a' }}>
+                       <div key={`inv-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #0f172a', zIndex: 10 }}>
                           <div style={{ background: 'linear-gradient(to right, #0f172a, #1e293b)', borderBottom: '3px solid #d4af37', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '15px', color: '#f8fafc' }}>مدرسة الرفعة النموذجية بنين</div>
@@ -1670,13 +1678,16 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 📄 6. هويات رؤساء اللجان المتوافقة مع QR */}
             {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
-              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
                  {chunk.map((head: any, si) => {
                     const headName = getSafeName(head);
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-head:${head.id}&margin=0`;
                     return (
-                       <div key={`head-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #78350f' }}>
+                       <div key={`head-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #78350f', zIndex: 10 }}>
                           <div style={{ background: 'linear-gradient(to right, #78350f, #92400e)', borderBottom: '3px solid #fcd34d', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '15px', color: '#fffbeb' }}>مدرسة الرفعة النموذجية بنين</div>
@@ -1714,12 +1725,15 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 📄 7. الهويات الإدارية المخصصة */}
             {printType === 'custom_ids' && chunkArray(printData.customIds, 6).map((chunk, pageIdx) => (
-              <div key={`p-cstm-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`p-cstm-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
                  {chunk.map((item: any, si: number) => {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-custom:${encodeURIComponent(item.name)}&margin=0`;
                     return (
-                       <div key={`cstm-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #1e1b4b' }}>
+                       <div key={`cstm-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #1e1b4b', zIndex: 10 }}>
                           <div style={{ background: 'linear-gradient(to right, #1e1b4b, #312e81)', borderBottom: '3px solid #fbbf24', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '15px', color: '#f8fafc' }}>مدرسة الرفعة النموذجية بنين</div>
