@@ -42,14 +42,16 @@ export default function TeacherDashboard() {
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
 
-  const [invigilationDuties, setInvigilationDuties] = useState<any[]>([]);
+  // 🌟 حالات المنظومة الامتحانية المطورة
+  const [upcomingDuty, setUpcomingDuty] = useState<any>(null);
+  const [coInvigilator, setCoInvigilator] = useState<string | null>(null);
+  const [examSubjects, setExamSubjects] = useState<any[]>([]);
   const [headDuties, setHeadDuties] = useState<any[]>([]);
   const [controlTeamRole, setControlTeamRole] = useState<any>(null);
   const [finalExamsTimetable, setFinalExamsTimetable] = useState<any[]>([]);
   const [answerKeys, setAnswerKeys] = useState<any[]>([]);
 
   const [isDutyExcuseModalOpen, setIsDutyExcuseModalOpen] = useState(false);
-  const [selectedDutyId, setSelectedDutyId] = useState('');
   const [dutyExcuseText, setDutyExcuseText] = useState('');
   const [isProcessingDuty, setIsProcessingDuty] = useState(false);
 
@@ -73,9 +75,7 @@ export default function TeacherDashboard() {
     totalToday: number;
   }>({ isActive: false, missedPeriods: [], completed: false, totalToday: 0 });
 
-  const [stats, setStats] = useState({
-    totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 0, absenceRate: 0
-  });
+  const [stats, setStats] = useState({ totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 0, absenceRate: 0 });
   const [assignmentStats, setAssignmentStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -115,13 +115,20 @@ export default function TeacherDashboard() {
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
   };
 
+  const getSafeName = (userObj: any) => {
+    if (!userObj) return 'زميل آخر';
+    try {
+      const name = Array.isArray(userObj) ? userObj[0]?.full_name : userObj?.full_name;
+      return String(name || 'زميل آخر');
+    } catch (e) { return 'زميل آخر'; }
+  };
+
   useEffect(() => {
     if (isChecking || !user || isFetchedRef.current) return;
     if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') return;
 
     const loadDashboardData = async () => {
       isFetchedRef.current = true;
-      
       try {
         setLoading(true);
         const data = await fetchTeacherDashboardData();
@@ -153,48 +160,68 @@ export default function TeacherDashboard() {
                     const userObj = Array.isArray(stuObj?.users) ? stuObj.users[0] : stuObj?.users;
                     const secObj = Array.isArray(a.sections) ? a.sections[0] : a.sections;
                     const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
-                    
-                    studentAbsences.set(sid, {
-                      id: sid, name: userObj?.full_name || 'طالب غير معروف',
-                      className: `${classObj?.name || ''} - ${secObj?.name || ''}`, count: 0
-                    });
+                    studentAbsences.set(sid, { id: sid, name: userObj?.full_name || 'طالب', className: `${classObj?.name || ''} - ${secObj?.name || ''}`, count: 0 });
                   }
                   studentAbsences.get(sid).count++;
                 });
                 setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
               }
 
+              // 🌟 المنظومة الامتحانية المطورة
               try {
                  const currentYear = '2025-2026';
                  const currentSemester = 'الفصل الدراسي الثاني';
                  
+                 const todayDate = new Date();
+                 const tomorrowDate = new Date(todayDate);
+                 tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+                 
+                 const todayStr = format(todayDate, 'yyyy-MM-dd');
+                 const tomorrowStr = format(tomorrowDate, 'yyyy-MM-dd');
+
                  let mySubjectIds: string[] = [];
                  const { data: myAssignments } = await supabase.from('teacher_assignments').select('subject_id').eq('teacher_id', data.teacher.id);
                  if (myAssignments) mySubjectIds = [...mySubjectIds, ...myAssignments.map((a: any) => a.subject_id)];
                  if (data.schedule) mySubjectIds = [...mySubjectIds, ...data.schedule.map((s: any) => s.subject_id)];
-                 mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean))); 
+                 mySubjectIds = Array.from(new Set(mySubjectIds.filter(Boolean)));
 
-                 // جلب جدول الامتحانات
-                 const { data: finalExamsRes } = await supabase.from('exam_timetables').select('*, subjects(name)').eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true });
-                 if (finalExamsRes) setFinalExamsTimetable(finalExamsRes.slice(0, 5)); // عرض أول 5 لجمالية التصميم
-
-                 // 🌟 التعديل الجوهري: تحديد تاريخ اليوم الفعلي لجلب لجنة المراقبة الخاصة باليوم فقط
-                 const todayDateStr = format(new Date(), 'yyyy-MM-dd'); // تاريخ اليوم الحالي
-                 // كبديل يمكنك جلب أقرب تاريخ امتحان قادم إذا لم يكن اليوم امتحان، لكن الأصح عرض لجنة اليوم
-                 // const activeExamDateToFetch = finalExamsRes && finalExamsRes.length > 0 ? finalExamsRes[0].exam_date : todayDateStr;
-
-                 const [invigRes, headRes, controlRes] = await Promise.all([
-                    // 🌟 هنا نقوم بالفلترة بواسطة exam_date لليوم النشط فقط ليظهر للمُعلم لجنة واحدة
-                    supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_date, exam_committees(name, location, capacity)')
+                 const [invigRes, headRes, controlRes, finalExamsRes] = await Promise.all([
+                    supabase.from('committee_invigilators').select('id, status, excuse_reason, signed_at, exam_date, committee_id, exam_committees(name, location, capacity)')
                       .eq('teacher_id', data.teacher.id)
-                      .eq('exam_date', todayDateStr), // 👈 الفلترة بتاريخ اليوم فقط
-                    supabase.from('exam_committee_heads').select('committees_range, exam_timetables!inner(exam_date, subjects(name), class_level)').eq('head_teacher_id', data.teacher.id).eq('exam_timetables.exam_date', todayDateStr),
-                    supabase.from('exam_control_team').select('role_name').eq('user_id', user.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle()
+                      .in('exam_date', [todayStr, tomorrowStr])
+                      .order('exam_date', { ascending: true })
+                      .limit(1),
+                    supabase.from('exam_committee_heads').select('committees_range, exam_timetables!inner(exam_date, subjects(name), class_level)')
+                      .eq('head_teacher_id', data.teacher.id),
+                    supabase.from('exam_control_team').select('role_name')
+                      .eq('user_id', user.id).eq('academic_year', currentYear).eq('semester', currentSemester).maybeSingle(),
+                    supabase.from('exam_timetables').select('*, subjects(name)')
+                      .eq('academic_year', currentYear).eq('semester', currentSemester).order('exam_date', { ascending: true }).limit(5)
                  ]);
 
-                 if (invigRes.data) setInvigilationDuties(invigRes.data);
+                 if (invigRes.data && invigRes.data.length > 0) {
+                     const duty = invigRes.data[0];
+                     setUpcomingDuty(duty);
+
+                     const { data: coData } = await supabase.from('committee_invigilators')
+                        .select('users(full_name)')
+                        .eq('committee_id', duty.committee_id)
+                        .eq('exam_date', duty.exam_date)
+                        .neq('teacher_id', data.teacher.id)
+                        .limit(1);
+                     if (coData && coData.length > 0) setCoInvigilator(getSafeName(coData[0].users));
+
+                     const { data: subjectsData } = await supabase.from('exam_timetables')
+                        .select('class_level, subjects(name)')
+                        .eq('exam_date', duty.exam_date)
+                        .eq('academic_year', currentYear)
+                        .eq('semester', currentSemester);
+                     if (subjectsData) setExamSubjects(subjectsData);
+                 }
+
                  if (headRes.data) setHeadDuties(headRes.data);
                  if (controlRes.data) setControlTeamRole(controlRes.data);
+                 if (finalExamsRes.data) setFinalExamsTimetable(finalExamsRes.data);
 
                  if (mySubjectIds.length > 0) {
                      const { data: keysRes } = await supabase.from('exam_answer_keys')
@@ -205,6 +232,7 @@ export default function TeacherDashboard() {
                  } else {
                      setAnswerKeys([]);
                  }
+
               } catch (examErr) { console.error("Error fetching exam system data:", examErr); }
 
               const now = new Date();
@@ -212,7 +240,6 @@ export default function TeacherDashboard() {
                 const todayStr = format(now, 'yyyy-MM-dd');
                 const currentDayOfWeek = now.getDay() + 1; 
                 const todaysScheduleData = data.schedule.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
-                
                 if (todaysScheduleData.length === 0) {
                   setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
                 } else {
@@ -221,20 +248,15 @@ export default function TeacherDashboard() {
                     supabase.from('attendance_records').select('period, section_id').eq('date', todayStr).in('section_id', todaySectionIds),
                     supabase.from('attendance_sessions').select('period_number, section_id').eq('date', todayStr).eq('status', 'submitted').in('section_id', todaySectionIds)
                   ]);
-
                   const recordedKeys = new Set([
                     ...(recordsData || []).map(r => `${r.section_id}-${Number(r.period)}`),
                     ...(sessionsData || []).map(r => `${r.section_id}-${Number(r.period_number)}`)
                   ]);
-
                   const missed: number[] = [];
                   let totalRecorded = 0;
-
                   todaysScheduleData.forEach((slot: any) => {
                     const pNum = Number(slot.period);
-                    const sId = slot.section_id;
-                    const key = `${sId}-${pNum}`;
-
+                    const key = `${slot.section_id}-${pNum}`;
                     if (recordedKeys.has(key)) { totalRecorded++; } 
                     else if (slot.end_time) {
                       const [h, m] = slot.end_time.split(':').map(Number);
@@ -242,51 +264,37 @@ export default function TeacherDashboard() {
                       if (now > endTime && !missed.includes(pNum)) missed.push(pNum);
                     }
                   });
-
-                  setAttendanceStatus({
-                    isActive: true, missedPeriods: missed.sort((a, b) => a - b),
-                    completed: missed.length === 0 && totalRecorded >= todaysScheduleData.length,
-                    totalToday: todaysScheduleData.length
-                  });
+                  setAttendanceStatus({ isActive: true, missedPeriods: missed.sort((a, b) => a - b), completed: missed.length === 0 && totalRecorded >= todaysScheduleData.length, totalToday: todaysScheduleData.length });
                 }
               }
           }
         }
-      } catch (error) { 
-        console.error('Error fetching dashboard data:', error); 
-      } finally { 
-        if (mounted) setLoading(false); 
-      }
+      } catch (error) { console.error('Error fetching dashboard data:', error); } finally { if (mounted) setLoading(false); }
     };
-
     loadDashboardData();
   }, [isChecking, user, authRole, mounted]); 
 
-  const signDuty = async (id: string) => {
+  const signDuty = async () => {
+    if (!upcomingDuty) return;
     if (!confirm('هل أنت متأكد من توقيعك إلكترونياً لاستلام مهام هذه اللجنة؟')) return;
     setIsProcessingDuty(true);
     try {
-      const { error } = await supabase.from('committee_invigilators').update({ status: 'signed', signed_at: new Date().toISOString() }).eq('id', id);
+      const { error } = await supabase.from('committee_invigilators').update({ status: 'signed', signed_at: new Date().toISOString() }).eq('id', upcomingDuty.id);
       if (error) throw error;
-      setInvigilationDuties(prev => prev.map(d => d.id === id ? { ...d, status: 'signed', signed_at: new Date().toISOString() } : d));
+      setUpcomingDuty({ ...upcomingDuty, status: 'signed', signed_at: new Date().toISOString() });
     } catch(e) { alert('حدث خطأ أثناء التوقيع.'); } finally { setIsProcessingDuty(false); }
   };
 
-  const openDutyExcuseModal = (id: string) => {
-    setSelectedDutyId(id);
-    setDutyExcuseText('');
-    setIsDutyExcuseModalOpen(true);
-  };
-
   const submitDutyExcuse = async () => {
+    if (!upcomingDuty) return;
     if (!dutyExcuseText.trim()) { alert('يرجى كتابة سبب العذر للإدارة!'); return; }
     setIsProcessingDuty(true);
     try {
-       const { error } = await supabase.from('committee_invigilators').update({ status: 'excused', excuse_reason: dutyExcuseText }).eq('id', selectedDutyId);
+       const { error } = await supabase.from('committee_invigilators').update({ status: 'excused', excuse_reason: dutyExcuseText }).eq('id', upcomingDuty.id);
       if (error) throw error;
-      alert('تم رفع العذر للإدارة بنجاح وفي سرية تامة.');
+      alert('تم رفع العذر للإدارة بنجاح وفي سرية تامة وسيتم مراجعته.');
       setIsDutyExcuseModalOpen(false);
-      setInvigilationDuties(prev => prev.map(d => d.id === selectedDutyId ? { ...d, status: 'excused', excuse_reason: dutyExcuseText } : d));
+      setUpcomingDuty({ ...upcomingDuty, status: 'excused', excuse_reason: dutyExcuseText });
     } catch(e) { alert('حدث خطأ أثناء رفع العذر.'); } finally { setIsProcessingDuty(false); }
   };
 
@@ -359,56 +367,18 @@ export default function TeacherDashboard() {
     return schedule.filter(s => Number(s.day_of_week) === today);
   }, [schedule]);
 
-  if (isChecking && !user) {
-    return (
-      <div className="flex h-[100dvh] items-center justify-center bg-transparent">
-        <div className="flex flex-col items-center gap-5">
-          <div className="relative flex items-center justify-center">
-             <div className="h-20 w-20 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.4)]"></div>
-             <ShieldAlert className="absolute h-8 w-8 text-amber-400 animate-pulse" />
-          </div>
-          <p className="text-amber-500 font-black animate-pulse tracking-widest drop-shadow-md">جاري التحقق وتأمين الصلاحيات...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') {
-    return (
-      <div className="flex h-[100dvh] items-center justify-center bg-transparent p-4">
-        <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
-           <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
-           <h2 className="text-2xl font-black text-white mb-2">وصول مقيد</h2>
-           <p className="text-slate-400 font-bold">هذه الصفحة مخصصة للمعلمين وإدارة المدرسة فقط.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading && !teacherData) {
-    return (
-      <div className="flex h-[100dvh] items-center justify-center bg-transparent relative z-10">
-        <div className="flex flex-col items-center gap-5">
-          <div className="h-16 w-16 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]"></div>
-          <p className="text-slate-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري إعداد مركبة القيادة...</p>
-        </div>
-      </div>
-    );
-  }
+  if (isChecking && !user) return <div className="flex h-[100dvh] items-center justify-center bg-transparent"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /></div>;
+  if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') return <div className="flex h-[100dvh] items-center justify-center bg-transparent"><p className="text-white">وصول مقيد</p></div>;
+  if (loading && !teacherData) return <div className="flex h-[100dvh] items-center justify-center bg-transparent"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /></div>;
 
   const avatarUrl = teacherData?.users?.avatar_url;
-  const qrPayloadControl = `raf-control:${user?.id}`;
-  const qrCodeUrlControl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayloadControl)}&margin=0`;
-  const qrPayloadInvig = `raf-id:${user?.id}`;
-  const qrCodeUrlInvig = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayloadInvig)}&margin=0`;
+  const isDutyTomorrow = upcomingDuty?.exam_date === format(new Date(new Date().setDate(new Date().getDate() + 1)), 'yyyy-MM-dd');
 
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-[100dvh] relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-sans pt-2 sm:pt-6" dir="rtl">
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
 
-        {teacherData?.id && (
-           <MemorialShieldDisplay userId={teacherData.id} role="teacher" />
-        )}
+        {teacherData?.id && <MemorialShieldDisplay userId={teacherData.id} role="teacher" />}
 
         <AnimatePresence>
           {controlTeamRole && (
@@ -471,76 +441,68 @@ export default function TeacherDashboard() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {invigilationDuties.length > 0 && (
+          {upcomingDuty && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 md:p-10 border-emerald-500/30 group">
-               <div className="absolute top-[-50%] left-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none transition-transform duration-1000 group-hover:scale-110 mix-blend-screen"></div>
+               <div className="absolute top-[-50%] left-[-10%] w-[100vw] h-[100vw] sm:w-[60vw] sm:h-[60vw] bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none mix-blend-screen"></div>
                
-               <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
-                  <div className="flex-1 text-center lg:text-right">
+               <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-10">
+                  <div className="flex-1 text-right">
                      <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs sm:text-sm font-black mb-6 shadow-inner backdrop-blur-xl">
                        <Award className="w-4 h-4 text-emerald-400" /> تكليف رسمي بمهام المراقبة
                      </div>
-                     <h2 className="text-3xl sm:text-5xl font-black text-white mb-6 tracking-tight leading-tight drop-shadow-xl">
-                       أنتم <span className="text-transparent bg-clip-text bg-gradient-to-l from-emerald-400 to-teal-200">صمام الأمان</span> وعماد المنظومة!
+                     <h2 className="text-3xl sm:text-4xl font-black text-white mb-4 tracking-tight drop-shadow-xl">
+                       أستاذي الفاضل والمربي القدير
                      </h2>
-                     <p className="text-slate-200 text-sm sm:text-lg font-bold leading-relaxed mb-6 max-w-2xl mx-auto lg:mx-0 opacity-90 drop-shadow-sm">
-                       أستاذي الفاضل، ثقةً منا في حرصكم وعدالتكم، تم اختياركم لضمان نزاهة سير الاختبارات لليوم الامتحاني الفعال. يرجى التوقيع الإلكتروني بالاستلام أدناه.
+                     <p className="text-emerald-50 text-sm sm:text-base font-bold leading-relaxed mb-6 max-w-3xl opacity-90 drop-shadow-sm">
+                       بناءً على ثقتنا المطلقة في إدارتكم وكفاءتكم المعهودة، نُعلمكم بأنه تم تكليفكم بمهام المراقبة {isDutyTomorrow ? 'ليوم غدٍ' : 'لهذا اليوم'} الموافق <strong className="text-emerald-300">({safeFormat(upcomingDuty.exam_date, 'd MMMM yyyy')})</strong>.
                      </p>
                      
-                     <div className="flex flex-col gap-4 mb-6 w-full lg:w-3/4">
-                        {invigilationDuties.map((duty, idx) => (
-                          <div key={idx} className={`px-5 py-4 rounded-2xl flex flex-col gap-4 shadow-inner backdrop-blur-md transition-all ${duty.status === 'excused' ? 'bg-rose-500/5 border border-rose-500/20' : 'bg-emerald-500/5 border border-emerald-500/20 hover:bg-emerald-500/10'}`}>
-                             <div className="flex items-center gap-4">
-                                 <div className={`p-3 rounded-xl border ${duty.status === 'excused' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                                   <ShieldCheck className="w-6 h-6" />
-                                 </div>
-                                 <div className="text-right flex-1">
-                                   <p className={`text-[10px] font-bold mb-1 uppercase tracking-widest ${duty.status === 'excused' ? 'text-rose-300/80' : 'text-emerald-300/80'}`}>اللجنة المخصصة لك في {duty.exam_date}:</p>
-                                   <h3 className="text-lg sm:text-xl font-black text-white drop-shadow-md">{duty.exam_committees?.name}</h3>
-                                 </div>
-                             </div>
-                             
-                             <div className={`border-t pt-3 flex flex-wrap items-center gap-3 ${duty.status === 'excused' ? 'border-rose-500/10' : 'border-emerald-500/10'}`}>
-                                {(!duty.status || duty.status === 'pending') && (
-                                   <>
-                                     <button onClick={() => signDuty(duty.id)} disabled={isProcessingDuty} className="flex-1 sm:flex-none px-5 py-3 bg-emerald-500/80 hover:bg-emerald-500 backdrop-blur-md text-slate-950 font-black text-xs sm:text-sm rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50 border border-emerald-400/50">
-                                       <FileSignature className="w-4 h-4" /> توقيع إلكتروني بالاستلام
-                                     </button>
-                                     <button onClick={() => openDutyExcuseModal(duty.id)} disabled={isProcessingDuty} className="px-5 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-black text-xs sm:text-sm rounded-xl transition-all border border-rose-500/30 flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
-                                       <X className="w-4 h-4" /> لدي مانع
-                                     </button>
-                                   </>
-                                )}
-                                {duty.status === 'signed' && (
-                                   <div className="px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black text-xs sm:text-sm rounded-xl flex items-center gap-2 w-full shadow-inner">
-                                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                                     تم توقيع العهدة إلكترونياً (في {safeFormat(duty.signed_at, 'd MMM - h:mm a')})
-                                   </div>
-                                )}
-                                {duty.status === 'excused' && (
-                                   <div className="px-4 py-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 font-black text-xs sm:text-sm rounded-xl flex items-center gap-2 w-full shadow-inner">
-                                     <AlertTriangle className="w-5 h-5 text-rose-400" />
-                                     تم رفع الاعتذار للإدارة وهو قيد المراجعة.
-                                   </div>
-                                )}
-                             </div>
-                          </div>
-                        ))}
-                     </div>
-
-                     {finalExamsTimetable.length > 0 && (
-                        <div className="w-full max-w-2xl bg-[#02040a]/40 border border-white/5 rounded-2xl p-5 shadow-inner backdrop-blur-md">
-                           <p className="text-sm font-bold text-emerald-300 mb-4 flex items-center justify-center lg:justify-start gap-2"><CalendarDays className="w-4 h-4"/> جدول الامتحانات (أيام المراقبة):</p>
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {finalExamsTimetable.map((ex, i) => (
-                                 <div key={i} className="flex justify-between items-center bg-white/5 px-4 py-3 rounded-xl border border-white/5 shadow-inner">
-                                    <span className="text-sm font-black text-white truncate max-w-[120px]" title={ex.subjects?.name}>{ex.subjects?.name}</span>
-                                    <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">{safeFormat(ex.exam_date, 'd MMM yyyy')}</span>
-                                 </div>
-                              ))}
-                           </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div className="bg-[#02040a]/40 backdrop-blur-md p-5 rounded-2xl border border-white/5 shadow-inner">
+                           <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">اللجنة المخصصة لكم</p>
+                           <p className="text-xl font-black text-emerald-400">{upcomingDuty.exam_committees?.name}</p>
+                           {coInvigilator && (
+                             <p className="text-sm font-bold text-slate-300 mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
+                               <Users className="w-4 h-4 text-slate-400" /> برفقة الزميل: {coInvigilator}
+                             </p>
+                           )}
                         </div>
-                     )}
+                        <div className="bg-[#02040a]/40 backdrop-blur-md p-5 rounded-2xl border border-white/5 shadow-inner">
+                           <p className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest flex items-center gap-2"><BookOpen className="w-3.5 h-3.5" /> المواد المختبرة</p>
+                           {examSubjects.length > 0 ? (
+                             <ul className="space-y-1">
+                               {examSubjects.map((sub, idx) => (
+                                 <li key={idx} className="text-sm font-bold text-slate-200">الصف {sub.class_level}: <span className="text-emerald-300">{sub.subjects?.name}</span></li>
+                               ))}
+                             </ul>
+                           ) : (
+                             <p className="text-xs text-slate-500 font-bold">جاري تحديث المواد...</p>
+                           )}
+                        </div>
+                     </div>
+                     
+                     <div className="flex flex-wrap items-center gap-3">
+                        {(!upcomingDuty.status || upcomingDuty.status === 'pending') && (
+                           <>
+                             <button onClick={signDuty} disabled={isProcessingDuty} className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center gap-2 active:scale-95 border border-emerald-400/50">
+                               <FileSignature className="w-5 h-5" /> أتشرف بقبول التكليف (توقيع بالاستلام)
+                             </button>
+                             <button onClick={() => setIsDutyExcuseModalOpen(true)} disabled={isProcessingDuty} className="px-6 py-3.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-black text-sm rounded-xl transition-all border border-rose-500/30 flex items-center gap-2 active:scale-95">
+                               <AlertCircle className="w-5 h-5" /> أعتذر لظرف طارئ
+                             </button>
+                           </>
+                        )}
+                        {upcomingDuty.status === 'signed' && (
+                           <div className="px-6 py-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black text-sm rounded-xl flex items-center gap-2 shadow-inner">
+                             <CheckCircle2 className="w-5 h-5 text-emerald-400" /> تم تأكيد الاستلام بنجاح، بالتوفيق أستاذي!
+                           </div>
+                        )}
+                        {upcomingDuty.status === 'excused' && (
+                           <div className="px-6 py-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-300 font-black text-sm rounded-xl flex items-center gap-2 shadow-inner">
+                             <AlertTriangle className="w-5 h-5 text-rose-400" /> تم رفع عذركم للإدارة وهو قيد المراجعة والتقدير.
+                           </div>
+                        )}
+                     </div>
                   </div>
                </div>
             </motion.div>
@@ -982,6 +944,7 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
+      {/* 🚀 النوافذ (Modals) للغياب والاعتذار */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
