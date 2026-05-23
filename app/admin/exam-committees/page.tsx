@@ -1551,6 +1551,7 @@ function ExamCommitteesControl() {
             ))}
 
           </div>
+                  </div>
       )}
       
       <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }`}</style>
