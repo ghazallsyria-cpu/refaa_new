@@ -7,7 +7,7 @@ import {
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
   Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2,
-  CheckSquare, UserCheck, QrCode, Lock, FileCheck
+  CheckSquare, UserCheck, FileSignature, QrCode, Lock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,7 +31,6 @@ class ErrorBoundary extends React.Component {
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border-4 border-rose-500 text-center">
             <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4"/>
             <h1 className="text-3xl font-black text-rose-600 mb-4">حدث خطأ في عرض الصفحة</h1>
-            <p className="text-slate-500 font-bold mb-6">الرجاء تحديث الصفحة لمعالجة المشكلة.</p>
             <button onClick={() => window.location.reload()} className="mt-6 w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-colors">
               تحديث الصفحة وإعادة المحاولة
             </button>
@@ -77,7 +76,6 @@ function ExamCommitteesControl() {
   
   const [activeTab, setActiveTab] = useState<'management' | 'invigilators_radar' | 'heads_radar' | 'daily_stats' | 'custom_ids'>('management');
   
-  // 🌟 نظام الهويات والاعتماد
   const [customIdsList, setCustomIdsList] = useState<{name: string, role: string}[]>([{ name: '', role: 'مراقب إداري' }]);
   const [isFinalized, setIsFinalized] = useState(false);
 
@@ -116,19 +114,18 @@ function ExamCommitteesControl() {
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  // 🛡️ معالجة آمنة لبيانات الـ Local Storage لمنع التعارض أثناء الـ SSR
   useEffect(() => {
     try {
       const finalizedState = localStorage.getItem('committees_finalized');
       if (finalizedState === 'true') setIsFinalized(true);
-    } catch (e) { console.error('Local storage not accessible'); }
+    } catch(e) {}
   }, []);
 
   const handleToggleFinalize = () => {
     const newState = !isFinalized;
     if (newState && !confirm('اعتماد اللجان سيضيف ختم "معتمد رسمياً" على جميع المطبوعات، هل أنت متأكد؟')) return;
     setIsFinalized(newState);
-    try { localStorage.setItem('committees_finalized', newState ? 'true' : 'false'); } catch (e) {}
+    try { localStorage.setItem('committees_finalized', newState ? 'true' : 'false'); } catch(e) {}
   };
 
   const getFullClassName = (studentData: any) => {
@@ -353,7 +350,6 @@ function ExamCommitteesControl() {
     } catch (e) { alert('حدث خطأ أثناء الحذف'); } finally { setIsLoading(false); }
   };
 
-  // 🚀 إعادة تسلسل أرقام الجلوس للمصداقية
   const resequenceSeatNumbers = async () => {
     try {
       const { data: allocs } = await supabase.from('student_seat_allocations').select('id, student_id, committee_id, students(next_year_track, users(full_name), sections(classes(level)))').eq('academic_year', currentYear).eq('semester', currentSemester);
@@ -500,7 +496,6 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
-  // 🌟 التوزيع الذكي المرحلي (ضمان مراقب واحد على الأقل أولاً)
   const handleAutoAssignInvigilators = async () => {
     if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع (مراقب واحد كحد أدنى) لكل لجنة، ثم يدمج المراقب الثاني بدون تكرار للضرورة. تأكيد؟')) return;
     
@@ -627,34 +622,38 @@ function ExamCommitteesControl() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Hidden Input for custom avatar (used in standard teacher component, safe to leave)
+      // Stub
   };
 
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids' | 'signatures_sheet' | 'custom_ids', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
-      let query = supabase.from('student_seat_allocations')
-        .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( id, name )`)
-        .eq('academic_year', currentYear).eq('semester', currentSemester);
+      let finalDataToPrint = [];
+      let committee = { name: 'لجنة عامة', id: committeeId };
 
-      if (type === 'door_sheet' || type === 'desk_cards') {
-        query = query.eq('committee_id', committeeId).order('seat_number', { ascending: true });
+      if (['door_sheet', 'desk_cards', 'class_cards', 'signatures_sheet'].includes(type)) {
+         let query = supabase.from('student_seat_allocations')
+           .select(`seat_number, student_id, students ( id, next_year_track, users(full_name, avatar_url), sections(name, classes(name, level)) ), exam_committees ( id, name )`)
+           .eq('academic_year', currentYear).eq('semester', currentSemester);
+
+         if (committeeId) {
+           query = query.eq('committee_id', committeeId).order('seat_number', { ascending: true });
+         }
+         const { data } = await query;
+         finalDataToPrint = Array.isArray(data) ? data : [];
+         committee = committees.find(c => String(c?.id) === String(committeeId)) || committee;
+
+         if (type === 'class_cards' && classNameToPrint) {
+           finalDataToPrint = finalDataToPrint.filter(s => getFullClassName(s?.students) === classNameToPrint);
+           finalDataToPrint.sort((a, b) => getSafeName(a?.students?.users).localeCompare(getSafeName(b?.students?.users), 'ar'));
+         }
       }
 
-      const { data } = await query;
-      let finalDataToPrint = Array.isArray(data) ? data : [];
-      const committee = committees.find(c => String(c?.id) === String(committeeId)) || { name: 'لجنة عامة' };
-      
       let currentDayInvigilators = [];
       let eligibleHeadsForPrint = [];
 
       if (type === 'invigilator_ids') currentDayInvigilators = teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head);
       if (type === 'head_ids') eligibleHeadsForPrint = teachers.filter(t => t.is_committee_head);
-
-      if (type === 'class_cards' && classNameToPrint) {
-        finalDataToPrint = finalDataToPrint.filter(s => getFullClassName(s?.students) === classNameToPrint);
-        finalDataToPrint.sort((a, b) => getSafeName(a?.students?.users).localeCompare(getSafeName(b?.students?.users), 'ar'));
-      }
 
       if (['door_sheet','desk_cards','class_cards'].includes(type) && finalDataToPrint.length === 0) { 
         alert('لا يوجد طلاب للطباعة!'); setIsPrinting(false); return; 
@@ -681,17 +680,36 @@ function ExamCommitteesControl() {
       
       setPrintType(type);
 
+      // 🛡️ Safe timeout logic to ensure render
       setTimeout(async () => {
-        if (!printRef.current) { setIsPrinting(false); return; }
+        if (!printRef.current) { 
+            alert('الرجاء المحاولة مرة أخرى.');
+            setIsPrinting(false); 
+            return; 
+        }
+        
         try {
-          await document.fonts.ready; 
-          const html2canvasModule = await import('html2canvas-pro');
+          // 🛡️ Safe Promise Race to avoid hanging fonts
+          try { await Promise.race([document.fonts.ready, new Promise(res => setTimeout(res, 1000))]); } catch(e) {}
+          
+          let html2canvasModule;
+          try {
+             html2canvasModule = await import('html2canvas-pro');
+          } catch(e) {
+             alert('تعذر تحميل مكتبة الطباعة، تأكد من الاتصال.');
+             setIsPrinting(false);
+             return;
+          }
+          
           const html2canvas = html2canvasModule.default || html2canvasModule;
           const { jsPDF } = await import('jspdf');
 
           window.scrollTo(0, 0); const isMobile = window.innerWidth < 768;
           const pages = printRef.current.querySelectorAll('.print-page-wrapper');
-          if (pages.length === 0) { setIsPrinting(false); return; }
+          if (pages.length === 0) { 
+              alert('خطأ في بناء العرض المرئي للطباعة، حاول مرة أخرى.');
+              setIsPrinting(false); return; 
+          }
           const pdf = new jsPDF('p', 'mm', 'a4');
           
           const pdfWidth = pdf.internal.pageSize.getWidth(); 
@@ -699,15 +717,7 @@ function ExamCommitteesControl() {
 
           for (let i = 0; i < pages.length; i++) {
             const pageElement = pages[i] as HTMLElement;
-            const originalCssText = pageElement.style.cssText;
-            pageElement.style.position = 'fixed'; 
-            pageElement.style.top = '0'; 
-            pageElement.style.left = '0'; 
-            pageElement.style.width = '794px'; 
-            pageElement.style.zIndex = '-9999';
-
-            const canvas = await html2canvas(pageElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0 });
-            pageElement.style.cssText = originalCssText;
+            const canvas = await html2canvas(pageElement, { scale: isMobile ? 1.5 : 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0, logging: false });
             const imgData = canvas.toDataURL('image/jpeg', 1.0); 
             
             const imgProps = pdf.getImageProperties(imgData);
@@ -718,9 +728,9 @@ function ExamCommitteesControl() {
           }
           let fileName = `مستند_${type}`;
           pdf.save(`${fileName}.pdf`);
-        } catch (err: any) { alert('خطأ أثناء بناء الـ PDF.'); } finally { setPrintData(null); setPrintType(null); setIsPrinting(false); setIsClassPrintModalOpen(false); }
-      }, 3000); 
-    } catch (e) { alert('خطأ في الطباعة'); setIsPrinting(false); }
+        } catch (err: any) { alert('خطأ داخلي أثناء بناء الـ PDF.'); console.error(err); } finally { setPrintData(null); setPrintType(null); setIsPrinting(false); setIsClassPrintModalOpen(false); }
+      }, 2000); 
+    } catch (e) { alert('خطأ في الطباعة'); console.error(e); setIsPrinting(false); }
   };
 
   const getTeacherTotalAssignments = (tId: string) => invigilators.filter(i => String(i?.teacher_id) === String(tId));
@@ -1174,10 +1184,9 @@ function ExamCommitteesControl() {
                           </div>
                         </div>
 
-                        {/* 🚀 أزرار الطباعة المحدثة */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-auto pt-3 border-t border-slate-100">
                           <button type="button" onClick={() => printDocument(committee?.id, 'door_sheet')} className="bg-slate-800 text-white text-[10px] font-black py-2 rounded-lg hover:bg-slate-700 flex justify-center items-center"><Users className="w-3 h-3 mr-1"/> كشف الطلاب</button>
-                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileCheck className="w-3 h-3 mr-1"/> التوقيعات</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileSignature className="w-3 h-3 mr-1"/> التوقيعات</button>
                           <button type="button" onClick={() => printDocument(committee?.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100 flex justify-center items-center"><IdCard className="w-3 h-3 mr-1"/> الطاولة</button>
                         </div>
 
@@ -1191,7 +1200,7 @@ function ExamCommitteesControl() {
         </div>
       </div>
 
-      {/* 🚀 النوافذ المنبثقة */}
+      {/* النوافذ المنبثقة */}
       {isBuilderModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
@@ -1426,13 +1435,323 @@ function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
+      {/* 🖨️ قوالب الطباعة المعالجة لدعم اللغة العربية والـ QR بدقة تامة */}
+      {printData && (
+        <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+          <div ref={printRef} className="flex flex-col bg-white" dir="rtl" style={{ fontFamily: '"Cairo", sans-serif', textRendering: 'optimizeLegibility' }}>
+            
+            {isFinalized && (
+               <div style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '140px', color: 'rgba(16, 185, 129, 0.07)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>
+            )}
+
+            {/* 📄 1. محضر اللجنة / كشف أسماء الطلاب النظيف المفرغ من التوقيعات */}
+            {printType === 'door_sheet' && chunkArray(printData.students, 16).map((chunk, pageIdx, chunksArr) => (
+              <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
+                    <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
+                    <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
+                    <h3 className="text-2xl font-black text-black mt-3 border-2 border-black inline-block px-8 py-1.5 bg-slate-100 rounded-2xl">{printData.committee?.name || 'لجنة غير محددة'}</h3>
+                    <p className="text-lg font-black text-black mt-3">كشف أسماء الطلاب - الفصل الدراسي الثاني 2025/2026</p>
+                 </div>
+                 <table className="w-full border-collapse border-[3px] border-black text-sm text-black relative z-10 mb-auto">
+                   <thead>
+                     <tr className="bg-slate-100 border-b-[3px] border-black h-12">
+                       <th className="border-l-[3px] border-black p-2 w-10 text-center">م</th>
+                       <th className="border-l-[3px] border-black p-2 w-28 text-center">رقم الجلوس</th>
+                       <th className="border-l-[3px] border-black p-2 text-center">اسم الطالب الرباعي</th>
+                       <th className="p-2 w-36 text-center">الصف والشعبة</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {chunk.map((s:any, i:number) => {
+                       const globalIndex = (pageIdx * 16) + i + 1;
+                       return (
+                         <tr key={`p1-${i}`} className="border-b-[2px] border-black h-[48px]">
+                           <td className="border-l-[3px] border-black px-2 text-center font-bold">{globalIndex}</td>
+                           <td className="border-l-[3px] border-black px-2 text-center font-black text-lg">{s?.seat_number}</td>
+                           <td className="border-l-[3px] border-black px-3 font-bold text-base">{getSafeName(s?.students?.users)}</td>
+                           <td className="px-2 text-center font-bold text-xs">{getFullClassName(s?.students)}</td>
+                         </tr>
+                       )
+                     })}
+                   </tbody>
+                 </table>
+                 <div className="flex-1"></div>
+                 <div className="text-left mt-4 text-[10px] font-bold text-slate-500 shrink-0">صفحة {pageIdx + 1} من {chunksArr.length}</div>
+              </div>
+            ))}
+
+            {/* 📄 2. سجل توقيعات اللجنة المخصص */}
+            {printType === 'signatures_sheet' && (
+              <div className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
+                    <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
+                    <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
+                    <h3 className="text-2xl font-black text-black mt-3 border-2 border-black inline-block px-8 py-1.5 bg-slate-100 rounded-2xl">{printData.committee?.name || 'لجنة غير محددة'}</h3>
+                    <p className="text-lg font-black text-black mt-3">سجل توقيعات الملاحظين ورؤساء اللجان - الفصل الدراسي الثاني 2025/2026</p>
+                 </div>
+
+                 <table className="w-full border-collapse border-[3px] border-black text-sm text-black relative z-10 mb-auto">
+                   <thead>
+                     <tr className="bg-slate-100 border-b-[3px] border-black h-12">
+                       <th className="border-l-[3px] border-black p-2 text-center w-24">اليوم والتاريخ</th>
+                       <th className="border-l-[3px] border-black p-2 text-center w-32">المادة</th>
+                       <th className="border-l-[3px] border-black p-2 text-center w-40">المراقب الأول</th>
+                       <th className="border-l-[3px] border-black p-2 text-center w-40">المراقب الثاني</th>
+                       <th className="p-2 text-center w-40">رئيس اللجنة</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {printData.uniqueDates.map((date: string, i: number) => {
+                       const dayExams = printData.timetables.filter(t => t.exam_date === date);
+                       const subjectsStr = dayExams.map(ex => ex.subjects?.name).join(' + ');
+
+                       return (
+                         <tr key={`sig-${i}`} className="border-b-[2px] border-black h-[72px]">
+                           <td className="border-l-[3px] border-black px-2 text-center font-bold text-xs">{date}</td>
+                           <td className="border-l-[3px] border-black px-2 text-center font-bold text-xs">{subjectsStr || '---'}</td>
+                           <td className="border-l-[3px] border-black px-2 text-center text-xs relative bg-slate-50/30">
+                              <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
+                              <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                           </td>
+                           <td className="border-l-[3px] border-black px-2 text-center text-xs relative bg-slate-50/30">
+                              <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
+                              <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                           </td>
+                           <td className="px-2 text-center text-xs relative bg-slate-50/30">
+                              <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
+                              <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                           </td>
+                         </tr>
+                       )
+                     })}
+                   </tbody>
+                 </table>
+                 <div className="flex-1"></div>
+              </div>
+            )}
+
+            {/* 📄 3. بطاقات الطلاب للفصول */}
+            {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
+              <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {chunk.map((student:any, si) => {
+                    const stdName = getSafeName(student?.students?.users);
+                    const fullClassName = getFullClassName(student?.students);
+                    const commName = student?.exam_committees?.name || 'غير محدد';
+                    const qrPayload = `raf-id:${student?.student_id}`; 
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
+
+                    return (
+                       <div key={`c-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box' }}>
+                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة جلوس اختبارات نهاية العام</div>
+                             </div>
+                             <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{commName}</div>
+                          </div>
+                          <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
+                             <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
+                                <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                             </div>
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
+                                <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0, display: 'block' }}>{stdName}</h2>
+                                </div>
+                                <div style={{ marginTop: '2px' }}>
+                                   <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{fullClassName}</span>
+                                </div>
+                             </div>
+                             <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '10px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '20mm', flexShrink: 0 }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
+                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
+                             </div>
+                          </div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
+            {/* 📄 4. بطاقات الطاولة */}
+            {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
+              <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {chunk.map((student:any, si) => {
+                    const stdName = getSafeName(student?.students?.users);
+                    const fullClassName = getFullClassName(student?.students);
+                    const qrPayload = `raf-id:${student?.student_id}`; 
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrPayload)}&margin=0`;
+
+                    return (
+                       <div key={`d-${si}`} style={{ width: '85mm', height: '55mm', border: '3px solid black', position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden', boxSizing: 'border-box' }}>
+                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة جلوس اختبارات نهاية العام</div>
+                             </div>
+                             <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{printData.committee?.name || 'غير محدد'}</div>
+                          </div>
+                          <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }} dir="rtl">
+                             <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
+                                <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                             </div>
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
+                                <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0, display: 'block' }}>{stdName}</h2>
+                                </div>
+                                <div style={{ marginTop: '2px' }}>
+                                   <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{fullClassName}</span>
+                                </div>
+                             </div>
+                             <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '10px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '20mm', flexShrink: 0 }}>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
+                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
+                             </div>
+                          </div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
+            {/* 📄 5. هويات المراقبين الثابتة (تصميم فخم مدمج مع QR) */}
+            {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
+              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {chunk.map((inv: any, si) => {
+                    const teacherName = getSafeName(inv);
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-staff:${inv.id}&margin=0`;
+                    return (
+                       <div key={`inv-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #0f172a' }}>
+                          <div style={{ background: 'linear-gradient(to right, #0f172a, #1e293b)', borderBottom: '3px solid #d4af37', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '15px', color: '#f8fafc' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#d4af37', marginTop: '4px' }}>كنترول امتحانات نهاية العام</div>
+                             </div>
+                             <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px solid #d4af37', color: '#d4af37', padding: '6px 12px', fontWeight: '900', fontSize: '12px', borderRadius: '8px' }}>2025-2026</div>
+                          </div>
+                          <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
+                             <div style={{ width: '80px', height: '80px', border: '3px solid #d4af37', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f1f5f9', padding: '3px' }}>
+                                <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {inv?.avatar_url ? (
+                                    <img src={inv.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ fontWeight: '900', color: '#0f172a', fontSize: '32px' }}>{String(teacherName).charAt(0)}</div>
+                                  )}
+                                </div>
+                             </div>
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 'black', color: '#64748b', marginBottom: '4px' }}>عضو لجنة المراقبة</div>
+                                <div style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '18px', fontWeight: '900', color: '#0f172a', lineHeight: '1.4', display: 'block', margin: 0 }}>{teacherName}</h2>
+                                </div>
+                                <div style={{ marginTop: '8px' }}>
+                                   <span style={{ display: 'inline-block', backgroundColor: '#0f172a', border: '1px solid #d4af37', padding: '4px 10px', borderRadius: '8px', fontWeight: '900', fontSize: '11px', color: '#f8fafc' }}>مُراقب معتمد</span>
+                                </div>
+                             </div>
+                             <div style={{ width: '22mm', height: '22mm', border: '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, padding: '2px', alignSelf: 'start' }}>
+                               <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                             </div>
+                          </div>
+                          <div style={{ height: '6px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
+            {/* 📄 6. هويات رؤساء اللجان المتوافقة مع QR */}
+            {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
+              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {chunk.map((head: any, si) => {
+                    const headName = getSafeName(head);
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-head:${head.id}&margin=0`;
+                    return (
+                       <div key={`head-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #78350f' }}>
+                          <div style={{ background: 'linear-gradient(to right, #78350f, #92400e)', borderBottom: '3px solid #fcd34d', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '15px', color: '#fffbeb' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#fcd34d', marginTop: '4px' }}>التكليف الإشرافي العام للجان</div>
+                             </div>
+                             <div style={{ backgroundColor: '#b45309', border: '1px solid #fcd34d', color: '#fffbeb', padding: '6px 12px', fontWeight: '900', fontSize: '11px', borderRadius: '8px' }}>رئيس اللجان</div>
+                          </div>
+                          <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
+                             <div style={{ width: '80px', height: '80px', border: '3px solid #b45309', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#fffbeb', padding: '3px' }}>
+                                <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {head?.avatar_url ? (
+                                    <img src={head.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ fontWeight: '900', color: '#b45309', fontSize: '32px' }}>👑</div>
+                                  )}
+                                </div>
+                             </div>
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 'black', color: '#92400e', marginBottom: '4px' }}>رئيس اللجنة القيادي</div>
+                                <div style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '18px', fontWeight: '900', color: '#451a03', lineHeight: '1.4', display: 'block', margin: 0 }}>{headName}</h2>
+                                </div>
+                                <div style={{ marginTop: '8px' }}>
+                                   <div style={{ fontSize: '11px', fontWeight: 'black', color: '#b45309', backgroundColor: '#fffbeb', padding: '4px 10px', borderRadius: '8px', border: '1px solid #fcd34d', display: 'inline-block' }}>نطاق الإشراف: الشامل</div>
+                                </div>
+                             </div>
+                             <div style={{ width: '22mm', height: '22mm', border: '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, padding: '2px', alignSelf: 'start' }}>
+                               <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                             </div>
+                          </div>
+                          <div style={{ height: '6px', width: '100%', background: 'linear-gradient(to right, #b45309, #fde68a, #b45309)' }}></div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
+            {/* 📄 7. الهويات الإدارية المخصصة */}
+            {printType === 'custom_ids' && chunkArray(printData.customIds, 6).map((chunk, pageIdx) => (
+              <div key={`p-cstm-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {chunk.map((item: any, si: number) => {
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-custom:${encodeURIComponent(item.name)}&margin=0`;
+                    return (
+                       <div key={`cstm-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #1e1b4b' }}>
+                          <div style={{ background: 'linear-gradient(to right, #1e1b4b, #312e81)', borderBottom: '3px solid #fbbf24', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '15px', color: '#f8fafc' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#fbbf24', marginTop: '4px' }}>إدارة الامتحانات والكنترول</div>
+                             </div>
+                             <div style={{ backgroundColor: 'rgba(251, 191, 36, 0.1)', border: '1px solid #fbbf24', color: '#fbbf24', padding: '6px 12px', fontWeight: '900', fontSize: '12px', borderRadius: '8px' }}>2025-2026</div>
+                          </div>
+                          <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
+                             <div style={{ width: '80px', height: '80px', border: '3px solid #fbbf24', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f1f5f9', padding: '3px' }}>
+                                <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <div style={{ fontWeight: '900', color: '#1e1b4b', fontSize: '32px' }}>{String(item.name).charAt(0)}</div>
+                                </div>
+                             </div>
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 'black', color: '#64748b', marginBottom: '4px' }}>{item.role || 'عضو إداري'}</div>
+                                <div style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '18px', fontWeight: '900', color: '#1e1b4b', lineHeight: '1.4', display: 'block', margin: 0 }}>{item.name || 'بدون اسم'}</h2>
+                                </div>
+                             </div>
+                             <div style={{ width: '22mm', height: '22mm', border: '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, padding: '2px', alignSelf: 'start' }}>
+                               <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                             </div>
+                          </div>
+                          <div style={{ height: '6px', width: '100%', background: 'linear-gradient(to right, #fbbf24, #fef08a, #fbbf24)' }}></div>
+                       </div>
+                    )
+                 })}
+              </div>
+            ))}
+
+          </div>
+        </div>
+      )}
+      
+      <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }`}</style>
     </div>
   );
 }
 
-// =========================================================================
-// 3. 🚀 التصدير النهائي للصفحة
-// =========================================================================
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { const timer = setTimeout(() => setMounted(true), 0); return () => clearTimeout(timer); }, []);
