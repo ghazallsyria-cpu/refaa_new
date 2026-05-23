@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, UserPlus, ShieldCheck, Settings, Loader2, Search, Trash2, PrinterIcon, 
   IdCard, DoorOpen, LayoutGrid, CheckCircle2, X, Edit3, Plus, Eye, AlertTriangle, 
-  Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, Info, AlertCircle, Clock, Wand2,
+  Contact, Camera, UploadCloud, Crown, Layers, UserMinus, CalendarDays, FileText, AlertCircle, Clock, Wand2,
   CheckSquare, UserCheck
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -16,7 +16,7 @@ import { useExamSeating } from '@/hooks/useExamSeating';
 import { useAuth } from '@/context/auth-context';
 
 // =========================================================================
-// 1. 🛡️ جدار الحماية المبسط (بدون حلقات لا نهائية)
+// 1. 🛡️ جدار الحماية المبسط
 // =========================================================================
 class ErrorBoundary extends React.Component {
   constructor(props: any) {
@@ -453,7 +453,7 @@ function ExamCommitteesControl() {
   };
 
   const handleAutoAssignInvigilators = async () => {
-    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع 2 لكل لجنة على جميع أيام الامتحانات، مع استبعاد المعفيين ورؤساء اللجان، وضمان عدم تكرار المعلم لنفس اللجنة. هل أنت متأكد؟')) return;
+    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع 2 لكل لجنة على جميع أيام الامتحانات. هل أنت متأكد؟')) return;
     
     setIsAutoAssigning(true);
     try {
@@ -541,6 +541,7 @@ function ExamCommitteesControl() {
     } catch (err: any) { alert('حدث خطأ أثناء التوزيع الآلي: ' + err.message); } finally { setIsAutoAssigning(false); }
   };
 
+  // 🌟 دالة الطباعة المحدثة لمنع تقطيع الأحرف (إزالة letterSpacing تماماً عن النصوص العربية و truncate)
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
@@ -563,18 +564,13 @@ function ExamCommitteesControl() {
       if (type === 'invigilator_ids') {
         currentDayInvigilators = teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head);
       }
-      
       if (type === 'head_ids') {
         eligibleHeadsForPrint = teachers.filter(t => t.is_committee_head);
       }
 
       if (type === 'class_cards' && classNameToPrint) {
         finalDataToPrint = finalDataToPrint.filter(s => getFullClassName(s?.students) === classNameToPrint);
-        finalDataToPrint.sort((a, b) => {
-           const nameA = getSafeName(a?.students?.users);
-           const nameB = getSafeName(b?.students?.users);
-           return nameA.localeCompare(nameB, 'ar');
-        });
+        finalDataToPrint.sort((a, b) => getSafeName(a?.students?.users).localeCompare(getSafeName(b?.students?.users), 'ar'));
       }
 
       if (type !== 'invigilator_ids' && type !== 'head_ids' && finalDataToPrint.length === 0) { 
@@ -593,6 +589,7 @@ function ExamCommitteesControl() {
       setTimeout(async () => {
         if (!printRef.current) { setIsPrinting(false); return; }
         try {
+          await document.fonts.ready; // 🌟 انتظار تحميل الخطوط لضمان عدم تقطيع الأحرف 🌟
           const html2canvasModule = await import('html2canvas-pro');
           const html2canvas = html2canvasModule.default || html2canvasModule;
           const { jsPDF } = await import('jspdf');
@@ -660,7 +657,7 @@ function ExamCommitteesControl() {
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex flex-col items-center justify-center text-white backdrop-blur-sm">
           <Loader2 className="w-16 h-16 animate-spin text-indigo-400 mb-6" />
           <h2 className="text-xl font-black animate-pulse text-center px-4">
-             {isPrinting ? 'جاري رسم ومعالجة قوالب الطباعة عالية الدقة...' : isAutoAssigning ? 'جاري تشغيل خوارزمية التوزيع الذكي للمراقبين...' : String(progressMsg || 'جاري التحميل')}
+             {isPrinting ? 'جاري رسم ومعالجة قوالب الطباعة العالية الدقة...' : isAutoAssigning ? 'جاري تشغيل خوارزمية التوزيع الذكي للمراقبين...' : String(progressMsg || 'جاري التحميل')}
           </h2>
         </div>
       )}
@@ -716,7 +713,7 @@ function ExamCommitteesControl() {
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة (العدالة والتدوير لجميع الأيام)</h3>
+                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><ShieldCheck className="w-6 h-6 text-emerald-500"/> رادار المراقبة</h3>
                      <button onClick={handleAutoAssignInvigilators} disabled={isAutoAssigning} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md transition-all flex items-center gap-2">
                         <Wand2 className="w-5 h-5"/> التوزيع الآلي الذكي
                      </button>
@@ -760,7 +757,6 @@ function ExamCommitteesControl() {
                          </div>
                        )
                      })}
-                     {teachers.filter(t => getTeacherTotalAssignments(String(t?.id)).length > 0).length === 0 && <p className="text-slate-400 font-bold text-sm col-span-full text-center py-10">لم يتم تكليف أي مراقب في أي يوم حتى الآن.</p>}
                   </div>
                </div>
             </div>
@@ -774,22 +770,8 @@ function ExamCommitteesControl() {
                         <h3 className="text-2xl font-black text-fuchsia-800 flex items-center gap-2 mb-2"><FileText className="w-7 h-7 text-fuchsia-600"/> إحصائية لجان المراقبة اليومية</h3>
                         <p className="text-sm font-bold text-fuchsia-600">تقرير مفصل ليوم: {activeExamDate}</p>
                      </div>
-                     <button onClick={() => window.print()} className="px-4 py-2 bg-fuchsia-600 text-white font-black rounded-xl hover:bg-fuchsia-700 shadow-sm print:hidden">
-                        طباعة الإحصائية
-                     </button>
+                     <button onClick={() => window.print()} className="px-4 py-2 bg-fuchsia-600 text-white font-black rounded-xl hover:bg-fuchsia-700 shadow-sm print:hidden">طباعة الإحصائية</button>
                   </div>
-
-                  <div className="mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                     <h4 className="text-sm font-black text-slate-800 mb-3 border-b border-slate-200 pb-2">المواد المختبرة في هذا اليوم:</h4>
-                     <div className="flex flex-wrap gap-2">
-                        {timetables.filter(t => t.exam_date === activeExamDate).map((t, idx) => (
-                           <span key={`sub-${idx}`} className="bg-white border border-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm">
-                              {t.subjects?.name} <span className="text-indigo-500 font-black">({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})</span>
-                           </span>
-                        ))}
-                     </div>
-                  </div>
-
                   <div className="mb-6 bg-amber-50 p-5 rounded-2xl border border-amber-200">
                      <h4 className="text-sm font-black text-amber-900 mb-3 border-b border-amber-200/50 pb-2 flex items-center gap-2"><Crown className="w-4 h-4"/> رؤساء اللجان لهذا اليوم:</h4>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -806,30 +788,26 @@ function ExamCommitteesControl() {
                         )) : <p className="text-xs font-bold text-amber-600">لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
                      </div>
                   </div>
-
-                  <div className="space-y-4">
-                     <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-200 pb-2">توزيع المراقبين على اللجان:</h4>
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {committees.map((comm, idx) => {
-                           const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(comm.id) && i.exam_date === activeExamDate);
-                           return (
-                              <div key={`c-stat-${idx}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                                 <h5 className="font-black text-indigo-700 border-b border-slate-100 pb-2 mb-3">{comm.name}</h5>
-                                 {commInvigs.length > 0 ? (
-                                    <ul className="space-y-2">
-                                       {commInvigs.map((inv, iIdx) => (
-                                          <li key={`inv-${iIdx}`} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                             <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0"/> {getSafeName(inv.users)}
-                                          </li>
-                                       ))}
-                                    </ul>
-                                 ) : (
-                                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">لا يوجد مراقبون محددون لهذا اليوم</p>
-                                 )}
-                              </div>
-                           )
-                        })}
-                     </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                     {committees.map((comm, idx) => {
+                        const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(comm.id) && i.exam_date === activeExamDate);
+                        return (
+                           <div key={`c-stat-${idx}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                              <h5 className="font-black text-indigo-700 border-b border-slate-100 pb-2 mb-3">{comm.name}</h5>
+                              {commInvigs.length > 0 ? (
+                                 <ul className="space-y-2">
+                                    {commInvigs.map((inv, iIdx) => (
+                                       <li key={`inv-${iIdx}`} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                          <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0"/> {getSafeName(inv.users)}
+                                       </li>
+                                    ))}
+                                 </ul>
+                              ) : (
+                                 <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-lg">لا يوجد مراقبون</p>
+                              )}
+                           </div>
+                        )
+                     })}
                   </div>
                </div>
             </div>
@@ -837,37 +815,21 @@ function ExamCommitteesControl() {
 
           {activeTab === 'heads_radar' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-               
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
-                 <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
-                    <UserCheck className="w-6 h-6 text-emerald-600"/> 1. تعيين رؤساء اللجان (اعتماد الفريق الدائم)
-                 </h3>
-                 <p className="text-xs font-bold text-slate-500 mb-6">ابحث عن المعلم، واعتمد كونه "رئيس لجنة". بمجرد الاعتماد سيتم استبعاده من المراقبات التلقائية اليومية ليتفرغ للرئاسة.</p>
-                 
+                 <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2"><UserCheck className="w-6 h-6 text-emerald-600"/> تعيين رؤساء اللجان المعتمدين</h3>
                  <div className="relative mb-4">
                     <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500 transition-colors shadow-inner" placeholder="ابحث عن اسم المعلم لتعيينه رئيساً..." value={headSearchTerm} onChange={(e) => setHeadSearchTerm(e.target.value)} />
+                    <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500" placeholder="ابحث عن معلم..." value={headSearchTerm} onChange={(e) => setHeadSearchTerm(e.target.value)} />
                  </div>
-
                  <div className="max-h-56 overflow-y-auto custom-scrollbar p-2 bg-slate-50/50 border border-slate-100 rounded-2xl space-y-2">
                     {teachers.filter(t => String(t?.full_name || '').includes(headSearchTerm)).map((t, idx) => {
                        const isHead = t.is_committee_head;
                        return (
-                          <div key={`hdl-${idx}`} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isHead ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                          <div key={`hdl-${idx}`} className={`p-3 rounded-xl border flex items-center justify-between transition-all ${isHead ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
                              <div className="flex items-center gap-3">
-                                 <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0 overflow-hidden">
-                                     {t?.avatar_url ? <img src={t.avatar_url} crossOrigin="anonymous" className="w-full h-full object-cover" alt="av" /> : <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm shrink-0">{String(t?.full_name || 'م').charAt(0)}</div>}
-                                 </div>
-                                 <div>
-                                     <p className={`text-sm font-black ${isHead ? 'text-amber-800' : 'text-slate-800'}`}>{t?.full_name}</p>
-                                     <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate max-w-[150px]">{t?.subjectsStr}</p>
-                                 </div>
+                                 <p className={`text-sm font-black ${isHead ? 'text-amber-800' : 'text-slate-800'}`}>{t?.full_name}</p>
                              </div>
-                             <button 
-                                 type="button"
-                                 onClick={() => handleToggleCommitteeHead(String(t?.id), isHead)}
-                                 className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isHead ? 'bg-rose-100 text-rose-600 hover:bg-rose-200' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
-                             >
+                             <button type="button" onClick={() => handleToggleCommitteeHead(String(t?.id), isHead)} className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isHead ? 'bg-rose-100 text-rose-600' : 'bg-emerald-500 text-white'}`}>
                                  {isHead ? 'إلغاء صفة الرئاسة' : 'تعيين كرئيس لجنة'}
                              </button>
                           </div>
@@ -877,91 +839,38 @@ function ExamCommitteesControl() {
                </div>
 
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
-                 <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
-                   <CalendarDays className="w-6 h-6 text-indigo-500"/> 2. التكليف اليومي لرؤساء اللجان المعتمدين
-                 </h3>
-                 
+                 <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">التكليف اليومي لرؤساء اللجان</h3>
                  <div className="space-y-6">
                    <div>
-                     <label className="block text-sm font-black text-slate-700 mb-2">أ) حدد اليوم الامتحاني</label>
-                     <select value={headAssignment.date} onChange={(e) => { setHeadAssignment({...headAssignment, date: e.target.value, head_teacher_id: ''}); fetchHeadsByDate(e.target.value); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
-                       <option value="">- اضغط لاختيار اليوم الامتحاني -</option>
-                       {uniqueExamDates.map((date, di) => {
-                          const count = timetables.filter(t => t?.exam_date === date).length;
-                          return <option key={`d-${di}`} value={date}>{date} (يتضمن {count} امتحانات)</option>
-                       })}
+                     <select value={headAssignment.date} onChange={(e) => { setHeadAssignment({...headAssignment, date: e.target.value, head_teacher_id: ''}); fetchHeadsByDate(e.target.value); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none">
+                       <option value="">- حدد اليوم الامتحاني -</option>
+                       {uniqueExamDates.map((date, di) => <option key={`d-${di}`} value={date}>{date}</option>)}
                      </select>
                    </div>
-                   
                    {headAssignment.date && (
-                     <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
-                       <label className="block text-sm font-black text-slate-700 mb-2">ب) اختر اللجان (يمكنك تحديد عدة لجان لرئيس واحد)</label>
-                       <div className="flex flex-wrap gap-2 mb-4 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
-                          {committees.filter(c => !String(c?.name || '').includes('الفائض')).map((c, ci) => {
-                            const isAssigned = alreadyAssignedCommittees.includes(c?.name);
-                            const isSelected = selectedCommitteesForHead.includes(c?.name);
-                            return (
-                              <button 
-                                type="button"
-                                key={`hc-${ci}`} 
-                                disabled={isAssigned}
-                                onClick={() => toggleCommitteeSelectionForHead(c?.name)}
-                                className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 border shadow-sm
-                                  ${isAssigned ? 'bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed' : 
-                                    isSelected ? 'bg-indigo-600 text-white border-indigo-700 scale-105' : 
-                                    'bg-white text-slate-700 border-slate-300 hover:border-indigo-400 hover:text-indigo-700'}`}
-                              >
-                                {isAssigned ? <X className="w-4 h-4"/> : isSelected ? <CheckSquare className="w-4 h-4"/> : <Plus className="w-4 h-4"/>}
-                                {String(c?.name || '')}
-                              </button>
-                            )
-                          })}
-                       </div>
-                     </motion.div>
+                     <div className="flex flex-wrap gap-2 mb-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                        {committees.filter(c => !String(c?.name || '').includes('الفائض')).map((c, ci) => {
+                          const isAssigned = alreadyAssignedCommittees.includes(c?.name);
+                          const isSelected = selectedCommitteesForHead.includes(c?.name);
+                          return (
+                            <button type="button" key={`hc-${ci}`} disabled={isAssigned} onClick={() => toggleCommitteeSelectionForHead(c?.name)} className={`px-4 py-2.5 rounded-xl text-sm font-black transition-all border shadow-sm ${isAssigned ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : isSelected ? 'bg-indigo-600 text-white' : 'bg-white text-slate-700'}`}>
+                              {String(c?.name || '')}
+                            </button>
+                          )
+                        })}
+                     </div>
                    )}
-
                    {headAssignment.date && selectedCommitteesForHead.length > 0 && (
-                     <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
-                       <label className="block text-sm font-black text-slate-700 mb-2">ج) من سيتولى رئاسة هذه اللجان المحددة؟</label>
-                       <div className="flex flex-col sm:flex-row gap-3">
-                         <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm">
-                           <option value="">- اختر رئيس اللجان المعتمد -</option>
-                           {teachers.filter(t => t.is_committee_head).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>👑 {t?.full_name}</option>)}
-                         </select>
-                         <button type="button" onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg flex items-center gap-2 justify-center">
-                            <CheckCircle2 className="w-5 h-5"/> اعتماد التكليف
-                         </button>
-                       </div>
-                     </motion.div>
+                     <div className="flex flex-col sm:flex-row gap-3">
+                       <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none">
+                         <option value="">- اختر رئيس اللجان المعتمد -</option>
+                         {teachers.filter(t => t.is_committee_head).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>👑 {t?.full_name}</option>)}
+                       </select>
+                       <button type="button" onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md">اعتماد التكليف</button>
+                     </div>
                    )}
                  </div>
                </div>
-
-               {headAssignment.date && (
-                 <div className="bg-white border border-slate-200 rounded-3xl p-6">
-                    <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> تكليفات رؤساء اللجان لليوم الامتحاني المحدد:</h4>
-                    <div className="space-y-3">
-                       {currentHeads.length > 0 ? currentHeads.map((head, hi) => (
-                          <div key={`h-asg-${hi}`} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl bg-slate-50 shadow-sm hover:shadow-md transition-shadow">
-                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center font-black shrink-0 overflow-hidden">
-                                   {head?.users?.avatar_url ? <img src={head.users.avatar_url} className="w-full h-full rounded-full object-cover" alt="img" /> : <Crown className="w-6 h-6"/>}
-                                </div>
-                                <div>
-                                   <p className="font-black text-slate-900 text-base">{getSafeName(head?.users)}</p>
-                                   <div className="flex flex-wrap gap-1 mt-1.5">
-                                      {String(head?.committees_range || '').split('، ').filter(Boolean).map((cr:string, i:number) => (
-                                        <span key={`cr-${i}`} className="font-bold text-amber-800 text-[11px] bg-amber-100 px-2 py-1 rounded-md border border-amber-200">{cr}</span>
-                                      ))}
-                                   </div>
-                                </div>
-                             </div>
-                             <button type="button" onClick={() => handleDeleteHead(head?.head_teacher_id, headAssignment.date)} className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shadow-sm" title="إزالة التكليف"><Trash2 className="w-5 h-5"/></button>
-                          </div>
-                       )) : <p className="text-center text-sm font-bold text-slate-400 py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">لم يتم تكليف أي رئيس لهذا اليوم الامتحاني بعد.</p>}
-                    </div>
-                 </div>
-               )}
             </div>
           )}
 
@@ -981,14 +890,11 @@ function ExamCommitteesControl() {
                 ) : (
                   <>
                     <button type="button" onClick={handleDistribute} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md flex justify-center items-center gap-2"><Users className="w-5 h-5" /> توزيع السحّاب</button>
-                    <button type="button" onClick={() => setIsClassPrintModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md border border-emerald-600"><Layers className="w-5 h-5" /> طباعة بطاقات الفصول</button>
-                    
+                    <button type="button" onClick={() => setIsClassPrintModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"><Layers className="w-5 h-5" /> طباعة بطاقات الفصول</button>
                     <button type="button" onClick={() => setIsExemptionsModalOpen(true)} className="flex-1 sm:flex-none px-6 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black rounded-xl flex justify-center items-center gap-2 shadow-sm border border-rose-100"><UserMinus className="w-5 h-5" /> إعفاء معلمين</button>
-                    
-                    <button type="button" onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة</button>
+                    <button type="button" onClick={() => openCommitteeModal()} className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl flex justify-center items-center gap-2"><Plus className="w-5 h-5" /> لجنة يدوية</button>
                     <button type="button" onClick={handleSoftReset} className="flex-1 sm:flex-none px-6 py-3 bg-orange-100 hover:bg-orange-200 text-orange-700 font-black rounded-xl flex justify-center items-center gap-2"><Trash2 className="w-5 h-5" /> تفريغ</button>
                     
-                    {/* أزرار الطباعة العامة الفخمة */}
                     <button type="button" onClick={() => printDocument('', 'invigilator_ids')} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"><Contact className="w-5 h-5"/> هويات المراقبين</button>
                     <button type="button" onClick={() => printDocument('', 'head_ids')} className="flex-1 sm:flex-none px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl flex justify-center items-center gap-2 shadow-md"><Crown className="w-5 h-5"/> هويات الرؤساء</button>
 
@@ -1046,12 +952,11 @@ function ExamCommitteesControl() {
                                      <span className="text-xs font-bold text-slate-800 truncate pr-1">{tName}</span>
                                      <button type="button" onClick={() => handleRemoveInvigilator(inv?.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
                                   </div>
-                                  
                                   <div className="flex items-center justify-between border-t border-slate-200/50 pt-1.5 mt-0.5">
                                      {inv?.status === 'signed' ? (
                                         <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> وقع الاستلام</span>
                                      ) : inv?.status === 'excused' ? (
-                                        <button type="button" onClick={() => openReadExcuseModal(inv)} className="text-[9px] font-black text-rose-500 bg-rose-100 px-2 py-0.5 rounded flex items-center gap-1 hover:bg-rose-200 transition-colors"><AlertCircle className="w-3 h-3"/> عرض العذر</button>
+                                        <button type="button" onClick={() => openReadExcuseModal(inv)} className="text-[9px] font-black text-rose-500 bg-rose-100 px-2 py-0.5 rounded flex items-center gap-1 hover:bg-rose-200 transition-colors cursor-pointer"><AlertCircle className="w-3 h-3"/> عرض العذر</button>
                                      ) : (
                                         <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3"/> قيد الانتظار</span>
                                      )}
@@ -1079,7 +984,7 @@ function ExamCommitteesControl() {
         </div>
       </div>
 
-      {/* 🚀 النوافذ المنبثقة (Modals) توضع هنا بشكل آمن داخل المكون الرئيسي */}
+      {/* 🚀 النوافذ المنبثقة */}
       {isBuilderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
@@ -1093,24 +998,19 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🚀 نافذة إدارة الإعفاءات */}
       <AnimatePresence>
         {isExemptionsModalOpen && (
            <>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsExemptionsModalOpen(false)} />
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
                  <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
-                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                       <UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين
-                    </h3>
+                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين</h3>
                     <button type="button" onClick={() => setIsExemptionsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full transition-colors"><X className="w-5 h-5"/></button>
                  </div>
-                 
                  <div className="relative mb-4 shrink-0">
                     <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
                     <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pr-11 pl-4 text-sm font-bold text-slate-800 focus:outline-none focus:border-rose-500 transition-colors" placeholder="ابحث عن معلم لإعفائه من المراقبة..." value={exemptionSearchTerm} onChange={(e) => setExemptionSearchTerm(e.target.value)} />
                  </div>
-                 
                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
                      {teachers.filter(t => String(t?.full_name || '').includes(exemptionSearchTerm) || String(t?.subjectsStr || '').includes(exemptionSearchTerm)).map((t, index) => {
                          const isExcluded = t?.is_excluded_from_exams;
@@ -1122,27 +1022,20 @@ function ExamCommitteesControl() {
                                    </div>
                                    <div>
                                        <p className={`text-sm font-black ${isExcluded ? 'text-rose-700' : 'text-slate-800'}`}>{t?.full_name}</p>
-                                       <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate max-w-[150px]">{t?.subjectsStr}</p>
                                    </div>
                                </div>
-                               <button 
-                                   type="button"
-                                   onClick={() => handleToggleExemption(String(t?.id), isExcluded)}
-                                   className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isExcluded ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
-                               >
+                               <button type="button" onClick={() => handleToggleExemption(String(t?.id), isExcluded)} className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all shadow-sm ${isExcluded ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                                    {isExcluded ? 'إلغاء الإعفاء' : 'إعفاء من المراقبة'}
                                </button>
                             </div>
                          )
                      })}
-                     {teachers.filter(t => String(t?.full_name || '').includes(exemptionSearchTerm)).length === 0 && <p className="text-center text-sm font-bold text-slate-400 py-8">لا يوجد معلمين.</p>}
                  </div>
               </motion.div>
            </>
         )}
       </AnimatePresence>
 
-      {/* 🚀 نافذة طباعة الفصول */}
       {isClassPrintModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsClassPrintModalOpen(false)}>
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative" onClick={e=>e.stopPropagation()}>
@@ -1150,7 +1043,7 @@ function ExamCommitteesControl() {
               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><Layers className="w-6 h-6 text-emerald-600"/> طباعة بطاقات الفصول</h3>
               <button type="button" onClick={() => setIsClassPrintModalOpen(false)} className="p-2 bg-slate-50 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
             </div>
-            <p className="text-sm font-bold text-slate-500 mb-4">اختر الصف لطباعة بطاقات جميع طلابه مجمعة لتسليمها لمربي الفصل.</p>
+            <p className="text-sm font-bold text-slate-500 mb-4">اختر الصف لطباعة بطاقات جميع طلابه مجمعة.</p>
             {availableClasses.length === 0 ? (
               <p className="text-center text-sm font-bold text-slate-500 py-8">لا يوجد طلاب موزعون بعد للطباعة.</p>
             ) : (
@@ -1167,7 +1060,6 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 👁️ نافذة استعراض اللجنة ونقل الطلاب */}
       {isViewModalOpen && selectedCommittee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)}>
            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -1180,7 +1072,6 @@ function ExamCommitteesControl() {
                  </div>
                  <button onClick={() => setIsViewModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-6 h-6"/></button>
               </div>
-
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
                  {viewCommitteeDetails.loading ? (
                     <div className="flex flex-col items-center justify-center py-20">
@@ -1193,7 +1084,6 @@ function ExamCommitteesControl() {
                        <span>قائمة الطلاب الموزعين وإجراءات النقل</span>
                        <span className="text-xs font-bold text-emerald-600">{viewCommitteeDetails.students.length} طالب</span>
                     </h4>
-                    
                     {viewCommitteeDetails.students.length > 0 ? (
                        <table className="w-full border-collapse border border-slate-200 text-right text-sm rounded-xl overflow-hidden shadow-sm">
                          <thead className="bg-slate-100">
@@ -1208,19 +1098,12 @@ function ExamCommitteesControl() {
                            {viewCommitteeDetails.students.map((s, idx) => {
                              const stdAvatar = s?.students?.users?.avatar_url || s?.students?.users?.[0]?.avatar_url;
                              const stdName = getSafeName(s?.students?.users);
-                             const stdInitial = String(stdName || 'ط').charAt(0);
                              const fullClassName = getFullClassName(s?.students);
-
                              return (
                                <tr key={`vstd-${idx}`} className="even:bg-slate-50 hover:bg-emerald-50/50 transition-colors">
                                  <td className="p-3 border-b border-slate-100 font-black text-indigo-600 tracking-widest">{s?.seat_number}</td>
                                  <td className="p-3 border-b border-slate-100 font-bold text-slate-800 flex items-center gap-2">
-                                    {stdAvatar ? (
-                                      <img src={stdAvatar} crossOrigin="anonymous" className="w-6 h-6 rounded-full object-cover shrink-0" alt="std" />
-                                    ) : (
-                                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black shrink-0">{stdInitial}</div>
-                                    )}
-                                    <span className="truncate">{stdName}</span>
+                                    <span className="truncate max-w-[200px]">{stdName}</span>
                                  </td>
                                  <td className="p-3 border-b border-slate-100 font-bold text-slate-500 text-xs">{fullClassName}</td>
                                  <td className="p-3 border-b border-slate-100 text-center">
@@ -1254,7 +1137,6 @@ function ExamCommitteesControl() {
         </div>
       )}
 
-      {/* 🚀 نافذة إضافة/تعديل لجنة يدوياً */}
       <AnimatePresence>
         {isCommitteeModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
@@ -1285,14 +1167,12 @@ function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 نافذة التكليف اليدوي لتعويض مراقب غائب */}
       <AnimatePresence>
         {isAssignModalOpen && selectedCommittee && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2"><UserPlus className="w-6 h-6 text-emerald-600"/> تعويض / تكليف مراقب</h3>
               <p className="text-sm font-bold text-slate-500 mb-6">لجنة: <span className="text-indigo-600">{selectedCommittee.name}</span> | التاريخ: <span className="text-indigo-600">{activeExamDate}</span></p>
-              
               <div className="space-y-4 mb-6">
                 <div>
                   <label className="text-sm font-bold text-slate-600 mb-2 block">اختر المعلم المتاح للتكليف:</label>
@@ -1313,27 +1193,52 @@ function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
-      {/* 🖨️ قوالب الطباعة المخفية */}
+      {/* 🚀 نافذة عرض العذر واتخاذ إجراء */}
+      <AnimatePresence>
+        {isReadExcuseModalOpen && selectedExcuseData && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsReadExcuseModalOpen(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4 border-b border-rose-100 pb-4">
+                 <h3 className="text-xl font-black text-rose-600 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> عذر عن المراقبة</h3>
+                 <button onClick={() => setIsReadExcuseModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full"><X className="w-5 h-5"/></button>
+              </div>
+              <div className="mb-6">
+                 <p className="text-sm font-bold text-slate-500 mb-1">المعلم المعتذر:</p>
+                 <p className="text-lg font-black text-slate-800 mb-4">{getSafeName(selectedExcuseData.users)}</p>
+                 <p className="text-sm font-bold text-slate-500 mb-1">سبب الاعتذار المُقدم:</p>
+                 <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-rose-900 font-bold text-sm min-h-[100px]">
+                    {selectedExcuseData.excuse_reason || 'لم يتم كتابة سبب مفصل من قبل المعلم.'}
+                 </div>
+              </div>
+              <div className="flex gap-3 mt-6 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => handleRemoveInvigilator(selectedExcuseData.id, getSafeName(selectedExcuseData.users))} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-xl font-black shadow-md transition-colors flex justify-center items-center gap-2">
+                  <UserMinus className="w-5 h-5"/> قبول العذر وإلغاء التكليف
+                </button>
+                <button type="button" onClick={() => setIsReadExcuseModalOpen(false)} className="px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-black transition-colors">إغلاق</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 🖨️ قوالب الطباعة المعالجة لدعم اللغة العربية بدقة تامة */}
       {printData && (
         <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
-<div ref={printRef} className="flex flex-col bg-white" dir="rtl">
+          <div ref={printRef} className="flex flex-col bg-white" dir="rtl" style={{ fontFamily: '"Cairo", sans-serif', textRendering: 'optimizeLegibility' }}>
             
-            {/* 📄 1. محضر اللجنة / كشف الباب الرسمي المقسم بالصفحات لمنع التداخل */}
+            {/* 📄 1. محضر اللجنة / كشف الباب الرسمي */}
             {printType === 'door_sheet' && chunkArray(printData.students, 13).map((chunk, pageIdx, chunksArr) => (
               <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
-                 
                  <div className="text-center mb-4 border-b-[3px] border-black pb-3 shrink-0">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
                     <h3 className="text-2xl font-black text-black mt-3 border-2 border-black inline-block px-8 py-1.5 bg-slate-100 rounded-2xl">{printData.committee?.name || 'لجنة غير محددة'}</h3>
                     <p className="text-sm font-black text-black mt-2">محضر سير لجان الامتحانات - الفصل الدراسي الثاني 2025/2026</p>
                  </div>
-                 
                  <div className="flex justify-between items-center mb-4 px-4 font-black text-base text-black border-2 border-slate-300 p-3 rounded-xl shrink-0">
                     <p>اليوم والتاريخ: ............................................</p>
                     <p>المادة: ............................................</p>
                  </div>
-
                  <table className="w-full border-collapse border-[3px] border-black text-sm text-black flex-1">
                    <thead>
                      <tr className="bg-slate-100 border-b-[3px] border-black h-10">
@@ -1349,7 +1254,7 @@ function ExamCommitteesControl() {
                        return (
                          <tr key={`p1-${i}`} className="border-b-[2px] border-black h-[42px]">
                            <td className="border-l-[3px] border-black px-2 text-center font-bold">{globalIndex}</td>
-                           <td className="border-l-[3px] border-black px-2 text-center font-black text-lg tracking-widest">{s?.seat_number}</td>
+                           <td className="border-l-[3px] border-black px-2 text-center font-black text-lg">{s?.seat_number}</td>
                            <td className="border-l-[3px] border-black px-3 font-bold text-base">{getSafeName(s?.students?.users)}</td>
                            <td className="px-2 text-center font-bold text-xs">{getFullClassName(s?.students)}</td>
                          </tr>
@@ -1357,7 +1262,6 @@ function ExamCommitteesControl() {
                      })}
                    </tbody>
                  </table>
-
                  {pageIdx === chunksArr.length - 1 ? (
                    <div className="flex justify-between px-6 text-black mt-6 pt-2 shrink-0">
                       <div className="text-center">
@@ -1377,13 +1281,13 @@ function ExamCommitteesControl() {
                       </div>
                    </div>
                  ) : (
-                   <div className="mt-6 pt-2 shrink-0 h-[80px]"></div> /* مساحة فارغة للحفاظ على التناسق في الصفحات غير الأخيرة */
+                   <div className="mt-6 pt-2 shrink-0 h-[80px]"></div>
                  )}
                  <div className="text-left mt-2 text-[10px] font-bold text-slate-500 shrink-0">صفحة {pageIdx + 1} من {chunksArr.length}</div>
               </div>
             ))}
 
-            {/* 📄 2. بطاقات الطاولة العرضية للفصول المفرزة */}
+            {/* 📄 2. بطاقات الطاولة للفصول */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
@@ -1417,7 +1321,7 @@ function ExamCommitteesControl() {
                              </div>
                              <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '10px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '20mm', flexShrink: 0 }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
-                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', letterSpacing: '2px', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
+                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
                              </div>
                           </div>
                        </div>
@@ -1426,7 +1330,7 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 3. بطاقات الطاولة العادية (مفرزة باللجنة) */}
+            {/* 📄 3. بطاقات الطاولة للجان */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {chunk.map((student:any, si) => {
@@ -1459,7 +1363,7 @@ function ExamCommitteesControl() {
                              </div>
                              <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '10px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '20mm', flexShrink: 0 }}>
                                 <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
-                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', letterSpacing: '2px', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
+                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{student?.seat_number || '---'}</div>
                              </div>
                           </div>
                        </div>
@@ -1468,90 +1372,89 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 4. هويات المراقبين الثابتة (تصميم فخم، عامة لكل الأيام واللجان) */}
+            {/* 📄 4. هويات المراقبين الثابتة */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
-              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
                  {chunk.map((inv: any, si) => {
                     const teacherName = getSafeName(inv);
                     return (
-                       <div key={`inv-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #0f172a' }}>
-                          <div style={{ background: 'linear-gradient(to right, #0f172a, #1e293b)', borderBottom: '2px solid #d4af37', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div key={`inv-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #0f172a' }}>
+                          <div style={{ background: 'linear-gradient(to right, #0f172a, #1e293b)', borderBottom: '3px solid #d4af37', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: '900', fontSize: '12px', color: '#f8fafc', letterSpacing: '0.5px' }}>مدرسة الرفعة النموذجية بنين</div>
-                                <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#d4af37', marginTop: '2px' }}>كنترول امتحانات نهاية العام</div>
+                                <div style={{ fontWeight: '900', fontSize: '15px', color: '#f8fafc' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#d4af37', marginTop: '4px' }}>كنترول امتحانات نهاية العام</div>
                              </div>
-                             <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px solid #d4af37', color: '#d4af37', padding: '4px 10px', fontWeight: '900', fontSize: '10px', borderRadius: '8px' }}>2025-2026</div>
+                             <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px solid #d4af37', color: '#d4af37', padding: '6px 12px', fontWeight: '900', fontSize: '12px', borderRadius: '8px' }}>2025-2026</div>
                           </div>
-                          <div style={{ padding: '12px', display: 'flex', gap: '14px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
-                             <div style={{ width: '24mm', height: '24mm', border: '2px solid #d4af37', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f1f5f9', padding: '2px' }}>
+                          <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
+                             <div style={{ width: '80px', height: '80px', border: '3px solid #d4af37', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f1f5f9', padding: '3px' }}>
                                 <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                   {inv?.avatar_url ? (
                                     <img src={inv.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   ) : (
-                                    <div style={{ fontWeight: '900', color: '#0f172a', fontSize: '24px' }}>{String(teacherName).charAt(0)}</div>
+                                    <div style={{ fontWeight: '900', color: '#0f172a', fontSize: '32px' }}>{String(teacherName).charAt(0)}</div>
                                   )}
                                 </div>
                              </div>
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div style={{ fontSize: '9px', fontWeight: 'black', color: '#64748b', marginBottom: '2px', textTransform: 'uppercase' }}>عضو لجنة المراقبة</div>
-                                <div style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
-                                   <h2 style={{ fontSize: '14px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', display: 'block', margin: 0 }}>{teacherName}</h2>
+                                <div style={{ fontSize: '12px', fontWeight: 'black', color: '#64748b', marginBottom: '4px' }}>عضو لجنة المراقبة</div>
+                                <div style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '18px', fontWeight: '900', color: '#0f172a', lineHeight: '1.4', display: 'block', margin: 0 }}>{teacherName}</h2>
                                 </div>
-                                <div style={{ marginTop: '6px' }}>
-                                   <span style={{ display: 'inline-block', backgroundColor: '#0f172a', border: '1px solid #d4af37', padding: '3px 8px', borderRadius: '6px', fontWeight: '900', fontSize: '10px', color: '#f8fafc', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>مُراقب معتمد</span>
+                                <div style={{ marginTop: '8px' }}>
+                                   <span style={{ display: 'inline-block', backgroundColor: '#0f172a', border: '1px solid #d4af37', padding: '4px 10px', borderRadius: '8px', fontWeight: '900', fontSize: '11px', color: '#f8fafc' }}>مُراقب معتمد</span>
                                 </div>
                              </div>
                           </div>
-                          <div style={{ height: '4px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
+                          <div style={{ height: '6px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
                        </div>
                     )
                  })}
               </div>
             ))}
 
-            {/* 📄 5. هويات رؤساء اللجان المتوافقة مع التكليف الشامل لليوم */}
+            {/* 📄 5. هويات رؤساء اللجان المتوافقة */}
             {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
-              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
                  {chunk.map((head: any, si) => {
                     const headName = getSafeName(head);
                     return (
-                       <div key={`head-card-${si}`} style={{ width: '85mm', height: '55mm', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '2px solid #78350f' }}>
-                          <div style={{ background: 'linear-gradient(to right, #78350f, #92400e)', borderBottom: '2px solid #fcd34d', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div key={`head-card-${si}`} style={{ height: '260px', width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: '1.25rem', overflow: 'hidden', boxSizing: 'border-box', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '3px solid #78350f' }}>
+                          <div style={{ background: 'linear-gradient(to right, #78350f, #92400e)', borderBottom: '3px solid #fcd34d', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: '900', fontSize: '12px', color: '#fffbeb', letterSpacing: '0.5px' }}>مدرسة الرفعة النموذجية بنين</div>
-                                <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#fcd34d', marginTop: '2px' }}>التكليف الإشرافي العام والقيادي للجان</div>
+                                <div style={{ fontWeight: '900', fontSize: '15px', color: '#fffbeb' }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#fcd34d', marginTop: '4px' }}>التكليف الإشرافي العام للجان</div>
                              </div>
-                             <div style={{ backgroundColor: '#b45309', border: '1px solid #fcd34d', color: '#fffbeb', padding: '4px 10px', fontWeight: '900', fontSize: '10px', borderRadius: '8px' }}>رئيس اللجان</div>
+                             <div style={{ backgroundColor: '#b45309', border: '1px solid #fcd34d', color: '#fffbeb', padding: '6px 12px', fontWeight: '900', fontSize: '11px', borderRadius: '8px' }}>رئيس اللجان</div>
                           </div>
-                          <div style={{ padding: '12px', display: 'flex', gap: '14px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
-                             <div style={{ width: '24mm', height: '24mm', border: '2px solid #b45309', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#fffbeb', padding: '2px' }}>
+                          <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }} dir="rtl">
+                             <div style={{ width: '80px', height: '80px', border: '3px solid #b45309', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#fffbeb', padding: '3px' }}>
                                 <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                   {head?.avatar_url ? (
                                     <img src={head.avatar_url} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   ) : (
-                                    <div style={{ fontWeight: '900', color: '#b45309', fontSize: '24px' }}>👑</div>
+                                    <div style={{ fontWeight: '900', color: '#b45309', fontSize: '32px' }}>👑</div>
                                   )}
                                 </div>
                              </div>
                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div style={{ fontSize: '9px', fontWeight: 'black', color: '#92400e', marginBottom: '2px' }}>رئيس اللجنة القيادي</div>
-                                <div style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
-                                   <h2 style={{ fontSize: '14px', fontWeight: '900', color: '#451a03', lineHeight: '1.3', display: 'block', margin: 0 }}>{headName}</h2>
+                                <div style={{ fontSize: '12px', fontWeight: 'black', color: '#92400e', marginBottom: '4px' }}>رئيس اللجنة القيادي</div>
+                                <div style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '18px', fontWeight: '900', color: '#451a03', lineHeight: '1.4', display: 'block', margin: 0 }}>{headName}</h2>
                                 </div>
-                                <div style={{ marginTop: '6px' }}>
-                                   <div style={{ fontSize: '9px', fontWeight: 'black', color: '#b45309', backgroundColor: '#fffbeb', padding: '3px 8px', borderRadius: '6px', border: '1px solid #fcd34d', display: 'inline-block' }}>نطاق الإشراف: الشامل</div>
+                                <div style={{ marginTop: '8px' }}>
+                                   <div style={{ fontSize: '11px', fontWeight: 'black', color: '#b45309', backgroundColor: '#fffbeb', padding: '4px 10px', borderRadius: '8px', border: '1px solid #fcd34d', display: 'inline-block' }}>نطاق الإشراف: الشامل</div>
                                 </div>
                              </div>
                           </div>
-                          <div style={{ height: '4px', width: '100%', background: 'linear-gradient(to right, #b45309, #fde68a, #b45309)' }}></div>
+                          <div style={{ height: '6px', width: '100%', background: 'linear-gradient(to right, #b45309, #fde68a, #b45309)' }}></div>
                        </div>
                     )
                  })}
               </div>
             ))}
-
           </div>
-                  </div>
+        </div>
       )}
       
       <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }`}</style>
@@ -1559,9 +1462,6 @@ function ExamCommitteesControl() {
   );
 }
 
-// =========================================================================
-// 3. 🚀 التصدير النهائي للصفحة
-// =========================================================================
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { const timer = setTimeout(() => setMounted(true), 0); return () => clearTimeout(timer); }, []);
