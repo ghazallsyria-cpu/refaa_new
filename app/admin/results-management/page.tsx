@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, AlertTriangle, CheckCircle2, X, Loader2, Award, 
-  GraduationCap, Lock, Unlock, Percent, Filter, Activity, Save, EyeOff, Eye
+  GraduationCap, Lock, Unlock, Percent, Filter, Activity, Save, EyeOff, Eye,Users
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
