@@ -351,37 +351,63 @@ function ExamCommitteesControl() {
     } catch (e) { alert('حدث خطأ أثناء الحذف'); } finally { setIsLoading(false); }
   };
 
+  // 🌟 دالة إعادة التسلسل المتطورة (لحل مشكلة عشوائية الأرقام عند النقل اليدوي للجان الخاصة وغيرها)
   const resequenceSeatNumbers = async () => {
     try {
-      const { data: allocs } = await supabase.from('student_seat_allocations').select('id, student_id, committee_id, students(next_year_track, users(full_name), sections(classes(level)))').eq('academic_year', currentYear).eq('semester', currentSemester);
+      const { data: allocs } = await supabase.from('student_seat_allocations')
+        .select('id, student_id, committee_id, students(next_year_track, users(full_name), sections(classes(level))), exam_committees(name)')
+        .eq('academic_year', currentYear).eq('semester', currentSemester);
+        
       if (!allocs || allocs.length === 0) return;
 
       const clean = (name: string) => name.replace(/^[\s\.\-\_]+/, '').replace(/[أإآ]/g, 'ا').trim();
-      const sortAr = (a: any, b: any) => clean(a.fullName).localeCompare(clean(b.fullName), 'ar');
+      
+      // الترتيب حسب اللجنة أولاً (لكي لا تحدث فجوات داخل اللجان) ثم أبجدياً
+      const sortLogic = (a: any, b: any) => {
+         const numA = parseInt(String(a.commName).replace(/\D/g, '')) || 999;
+         const numB = parseInt(String(b.commName).replace(/\D/g, '')) || 999;
+         if (numA !== numB) return numA - numB;
+         return clean(a.fullName).localeCompare(clean(b.fullName), 'ar');
+      };
 
       let grade10 = []; let grade11_sci = []; let grade11_lit = [];
 
       allocs.forEach(a => {
-        const lvl = a.students?.sections?.classes?.level || 0;
+        const secObj = Array.isArray(a.students?.sections) ? a.students?.sections[0] : a.students?.sections;
+        const classObj = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
+        const lvl = Number(classObj?.level || 0);
         const track = String(a.students?.next_year_track || '').toLowerCase();
-        const obj = { alloc_id: a.id, fullName: getSafeName(a.students?.users) };
+        const cName = String(classObj?.name || '');
+        const sName = String(secObj?.name || '');
+        const isLiterary = track === 'literary' || cName.includes('أدبي') || cName.includes('ادبي') || sName.includes('أدبي') || sName.includes('ادبي');
+
+        const obj = { 
+           alloc_id: a.id, 
+           student_id: a.student_id,
+           committee_id: a.committee_id,
+           fullName: getSafeName(a.students?.users),
+           commName: a.exam_committees?.name || ''
+        };
 
         if (lvl === 10) grade10.push(obj);
         else if (lvl === 11) {
-           if (track === 'literary') grade11_lit.push(obj);
+           if (isLiterary) grade11_lit.push(obj);
            else grade11_sci.push(obj);
         }
       });
 
-      grade10.sort(sortAr); grade11_sci.sort(sortAr); grade11_lit.sort(sortAr);
+      grade10.sort(sortLogic); 
+      grade11_sci.sort(sortLogic); 
+      grade11_lit.sort(sortLogic);
 
       const updates = [];
-      grade10.forEach((s, idx) => updates.push({ id: s.alloc_id, seat_number: `10${String(idx + 1).padStart(3, '0')}` }));
-      grade11_sci.forEach((s, idx) => updates.push({ id: s.alloc_id, seat_number: `111${String(idx + 1).padStart(3, '0')}` }));
-      grade11_lit.forEach((s, idx) => updates.push({ id: s.alloc_id, seat_number: `112${String(idx + 1).padStart(3, '0')}` }));
+      grade10.forEach((s, idx) => updates.push({ id: s.alloc_id, student_id: s.student_id, committee_id: s.committee_id, academic_year: currentYear, semester: currentSemester, seat_number: `10${String(idx + 1).padStart(3, '0')}` }));
+      grade11_sci.forEach((s, idx) => updates.push({ id: s.alloc_id, student_id: s.student_id, committee_id: s.committee_id, academic_year: currentYear, semester: currentSemester, seat_number: `111${String(idx + 1).padStart(3, '0')}` }));
+      grade11_lit.forEach((s, idx) => updates.push({ id: s.alloc_id, student_id: s.student_id, committee_id: s.committee_id, academic_year: currentYear, semester: currentSemester, seat_number: `112${String(idx + 1).padStart(3, '0')}` }));
 
-      for (const update of updates) {
-         await supabase.from('student_seat_allocations').update({ seat_number: update.seat_number }).eq('id', update.id);
+      const chunkSize = 100;
+      for (let i = 0; i < updates.length; i += chunkSize) {
+         await supabase.from('student_seat_allocations').upsert(updates.slice(i, i + chunkSize));
       }
     } catch (e) {
       console.error("Resequence error:", e);
@@ -393,7 +419,7 @@ function ExamCommitteesControl() {
       setIsLoading(true);
       await supabase.from('student_seat_allocations').update({ committee_id: newCommitteeId }).eq('student_id', studentId).eq('academic_year', currentYear).eq('semester', currentSemester);
       await resequenceSeatNumbers(); 
-      alert('تم نقل الطالب وإعادة تسلسل أرقام الجلوس للمصداقية بنجاح!'); 
+      alert('تم نقل الطالب وإعادة توزيع أرقام الجلوس لضمان المصداقية بنجاح!'); 
       setIsViewModalOpen(false); 
       fetchData();
     } catch (error) { alert('خطأ أثناء النقل.'); } finally { setIsLoading(false); }
@@ -498,7 +524,7 @@ function ExamCommitteesControl() {
   };
 
   const handleAutoAssignInvigilators = async () => {
-    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع (مراقب واحد كحد أدنى) لكل لجنة، ثم يدمج المراقب الثاني بدون تكرار للضرورة. تأكيد؟')) return;
+    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع (مراقب واحد كحد أدنى) لكل لجنة، ثم يدمج المراقب الثاني بدون تكرار. تأكيد؟')) return;
     
     setIsAutoAssigning(true);
     try {
@@ -531,6 +557,7 @@ function ExamCommitteesControl() {
 
       const newAssignments: any[] = [];
 
+      // المرحلة الأولى: ضمان مراقب واحد على الأقل في كل لجنة
       for (const date of uniqueExamDates) {
          for (const comm of committees) {
             const commKey = `${date}_${comm.id}`;
@@ -564,6 +591,7 @@ function ExamCommitteesControl() {
          }
       }
 
+      // المرحلة الثانية: استكمال المراقب الثاني باللجان للضرورة
       for (const date of uniqueExamDates) {
          for (const comm of committees) {
             const commKey = `${date}_${comm.id}`;
@@ -623,7 +651,7 @@ function ExamCommitteesControl() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      // Stub
+     // Stub for compatibility
   };
 
   const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids' | 'signatures_sheet' | 'custom_ids', classNameToPrint?: string) => {
@@ -850,7 +878,7 @@ function ExamCommitteesControl() {
                                    " {excuse.excuse_reason} "
                                 </div>
                                 <div className="flex gap-2 mt-2">
-                                   <button onClick={() => handleRemoveInvigilator(excuse.id, getSafeName(excuse.users))} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2 rounded-lg text-xs transition-colors shadow-md">إعفاء المعلم وإلغاء التكليف</button>
+                                   <button onClick={() => handleRemoveInvigilator(excuse.id, getSafeName(excuse.users))} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2 rounded-lg text-xs transition-colors shadow-md">إعفاء المعلم وإلغاء تكليفه</button>
                                 </div>
                              </div>
                           )
@@ -1194,10 +1222,9 @@ function ExamCommitteesControl() {
                           </div>
                         </div>
 
-                        {/* أزرار الطباعة الشاملة للجنة المعينة */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-auto pt-3 border-t border-slate-100">
                           <button type="button" onClick={() => printDocument(committee?.id, 'door_sheet')} className="bg-slate-800 text-white text-[10px] font-black py-2 rounded-lg hover:bg-slate-700 flex justify-center items-center"><Users className="w-3 h-3 mr-1"/> كشف الطلاب</button>
-                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileSignature className="w-3 h-3 mr-1"/> التوقيعات</button>
+                          <button type="button" onClick={() => printDocument(committee?.id, 'signatures_sheet')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-100 flex justify-center items-center"><FileCheck className="w-3 h-3 mr-1"/> التوقيعات</button>
                           <button type="button" onClick={() => printDocument(committee?.id, 'desk_cards')} className="bg-indigo-50 text-indigo-700 text-[10px] font-black py-2 rounded-lg hover:bg-indigo-100 flex justify-center items-center"><IdCard className="w-3 h-3 mr-1"/> الطاولة</button>
                         </div>
 
@@ -1451,11 +1478,9 @@ function ExamCommitteesControl() {
         <div style={{ position: 'fixed', top: '-9999px', left: 0, zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl" style={{ fontFamily: '"Cairo", sans-serif', textRendering: 'optimizeLegibility' }}>
             
-            {/* 📄 1. محضر اللجنة / كشف أسماء الطلاب النظيف المفرغ من التوقيعات */}
-            {printType === 'door_sheet' && chunkArray(printData.students, 16).map((chunk, pageIdx, chunksArr) => (
+            {printType === 'door_sheet' && chunkArray(printData.students, 13).map((chunk, pageIdx, chunksArr) => (
               <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
-                 
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
@@ -1473,7 +1498,7 @@ function ExamCommitteesControl() {
                    </thead>
                    <tbody>
                      {chunk.map((s:any, i:number) => {
-                       const globalIndex = (pageIdx * 16) + i + 1;
+                       const globalIndex = (pageIdx * 13) + i + 1;
                        return (
                          <tr key={`p1-${i}`} className="border-b-[2px] border-black h-[48px]">
                            <td className="border-l-[3px] border-black px-2 text-center font-bold">{globalIndex}</td>
@@ -1490,18 +1515,15 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 2. سجل توقيعات اللجنة الجديد */}
             {printType === 'signatures_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
-                 
                  <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
                     <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
                     <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
                     <h3 className="text-2xl font-black text-black mt-3 border-2 border-black inline-block px-8 py-1.5 bg-slate-100 rounded-2xl">{printData.committee?.name || 'لجنة غير محددة'}</h3>
                     <p className="text-lg font-black text-black mt-3">سجل توقيعات الملاحظين ورؤساء اللجان - الفصل الدراسي الثاني 2025/2026</p>
                  </div>
-
                  <table className="w-full border-collapse border-[3px] border-black text-sm text-black relative z-10 mb-auto">
                    <thead>
                      <tr className="bg-slate-100 border-b-[3px] border-black h-12">
@@ -1542,11 +1564,9 @@ function ExamCommitteesControl() {
               </div>
             )}
 
-            {/* 📄 3. بطاقات الطلاب للفصول */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start relative" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
-                 
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1587,11 +1607,9 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 4. بطاقات الطاولة */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start relative" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
-                 
                  {chunk.map((student:any, si) => {
                     const stdName = getSafeName(student?.students?.users);
                     const fullClassName = getFullClassName(student?.students);
@@ -1631,11 +1649,9 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 5. هويات المراقبين الثابتة (تصميم فخم مدمج مع QR) */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
-              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
+              <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
-                 
                  {chunk.map((inv: any, si) => {
                     const teacherName = getSafeName(inv);
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-staff:${inv.id}&margin=0`;
@@ -1678,11 +1694,9 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 6. هويات رؤساء اللجان المتوافقة مع QR */}
             {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
               <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
-                 
                  {chunk.map((head: any, si) => {
                     const headName = getSafeName(head);
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-head:${head.id}&margin=0`;
@@ -1725,11 +1739,9 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 📄 7. الهويات الإدارية المخصصة */}
             {printType === 'custom_ids' && chunkArray(printData.customIds, 6).map((chunk, pageIdx) => (
               <div key={`p-cstm-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
-                 
                  {chunk.map((item: any, si: number) => {
                     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=raf-custom:${encodeURIComponent(item.name)}&margin=0`;
                     return (
