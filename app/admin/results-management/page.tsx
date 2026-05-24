@@ -5,47 +5,80 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, AlertTriangle, CheckCircle2, X, Loader2, Award, 
-  GraduationCap, Lock, Unlock, Percent, Filter, Activity, Save, EyeOff, Eye,Users
+  GraduationCap, Lock, Unlock, Percent, Filter, Activity, Save, EyeOff, Eye, Users, BookOpen, Layers
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
 export default function ResultsManagementPage() {
   const { user, authRole, isChecking } = useAuth() as any;
-  const [students, setStudents] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // 🌟 بيانات الهيكلة (الصفوف والفصول)
+  const [sectionsList, setSectionsList] = useState<any[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+
+  // 🌟 بيانات الطلاب للفصل المحدد فقط
+  const [students, setStudents] = useState<any[]>([]);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   
-  // Filters
+  // 🌟 الفلاتر المحلية
   const [searchTerm, setSearchTerm] = useState('');
-  const [stageFilter, setStageFilter] = useState<'all' | 'middle' | 'high'>('all');
   const [financeFilter, setFinanceFilter] = useState<'all' | 'cleared' | 'blocked'>('all');
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  const fetchData = async () => {
-    setLoading(true);
+  // 1. جلب الإعدادات وهيكلة المدرسة (الصفوف والفصول) عند التحميل لأول مرة
+  const fetchInitialData = async () => {
+    setLoadingInitial(true);
     try {
-      // 1. Fetch Global Settings
       const { data: settingsData } = await supabase.from('platform_settings').select('*').eq('id', 1).single();
       if (settingsData) setSettings(settingsData);
 
-      // 2. Fetch Students with their classes and results
+      const { data: secData, error: secErr } = await supabase
+        .from('sections')
+        .select('id, name, classes!inner(id, name, level)');
+      
+      if (!secErr && secData) {
+         setSectionsList(secData);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('خطأ في جلب إعدادات المنصة');
+    } finally {
+      setLoadingInitial(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isChecking && ['admin', 'management'].includes(authRole)) {
+      fetchInitialData();
+    }
+  }, [isChecking, authRole]);
+
+  // 2. جلب طلاب الفصل المحدد فقط (لحماية قاعدة البيانات من الضغط)
+  const fetchSectionStudents = async (sectionId: string) => {
+    if (!sectionId) return;
+    setLoadingStudents(true);
+    try {
       const { data: stdData, error } = await supabase
         .from('students')
         .select(`
           id, 
           has_financial_dues,
+          section_id,
           users!inner(full_name, national_id),
           sections!inner(name, classes!inner(name, level)),
-          student_final_results(final_percentage)
-        `);
+          student_final_results(final_percentage, academic_year, semester)
+        `)
+        .eq('section_id', sectionId);
 
       if (error) throw error;
 
-      // Format data
       const formatted = (stdData || []).map(s => {
         const u = Array.isArray(s.users) ? s.users[0] : s.users;
         const sec = Array.isArray(s.sections) ? s.sections[0] : s.sections;
@@ -60,34 +93,47 @@ export default function ResultsManagementPage() {
           className: cls?.name || '',
           sectionName: sec?.name || '',
           level: Number(cls?.level || 0),
-          isMiddle: Number(cls?.level || 0) >= 6 && Number(cls?.level || 0) <= 9,
           hasDues: s.has_financial_dues || false,
           percentage: currentResult ? currentResult.final_percentage : '',
         };
       });
 
-      // Sort by level then name
-      formatted.sort((a, b) => {
-        if (a.level !== b.level) return a.level - b.level;
-        return a.name.localeCompare(b.name, 'ar');
-      });
-
+      formatted.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
       setStudents(formatted);
     } catch (e) {
       console.error(e);
-      alert('خطأ في جلب البيانات');
+      alert('خطأ في جلب بيانات طلاب الفصل');
     } finally {
-      setLoading(false);
+      setLoadingStudents(false);
     }
   };
 
+  // مراقبة تغيير الفصل لجلب الطلاب تلقائياً
   useEffect(() => {
-    if (!isChecking && ['admin', 'management'].includes(authRole)) {
-      fetchData();
+    if (selectedSectionId) {
+      fetchSectionStudents(selectedSectionId);
+    } else {
+      setStudents([]); // تفريغ الجدول إذا لم يتم تحديد فصل
     }
-  }, [isChecking, authRole]);
+  }, [selectedSectionId]);
 
-  // 🌟 Toggle Global Settings (وضع الترقب وإعلان النتائج)
+
+  // 🌟 استخراج الصفوف الفريدة للقائمة المنسدلة
+  const uniqueClasses = useMemo(() => {
+     const classesMap = new Map();
+     sectionsList.forEach(sec => {
+        if(sec.classes) classesMap.set(sec.classes.id, sec.classes);
+     });
+     return Array.from(classesMap.values()).sort((a, b) => a.level - b.level);
+  }, [sectionsList]);
+
+  // 🌟 استخراج الفصول المرتبطة بالصف المحدد
+  const availableSections = useMemo(() => {
+     if(!selectedClassId) return [];
+     return sectionsList.filter(sec => sec.classes?.id === selectedClassId).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  }, [sectionsList, selectedClassId]);
+
+  // 🌟 الإعدادات العامة (وضع الترقب وإعلان النتائج)
   const toggleSetting = async (field: string, currentValue: boolean) => {
     const confirmMsg = field === 'results_suspense_mode' 
       ? (!currentValue ? 'سيتم إخفاء جميع الواجبات والاختبارات من لوحة الطلاب ووضع شاشة "ترقبوا النتائج". تأكيد؟' : 'سيتم إلغاء وضع الترقب وإعادة المنصة لطبيعتها. تأكيد؟')
@@ -104,7 +150,7 @@ export default function ResultsManagementPage() {
     }
   };
 
-  // 🌟 Toggle Financial Status
+  // 🌟 تحديث الحالة المالية للطالب
   const toggleFinance = async (studentId: string, currentStatus: boolean) => {
     setSavingId(`fin-${studentId}`);
     try {
@@ -118,7 +164,7 @@ export default function ResultsManagementPage() {
     }
   };
 
-  // 🌟 Save Percentage
+  // 🌟 حفظ نسبة الطالب
   const handlePercentageChange = (studentId: string, val: string) => {
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, percentage: val } : s));
   };
@@ -127,7 +173,6 @@ export default function ResultsManagementPage() {
     setSavingId(`perc-${studentId}`);
     try {
       const numVal = parseFloat(val) || 0;
-      // Upsert result
       const { error } = await supabase.from('student_final_results').upsert({
         student_id: studentId,
         academic_year: currentYear,
@@ -146,23 +191,23 @@ export default function ResultsManagementPage() {
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
       const matchesSearch = s.name.includes(searchTerm) || s.national_id.includes(searchTerm);
-      const matchesStage = stageFilter === 'all' ? true : stageFilter === 'middle' ? s.isMiddle : !s.isMiddle;
       const matchesFinance = financeFilter === 'all' ? true : financeFilter === 'blocked' ? s.hasDues : !s.hasDues;
-      return matchesSearch && matchesStage && matchesFinance;
+      return matchesSearch && matchesFinance;
     });
-  }, [students, searchTerm, stageFilter, financeFilter]);
+  }, [students, searchTerm, financeFilter]);
 
-  if (isChecking) return <div className="flex h-screen items-center justify-center bg-[#02040a]"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>;
+
+  if (isChecking || loadingInitial) return <div className="flex h-screen items-center justify-center bg-[#02040a]"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>;
   if (!['admin', 'management'].includes(authRole)) return <div className="flex h-screen items-center justify-center bg-[#02040a]"><p className="text-white font-bold">وصول مقيد للإدارة فقط.</p></div>;
 
   return (
     <div className="min-h-screen bg-[#02040a] text-slate-200 font-sans p-4 sm:p-8 pb-32" dir="rtl">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* Header */}
+        {/* Header - مركز القيادة */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-[#0a0f1d]/80 backdrop-blur-xl border border-indigo-500/20 p-8 rounded-[2rem] shadow-2xl">
            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-black mb-3 border border-indigo-500/30">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-black mb-3 border border-indigo-500/30 shadow-inner">
                 <Award className="w-4 h-4" /> مركز القيادة العليا
               </div>
               <h1 className="text-3xl sm:text-4xl font-black text-white drop-shadow-md">إدارة <span className="text-indigo-400">النتائج والذمم</span></h1>
@@ -195,99 +240,156 @@ export default function ResultsManagementPage() {
            </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-           <div className="bg-white/5 border border-white/10 p-6 rounded-[1.5rem] flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0"><Users className="w-6 h-6"/></div>
-              <div><p className="text-slate-400 font-bold text-xs">إجمالي الطلاب</p><p className="text-2xl font-black text-white">{students.length}</p></div>
-           </div>
-           <div className="bg-rose-500/5 border border-rose-500/20 p-6 rounded-[1.5rem] flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0"><Lock className="w-6 h-6"/></div>
-              <div><p className="text-slate-400 font-bold text-xs">حجب مالي (ذمم)</p><p className="text-2xl font-black text-rose-400">{students.filter(s => s.hasDues).length}</p></div>
-           </div>
-           <div className="bg-emerald-500/5 border border-emerald-500/20 p-6 rounded-[1.5rem] flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0"><Percent className="w-6 h-6"/></div>
-              <div><p className="text-slate-400 font-bold text-xs">نتائج مرصودة</p><p className="text-2xl font-black text-emerald-400">{students.filter(s => s.percentage).length}</p></div>
+        {/* 🌟 محرك الاستعلام الذكي (Smart Query Engine) */}
+        <div className="bg-gradient-to-br from-[#0a0f1d] to-[#02040a] p-6 sm:p-8 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] rounded-full pointer-events-none"></div>
+           
+           <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2"><Filter className="w-5 h-5 text-indigo-400"/> استعلام الفصول (لحماية قاعدة البيانات)</h3>
+           
+           <div className="flex flex-col md:flex-row gap-4 items-center relative z-10">
+              <div className="w-full md:w-1/3">
+                 <label className="text-xs font-bold text-slate-400 block mb-2">1. حدد المرحلة والصف</label>
+                 <select 
+                    value={selectedClassId} 
+                    onChange={(e) => {
+                       setSelectedClassId(e.target.value);
+                       setSelectedSectionId(''); // تفريغ الفصل عند تغيير الصف
+                    }} 
+                    className="w-full bg-[#0f1423] border border-white/10 rounded-xl p-4 text-sm font-black text-white outline-none focus:border-indigo-500 cursor-pointer shadow-inner transition-colors"
+                 >
+                    <option value="">- اختر الصف -</option>
+                    {uniqueClasses.map(cls => (
+                       <option key={cls.id} value={cls.id}>{cls.name} (الصف {cls.level})</option>
+                    ))}
+                 </select>
+              </div>
+              
+              <div className="w-full md:w-1/3">
+                 <label className="text-xs font-bold text-slate-400 block mb-2">2. حدد الشعبة / الفصل</label>
+                 <select 
+                    value={selectedSectionId} 
+                    onChange={(e) => setSelectedSectionId(e.target.value)} 
+                    disabled={!selectedClassId}
+                    className="w-full bg-[#0f1423] border border-white/10 rounded-xl p-4 text-sm font-black text-white outline-none focus:border-indigo-500 cursor-pointer shadow-inner transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                    <option value="">- اختر الفصل -</option>
+                    {availableSections.map(sec => (
+                       <option key={sec.id} value={sec.id}>{sec.name}</option>
+                    ))}
+                 </select>
+              </div>
+
+              <div className="w-full md:w-1/3">
+                 <label className="text-xs font-bold text-slate-400 block mb-2">3. تصفية داخل الفصل</label>
+                 <select 
+                    value={financeFilter} 
+                    onChange={(e) => setFinanceFilter(e.target.value as any)} 
+                    className="w-full bg-[#0f1423] border border-white/10 rounded-xl p-4 text-sm font-black text-white outline-none focus:border-indigo-500 cursor-pointer shadow-inner transition-colors"
+                 >
+                    <option value="all">عرض كل طلاب الفصل</option>
+                    <option value="cleared">مسددون فقط</option>
+                    <option value="blocked">محجوبون فقط (ذمم)</option>
+                 </select>
+              </div>
            </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-[#0f1423]/80 p-6 rounded-[2rem] border border-white/10 flex flex-col md:flex-row gap-4 items-center">
-           <div className="relative flex-1 w-full">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input type="text" placeholder="البحث بالاسم أو الرقم المدني..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#02040a] border border-white/10 rounded-xl py-3 pr-12 pl-4 text-sm font-bold text-white focus:border-indigo-500 outline-none" />
-           </div>
-           <div className="flex gap-2 w-full md:w-auto">
-             <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value as any)} className="flex-1 md:w-40 bg-[#02040a] border border-white/10 rounded-xl p-3 text-sm font-bold text-slate-200 outline-none focus:border-indigo-500 cursor-pointer">
-                <option value="all">جميع المراحل</option>
-                <option value="middle">المتوسطة فقط</option>
-                <option value="high">الثانوية فقط</option>
-             </select>
-             <select value={financeFilter} onChange={(e) => setFinanceFilter(e.target.value as any)} className="flex-1 md:w-48 bg-[#02040a] border border-white/10 rounded-xl p-3 text-sm font-bold text-slate-200 outline-none focus:border-indigo-500 cursor-pointer">
-                <option value="all">كل الحالات المالية</option>
-                <option value="cleared">مسدد (لا يوجد ذمم)</option>
-                <option value="blocked">حجب (عليه رسوم)</option>
-             </select>
-           </div>
-        </div>
+        {/* 🌟 إحصائيات الفصل المحدد (تتحدث ديناميكياً) */}
+        {selectedSectionId && !loadingStudents && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+             <div className="bg-white/5 border border-white/10 p-6 rounded-[1.5rem] flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0"><Users className="w-6 h-6"/></div>
+                <div><p className="text-slate-400 font-bold text-xs">طلاب الفصل</p><p className="text-2xl font-black text-white">{students.length}</p></div>
+             </div>
+             <div className="bg-rose-500/5 border border-rose-500/20 p-6 rounded-[1.5rem] flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0"><Lock className="w-6 h-6"/></div>
+                <div><p className="text-slate-400 font-bold text-xs">محجوب مالياً</p><p className="text-2xl font-black text-rose-400">{students.filter(s => s.hasDues).length}</p></div>
+             </div>
+             <div className="bg-emerald-500/5 border border-emerald-500/20 p-6 rounded-[1.5rem] flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0"><Percent className="w-6 h-6"/></div>
+                <div><p className="text-slate-400 font-bold text-xs">نتائج مكتملة</p><p className="text-2xl font-black text-emerald-400">{students.filter(s => s.percentage).length}</p></div>
+             </div>
+          </motion.div>
+        )}
 
         {/* Students Table */}
         <div className="bg-[#0f1423]/80 border border-white/10 rounded-[2rem] overflow-hidden shadow-xl">
-           {loading ? (
-             <div className="py-20 flex justify-center"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>
-           ) : filteredStudents.length === 0 ? (
-             <div className="py-20 text-center text-slate-400 font-bold">لا يوجد طلاب يطابقون شروط البحث.</div>
-           ) : (
-             <div className="overflow-x-auto custom-scrollbar">
-                <table className="w-full text-right">
-                   <thead className="bg-black/40 border-b border-white/10 text-slate-300 text-xs uppercase tracking-widest font-black">
-                      <tr>
-                         <th className="p-5">اسم الطالب</th>
-                         <th className="p-5">المرحلة والصف</th>
-                         <th className="p-5 text-center">النسبة المئوية (النتيجة)</th>
-                         <th className="p-5 text-center">الحالة المالية (حجب النتيجة)</th>
-                      </tr>
-                   </thead>
-                   <tbody className="divide-y divide-white/5">
-                      {filteredStudents.map((s, idx) => (
-                         <tr key={s.id} className="hover:bg-white/5 transition-colors group">
-                            <td className="p-5">
-                               <p className="font-black text-white text-sm">{s.name}</p>
-                               <p className="text-[10px] text-slate-500 mt-1">{s.national_id}</p>
-                            </td>
-                            <td className="p-5">
-                               <p className="font-bold text-indigo-300 text-xs bg-indigo-500/10 w-fit px-3 py-1 rounded-lg border border-indigo-500/20">{s.className} - {s.sectionName}</p>
-                            </td>
-                            <td className="p-5">
-                               <div className="flex items-center justify-center gap-2 max-w-[150px] mx-auto">
-                                  <input 
-                                     type="number" 
-                                     step="0.01"
-                                     value={s.percentage}
-                                     onChange={(e) => handlePercentageChange(s.id, e.target.value)}
-                                     onBlur={(e) => savePercentage(s.id, e.target.value)}
-                                     placeholder="0.00"
-                                     className="w-20 bg-[#02040a] border border-white/10 rounded-lg p-2 text-center text-sm font-black text-emerald-400 focus:border-emerald-500 outline-none"
-                                  />
-                                  <span className="text-slate-500 font-black">%</span>
-                                  {savingId === `perc-${s.id}` && <Loader2 className="w-4 h-4 animate-spin text-emerald-500 shrink-0" />}
-                               </div>
-                            </td>
-                            <td className="p-5 text-center">
-                               <button 
-                                  onClick={() => toggleFinance(s.id, s.hasDues)}
-                                  disabled={savingId === `fin-${s.id}`}
-                                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all border ${s.hasDues ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'}`}
-                               >
-                                  {savingId === `fin-${s.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : s.hasDues ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                                  {s.hasDues ? 'محجوب (عليه رسوم)' : 'مُصرح (لا يوجد رسوم)'}
-                               </button>
-                            </td>
-                         </tr>
-                      ))}
-                   </tbody>
-                </table>
+           {!selectedSectionId ? (
+             <div className="py-24 flex flex-col items-center justify-center text-slate-400 bg-white/5 border border-dashed border-white/10 m-4 rounded-3xl">
+                <Layers className="w-16 h-16 mb-4 opacity-50"/>
+                <p className="font-black text-lg">الرجاء اختيار الصف والفصل من الأعلى</p>
+                <p className="font-bold text-xs mt-2 opacity-80">نظام الجلب الذكي يمنع تحميل جميع طلاب المدرسة دفعة واحدة.</p>
              </div>
+           ) : loadingStudents ? (
+             <div className="py-24 flex flex-col items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-indigo-500 mb-4" /><p className="font-bold text-slate-400 text-sm animate-pulse">جاري جلب بيانات الفصل...</p></div>
+           ) : filteredStudents.length === 0 ? (
+             <div className="py-24 flex flex-col items-center justify-center text-slate-400">
+                <Search className="w-12 h-12 mb-4 opacity-50"/>
+                <p className="font-black">لا يوجد طلاب يطابقون شروط البحث في هذا الفصل.</p>
+             </div>
+           ) : (
+             <>
+               <div className="p-4 border-b border-white/10">
+                 <div className="relative max-w-md">
+                    <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <input type="text" placeholder="بحث سريع بالاسم داخل الفصل..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#02040a] border border-white/10 rounded-xl py-3 pr-10 pl-4 text-xs font-bold text-white focus:border-indigo-500 outline-none" />
+                 </div>
+               </div>
+               <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-right">
+                     <thead className="bg-black/40 border-b border-white/10 text-slate-300 text-xs uppercase tracking-widest font-black">
+                        <tr>
+                           <th className="p-5">اسم الطالب</th>
+                           <th className="p-5 text-center">النسبة المئوية النهائية</th>
+                           <th className="p-5 text-center">الحالة المالية (حجب النتيجة)</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-white/5">
+                        {filteredStudents.map((s, idx) => (
+                           <tr key={s.id} className="hover:bg-white/5 transition-colors group">
+                              <td className="p-5">
+                                 {/* 🌟 تم تصحيح الأيقونة والتنسيق هنا 🌟 */}
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-black text-sm shadow-inner shrink-0 group-hover:scale-110 transition-transform">
+                                       {s.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                       <p className="font-black text-white text-sm drop-shadow-sm">{s.name}</p>
+                                       <p className="text-[10px] text-slate-500 mt-1 font-bold tracking-widest">{s.national_id}</p>
+                                    </div>
+                                 </div>
+                              </td>
+                              <td className="p-5">
+                                 <div className="flex items-center justify-center gap-2 max-w-[150px] mx-auto bg-[#02040a] p-1.5 rounded-xl border border-white/10 shadow-inner focus-within:border-emerald-500/50 transition-colors">
+                                    <input 
+                                       type="number" 
+                                       step="0.01"
+                                       value={s.percentage}
+                                       onChange={(e) => handlePercentageChange(s.id, e.target.value)}
+                                       onBlur={(e) => savePercentage(s.id, e.target.value)}
+                                       placeholder="0.00"
+                                       className="w-full bg-transparent text-center text-sm font-black text-emerald-400 outline-none"
+                                    />
+                                    <span className="text-slate-500 font-black text-xs pl-2 border-l border-white/10">%</span>
+                                    {savingId === `perc-${s.id}` && <Loader2 className="w-4 h-4 animate-spin text-emerald-500 shrink-0 absolute -mr-8" />}
+                                 </div>
+                              </td>
+                              <td className="p-5 text-center">
+                                 <button 
+                                    onClick={() => toggleFinance(s.id, s.hasDues)}
+                                    disabled={savingId === `fin-${s.id}`}
+                                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all border shadow-sm active:scale-95 ${s.hasDues ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20 shadow-rose-500/10' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 shadow-emerald-500/10'}`}
+                                 >
+                                    {savingId === `fin-${s.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : s.hasDues ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                                    {s.hasDues ? 'محجوب (عليه رسوم)' : 'مُصرح (لا يوجد رسوم)'}
+                                 </button>
+                              </td>
+                           </tr>
+                        ))}
+                     </tbody>
+                  </table>
+               </div>
+             </>
            )}
         </div>
 
