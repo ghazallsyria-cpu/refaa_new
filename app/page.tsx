@@ -298,7 +298,7 @@ export default function DigitalCampusPage() {
               </div>
               <div className="pt-2">
                 <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
-                  <span className="px-3 py-1 rounded-lg text-[10px] sm:text-xs font-black bg-emerald-500/20 text-emerald-300 uppercase tracking-widest border border-emerald-500/30 backdrop-blur-md flex items-center gap-1.5"><Zap className="w-3.5 h-3.5"/> حصري ومدعوم بالذكاء الاصطناعي</span>
+                  <span className="px-3 py-1 rounded-lg text-[10px] sm:text-xs font-black bg-emerald-500/20 text-emerald-300 uppercase tracking-widest border border-emerald-500/30 backdrop-blur-md flex items-center gap-1.5"><Zap className="w-3.5 h-3.5"/> حصري لمدرسة الرفعة النموذجية بنين (م-ث)</span>
                 </div>
                 <h2 className="text-3xl sm:text-4xl font-black text-white mb-3">البوصلة الأكاديمية <span className="text-emerald-400 drop-shadow-md">للتفوق</span></h2>
                 <p className="text-slate-300 text-sm sm:text-base font-bold max-w-2xl leading-relaxed opacity-90">
