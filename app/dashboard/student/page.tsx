@@ -985,6 +985,7 @@ export default function StudentDashboard() {
                     </div>
                   </div>
                 </div>
+                      </div>   
              </motion.div>
           )}
         </AnimatePresence>
