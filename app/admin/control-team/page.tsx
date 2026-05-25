@@ -375,7 +375,7 @@ export default function ControlTeamManagement() {
                                  <p className="text-white font-black text-[14px]">مدرسة الرفعة النموذجية</p>
                                  <div className="mt-2 bg-rose-600 px-3 py-1 rounded-full shadow-sm flex items-center gap-1.5">
                                     <ShieldCheck className="w-3 h-3 text-white" />
-                                    <p className="text-white font-black text-[10px]">غرفة العمليات المركزية (VIP)</p>
+                                    <p className="text-white font-black text-[10px]">أعضاء لجنة النظام والمراقبة (الكنترول)</p>
                                  </div>
                               </div>
                               
