@@ -14,29 +14,26 @@ export default function ResultsManagementPage() {
   const { user, authRole, isChecking } = useAuth() as any;
   const [settings, setSettings] = useState<any>(null);
   
-  // 🌟 بيانات الهيكلة (الصفوف والفصول)
   const [sectionsList, setSectionsList] = useState<any[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
 
-  // 🌟 بيانات الطلاب للفصل المحدد فقط
   const [students, setStudents] = useState<any[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   
-  // 🌟 الفلاتر المحلية
   const [searchTerm, setSearchTerm] = useState('');
   const [financeFilter, setFinanceFilter] = useState<'all' | 'cleared' | 'blocked'>('all');
 
   const currentYear = '2025-2026';
   const currentSemester = 'الفصل الدراسي الثاني';
 
-  // 1. جلب الإعدادات وهيكلة المدرسة (الصفوف والفصول) عند التحميل لأول مرة
   const fetchInitialData = async () => {
     setLoadingInitial(true);
     try {
-      const { data: settingsData } = await supabase.from('platform_settings').select('*').eq('id', 1).single();
+      // 🌟 التعديل الآمن: جلب الإعدادات دون تحديد رقم ID ثابت
+      const { data: settingsData } = await supabase.from('platform_settings').select('*').limit(1).maybeSingle();
       if (settingsData) setSettings(settingsData);
 
       const { data: secData, error: secErr } = await supabase
@@ -60,7 +57,6 @@ export default function ResultsManagementPage() {
     }
   }, [isChecking, authRole]);
 
-  // 2. جلب طلاب الفصل المحدد فقط (لحماية قاعدة البيانات من الضغط)
   const fetchSectionStudents = async (sectionId: string) => {
     if (!sectionId) return;
     setLoadingStudents(true);
@@ -108,17 +104,14 @@ export default function ResultsManagementPage() {
     }
   };
 
-  // مراقبة تغيير الفصل لجلب الطلاب تلقائياً
   useEffect(() => {
     if (selectedSectionId) {
       fetchSectionStudents(selectedSectionId);
     } else {
-      setStudents([]); // تفريغ الجدول إذا لم يتم تحديد فصل
+      setStudents([]);
     }
   }, [selectedSectionId]);
 
-
-  // 🌟 استخراج الصفوف الفريدة للقائمة المنسدلة
   const uniqueClasses = useMemo(() => {
      const classesMap = new Map();
      sectionsList.forEach(sec => {
@@ -127,14 +120,15 @@ export default function ResultsManagementPage() {
      return Array.from(classesMap.values()).sort((a, b) => a.level - b.level);
   }, [sectionsList]);
 
-  // 🌟 استخراج الفصول المرتبطة بالصف المحدد
   const availableSections = useMemo(() => {
      if(!selectedClassId) return [];
      return sectionsList.filter(sec => sec.classes?.id === selectedClassId).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   }, [sectionsList, selectedClassId]);
 
-  // 🌟 الإعدادات العامة (وضع الترقب وإعلان النتائج)
+  // 🌟 التعديل الآمن لتحديث الإعدادات باستخدام الـ ID الحقيقي المستخرج
   const toggleSetting = async (field: string, currentValue: boolean) => {
+    if (!settings?.id) { alert('لم يتم العثور على إعدادات المنصة في قاعدة البيانات.'); return; }
+    
     const confirmMsg = field === 'results_suspense_mode' 
       ? (!currentValue ? 'سيتم إخفاء جميع الواجبات والاختبارات من لوحة الطلاب ووضع شاشة "ترقبوا النتائج". تأكيد؟' : 'سيتم إلغاء وضع الترقب وإعادة المنصة لطبيعتها. تأكيد؟')
       : (!currentValue ? 'سيتم إعلان النتائج للطلاب (الذين ليس عليهم ذمم مالية). تأكيد؟' : 'سيتم إخفاء النتائج وسحبها من لوحة الطلاب. تأكيد؟');
@@ -142,7 +136,7 @@ export default function ResultsManagementPage() {
     if (!confirm(confirmMsg)) return;
 
     try {
-      const { error } = await supabase.from('platform_settings').update({ [field]: !currentValue }).eq('id', 1);
+      const { error } = await supabase.from('platform_settings').update({ [field]: !currentValue }).eq('id', settings.id);
       if (error) throw error;
       setSettings((prev: any) => ({ ...prev, [field]: !currentValue }));
     } catch (e) {
@@ -150,7 +144,6 @@ export default function ResultsManagementPage() {
     }
   };
 
-  // 🌟 تحديث الحالة المالية للطالب
   const toggleFinance = async (studentId: string, currentStatus: boolean) => {
     setSavingId(`fin-${studentId}`);
     try {
@@ -164,7 +157,6 @@ export default function ResultsManagementPage() {
     }
   };
 
-  // 🌟 حفظ نسبة الطالب
   const handlePercentageChange = (studentId: string, val: string) => {
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, percentage: val } : s));
   };
@@ -196,7 +188,6 @@ export default function ResultsManagementPage() {
     });
   }, [students, searchTerm, financeFilter]);
 
-
   if (isChecking || loadingInitial) return <div className="flex h-screen items-center justify-center bg-[#02040a]"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>;
   if (!['admin', 'management'].includes(authRole)) return <div className="flex h-screen items-center justify-center bg-[#02040a]"><p className="text-white font-bold">وصول مقيد للإدارة فقط.</p></div>;
 
@@ -204,7 +195,7 @@ export default function ResultsManagementPage() {
     <div className="min-h-screen bg-[#02040a] text-slate-200 font-sans p-4 sm:p-8 pb-32" dir="rtl">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* Header - مركز القيادة */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-[#0a0f1d]/80 backdrop-blur-xl border border-indigo-500/20 p-8 rounded-[2rem] shadow-2xl">
            <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-black mb-3 border border-indigo-500/30 shadow-inner">
@@ -240,7 +231,7 @@ export default function ResultsManagementPage() {
            </div>
         </div>
 
-        {/* 🌟 محرك الاستعلام الذكي (Smart Query Engine) */}
+        {/* Filters */}
         <div className="bg-gradient-to-br from-[#0a0f1d] to-[#02040a] p-6 sm:p-8 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden">
            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] rounded-full pointer-events-none"></div>
            
@@ -253,7 +244,7 @@ export default function ResultsManagementPage() {
                     value={selectedClassId} 
                     onChange={(e) => {
                        setSelectedClassId(e.target.value);
-                       setSelectedSectionId(''); // تفريغ الفصل عند تغيير الصف
+                       setSelectedSectionId(''); 
                     }} 
                     className="w-full bg-[#0f1423] border border-white/10 rounded-xl p-4 text-sm font-black text-white outline-none focus:border-indigo-500 cursor-pointer shadow-inner transition-colors"
                  >
@@ -294,7 +285,6 @@ export default function ResultsManagementPage() {
            </div>
         </div>
 
-        {/* 🌟 إحصائيات الفصل المحدد (تتحدث ديناميكياً) */}
         {selectedSectionId && !loadingStudents && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
              <div className="bg-white/5 border border-white/10 p-6 rounded-[1.5rem] flex items-center gap-4">
@@ -312,7 +302,7 @@ export default function ResultsManagementPage() {
           </motion.div>
         )}
 
-        {/* Students Table */}
+        {/* Table */}
         <div className="bg-[#0f1423]/80 border border-white/10 rounded-[2rem] overflow-hidden shadow-xl">
            {!selectedSectionId ? (
              <div className="py-24 flex flex-col items-center justify-center text-slate-400 bg-white/5 border border-dashed border-white/10 m-4 rounded-3xl">
@@ -348,7 +338,6 @@ export default function ResultsManagementPage() {
                         {filteredStudents.map((s, idx) => (
                            <tr key={s.id} className="hover:bg-white/5 transition-colors group">
                               <td className="p-5">
-                                 {/* 🌟 تم تصحيح الأيقونة والتنسيق هنا 🌟 */}
                                  <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-black text-sm shadow-inner shrink-0 group-hover:scale-110 transition-transform">
                                        {s.name.charAt(0)}
