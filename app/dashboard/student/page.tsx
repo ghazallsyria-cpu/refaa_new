@@ -69,7 +69,6 @@ export default function StudentDashboard() {
   const [isFinanciallyBlocked, setIsFinanciallyBlocked] = useState(false);
 
   const isFetchingRef = useRef(false);
-  const printTicketRef = useRef<HTMLDivElement>(null);
   const { fetchStudentDashboardData, updateStudentTrack } = useDashboardSystem();
 
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -92,7 +91,6 @@ export default function StudentDashboard() {
         setLoading(true);
         const data = await fetchStudentDashboardData(true); 
         if (data && data.student) {
-          setStudentData(data.student);
           setUpcomingAssignments(data.assignments || []);
           setTodaysSchedule(data.todaysSchedule || []);
           const studentId = data.student.id;
@@ -114,15 +112,21 @@ export default function StudentDashboard() {
               if (docsRes.data) setExistingDocRequest(docsRes.data);
               if (settingsRes.data) setPlatformSettings(settingsRes.data);
               if (resultRes.data) setFinalResult(resultRes.data.final_percentage);
-              setIsFinanciallyBlocked(stdFinanceRes.data?.has_financial_dues ?? false);
-              if (trackRes.data) setStudentData((prev: any) => ({ ...prev, ...trackRes.data }));
+              
+              setIsFinanciallyBlocked(stdFinanceRes.data?.has_financial_dues ?? data.student.has_financial_dues ?? false);
+              
+              const mergedStudent = { ...data.student, ...trackRes.data };
+              setStudentData(mergedStudent);
+              
               if (!absentCountRes.error) setAbsentPeriods(absentCountRes.count || 0);
               if (gradesRes.data) setRecentGrades(gradesRes.data.map((g: any) => ({ ...g, exam: { ...g.exams, subject: g.exams?.subjects } })));
               
               try {
-                 const classLevelStr = String(trackRes.data?.sections?.classes?.name || data.student?.sections?.classes?.name || '');
-                 const cLevel = (classLevelStr.includes('10') || classLevelStr.includes('عاشر')) ? 10 : (classLevelStr.includes('11') || classLevelStr.includes('حادي عشر')) ? 11 : (classLevelStr.includes('12') || classLevelStr.includes('ثاني عشر')) ? 12 : null;
-                 if (cLevel) {
+                 const sec = Array.isArray(mergedStudent.sections) ? mergedStudent.sections[0] : mergedStudent.sections;
+                 const cls = Array.isArray(sec?.classes) ? sec?.classes[0] : sec?.classes;
+                 const cLevel = Number(cls?.level || 0);
+                 
+                 if (cLevel > 0) {
                     const [allocRes, timeRes, keysRes] = await Promise.all([
                       supabase.from('student_seat_allocations').select('seat_number, exam_committees(name, location)').eq('student_id', studentId).maybeSingle(),
                       supabase.from('exam_timetables').select('*, subjects(name)').eq('class_level', cLevel).order('exam_date', { ascending: true }).order('start_time', { ascending: true }),
@@ -187,21 +191,28 @@ export default function StudentDashboard() {
 
   const rawFullName = studentData?.users?.full_name || studentData?.full_name || 'بطل الرفعة';
   const displayFirstName = rawFullName.split(' ')[0];
-  const classNameStr = String(studentData?.sections?.classes?.name || studentData?.class_name || '');
-  const sectionNameStr = String(studentData?.sections?.name || studentData?.section_name || 'غير محدد');
+  
+  // 🌟 استخراج المستوى (الـ Level) بدقة 🌟
+  const secObj = Array.isArray(studentData?.sections) ? studentData?.sections[0] : studentData?.sections;
+  const clsObj = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
+  const classLevel = Number(clsObj?.level || 0);
+  const classNameStr = String(clsObj?.name || studentData?.class_name || '');
+  const sectionNameStr = String(secObj?.name || studentData?.section_name || 'غير محدد');
   const avatarUrl = studentData?.users?.avatar_url || studentData?.avatar_url;
   
-  const isMiddleSchool = classNameStr.includes('6') || classNameStr.includes('7') || classNameStr.includes('8') || classNameStr.includes('9');
-  const isHighSchool = !isMiddleSchool;
-  const isTenthGrade = classNameStr.includes('10') || classNameStr.includes('عاشر');
-  const isTwelfthGrade = classNameStr.includes('12') || classNameStr.includes('ثاني عشر');
+  // 🌟 تصنيف المراحل بناءً على الـ Level لضمان دقة الاستجابة
+  const isMiddleSchool = classLevel >= 6 && classLevel <= 9;
+  const isHighSchool = classLevel >= 10 && classLevel <= 12;
+  const isTenthGrade = classLevel === 10;
+  const isTwelfthGrade = classLevel === 12;
   const hasSelectedTrack = !!studentData?.next_year_track;
   
+  // 🌟 فلتر الجداول الذكي (Smart Track Filter) للثانوية
   const isLiterary = classNameStr.includes('أدبي') || sectionNameStr.includes('أدبي') || studentData?.next_year_track === 'literary';
   const isScientific = classNameStr.includes('علمي') || sectionNameStr.includes('علمي') || studentData?.next_year_track === 'scientific';
   
   const literaryExclusions = ['فيزياء', 'كيمياء', 'أحياء', 'جيولوجيا']; 
-  const scientificExclusions = ['تاريخ', 'جغرافيا', 'فلسفة', 'علم نفس', 'فرنسي'];
+  const scientificExclusions = ['تاريخ', 'جغرافيا', 'فلسفة', 'علم نفس', 'فرنسي', 'احصاء', 'إحصاء'];
 
   const filteredTimetables = examTimetables.filter(ex => {
      const subjName = ex.subjects?.name || '';
@@ -227,15 +238,15 @@ export default function StudentDashboard() {
   const qrPayload = `raf-id:${studentData?.id}`; 
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrPayload)}&margin=1`;
 
-  const isSuspenseGlobal = platformSettings?.results_suspense_mode;
-  const isMyResultPublished = (isMiddleSchool && platformSettings?.results_published_middle) || (isHighSchool && platformSettings?.results_published_high);
+  // آلة الحالات الذكية 
+  const isSuspenseGlobal = platformSettings?.results_suspense_mode === true;
+  const isMyResultPublished = (isMiddleSchool && platformSettings?.results_published_middle === true) || (isHighSchool && platformSettings?.results_published_high === true);
   
   const showFinalResult = isMyResultPublished;
   const showMiddleSchoolSuspense = isMiddleSchool && isSuspenseGlobal && !isMyResultPublished;
   const showHighSchoolExamMode = isHighSchool && isSuspenseGlobal && !isMyResultPublished;
-  const showRegularDashboard = !showFinalResult && !showMiddleSchoolSuspense && !showHighSchoolExamMode;
+  const hideOldContent = isSuspenseGlobal || isMyResultPublished;
 
-  // تعريف متغيرات الإنذار (لحل الخطأ)
   let warningLevel = 0; let warningTitle = ""; let warningMessage = ""; let warningColors = ""; let warningIconColor = ""; let WarningIcon = Info; let warningPulse = false;
   if (absentPeriods >= 100) { warningLevel = 4; warningTitle = "إشعار فصل نهائي"; warningMessage = "تجاوزت 100 حصة غياب."; warningColors = "border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]"; warningIconColor = "text-rose-500"; WarningIcon = Siren; warningPulse = true; } 
   else if (absentPeriods >= 75) { warningLevel = 3; warningTitle = "إنذار ثالث"; warningMessage = "غيابك بمرحلة حرجة."; warningColors = "border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]"; warningIconColor = "text-rose-500"; WarningIcon = ShieldAlert; warningPulse = true; } 
@@ -246,21 +257,35 @@ export default function StudentDashboard() {
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-[#02040a] text-slate-100 pb-32 pt-6 font-sans print:bg-white print:text-black print:p-0 print:m-0" dir="rtl">
       
+      {/* 🚀 ستايل الطباعة المثالي (يمنع قص البطاقة ويخفي الباقي) */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
+           body { background: white !important; -webkit-print-color-adjust: exact; }
            body * { visibility: hidden; }
-           #printable-ticket, #printable-ticket * { visibility: visible; }
-           #printable-ticket { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1.2); width: 100%; margin: 0; padding: 0; box-shadow: none !important; border: none !important; background: white !important; }
+           #printable-ticket-container, #printable-ticket-container * { visibility: visible; }
+           #printable-ticket-container {
+             position: absolute;
+             left: 0;
+             top: 0;
+             width: 100%;
+             display: flex;
+             justify-content: center;
+             align-items: flex-start;
+             padding-top: 2cm;
+           }
            .no-print { display: none !important; }
         }
       `}} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 print:w-full print:px-0 print:space-y-0">
         
-        {studentData?.id && !isSuspenseGlobal && !isMyResultPublished && (
+        {studentData?.id && !hideOldContent && (
            <div className="no-print"><MemorialShieldDisplay userId={studentData.id} role="student" /></div>
         )}
 
+        {/* ========================================================= */}
+        {/* 🏆 وضع إعلان النتائج (Results Mode) */}
+        {/* ========================================================= */}
         <AnimatePresence mode="wait">
           {showFinalResult && (
              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`relative overflow-hidden rounded-[2.5rem] glass-panel p-8 sm:p-12 text-center shadow-2xl flex flex-col items-center justify-center min-h-[50vh] ${isFinanciallyBlocked ? 'border-rose-500/40' : 'border-emerald-500/40'}`}>
@@ -297,26 +322,35 @@ export default function StudentDashboard() {
              </motion.div>
           )}
 
+          {/* ========================================================= */}
+          {/* ⏳ وضع الترقب لطلاب المتوسطة (Middle School Suspense) */}
+          {/* ========================================================= */}
           {showMiddleSchoolSuspense && (
              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative overflow-hidden rounded-[2.5rem] glass-panel p-10 sm:p-16 border-amber-500/30 text-center shadow-[0_0_50px_rgba(245,158,11,0.15)] flex flex-col items-center justify-center min-h-[60vh]">
                 <div className="absolute inset-0 bg-gradient-to-t from-amber-900/30 to-transparent"></div>
+                
                 {platformSettings?.grading_cta_image_url && (
-                   <div className="w-full max-w-md h-48 sm:h-64 rounded-3xl overflow-hidden shadow-2xl mb-8 border border-white/10 relative z-10">
-                      <img src={platformSettings.grading_cta_image_url} alt="Announcement" className="w-full h-full object-cover" />
+                   <div className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl mb-8 border border-white/10 relative z-10">
+                      <img src={platformSettings.grading_cta_image_url} alt="Announcement" className="w-full h-auto object-contain" />
                    </div>
                 )}
+
                 <div className="w-24 h-24 bg-amber-500/10 rounded-[2rem] flex items-center justify-center border border-amber-500/30 shadow-[0_0_40px_rgba(245,158,11,0.3)] mb-8 animate-[bounce_3s_infinite] z-10">
-                   <Clock className="w-12 h-12 text-amber-400 drop-shadow-md" />
+                   <GraduationCap className="w-12 h-12 text-amber-400 drop-shadow-md" />
                 </div>
-                <h2 className="text-4xl sm:text-6xl font-black text-white mb-6 drop-shadow-xl z-10 tracking-tight">ترقبوا إعلان النتائج!</h2>
+                <h2 className="text-4xl sm:text-6xl font-black text-white mb-6 drop-shadow-xl z-10 tracking-tight">مبارك التفوق والنجاح! 🌟</h2>
                 <p className="text-amber-200/80 font-bold text-base sm:text-xl max-w-2xl leading-relaxed z-10 bg-[#02040a]/40 p-6 rounded-2xl border border-amber-500/20 shadow-inner">
-                   {platformSettings?.grading_cta_message || 'اللجان تعمل على قدم وساق للتدقيق والمراجعة. سيتم إظهار نتيجتك النهائية هنا فور اعتمادها من الإدارة العليا. نتمنى لك التوفيق والنجاح.'}
+                   تهانينا بانتقالك إلى صف أعلى! جاري الآن إصدار الشهادات واعتمادها من الإدارة، ترقبوا التحديث هنا قريباً جداً...
                 </p>
              </motion.div>
           )}
 
+          {/* ========================================================= */}
+          {/* 🎯 وضع التركيز لطلاب الثانوية (High School Exam Focus Mode) */}
+          {/* ========================================================= */}
           {showHighSchoolExamMode && (
             <div className="space-y-8">
+              
               <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-12 border-rose-500/30 group shadow-2xl no-print">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110 opacity-50"></div>
                 <div className="relative z-10 flex flex-col items-center text-center">
@@ -328,49 +362,54 @@ export default function StudentDashboard() {
                 </div>
               </motion.div>
 
+              {/* 🚀 البطاقة الامتحانية الفاخرة المجهزة للطباعة */}
               <AnimatePresence>
                 {seatAllocation && (
-                    <motion.div id="printable-ticket" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-10 border-indigo-500/40 flex flex-col items-center justify-center gap-8 shadow-[0_0_50px_rgba(79,70,229,0.15)] print:bg-white print:shadow-none print:border-none print:p-0">
-                      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none no-print"></div>
-                      
-                      <div className="w-full flex justify-between items-center mb-4 no-print">
-                         <h2 className="text-xl font-black text-indigo-300">البطاقة الرسمية (يرجى إبرازها للمراقب)</h2>
-                         <button onClick={handlePrintTicket} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-2 border border-indigo-400">
-                            <PrinterIcon className="w-4 h-4"/> طباعة البطاقة
-                         </button>
-                      </div>
+                    <motion.div id="printable-ticket-container" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative">
+                      <div className="overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-10 border-indigo-500/40 flex flex-col items-center justify-center gap-8 shadow-[0_0_50px_rgba(79,70,229,0.15)] no-print">
+                        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none no-print"></div>
+                        
+                        <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-4 gap-4 no-print relative z-10">
+                           <h2 className="text-xl font-black text-indigo-300">البطاقة الرسمية (يرجى إبرازها للمراقب)</h2>
+                           <button onClick={handlePrintTicket} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-2 border border-indigo-400 active:scale-95">
+                              <PrinterIcon className="w-5 h-5"/> طباعة البطاقة
+                           </button>
+                        </div>
 
-                      <div className="w-[85mm] h-[55mm] bg-white text-black border-[3px] border-black relative flex flex-col rounded-2xl overflow-hidden shrink-0 mx-auto shadow-2xl print:shadow-none print:m-0 print:scale-125" style={{ boxSizing: 'border-box' }} dir="rtl">
-                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                             <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة جلوس اختبارات نهاية العام</div>
-                             </div>
-                             <div style={{ backgroundColor: 'black', color: 'white', padding: '2px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{seatAllocation.exam_committees?.name}</div>
-                          </div>
-                          <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }}>
-                             <div style={{ width: '20mm', height: '20mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
-                                <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                             </div>
-                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
-                                <div style={{ minHeight: '30px', display: 'flex', alignItems: 'center' }}>
-                                   <h2 style={{ fontSize: '13px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0 }}>{rawFullName}</h2>
-                                </div>
-                                <div style={{ marginTop: '2px' }}>
-                                   <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{classNameStr}</span>
-                                </div>
-                             </div>
-                             <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '10px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '20mm', flexShrink: 0 }}>
-                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
-                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{seatAllocation.seat_number}</div>
-                             </div>
-                          </div>
+                        {/* البطاقة ذاتها (للعرض والطباعة) */}
+                        <div className="w-[85mm] h-[55mm] bg-white text-black border-[3px] border-black relative flex flex-col rounded-xl overflow-hidden shrink-0 mx-auto shadow-2xl relative z-10" style={{ boxSizing: 'border-box' }} dir="rtl">
+                            <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                               <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين</div>
+                                  <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة دخول اختبارات نهاية العام</div>
+                               </div>
+                               <div style={{ backgroundColor: 'black', color: 'white', padding: '3px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{seatAllocation.exam_committees?.name}</div>
+                            </div>
+                            <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }}>
+                               <div style={{ width: '22mm', height: '22mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
+                                  <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                               </div>
+                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
+                                  <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
+                                     <h2 style={{ fontSize: '14px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0 }}>{rawFullName}</h2>
+                                  </div>
+                                  <div style={{ marginTop: '2px' }}>
+                                     <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '3px 8px', borderRadius: '4px', fontWeight: '900', fontSize: '10px', color: '#0f172a' }}>{classNameStr}</span>
+                                  </div>
+                               </div>
+                               <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '12px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '22mm', flexShrink: 0 }}>
+                                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
+                                  <div style={{ fontSize: '20px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{seatAllocation.seat_number}</div>
+                               </div>
+                            </div>
+                        </div>
                       </div>
                     </motion.div>
                 )}
               </AnimatePresence>
 
+              {/* 🚀 جدول الاختبارات (مفلتر بذكاء) ونماذج الإجابات */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 no-print">
                 {filteredTimetables.length > 0 && (
                   <motion.div variants={itemVariants} className="glass-panel rounded-[2.5rem] p-6 sm:p-8 border-white/10">
@@ -431,9 +470,12 @@ export default function StudentDashboard() {
           )}
         </AnimatePresence>
 
+        {/* ========================================================= */}
+        {/* 🏢 الوضع الافتراضي والأقسام المعتادة */}
+        {/* ========================================================= */}
         <AnimatePresence>
         {showRegularDashboard && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 lg:grid-cols-12 gap-8 no-print">
             
             <div className="lg:col-span-12 relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-blue-500/30 group shadow-lg">
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110 opacity-50"></div>
@@ -496,19 +538,6 @@ export default function StudentDashboard() {
                             <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-screen" />
                           </div>
                       </div>
-                    </div>
-                </div>
-                <div className="w-full md:hidden bg-[#02040a]/60 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-inner flex items-center gap-4 relative z-10">
-                    <div className="w-16 h-16 bg-white/5 p-1 rounded-xl border border-white/10 shrink-0 shadow-inner overflow-hidden flex items-center justify-center">
-                      <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-screen" />
-                    </div>
-                    <div className="flex-1 text-right">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
-                      <h3 className="text-sm sm:text-base font-black text-white leading-tight drop-shadow-md">{seatAllocation.exam_committees?.name}</h3>
-                    </div>
-                    <div className="shrink-0 text-center border-r border-white/10 pr-4">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">الجلوس</p>
-                      <p className="text-xl font-black text-rose-400 tracking-widest drop-shadow-sm">{seatAllocation.seat_number}</p>
                     </div>
                 </div>
               </div>
@@ -1053,8 +1082,89 @@ export default function StudentDashboard() {
           </motion.div>
         )}
         </AnimatePresence>
-
       </div>
+
+      {studentData?.id && (
+         <StudentEvaluationGate studentId={studentData.id} sectionId={studentData.section_id || studentData.sections?.id} />
+      )}
+
+      {/* 🚀 نافذة العذر الطبي (Glass Modal) */}
+      <AnimatePresence>
+        {isExcuseModalOpen && (
+          <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-50" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 glass-panel rounded-[2.5rem] w-[95%] max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50 p-6 sm:p-8 border-white/10" dir="rtl">
+                
+                <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
+                  <div>
+                    <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3 drop-shadow-md"><Stethoscope className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" /> تقديم عذر طبي</Dialog.Title>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-300 mt-2">يرجى تعبئة تفاصيل الغياب وإرفاق التقرير لاعتماده من الإدارة.</p>
+                  </div>
+                  <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90 shadow-inner"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-3 bg-[#02040a]/40 backdrop-blur-sm p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
+                    <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 drop-shadow-sm"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها</label>
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={currentDateInput} onChange={(e) => setCurrentDateInput(e.target.value)} className="flex-1 glass-input p-3 text-xs sm:text-sm font-bold" style={{ colorScheme: 'dark' }} />
+                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 backdrop-blur-md text-amber-300 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-xs sm:text-sm transition-all shadow-inner active:scale-95">إضافة</button>
+                    </div>
+                    {excuseForm.absent_dates.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/5">
+                        {excuseForm.absent_dates.map(date => (
+                          <div key={date} className="flex items-center gap-2 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
+                            <span className="text-[10px] sm:text-xs font-bold text-slate-200" dir="ltr">{date}</span>
+                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300 drop-shadow-sm"><Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">نوع الدوام</label>
+                    <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full glass-input p-3.5 text-xs sm:text-sm font-bold appearance-none [&>option]:bg-[#0f1423] cursor-pointer">
+                      <option value="full_day">غياب يوم كامل</option>
+                      <option value="partial_day">غياب جزئي (استئذان حصص)</option>
+                    </select>
+                  </div>
+                  <AnimatePresence>
+                    {excuseForm.duration_type === 'partial_day' && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="space-y-2 pt-2">
+                          <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 drop-shadow-sm"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /> حدد الحصص التي غبت عنها</label>
+                          <div className="flex flex-wrap gap-2">
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
+                              <button key={p} type="button" onClick={() => togglePeriod(p)} className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all border shadow-inner backdrop-blur-md", excuseForm.target_periods.includes(p) ? "bg-amber-500/80 text-slate-950 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)]" : "bg-white/5 text-slate-300 border-white/10 hover:border-amber-500/40 hover:bg-white/10")}>{p}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">إرفاق التقرير الطبي (صورة)</label>
+                    <label className={cn("relative flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all backdrop-blur-md shadow-inner", isUploadingReport ? "border-amber-500/50 bg-amber-500/10" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/10" : "border-white/10 bg-[#02040a]/40 hover:border-amber-500/30 hover:bg-white/5")}>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleReportUpload} disabled={isUploadingReport} />
+                      {isUploadingReport ? <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" /><span className="text-[10px] sm:text-xs font-black">جاري الرفع السحابي...</span></div> : excuseForm.attachment_url ? <div className="flex flex-col items-center gap-2 text-emerald-400 drop-shadow-sm"><CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-black text-center">تم الإرفاق بنجاح</span></div> : <div className="flex flex-col items-center gap-2 text-slate-400 drop-shadow-sm"><UploadCloud className="w-6 h-6 sm:w-8 sm:h-8" /><span className="text-[10px] sm:text-xs font-bold text-center">اضغط لاختيار صورة</span></div>}
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest drop-shadow-sm">ملاحظات (اختياري)</label>
+                    <textarea value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})} placeholder="اكتب أي تفاصيل إضافية هنا..." className="w-full glass-input p-3 sm:p-4 text-xs sm:text-sm font-bold h-20 sm:h-24 resize-none" />
+                  </div>
+                </div>
+                <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/5 flex gap-3">
+                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-amber-500/90 to-orange-500/90 backdrop-blur-md hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base active:scale-95 border border-amber-300"><Loader2 className={cn("w-5 h-5", isSubmittingExcuse ? "animate-spin" : "hidden")} /> إرسال الطلب</button>
+                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-6 sm:px-8 py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10 text-sm sm:text-base active:scale-95 shadow-inner backdrop-blur-sm">إلغاء</button>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 }
