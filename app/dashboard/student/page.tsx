@@ -241,6 +241,8 @@ export default function StudentDashboard() {
   const showMiddleSchoolSuspense = isMiddleSchool && isSuspenseGlobal && !isMyResultPublished;
   const showHighSchoolExamMode = isHighSchool && isSuspenseGlobal && !isMyResultPublished;
   const showRegularDashboard = !showFinalResult && !showMiddleSchoolSuspense && !showHighSchoolExamMode;
+const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSchoolExamMode;
+
 
   let warningLevel = 0; let warningTitle = ""; let warningMessage = ""; let warningColors = ""; let warningIconColor = ""; let WarningIcon = Info; let warningPulse = false;
   if (absentPeriods >= 100) { warningLevel = 4; warningTitle = "إشعار فصل نهائي"; warningMessage = "تجاوزت 100 حصة غياب."; warningColors = "border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]"; warningIconColor = "text-rose-500"; WarningIcon = Siren; warningPulse = true; } 
