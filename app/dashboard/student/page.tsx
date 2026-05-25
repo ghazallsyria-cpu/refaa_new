@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   BookOpen, Calendar, CheckCircle2, Clock, 
   FileText, GraduationCap, TrendingUp, AlertCircle, Bell, ChevronLeft,
@@ -192,7 +192,7 @@ export default function StudentDashboard() {
   const rawFullName = studentData?.users?.full_name || studentData?.full_name || 'بطل الرفعة';
   const displayFirstName = rawFullName.split(' ')[0];
   
-  // 🌟 استخراج المستوى (الـ Level) بدقة 🌟
+  // 🌟 استخراج المستوى (الـ Level) بدقة تامة لتحديد المرحلة 🌟
   const secObj = Array.isArray(studentData?.sections) ? studentData?.sections[0] : studentData?.sections;
   const clsObj = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
   const classLevel = Number(clsObj?.level || 0);
@@ -200,7 +200,7 @@ export default function StudentDashboard() {
   const sectionNameStr = String(secObj?.name || studentData?.section_name || 'غير محدد');
   const avatarUrl = studentData?.users?.avatar_url || studentData?.avatar_url;
   
-  // 🌟 تصنيف المراحل بناءً على الـ Level لضمان دقة الاستجابة
+  // تصنيف المراحل بدقة رقمية بدلاً من الأسماء
   const isMiddleSchool = classLevel >= 6 && classLevel <= 9;
   const isHighSchool = classLevel >= 10 && classLevel <= 12;
   const isTenthGrade = classLevel === 10;
@@ -260,18 +260,21 @@ export default function StudentDashboard() {
       {/* 🚀 ستايل الطباعة المثالي (يمنع قص البطاقة ويخفي الباقي) */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-           body { background: white !important; -webkit-print-color-adjust: exact; }
+           body { background: white !important; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
            body * { visibility: hidden; }
            #printable-ticket-container, #printable-ticket-container * { visibility: visible; }
            #printable-ticket-container {
-             position: absolute;
-             left: 0;
-             top: 0;
-             width: 100%;
-             display: flex;
-             justify-content: center;
-             align-items: flex-start;
-             padding-top: 2cm;
+             position: absolute !important;
+             left: 0 !important;
+             top: 0 !important;
+             width: 100% !important;
+             display: flex !important;
+             justify-content: center !important;
+             align-items: flex-start !important;
+             padding-top: 2cm !important;
+             margin: 0 !important;
+             transform: scale(1.1) !important;
+             transform-origin: top center !important;
            }
            .no-print { display: none !important; }
         }
@@ -283,12 +286,12 @@ export default function StudentDashboard() {
            <div className="no-print"><MemorialShieldDisplay userId={studentData.id} role="student" /></div>
         )}
 
-        {/* ========================================================= */}
-        {/* 🏆 وضع إعلان النتائج (Results Mode) */}
-        {/* ========================================================= */}
         <AnimatePresence mode="wait">
+          {/* ========================================================= */}
+          {/* 🏆 وضع إعلان النتائج (Results Mode) */}
+          {/* ========================================================= */}
           {showFinalResult && (
-             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`relative overflow-hidden rounded-[2.5rem] glass-panel p-8 sm:p-12 text-center shadow-2xl flex flex-col items-center justify-center min-h-[50vh] ${isFinanciallyBlocked ? 'border-rose-500/40' : 'border-emerald-500/40'}`}>
+             <motion.div key="result-mode" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className={`relative overflow-hidden rounded-[2.5rem] glass-panel p-8 sm:p-12 text-center shadow-2xl flex flex-col items-center justify-center min-h-[50vh] ${isFinanciallyBlocked ? 'border-rose-500/40' : 'border-emerald-500/40'}`}>
                 {isFinanciallyBlocked ? (
                    <>
                       <div className="absolute inset-0 bg-gradient-to-t from-rose-900/20 to-transparent"></div>
@@ -326,7 +329,7 @@ export default function StudentDashboard() {
           {/* ⏳ وضع الترقب لطلاب المتوسطة (Middle School Suspense) */}
           {/* ========================================================= */}
           {showMiddleSchoolSuspense && (
-             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative overflow-hidden rounded-[2.5rem] glass-panel p-10 sm:p-16 border-amber-500/30 text-center shadow-[0_0_50px_rgba(245,158,11,0.15)] flex flex-col items-center justify-center min-h-[60vh]">
+             <motion.div key="suspense-mode" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative overflow-hidden rounded-[2.5rem] glass-panel p-10 sm:p-16 border-amber-500/30 text-center shadow-[0_0_50px_rgba(245,158,11,0.15)] flex flex-col items-center justify-center min-h-[60vh]">
                 <div className="absolute inset-0 bg-gradient-to-t from-amber-900/30 to-transparent"></div>
                 
                 {platformSettings?.grading_cta_image_url && (
@@ -349,9 +352,9 @@ export default function StudentDashboard() {
           {/* 🎯 وضع التركيز لطلاب الثانوية (High School Exam Focus Mode) */}
           {/* ========================================================= */}
           {showHighSchoolExamMode && (
-            <div className="space-y-8">
+            <motion.div key="exam-mode" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
               
-              <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-12 border-rose-500/30 group shadow-2xl no-print">
+              <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-12 border-rose-500/30 group shadow-2xl no-print">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110 opacity-50"></div>
                 <div className="relative z-10 flex flex-col items-center text-center">
                   <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-rose-500/20 backdrop-blur-md border border-rose-500/30 text-xs font-black uppercase tracking-widest mb-4 shadow-inner text-rose-300">
@@ -360,59 +363,57 @@ export default function StudentDashboard() {
                   <h1 className="text-4xl sm:text-6xl font-black mb-4 leading-tight drop-shadow-xl text-white">بالتوفيق يا {displayFirstName} 🎯</h1>
                   <p className="text-rose-200 font-black text-sm sm:text-lg drop-shadow-md max-w-2xl leading-relaxed bg-black/40 px-6 py-3 rounded-2xl border border-white/5">أنت الآن في فترة الاختبارات النهائية. تم إخفاء المشتتات لتتفرغ تماماً لمراجعة موادك، نثق بقدراتك وبأنك ستحقق أعلى الدرجات!</p>
                 </div>
-              </motion.div>
+              </div>
 
               {/* 🚀 البطاقة الامتحانية الفاخرة المجهزة للطباعة */}
-              <AnimatePresence>
-                {seatAllocation && (
-                    <motion.div id="printable-ticket-container" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative">
-                      <div className="overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-10 border-indigo-500/40 flex flex-col items-center justify-center gap-8 shadow-[0_0_50px_rgba(79,70,229,0.15)] no-print">
-                        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none no-print"></div>
-                        
-                        <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-4 gap-4 no-print relative z-10">
-                           <h2 className="text-xl font-black text-indigo-300">البطاقة الرسمية (يرجى إبرازها للمراقب)</h2>
-                           <button onClick={handlePrintTicket} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-2 border border-indigo-400 active:scale-95">
-                              <PrinterIcon className="w-5 h-5"/> طباعة البطاقة
-                           </button>
-                        </div>
-
-                        {/* البطاقة ذاتها (للعرض والطباعة) */}
-                        <div className="w-[85mm] h-[55mm] bg-white text-black border-[3px] border-black relative flex flex-col rounded-xl overflow-hidden shrink-0 mx-auto shadow-2xl relative z-10" style={{ boxSizing: 'border-box' }} dir="rtl">
-                            <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                               <div style={{ textAlign: 'right' }}>
-                                  <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين</div>
-                                  <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة دخول اختبارات نهاية العام</div>
-                               </div>
-                               <div style={{ backgroundColor: 'black', color: 'white', padding: '3px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{seatAllocation.exam_committees?.name}</div>
-                            </div>
-                            <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }}>
-                               <div style={{ width: '22mm', height: '22mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
-                                  <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                               </div>
-                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
-                                  <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
-                                     <h2 style={{ fontSize: '14px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0 }}>{rawFullName}</h2>
-                                  </div>
-                                  <div style={{ marginTop: '2px' }}>
-                                     <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '3px 8px', borderRadius: '4px', fontWeight: '900', fontSize: '10px', color: '#0f172a' }}>{classNameStr}</span>
-                                  </div>
-                               </div>
-                               <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '12px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '22mm', flexShrink: 0 }}>
-                                  <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
-                                  <div style={{ fontSize: '20px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{seatAllocation.seat_number}</div>
-                               </div>
-                            </div>
-                        </div>
+              {seatAllocation && (
+                  <div id="printable-ticket-container" className="relative">
+                    <div className="overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-10 border-indigo-500/40 flex flex-col items-center justify-center gap-8 shadow-[0_0_50px_rgba(79,70,229,0.15)] no-print">
+                      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none no-print"></div>
+                      
+                      <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-4 gap-4 no-print relative z-10">
+                         <h2 className="text-xl font-black text-indigo-300">البطاقة الرسمية (يرجى إبرازها للمراقب)</h2>
+                         <button onClick={handlePrintTicket} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-2 border border-indigo-400 active:scale-95">
+                            <PrinterIcon className="w-5 h-5"/> طباعة البطاقة
+                         </button>
                       </div>
-                    </motion.div>
-                )}
-              </AnimatePresence>
+
+                      {/* البطاقة ذاتها (للعرض والطباعة) */}
+                      <div className="w-[85mm] h-[55mm] bg-white text-black border-[3px] border-black relative flex flex-col rounded-xl overflow-hidden shrink-0 mx-auto shadow-2xl relative z-10" style={{ boxSizing: 'border-box' }} dir="rtl">
+                          <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين</div>
+                                <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>بطاقة دخول اختبارات نهاية العام</div>
+                             </div>
+                             <div style={{ backgroundColor: 'black', color: 'white', padding: '3px 8px', fontWeight: '900', fontSize: '10px', border: '1px solid black', borderRadius: '6px' }}>{seatAllocation.exam_committees?.name}</div>
+                          </div>
+                          <div style={{ padding: '8px 10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }}>
+                             <div style={{ width: '22mm', height: '22mm', padding: '2px', border: '2px solid #1e293b', borderRadius: '8px', flexShrink: 0 }}>
+                                <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                             </div>
+                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
+                                <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
+                                   <h2 style={{ fontSize: '14px', fontWeight: '900', color: 'black', lineHeight: '1.2', margin: 0, padding: 0 }}>{rawFullName}</h2>
+                                </div>
+                                <div style={{ marginTop: '2px' }}>
+                                   <span style={{ display: 'inline-block', backgroundColor: '#f1f5f9', border: '2px solid #1e293b', padding: '3px 8px', borderRadius: '4px', fontWeight: '900', fontSize: '10px', color: '#0f172a' }}>{classNameStr}</span>
+                                </div>
+                             </div>
+                             <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '12px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '22mm', flexShrink: 0 }}>
+                                <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
+                                <div style={{ fontSize: '20px', fontWeight: '900', color: 'black', lineHeight: '1' }}>{seatAllocation.seat_number}</div>
+                             </div>
+                          </div>
+                      </div>
+                    </div>
+                  </div>
+              )}
 
               {/* 🚀 جدول الاختبارات (مفلتر بذكاء) ونماذج الإجابات */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 no-print">
                 {filteredTimetables.length > 0 && (
-                  <motion.div variants={itemVariants} className="glass-panel rounded-[2.5rem] p-6 sm:p-8 border-white/10">
+                  <div className="glass-panel rounded-[2.5rem] p-6 sm:p-8 border-white/10">
                     <div className="border-b border-white/5 flex items-center justify-between pb-5 mb-5">
                       <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-3 drop-shadow-md">
                         <div className="p-2 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-5 w-5 text-indigo-400" /></div> جدول اختباراتك المعتمد
@@ -438,11 +439,11 @@ export default function StudentDashboard() {
                             );
                         })}
                     </div>
-                  </motion.div>
+                  </div>
                 )}
 
                 {answerKeys.length > 0 && (
-                  <motion.div variants={itemVariants} className="glass-panel border-emerald-500/30 rounded-[2.5rem] p-6 sm:p-8">
+                  <div className="glass-panel border-emerald-500/30 rounded-[2.5rem] p-6 sm:p-8">
                     <div className="border-b border-white/5 flex items-center justify-between pb-5 mb-5">
                       <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-3 drop-shadow-md">
                         <div className="p-2 bg-emerald-500/10 backdrop-blur-md rounded-xl border border-emerald-500/20 shadow-inner"><FileKey className="h-5 w-5 text-emerald-400" /></div> نماذج الإجابات المعتمدة
@@ -463,19 +464,18 @@ export default function StudentDashboard() {
                             </a>
                         ))}
                     </div>
-                  </motion.div>
+                  </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
         {/* ========================================================= */}
         {/* 🏢 الوضع الافتراضي والأقسام المعتادة */}
         {/* ========================================================= */}
-        <AnimatePresence>
-        {showRegularDashboard && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 lg:grid-cols-12 gap-8 no-print">
+        {!hideOldContent && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 no-print">
             
             <div className="lg:col-span-12 relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-6 sm:p-10 border-blue-500/30 group shadow-lg">
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110 opacity-50"></div>
@@ -538,6 +538,19 @@ export default function StudentDashboard() {
                             <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-screen" />
                           </div>
                       </div>
+                    </div>
+                </div>
+                <div className="w-full md:hidden bg-[#02040a]/60 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-inner flex items-center gap-4 relative z-10">
+                    <div className="w-16 h-16 bg-white/5 p-1 rounded-xl border border-white/10 shrink-0 shadow-inner overflow-hidden flex items-center justify-center">
+                      <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" className="w-full h-full object-contain mix-blend-screen" />
+                    </div>
+                    <div className="flex-1 text-right">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">اللجنة الامتحانية</p>
+                      <h3 className="text-sm sm:text-base font-black text-white leading-tight drop-shadow-md">{seatAllocation.exam_committees?.name}</h3>
+                    </div>
+                    <div className="shrink-0 text-center border-r border-white/10 pr-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">الجلوس</p>
+                      <p className="text-xl font-black text-rose-400 tracking-widest drop-shadow-sm">{seatAllocation.seat_number}</p>
                     </div>
                 </div>
               </div>
@@ -674,55 +687,6 @@ export default function StudentDashboard() {
                       </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {myBadges.length > 0 && (
-              <div className="lg:col-span-12 relative z-10 pt-2 w-full">
-                <h3 className="text-sm sm:text-base font-black text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-md">
-                  <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف الخاصة بك
-                </h3>
-                <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                  {myBadges.map((badgeEntry, index) => (
-                    <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 glass-panel rounded-[2rem] p-5 border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:border-amber-500/30 transition-all duration-300 group cursor-default">
-                      <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
-                        <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/20 transition-colors"></div>
-                        {badgeEntry.badge?.image_url ? (
-                          <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-xl relative z-10" />
-                        ) : <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-md p-2" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
-                        <p className="text-[10px] sm:text-xs font-bold text-slate-300 opacity-90 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود'}</p>
-                        <p className="text-[9px] text-slate-400 mt-2 bg-white/5 w-fit px-2.5 py-1 rounded-lg border border-white/5 shadow-inner font-bold">بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {studentData?.section_id && (
-              <div className="lg:col-span-12 relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] glass-panel p-6 sm:p-8 border-indigo-500/30 group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 blur-[80px] pointer-events-none rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-110"></div>
-                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
-                  <div className="flex flex-col md:flex-row items-center gap-4 sm:gap-6">
-                    <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500/10 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-indigo-500/20 shadow-inner shrink-0 relative group-hover:scale-110 transition-transform duration-500">
-                      <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400 drop-shadow-md" />
-                      <div className="absolute -top-2 -right-2 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#02040a] shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse"></div>
-                    </div>
-                    <div>
-                      <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-indigo-500/20 text-indigo-300 shadow-inner">
-                        <Sparkles className="w-3.5 h-3.5" /> مجلس الصف الموحد
-                      </div>
-                      <h2 className="text-xl sm:text-3xl font-black tracking-tight mb-2 text-white drop-shadow-lg">النقاشات المدرسية الحية</h2>
-                      <p className="text-slate-300 text-xs sm:text-sm font-bold opacity-90 max-w-xl mx-auto md:mx-0 leading-relaxed drop-shadow-sm">انضم لغرفة نقاش صفك للتواصل مع معلميك وزملائك في مكان واحد، واستقبال إعلانات الفصل الهامة.</p>
-                    </div>
-                  </div>
-                  <Link href={`/messages?sectionId=${studentData.section_id}`} className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600/80 hover:bg-indigo-500 backdrop-blur-md text-white font-black rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all active:scale-95 border border-indigo-400/50 w-full md:w-auto shrink-0 z-10 text-sm sm:text-base">
-                    دخول المجلس الآن <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
-                  </Link>
-                </div>
               </div>
             )}
 
@@ -1079,23 +1043,24 @@ export default function StudentDashboard() {
                 </div>
               </div>
             </div>
+
           </motion.div>
         )}
         </AnimatePresence>
+
       </div>
 
       {studentData?.id && (
          <StudentEvaluationGate studentId={studentData.id} sectionId={studentData.section_id || studentData.sections?.id} />
       )}
 
-      {/* 🚀 نافذة العذر الطبي (Glass Modal) */}
+      {/* 🚀 نافذة العذر الطبي */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
             <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-50" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 glass-panel rounded-[2.5rem] w-[95%] max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50 p-6 sm:p-8 border-white/10" dir="rtl">
-                
+              <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-50 no-print" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 glass-panel rounded-[2.5rem] w-[95%] max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50 p-6 sm:p-8 border-white/10 no-print" dir="rtl">
                 <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
                   <div>
                     <Dialog.Title className="text-xl sm:text-2xl font-black text-white flex items-center gap-3 drop-shadow-md"><Stethoscope className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" /> تقديم عذر طبي</Dialog.Title>
@@ -1103,7 +1068,7 @@ export default function StudentDashboard() {
                   </div>
                   <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors active:scale-90 shadow-inner"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
                 </div>
-
+                {/* استكمال كود نافذة العذر الطبي كما هو دون تغيير... */}
                 <div className="space-y-6">
                   <div className="space-y-3 bg-[#02040a]/40 backdrop-blur-sm p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
                     <label className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 drop-shadow-sm"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> أيام الغياب المراد تبريرها</label>
