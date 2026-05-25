@@ -293,13 +293,48 @@ const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSc
                          <Lock className="w-12 h-12 text-rose-400 drop-shadow-md" />
                       </div>
                       <h2 className="text-3xl sm:text-5xl font-black text-white mb-6 drop-shadow-xl z-10 tracking-tight">النتيجة معتمدة وجاهزة</h2>
-                      <div className="bg-[#02040a]/60 backdrop-blur-md p-6 sm:p-8 rounded-3xl border border-rose-500/20 max-w-2xl z-10 text-right shadow-inner">
-                         <p className="text-rose-200 font-bold text-sm sm:text-base leading-relaxed">
-                            <strong className="text-rose-400 font-black text-lg block mb-2">عزيزي ولي الأمر،</strong>
-                            نبارك لنجلكم إنهاء العام الدراسي بنجاح. يرجى التكرم بتسوية الرصيد المالي المتبقي لدى قسم المحاسبة لتفعيل إصدار الشهادة الرقمية فوراً، ولتتمكنوا من استلام النسخة الورقية الرسمية المعتمدة من سكرتارية المدرسة.
-                         </p>
-                      </div>
-                   </>
+                    <div className="bg-[#02040a]/60 backdrop-blur-md p-6 sm:p-8 rounded-3xl border border-rose-500/20 max-w-2xl z-10 text-right shadow-inner">
+         <p className="text-rose-200 font-bold text-sm sm:text-base leading-relaxed">
+            <strong className="text-rose-400 font-black text-lg block mb-2">عزيزي ولي الأمر،</strong>
+            نبارك لنجلكم إنهاء العام الدراسي بنجاح. يرجى التكرم بتسوية الرصيد المالي المتبقي لدى قسم المحاسبة لتفعيل إصدار الشهادة الرقمية فوراً، ولتتمكنوا من استلام النسخة الورقية الرسمية المعتمدة من سكرتارية المدرسة.
+         </p>
+      </div>
+
+      {/* زر الدفع الإلكتروني */}
+      <div className="relative z-10 w-full max-w-2xl mt-6">
+        <div className="bg-gradient-to-br from-emerald-900/40 to-teal-900/30 backdrop-blur-xl border border-emerald-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_0_40px_rgba(16,185,129,0.15)]">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-emerald-500/20 rounded-xl border border-emerald-500/30 shadow-inner">
+              <Wallet className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <p className="font-black text-white text-sm">الدفع الإلكتروني الآمن</p>
+              <p className="text-[10px] font-bold text-emerald-300/70">مدعوم من منصة سند الكويت 🇰🇼</p>
+            </div>
+          </div>
+
+          <p className="text-emerald-100/80 text-xs sm:text-sm font-bold leading-relaxed mb-5 bg-[#02040a]/30 p-3 rounded-xl border border-white/5">
+            يمكنكم الآن تسوية الرصيد المالي بكل سهولة وأمان عبر بوابة الدفع الإلكتروني، دون الحاجة للحضور الشخصي.
+          </p>
+
+          <a
+            href="https://sanad.com.kw/sanadpayment/Eschool001/AccountList.aspx?sid=239&ifrm=yes&fbclid=PAdGRleASBo7tjbGNrAcFYgWV4dG4DYWVtAjEwAAGmyOnjC2Xr5yun7aWOK0R2n-RQRIRVLghj5GmY43RwXCjIDt215bhxe-XX_aem_DvO8rx8pRbbjqimzW6OQUA"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-3 w-full py-4 px-8 bg-gradient-to-l from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black rounded-2xl shadow-[0_0_25px_rgba(16,185,129,0.4)] transition-all active:scale-95 border border-emerald-400/50 text-sm sm:text-base group"
+          >
+            <Wallet className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            ادفع الآن وافتح نتيجتك فوراً
+            <span className="text-emerald-200 text-xs font-bold bg-white/10 px-2 py-1 rounded-lg border border-white/10">سند</span>
+          </a>
+
+          <p className="text-center text-[10px] text-emerald-300/50 font-bold mt-3 flex items-center justify-center gap-1.5">
+            <CheckCircle2 className="w-3 h-3" /> دفع آمن ومشفر بالكامل
+          </p>
+        </div>
+      </div>
+   </>
+
                 ) : (
                    <>
                       <div className="absolute inset-0 bg-[url('https://cdn.discordapp.com/attachments/1083424168050720880/1155913210359058512/confetti.gif')] opacity-20 mix-blend-screen bg-cover pointer-events-none z-0"></div>
