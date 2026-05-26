@@ -9,7 +9,8 @@ import {
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
   AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2, Sparkles,
-  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key, FileSignature, X, Stethoscope, UploadCloud, PartyPopper
+  ShieldCheck, MapPin, FileKey, CalendarDays, Download, Fingerprint, Crown, Key, FileSignature, X, Stethoscope, UploadCloud, PartyPopper,
+  Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -85,6 +86,13 @@ export default function TeacherDashboard() {
     const clockTimer = setInterval(() => setCurrentTime(new Date()), 60000); 
     return () => clearInterval(clockTimer);
   }, []);
+
+  // ✅ الإصلاح الأول: todaysSchedule مشتق من schedule بشكل صحيح
+  const todaysSchedule = useMemo(() => {
+    if (!schedule || !currentTime) return [];
+    const currentDayOfWeek = currentTime.getDay() + 1; // 0=الأحد في JS → 1=الأحد في DB
+    return schedule.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
+  }, [schedule, currentTime]);
 
   const isCurrentClass = useCallback((startTime?: string, endTime?: string) => {
     if (!currentTime || !startTime || !endTime) return false;
@@ -261,13 +269,13 @@ export default function TeacherDashboard() {
               }
           }
         }
-      } catch (error) { console.error('Error fetching dashboard data:', error); } finally { if (mounted) setLoading(false); }
+      } catch (error) { console.error('Error fetching dashboard data:', error); } finally { setLoading(false); }
     };
 
     loadDashboardData();
   }, [isChecking, user, authRole, mounted]); 
 
-  // --- دوال الأعذار والتوقيع (تبقى تعمل كما هي في حال احتاج المعلم للاعتذار عن المراقبة) ---
+  // --- دوال الأعذار والتوقيع ---
   const signDuty = async () => {
     if (!upcomingDuty) return;
     if (!confirm('هل أنت متأكد من توقيعك إلكترونياً لاستلام مهام هذه اللجنة؟')) return;
@@ -367,13 +375,11 @@ export default function TeacherDashboard() {
   const teachesHighSchool = sections.some(sec => Number(sec.classes?.level) >= 10);
   const teachesMiddleSchool = sections.some(sec => Number(sec.classes?.level) >= 6 && Number(sec.classes?.level) <= 9);
   
-  // المشترك نعتبره "ثانوية" لضمان ظهور جداول المراقبة واللجان له، أما المتوسطة الصافي تظهر له رسالة الشكر فقط.
   const isHighSchoolTeacher = teachesHighSchool || (teachesHighSchool && teachesMiddleSchool); 
   const isStrictlyMiddleSchoolTeacher = !teachesHighSchool && teachesMiddleSchool;
 
   const isSuspenseGlobal = platformSettings?.results_suspense_mode === true;
   
-  // مفاتيح التحكم بظهور الشاشات
   const showMiddleSchoolEndYear = isStrictlyMiddleSchoolTeacher && isSuspenseGlobal;
   const showHighSchoolExamMode = isHighSchoolTeacher && isSuspenseGlobal;
   const showRegularDashboard = !showMiddleSchoolEndYear && !showHighSchoolExamMode;
@@ -381,7 +387,7 @@ export default function TeacherDashboard() {
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen relative bg-[#02040a] text-slate-100 pb-32 overflow-x-hidden font-sans pt-2 sm:pt-6 print:bg-white print:text-black print:p-0" dir="rtl">
       
-      {/* 🚀 ستايل الطباعة لتذاكر المراقبة (إن لزم الأمر) */}
+      {/* 🚀 ستايل الطباعة */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
            body * { visibility: hidden; }
@@ -397,7 +403,7 @@ export default function TeacherDashboard() {
 
         <AnimatePresence mode="wait">
            {/* ========================================================= */}
-           {/* 🎓 1. شاشة معلمي المتوسطة (نهاية العام) - تظهر فقط في وضع الترقب */}
+           {/* 🎓 1. شاشة معلمي المتوسطة (نهاية العام) */}
            {/* ========================================================= */}
            {showMiddleSchoolEndYear && (
              <motion.div key="middle-school-end" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="relative overflow-hidden rounded-[2.5rem] glass-panel p-10 sm:p-16 border-emerald-500/30 text-center shadow-[0_0_50px_rgba(16,185,129,0.15)] flex flex-col items-center justify-center min-h-[70vh]">
@@ -420,7 +426,7 @@ export default function TeacherDashboard() {
            )}
 
            {/* ========================================================= */}
-           {/* 🎯 2. شاشة معلمي الثانوية (غرفة عمليات الاختبارات) - وضع الترقب */}
+           {/* 🎯 2. شاشة معلمي الثانوية (غرفة عمليات الاختبارات) */}
            {/* ========================================================= */}
            {showHighSchoolExamMode && (
              <motion.div key="high-school-exams" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8 no-print">
@@ -507,8 +513,8 @@ export default function TeacherDashboard() {
                              {upcomingDuty.status === 'signed' && <div className="px-6 py-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black text-sm rounded-xl"><CheckCircle2 className="w-5 h-5 inline" /> تم تأكيد الاستلام بنجاح!</div>}
                              {upcomingDuty.status === 'excused' && <div className="px-6 py-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-300 font-black text-sm rounded-xl"><AlertTriangle className="w-5 h-5 inline" /> تم رفع عذركم للإدارة.</div>}
                              
-                             {/* زر طباعة التكليف لمن يرغب */}
-                             <button onClick={() => window.print()} className="px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white font-black text-sm rounded-xl border border-white/20 flex items-center gap-2 mr-auto"><PrinterIcon className="w-4 h-4"/> طباعة التكليف</button>
+                             {/* ✅ الإصلاح الثاني: Printer بدلاً من PrinterIcon */}
+                             <button onClick={() => window.print()} className="px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white font-black text-sm rounded-xl border border-white/20 flex items-center gap-2 mr-auto"><Printer className="w-4 h-4"/> طباعة التكليف</button>
                           </div>
                        </div>
                     </div>
@@ -539,7 +545,7 @@ export default function TeacherDashboard() {
            )}
 
            {/* ========================================================= */}
-           {/* 🏫 3. الوضع الافتراضي للداشبورد العادي (يظهر إذا لم يتم تفعيل الحجب) */}
+           {/* 🏫 3. الوضع الافتراضي للداشبورد العادي */}
            {/* ========================================================= */}
            {showRegularDashboard && (
              <motion.div key="regular-mode" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8 no-print">
@@ -634,7 +640,7 @@ export default function TeacherDashboard() {
                   </motion.div>
                 )}
 
-                {/* شبكة الإحصائيات (Stats) */}
+                {/* شبكة الإحصائيات */}
                 <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                   {[
                     { label: 'إجمالي الطلاب', value: stats.totalStudents, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
@@ -643,7 +649,7 @@ export default function TeacherDashboard() {
                     { label: 'متوسط الحضور', value: `${stats.avgAttendance || 100}%`, icon: BarChart2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
                     { label: 'معدل الغياب', value: `${stats.absenceRate || 0}%`, icon: AlertCircle, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
                   ].map((stat, i) => (
-                    <motion.div key={i} variants={itemVariants} whileHover={{ y: -5 }} className={`glass-panel p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2.rem] flex flex-col justify-center items-center text-center gap-3 group relative overflow-hidden`}>
+                    <motion.div key={i} variants={itemVariants} whileHover={{ y: -5 }} className={`glass-panel p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] flex flex-col justify-center items-center text-center gap-3 group relative overflow-hidden`}>
                       <div className={`absolute -right-4 -top-4 w-16 h-16 rounded-full ${stat.bg.split(' ')[0]} blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none mix-blend-screen`}></div>
                       <div className={`h-12 w-12 sm:h-14 sm:w-14 rounded-2xl ${stat.bg} backdrop-blur-md border ${stat.border} flex items-center justify-center ${stat.color} relative z-10 group-hover:scale-110 transition-transform shadow-inner`}>
                         <stat.icon className="h-6 w-6 sm:h-7 sm:w-7 drop-shadow-md" />
