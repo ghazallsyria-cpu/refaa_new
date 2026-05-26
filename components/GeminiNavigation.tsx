@@ -76,6 +76,7 @@ const navigationGroups = [
       { name: 'وثائق التخرج', href: '/admin/graduation-docs', icon: ScrollText },
       { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
       { name: 'تقرير غياب الاختبارات', href: '/admin/exam-attendance-report', icon: FileText },
+        { name: 'ادارة النتائج', href: '/admin/results-management', icon: FileText },
     ]
   },
   {
