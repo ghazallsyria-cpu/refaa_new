@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     }
 
     // 1. تسجيل الحملة في قاعدة البيانات
-    const { data: campaign, error } = await supabase
+    const { data: campaign, error: campaignError } = await supabase
       .from('whatsapp_campaigns')
       .insert([{ 
         message, 
@@ -23,30 +23,55 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) throw new Error(`Database error: ${error.message}`);
+    if (campaignError) throw new Error(`Database error: ${campaignError.message}`);
 
-    // 2. حساب تأخير الجدولة الزمنية (إن وجد)
-    let delayMs = 0;
-    if (scheduledAt) {
-      const scheduledTime = new Date(scheduledAt).getTime();
-      delayMs = Math.max(0, scheduledTime - Date.now());
+    // 2. جلب أرقام الهواتف (الربط مع جدول users)
+    let query = supabase.from('users').select('id, phone');
+    
+    if (audienceType === 'teachers') {
+      query = query.eq('role', 'teacher');
+    } else if (audienceType === 'students') {
+      query = query.eq('role', 'student');
+      if (classId) {
+         // نفلتر الطلاب بناءً على class_id من جدول students
+         const { data: studentIds } = await supabase.from('students').select('id').eq('section_id', classId);
+         const ids = studentIds?.map(s => s.id) || [];
+         query = query.in('id', ids);
+      }
     }
 
-    // 3. تسليم المهمة للطابور
+    const { data: recipients, error: fetchError } = await query;
+    if (fetchError) throw new Error(`Fetch error: ${fetchError.message}`);
+
+    // 3. إدراج السجلات في whatsapp_logs (تعبئة الجدول)
+    const validRecipients = recipients?.filter(r => r.phone); // استبعاد من لا يملك رقم هاتف
+
+    if (validRecipients && validRecipients.length > 0) {
+      const logs = validRecipients.map((r: any) => ({
+        campaign_id: campaign.id,
+        user_id: r.id,
+        phone: r.phone,
+        status: 'pending'
+      }));
+
+      const { error: logError } = await supabase.from('whatsapp_logs').insert(logs);
+      if (logError) throw new Error(`Log insertion error: ${logError.message}`);
+    } else {
+      return NextResponse.json({ error: 'لم يتم العثور على أرقام هواتف' }, { status: 404 });
+    }
+
+    // 4. تسليم المهمة للطابور
     const job = await whatsappQueue.add('send-campaign', {
       campaignId: campaign.id,
       message,
-      audienceType,
-      classId
     }, { 
-      delay: delayMs,
       removeOnComplete: true,
     });
 
-    return NextResponse.json({ success: true, campaignId: campaign.id, jobId: job.id });
+    return NextResponse.json({ success: true, campaignId: campaign.id, recipientsCount: validRecipients.length });
 
   } catch (error: any) {
     console.error('WhatsApp API Error:', error);
-    return NextResponse.json({ error: error.message || 'حدث خطأ غير متوقع' }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
