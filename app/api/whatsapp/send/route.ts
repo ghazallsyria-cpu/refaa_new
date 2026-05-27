@@ -1,18 +1,16 @@
 import { NextResponse } from 'next/server';
 import { whatsappQueue } from '@/lib/queue/config';
-import { supabase } from '@/lib/supabase'; // تأكد من استخدام SERVICE_ROLE_KEY هنا إن أمكن لضمان الإدراج
+import { supabase } from '@/lib/supabase';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { message, audienceType, classId, scheduledAt, userId } = body;
+    const { message, audienceType, classId, scheduledAt, userId } = await req.json();
 
-    // 1. التحقق من البيانات الأساسية
     if (!message || !audienceType || !userId) {
       return NextResponse.json({ error: 'البيانات المطلوبة غير مكتملة' }, { status: 400 });
     }
 
-    // 2. تسجيل الحملة في قاعدة البيانات بحالة 'pending'
+    // 1. تسجيل الحملة في قاعدة البيانات
     const { data: campaign, error } = await supabase
       .from('whatsapp_campaigns')
       .insert([{ 
@@ -25,29 +23,27 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) {
-      throw new Error(`Database error: ${error.message}`);
-    }
+    if (error) throw new Error(`Database error: ${error.message}`);
 
-    // 3. حساب وقت الجدولة (التأخير بالمللي ثانية) إن وجد
+    // 2. حساب تأخير الجدولة الزمنية (إن وجد)
     let delayMs = 0;
     if (scheduledAt) {
       const scheduledTime = new Date(scheduledAt).getTime();
       delayMs = Math.max(0, scheduledTime - Date.now());
     }
 
-    // 4. تسليم المهمة للطابور (BullMQ) ليقوم الـ Worker باستلامها
-    await whatsappQueue.add('send-campaign', {
+    // 3. تسليم المهمة للطابور
+    const job = await whatsappQueue.add('send-campaign', {
       campaignId: campaign.id,
       message,
       audienceType,
       classId
     }, { 
       delay: delayMs,
-      removeOnComplete: true, // اختياري: لتنظيف الـ Redis بعد النجاح
+      removeOnComplete: true,
     });
 
-    return NextResponse.json({ success: true, campaignId: campaign.id });
+    return NextResponse.json({ success: true, campaignId: campaign.id, jobId: job.id });
 
   } catch (error: any) {
     console.error('WhatsApp API Error:', error);
