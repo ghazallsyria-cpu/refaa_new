@@ -1,10 +1,8 @@
-// whatsapp-worker.ts
 import { Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { sendWhatsAppMessage } from './lib/whatsapp/evolution';
 import { resolveAudience } from './lib/whatsapp/resolver';
 import { supabase } from './lib/supabase'; 
-// تنبيه: تأكد أن supabase client هنا يستخدم SERVICE_ROLE_KEY ليتمكن من الكتابة والقراءة بصلاحيات كاملة في الخلفية
 
 const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -12,15 +10,14 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 console.log('👷 WhatsApp Worker is running and waiting for jobs...');
 
 const worker = new Worker('whatsapp-messages', async (job: Job) => {
-  // البيانات التي سنرسلها من واجهة المدير لاحقاً
   const { campaignId, message, audienceType, classId } = job.data;
   console.log(`[Job ${job.id}] Starting campaign: ${campaignId}`);
 
   try {
-    // 1. تحديث حالة الحملة إلى "جاري المعالجة"
+    // 1. تحديث الحالة
     await supabase.from('whatsapp_campaigns').update({ status: 'processing' }).eq('id', campaignId);
 
-    // 2. جلب الأرقام المستهدفة عبر المُحلل الذكي الذي برمجناه
+    // 2. جلب الأرقام
     const targets = await resolveAudience(audienceType, classId);
     console.log(`[Job ${job.id}] Found ${targets.length} targets.`);
 
@@ -29,53 +26,31 @@ const worker = new Worker('whatsapp-messages', async (job: Job) => {
       return;
     }
 
-    // 3. حلقة الإرسال مع Rate Limiting (نقطة الأمان القصوى)
+    // 3. حلقة الإرسال مع Rate Limiting 
     for (const target of targets) {
       try {
         await sendWhatsAppMessage(target.phone, message);
-        
-        // تسجيل النجاح في الـ Logs
         await supabase.from('whatsapp_logs').insert({
-          campaign_id: campaignId,
-          user_id: target.id,
-          phone: target.phone,
-          status: 'sent',
-          sent_at: new Date().toISOString()
+          campaign_id: campaignId, user_id: target.id, phone: target.phone, status: 'sent', sent_at: new Date().toISOString()
         });
-        console.log(`[Job ${job.id}] ✅ Sent to ${target.phone}`);
-        
+        console.log(`✅ Sent to ${target.phone}`);
       } catch (error: any) {
-        // تسجيل الفشل في الـ Logs لمعرفة السبب لاحقاً من لوحة التحكم
         await supabase.from('whatsapp_logs').insert({
-          campaign_id: campaignId,
-          user_id: target.id,
-          phone: target.phone,
-          status: 'failed',
-          error_response: error.message
+          campaign_id: campaignId, user_id: target.id, phone: target.phone, status: 'failed', error_response: error.message
         });
-        console.log(`[Job ${job.id}] ❌ Failed for ${target.phone}: ${error.message}`);
+        console.log(`❌ Failed for ${target.phone}`);
       }
-
-      // ⏱️ تأخير 3 ثوانٍ بين كل رسالة لتجنب الحظر من واتساب
+      // ⏱️ تأخير 3 ثوانٍ لحماية الرقم من الحظر
       await delay(3000); 
     }
 
-    // 4. تحديث حالة الحملة إلى "مكتملة"
+    // 4. إتمام المهمة
     await supabase.from('whatsapp_campaigns').update({ status: 'completed' }).eq('id', campaignId);
     console.log(`[Job ${job.id}] Campaign completed successfully.`);
 
   } catch (error: any) {
     console.error(`[Job ${job.id}] Critical Error:`, error);
-    // في حال حدوث خطأ كارثي (انقطاع قاعدة البيانات مثلاً)
     await supabase.from('whatsapp_campaigns').update({ status: 'failed' }).eq('id', campaignId);
     throw error;
   }
-
-}, { 
-  connection, 
-  concurrency: 1 // قيمة 1 تضمن أننا لن نرسل أكثر من رسالة واحدة في نفس اللحظة
-});
-
-worker.on('failed', (job, err) => {
-  console.error(`[Job ${job?.id}] Failed with error: ${err.message}`);
-});
+}, { connection, concurrency: 1 });
