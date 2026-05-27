@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Send, Users, Clock, AlertTriangle, CheckCircle2, Loader2, MessageSquare, Activity } from 'lucide-react';
+import { Send, Users, Clock, AlertTriangle, CheckCircle2, Loader2, MessageSquare, Activity, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
