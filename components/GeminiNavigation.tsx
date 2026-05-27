@@ -2,13 +2,12 @@
 /* eslint-disable */
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
-import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, Users, GraduationCap, School, BookOpen, 
   CalendarCheck, FileText, CalendarDays, Clock, PenTool, 
@@ -18,8 +17,7 @@ import {
   UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, 
   MonitorPlay, Target, Wand2, MonitorUp, ShieldCheck, FileKey, 
   ScanLine, FileSignature, UserSearch, CreditCard, ClipboardList, 
-  Globe, ScrollText, Star, Shield, LogOut, Search, ChevronDown,
-  FileSpreadsheet, Unlock 
+  Globe, ScrollText, Star, Shield, LogOut, Search, FileSpreadsheet, Unlock 
 } from 'lucide-react';
 
 // ==========================================
@@ -66,6 +64,8 @@ const navigationGroups = [
       { name: 'رادار الكنترول', href: '/admin/control-radar', icon: ScanLine },
       { name: 'غرفة عمليات الرصد', href: '/admin/grading-control', icon: Activity }, 
       { name: 'الخزنة المركزية', href: '/admin/grading-unlock', icon: Unlock }, 
+      { name: 'إدارة النتائج والذمم', href: '/admin/results-management', icon: Award },
+      { name: 'نظام إشعارات واتساب', href: '/admin/whatsapp', icon: MessageSquare },
       { name: 'محرك الرصد اليدوي', href: '/admin/manual-grading', icon: FileSpreadsheet }, 
       { name: 'اللوائح الأكاديمية', href: '/admin/grading-rules', icon: Scale },
       { name: 'الغلاف الرقمي', href: '/hod/digital-cover', icon: FileSignature },
@@ -76,7 +76,6 @@ const navigationGroups = [
       { name: 'وثائق التخرج', href: '/admin/graduation-docs', icon: ScrollText },
       { name: 'نماذج الإجابات', href: '/admin/exam-answer-keys', icon: FileKey },
       { name: 'تقرير غياب الاختبارات', href: '/admin/exam-attendance-report', icon: FileText },
-        { name: 'ادارة النتائج', href: '/admin/results-management', icon: FileText },
     ]
   },
   {
@@ -156,7 +155,7 @@ export default function GeminiNavigation() {
           setDynamicRolePermissions(settingsData.role_permissions);
         }
       } catch (err) {
-        console.warn("Dynamic permissions fetch failed, using internal safety logic.");
+        console.warn("Dynamic permissions fetch failed.");
       }
     }
     fetchPlatformSettingsAndPerms();
@@ -237,15 +236,11 @@ export default function GeminiNavigation() {
   };
   const quickLinks = getQuickLinks();
 
-  const roleDisplayNames: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر', 'staff': 'كادر إداري/مساند' };
-  let roleDisplayName = roleDisplayNames[authRole] || roleDisplayNames[userRole] || 'مستخدم';
-  if (isGlobalWatcher) roleDisplayName = 'مشرف إداري (مراقبة)';
-
   return (
     <>
       {/* 💻 الكبسولة الطافية (Desktop) */}
       <motion.div 
-         Sherwood={false} animate={{ width: isExpanded ? 240 : 80 }}
+        animate={{ width: isExpanded ? 240 : 80 }}
         onHoverStart={() => setIsExpanded(true)} onHoverEnd={() => setIsExpanded(false)}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="hidden md:flex fixed top-6 bottom-6 right-6 z-40 flex-col bg-[#02040a]/60 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden"
@@ -344,7 +339,6 @@ export default function GeminiNavigation() {
                         </div>
                         <div className="flex flex-col gap-1.5 flex-1">
                           {searchedItems.map((item) => {
-                            // 🚀 تم حقن معالجة الروابط الديناميكية هنا لتصحيح التوجيه كلياً
                             let itemHref = item.href;
                             
                             if (item.name === 'لوحة التحكم') {
