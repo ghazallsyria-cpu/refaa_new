@@ -2,20 +2,24 @@
 
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { sendWhatsAppMessage } from '@/lib/whatsapp/evolution'; // تأكد أن المسار صحيح عندك
+import { sendWhatsAppMessage } from '@/lib/whatsapp/evolution';
 
 export async function GET() {
   try {
     console.log("--- بدء عملية معالجة الرسائل ---");
 
-    // 🚀 كود إنقاذ مؤقت لإجبار السيرفر على إنشاء الجلسة "refaa" إذا لم تكن موجودة
+    // 🚀 كود إنقاذ مؤقت لإجبار السيرفر على إنشاء الجلسة "refaa"
+    // ⚠️ مهم جداً: ضع كلمة السر الحقيقية (API Key) الخاصة بـ Railway داخل علامتي التنصيص هنا
+    const MY_API_KEY = 'Ehab@Gh870495';
+
     try {
       console.log("⏳ محاولة التأكد من إنشاء الجلسة refaa على السيرفر...");
       await fetch(`${process.env.EVOLUTION_API_URL}/instance/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': process.env.EVOLUTION_API_KEY || ''
+          'apikey': MY_API_KEY,
+          'Authorization': `Bearer ${MY_API_KEY}`
         },
         body: JSON.stringify({
           instanceName: "refaa",
