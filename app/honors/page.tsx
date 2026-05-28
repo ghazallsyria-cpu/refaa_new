@@ -12,7 +12,7 @@ export default function HonorsPage() {
   const [activeTab, setActiveTab] = useState('العاشر');
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [customDesigns, setCustomDesigns] = useState<Record<string, string>>({}); // 🚀 جلب البوسترات
+  const [customDesigns, setCustomDesigns] = useState<Record<string, string>>({});
   
   const grades = ['العاشر', 'الحادي عشر علمي', 'الحادي عشر أدبي', 'الثاني عشر علمي', 'الثاني عشر أدبي'];
   const toArabicDigits = (num: any) => String(num).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
@@ -21,11 +21,9 @@ export default function HonorsPage() {
     const fetchData = async () => {
       setLoading(true);
       
-      // 1. جلب الإعدادات والبوسترات المخصصة
       const { data: settingsData } = await supabase.from('platform_settings').select('honors_custom_designs').limit(1).maybeSingle();
       if (settingsData) setCustomDesigns(settingsData.honors_custom_designs || {});
 
-      // 2. جلب الطلاب المرصودين ذكياً
       const { data, error } = await supabase.from('top_students').select('*').eq('grade_level', activeTab).order('percentage', { ascending: false });
       if (!error) setStudents(data || []);
       
@@ -35,9 +33,13 @@ export default function HonorsPage() {
   }, [activeTab]);
 
   const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
-  const itemVariants = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } } };
+  
+  // 🚀 التعديل الجذري هنا لإرضاء TypeScript (إضافة as const)
+  const itemVariants = { 
+    hidden: { opacity: 0, y: 20 }, 
+    show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300, damping: 24 } } 
+  };
 
-  // التحقق مما إذا كان هناك بوستر مخصص لهذا الصف
   const currentCustomPoster = customDesigns[activeTab];
 
   return (
@@ -56,7 +58,7 @@ export default function HonorsPage() {
             <span className="text-xs font-black text-blue-600 tracking-wider">لوحة التميز والنجاح</span>
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 mb-4 tracking-tight">لوحة الشرف</h1>
-          <p className="text-slate-500 font-bold text-sm sm:text-base max-w-lg mx-auto">كوكبة من فرسان مدرسة الرفعة، سطروا أسماءهم بماء الذهب في سجلات التفوق.</p>
+          <p className="text-slate-500 font-bold text-sm sm:text-base max-w-lg mx-auto">كوكبة من فرسان مدرسة الرفعة النموذجية، سطروا أسماءهم بماء الذهب في سجلات التفوق.</p>
         </motion.div>
 
         <div className="w-full overflow-hidden mb-12 relative">
@@ -76,7 +78,7 @@ export default function HonorsPage() {
           </div>
         ) : currentCustomPoster ? (
           
-          /* 🖼️ عرض البوستر المخصص (كامل وبدون قص) */
+          /* 🖼️ عرض البوستر المخصص */
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }} className="w-full flex justify-center">
             <div className="w-full max-w-4xl bg-white/50 backdrop-blur-md p-2 rounded-[2rem] shadow-xl border border-white/60">
               <img 
@@ -95,7 +97,7 @@ export default function HonorsPage() {
           </motion.div>
         ) : (
           
-          /* 👑 عرض منصة التتويج الذكية (في حال لم يرفع بوستر) */
+          /* 👑 عرض منصة التتويج الذكية */
           <motion.div variants={containerVariants} initial="hidden" animate="show">
             <div className="grid grid-cols-2 md:flex md:flex-row justify-center items-end gap-4 md:gap-8 mb-16 md:mb-24">
               
