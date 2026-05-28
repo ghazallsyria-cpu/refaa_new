@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import ImageUpload from '@/components/ImageUpload'; 
-import { Search, Check, Image as ImageIcon, LayoutTemplate, Trash2 } from 'lucide-react';
+import { Search, Check, Image as ImageIcon, LayoutTemplate, Trash2, Sparkles, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function AdminHonorsDashboard() {
@@ -16,16 +16,13 @@ export default function AdminHonorsDashboard() {
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // إعدادات المنصة المركزية
   const [isPublished, setIsPublished] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [settingsId, setSettingsId] = useState<any>(null);
   
-  // 🚀 النظام الهجين (التصاميم المخصصة)
   const [customDesigns, setCustomDesigns] = useState<Record<string, string>>({});
   const [isCustomMode, setIsCustomMode] = useState(false);
 
-  // حالات النظام الذكي
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
   const [availableStudents, setAvailableStudents] = useState<any[]>([]);
@@ -38,7 +35,6 @@ export default function AdminHonorsDashboard() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // 1. جلب الإعدادات والطلاب
   useEffect(() => { 
     const loadSettings = async () => {
       const { data } = await supabase.from('platform_settings').select('id, show_honors_board, honors_custom_designs').limit(1).maybeSingle();
@@ -58,12 +54,10 @@ export default function AdminHonorsDashboard() {
     loadTopStudents();
   }, [activeTab, refreshTrigger]);
 
-  // تحديث حالة وضع التصميم عند تغيير التاب
   useEffect(() => {
     setIsCustomMode(!!customDesigns[activeTab]);
   }, [activeTab, customDesigns]);
 
-  // 2. جلب الفصول والطلاب (نفس الكود الذكي السابق)
   useEffect(() => {
     const loadSections = async () => {
       const searchKeyword = activeTab.replace('الصف ', '').replace('ال', '').trim();
@@ -101,7 +95,6 @@ export default function AdminHonorsDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // دالة النشر العام
   const handleTogglePublish = async () => {
     if (!settingsId) return;
     setIsPublishing(true);
@@ -110,12 +103,13 @@ export default function AdminHonorsDashboard() {
     if (!error && data && data.length > 0) {
       setIsPublished(newValue);
       setMessage({ text: newValue ? 'تم إعلان النتائج ونشر اللوحة في الصفحة الرئيسية بنجاح! 🎉' : 'تم إخفاء اللوحة بنجاح. 🔒', type: 'success' });
+    } else {
+      setMessage({ text: 'فشل تغيير حالة النشر. تأكد من إعدادات قاعدة البيانات (RLS).', type: 'error' });
     }
     setIsPublishing(false);
     setTimeout(() => setMessage({ text: '', type: '' }), 4000);
   };
 
-  // إضافة طالب للنظام الذكي
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName || !percentage) return;
@@ -124,6 +118,8 @@ export default function AdminHonorsDashboard() {
     if (!error) {
       setMessage({ text: 'تمت إضافة الطالب إلى اللوحة بنجاح!', type: 'success' });
       setPercentage(''); setStudentName(''); setSelectedStudentId(''); setResetKey(prev => prev + 1); setRefreshTrigger(prev => prev + 1); 
+    } else {
+      setMessage({ text: `فشل الحفظ: ${error.message}`, type: 'error' });
     }
     setLoading(false);
     setTimeout(() => setMessage({ text: '', type: '' }), 3000);
@@ -136,18 +132,12 @@ export default function AdminHonorsDashboard() {
     }
   };
 
-  // 🚀 دالة حفظ البوستر المخصص (النظام الهجين)
   const handleSaveCustomDesign = async (url: string) => {
     if (!settingsId) return;
     setLoading(true);
-    
-    // إما أن نضيف رابط الصورة أو نحذفها إذا كانت فارغة
     const updatedDesigns = { ...customDesigns };
-    if (url) {
-      updatedDesigns[activeTab] = url;
-    } else {
-      delete updatedDesigns[activeTab];
-    }
+    if (url) updatedDesigns[activeTab] = url;
+    else delete updatedDesigns[activeTab];
 
     const { error } = await supabase.from('platform_settings').update({ honors_custom_designs: updatedDesigns }).eq('id', settingsId);
     
@@ -162,11 +152,59 @@ export default function AdminHonorsDashboard() {
     setTimeout(() => setMessage({ text: '', type: '' }), 3000);
   };
 
+  // 🤖 الدالة العبقرية لتوليد برومبت الذكاء الاصطناعي ونسخه (تحديث فصل المراكز)
+  const handleCopyAIPrompt = () => {
+    if (students.length === 0) {
+      setMessage({ text: 'الرجاء رصد المتفوقين في النظام الذكي أولاً لتوليد البرومبت!', type: 'error' });
+      setTimeout(() => setMessage({ text: '', type: '' }), 4000);
+      return;
+    }
+
+    // 1. استخلاص أول 3 مراكز (منصة التتويج المتميزة)
+    const top3Students = students.slice(0, 3).map((s, index) => 
+      `${index + 1}. ${s.student_name} - ${s.percentage}%`
+    ).join('\n');
+
+    // 2. استخلاص باقي المتفوقين (القائمة السفلية)
+    const remainingStudents = students.slice(3).map(s => 
+      `- ${s.student_name} (${s.percentage}%)`
+    ).join('  |  '); // الفاصل بين الأسماء
+
+    const remainingInstruction = remainingStudents.length > 0 ? `
+2. OTHER HONORED STUDENTS: 
+Below the top 3, create an elegant, frosted glass board or a glowing golden list containing all the following remaining honored students in clear, slightly smaller Arabic text:
+${remainingStudents}
+` : '';
+
+    // البرومبت الهندسي الجاهز للذكاء الاصطناعي
+    const promptText = `Create a hyper-realistic, ultra-luxurious 4K academic honors board poster for a boys' high school. 
+Theme: Futuristic elegance combining deep navy blue, metallic gold, and frosted glassmorphism effects. Cinematic volumetric lighting with glowing golden particles.
+
+At the very top, write clearly in elegant, majestic 3D Arabic calligraphy:
+"مدرسة الرفعة النموذجية (م-ث) بنين"
+Directly below it, write:
+"لوحة الشرف - صف ${activeTab}"
+
+DESIGN INSTRUCTIONS:
+1. TOP 3 WINNERS: 
+Create three distinct, prominent, and highly decorated glowing glass pedestals or royal golden shields in the center for the top 3 students. Make them look elite and victorious. Here are their names and scores in Arabic:
+${top3Students}
+${remainingInstruction}
+At the bottom center, in a formal and prestigious Arabic font, write:
+"مدير المدرسة: صالح مخلد المطيري"
+
+The overall vibe should be prestigious, victorious, and academically elite, resembling a royal cinematic award ceremony.`.trim();
+
+    // نسخ النص للحافظة
+    navigator.clipboard.writeText(promptText);
+    setMessage({ text: '✨ تم نسخ البرومبت السحري! الصقه الآن في (ChatGPT / DALL-E) لإنتاج البوستر.', type: 'success' });
+    setTimeout(() => setMessage({ text: '', type: '' }), 5000);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans" dir="rtl">
       <div className="max-w-5xl mx-auto">
         
-        {/* الترويسة */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-800">إدارة لوحة الشرف 🏆</h1>
@@ -186,7 +224,8 @@ export default function AdminHonorsDashboard() {
         </div>
 
         {message.text && (
-          <div className={`mb-6 p-4 rounded-xl font-bold text-center border shadow-sm ${message.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+          <div className={`mb-6 p-4 rounded-xl font-bold text-center flex items-center justify-center gap-2 border shadow-sm ${message.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+            {message.type === 'error' && <AlertCircle className="w-5 h-5" />}
             {message.text}
           </div>
         )}
@@ -201,11 +240,9 @@ export default function AdminHonorsDashboard() {
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
           
-          {/* 🚀 قسم الإدخال (مع مفتاح النظام الهجين) */}
           <div className="md:col-span-5">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 sticky top-8">
               
-              {/* مفتاح التبديل (Toggle) */}
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                 <button onClick={() => setIsCustomMode(false)} className={`flex-1 py-2 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${!isCustomMode ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                   <LayoutTemplate className="w-4 h-4" /> الرصد الذكي
@@ -215,11 +252,23 @@ export default function AdminHonorsDashboard() {
                 </button>
               </div>
 
-              {/* 🟢 الوضع الأول: رفع بوستر جاهز */}
               {isCustomMode ? (
                 <div className="space-y-4">
-                  <h2 className="text-lg font-black text-gray-800 text-center mb-2">تصميم مخصص لـ {activeTab}</h2>
-                  <p className="text-xs text-gray-500 text-center font-bold mb-4">عند رفع بوستر جاهز، سيتم إلغاء عرض منصة التتويج الذكية لهذا الصف وعرض البوستر بحجمه الكامل.</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-black text-gray-800 text-center">تصميم مخصص لـ {activeTab}</h2>
+                    
+                    <button 
+                      onClick={handleCopyAIPrompt}
+                      className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors border border-indigo-200 shadow-sm active:scale-95"
+                      type="button"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> هندسة البوستر (AI)
+                    </button>
+                  </div>
+                  
+                  <p className="text-[11px] text-gray-500 font-bold mb-4 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    💡 <span className="text-indigo-600">نصيحة للإدارة:</span> قم برصد الطلاب في "النظام الذكي" أولاً، ثم اضغط على زر <strong className="text-indigo-600">(هندسة البوستر)</strong> أعلاه لنسخ وصف احترافي. الذكاء الاصطناعي سيقوم بتصميم منصات تتويج لأول 3 مراكز وسرد الباقين أسفلها بشكل فخم!
+                  </p>
                   
                   <ImageUpload 
                     key={`custom-${activeTab}`} 
@@ -229,13 +278,12 @@ export default function AdminHonorsDashboard() {
                   />
                   
                   {customDesigns[activeTab] && (
-                    <button onClick={() => handleSaveCustomDesign('')} className="w-full flex items-center justify-center gap-2 mt-4 text-red-500 hover:text-red-600 bg-red-50 py-2.5 rounded-xl font-bold text-sm transition">
+                    <button onClick={() => handleSaveCustomDesign('')} className="w-full flex items-center justify-center gap-2 mt-4 text-red-500 hover:text-red-600 bg-red-50 py-2.5 rounded-xl font-bold text-sm transition active:scale-95 border border-red-100">
                       <Trash2 className="w-4 h-4" /> إزالة البوستر والعودة للنظام الذكي
                     </button>
                   )}
                 </div>
               ) : (
-                /* 🔵 الوضع الثاني: النظام الذكي للرصد */
                 <form onSubmit={handleAddStudent} className="space-y-4">
                   <h2 className="text-lg font-bold text-gray-800 mb-4">رصد متفوق فردي لصف {activeTab}</h2>
                   <div>
@@ -283,7 +331,6 @@ export default function AdminHonorsDashboard() {
             </div>
           </div>
 
-          {/* قسم المعاينة والسجل */}
           <div className="md:col-span-7">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-full">
               <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
