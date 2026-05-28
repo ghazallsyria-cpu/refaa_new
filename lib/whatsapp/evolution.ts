@@ -12,7 +12,7 @@ export async function sendWhatsAppMessage(phone: string, text: string) {
   const instance = process.env.EVOLUTION_INSTANCE;
   
   // 🚀 الحقن المباشر لكلمة السر (استبدل الجملة العربية بكلمة السر الحقيقية الخاصة بك)
-  const MY_API_KEY = 'Ehab@Gh870495ا';
+  const MY_API_KEY = 'Ehab@Gh870495';
 
   if (!apiUrl || !instance) {
     throw new Error('Evolution API environment variables are missing (URL or Instance).');
