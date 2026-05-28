@@ -1,5 +1,6 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import ImageUpload from '@/components/ImageUpload'; 
 
@@ -12,33 +13,32 @@ export default function AdminHonorsDashboard() {
   const [activeTab, setActiveTab] = useState('العاشر');
   const [studentName, setStudentName] = useState('');
   const [percentage, setPercentage] = useState('');
-  
-  // حالات التعامل مع الصور
   const [imageUrl, setImageUrl] = useState<string>(''); 
   const [resetKey, setResetKey] = useState(0); 
-  
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
+
+  // 🚀 متغير المحفز (Trigger) لتحديث البيانات بذكاء وبدون أخطاء
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const grades = ['العاشر', 'الحادي عشر علمي', 'الحادي عشر أدبي', 'الثاني عشر علمي', 'الثاني عشر أدبي'];
 
   const toArabicDigits = (num: any) => String(num).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
 
-  // 🛠️ التعديل هنا: تغليف الدالة بـ useCallback لحل مشكلة الـ Build في Netlify
-  const fetchStudents = useCallback(async () => {
-    const { data } = await supabase
-      .from('top_students')
-      .select('*')
-      .eq('grade_level', activeTab)
-      .order('percentage', { ascending: false });
-    setStudents(data || []);
-  }, [activeTab]);
-
-  // تحديث البيانات عند تغيير الصف
+  // 🛠️ الحل الجذري: دمج دالة الجلب بالداخل واستخدام المحفز
   useEffect(() => { 
-    fetchStudents(); 
-  }, [fetchStudents]);
+    const loadStudents = async () => {
+      const { data } = await supabase
+        .from('top_students')
+        .select('*')
+        .eq('grade_level', activeTab)
+        .order('percentage', { ascending: false });
+      setStudents(data || []);
+    };
+    
+    loadStudents();
+  }, [activeTab, refreshTrigger]); // 👈 الكود سيعمل تلقائياً عند تغيير الصف أو إطلاق المحفز
 
   // دالة الإضافة
   const handleAddStudent = async (e: React.FormEvent) => {
@@ -59,12 +59,11 @@ export default function AdminHonorsDashboard() {
 
     if (!error) {
       setMessage({ text: 'تمت إضافة الطالب بنجاح!', type: 'success' });
-      // تصفير الحقول لبدء إضافة طالب جديد
       setStudentName('');
       setPercentage('');
       setImageUrl(''); 
-      setResetKey(prev => prev + 1); // تفريغ مكون رفع الصورة
-      fetchStudents(); // تحديث الجدول
+      setResetKey(prev => prev + 1); 
+      setRefreshTrigger(prev => prev + 1); // 👈 إطلاق المحفز لتحديث الجدول بعد الإضافة
     } else {
       setMessage({ text: 'حدث خطأ أثناء حفظ البيانات.', type: 'error' });
     }
@@ -76,7 +75,7 @@ export default function AdminHonorsDashboard() {
   const handleDelete = async (id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا الطالب؟')) {
       await supabase.from('top_students').delete().eq('id', id);
-      fetchStudents();
+      setRefreshTrigger(prev => prev + 1); // 👈 إطلاق المحفز لتحديث الجدول بعد الحذف
     }
   };
 
@@ -117,7 +116,7 @@ export default function AdminHonorsDashboard() {
                   <input type="number" step="0.01" value={percentage} onChange={(e) => setPercentage(e.target.value)} className="w-full px-4 py-2 border rounded-lg" dir="ltr" required />
                 </div>
                 
-                {/* مكون رفع الصورة الخاص بك */}
+                {/* مكون رفع الصورة */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">صورة الطالب (اختياري)</label>
                   <ImageUpload 
