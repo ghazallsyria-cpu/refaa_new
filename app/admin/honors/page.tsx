@@ -35,13 +35,18 @@ export default function AdminHonorsDashboard() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // 1. جلب الإعدادات والطلاب
   useEffect(() => { 
     const loadSettings = async () => {
       const { data } = await supabase.from('platform_settings').select('id, show_honors_board, honors_custom_designs').limit(1).maybeSingle();
       if (data) {
         setIsPublished(data.show_honors_board);
         setSettingsId(data.id);
-        setCustomDesigns(data.honors_custom_designs || {});
+        const fetchedDesigns = data.honors_custom_designs || {};
+        setCustomDesigns(fetchedDesigns);
+        
+        // 🚀 الإصلاح الجذري 1: تعيين الحالة هنا مباشرة بدلاً من useEffect منفصل
+        setIsCustomMode(!!fetchedDesigns[activeTab]);
       }
     };
 
@@ -54,10 +59,7 @@ export default function AdminHonorsDashboard() {
     loadTopStudents();
   }, [activeTab, refreshTrigger]);
 
-  useEffect(() => {
-    setIsCustomMode(!!customDesigns[activeTab]);
-  }, [activeTab, customDesigns]);
-
+  // 2. جلب الفصول والطلاب
   useEffect(() => {
     const loadSections = async () => {
       const searchKeyword = activeTab.replace('الصف ', '').replace('ال', '').trim();
@@ -143,6 +145,8 @@ export default function AdminHonorsDashboard() {
     
     if (!error) {
       setCustomDesigns(updatedDesigns);
+      // 🚀 تحديث حالة الواجهة محلياً بشكل آمن
+      setIsCustomMode(!!url);
       setMessage({ text: url ? 'تم حفظ البوستر المخصص بنجاح!' : 'تم إزالة البوستر والعودة للنظام الذكي.', type: 'success' });
       setRefreshTrigger(prev => prev + 1);
     } else {
@@ -152,7 +156,6 @@ export default function AdminHonorsDashboard() {
     setTimeout(() => setMessage({ text: '', type: '' }), 3000);
   };
 
-  // 🤖 الدالة العبقرية لتوليد برومبت الذكاء الاصطناعي ونسخه (تحديث فصل المراكز)
   const handleCopyAIPrompt = () => {
     if (students.length === 0) {
       setMessage({ text: 'الرجاء رصد المتفوقين في النظام الذكي أولاً لتوليد البرومبت!', type: 'error' });
@@ -160,23 +163,11 @@ export default function AdminHonorsDashboard() {
       return;
     }
 
-    // 1. استخلاص أول 3 مراكز (منصة التتويج المتميزة)
-    const top3Students = students.slice(0, 3).map((s, index) => 
-      `${index + 1}. ${s.student_name} - ${s.percentage}%`
-    ).join('\n');
+    const top3Students = students.slice(0, 3).map((s, index) => `${index + 1}. ${s.student_name} - ${s.percentage}%`).join('\n');
+    const remainingStudents = students.slice(3).map(s => `- ${s.student_name} (${s.percentage}%)`).join('  |  ');
 
-    // 2. استخلاص باقي المتفوقين (القائمة السفلية)
-    const remainingStudents = students.slice(3).map(s => 
-      `- ${s.student_name} (${s.percentage}%)`
-    ).join('  |  '); // الفاصل بين الأسماء
+    const remainingInstruction = remainingStudents.length > 0 ? `\n2. OTHER HONORED STUDENTS: \nBelow the top 3, create an elegant, frosted glass board or a glowing golden list containing all the following remaining honored students in clear, slightly smaller Arabic text:\n${remainingStudents}\n` : '';
 
-    const remainingInstruction = remainingStudents.length > 0 ? `
-2. OTHER HONORED STUDENTS: 
-Below the top 3, create an elegant, frosted glass board or a glowing golden list containing all the following remaining honored students in clear, slightly smaller Arabic text:
-${remainingStudents}
-` : '';
-
-    // البرومبت الهندسي الجاهز للذكاء الاصطناعي
     const promptText = `Create a hyper-realistic, ultra-luxurious 4K academic honors board poster for a boys' high school. 
 Theme: Futuristic elegance combining deep navy blue, metallic gold, and frosted glassmorphism effects. Cinematic volumetric lighting with glowing golden particles.
 
@@ -195,7 +186,6 @@ At the bottom center, in a formal and prestigious Arabic font, write:
 
 The overall vibe should be prestigious, victorious, and academically elite, resembling a royal cinematic award ceremony.`.trim();
 
-    // نسخ النص للحافظة
     navigator.clipboard.writeText(promptText);
     setMessage({ text: '✨ تم نسخ البرومبت السحري! الصقه الآن في (ChatGPT / DALL-E) لإنتاج البوستر.', type: 'success' });
     setTimeout(() => setMessage({ text: '', type: '' }), 5000);
@@ -232,7 +222,15 @@ The overall vibe should be prestigious, victorious, and academically elite, rese
 
         <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-2 mb-8 justify-center">
           {grades.map((grade) => (
-            <button key={grade} onClick={() => setActiveTab(grade)} className={`px-5 py-2 rounded-lg font-semibold transition ${activeTab === grade ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
+            <button 
+              key={grade} 
+              // 🚀 الإصلاح الجذري 2: تحديث حالة الـ Custom Mode يدوياً عند اختيار الصف
+              onClick={() => {
+                setActiveTab(grade);
+                setIsCustomMode(!!customDesigns[grade]);
+              }} 
+              className={`px-5 py-2 rounded-lg font-semibold transition ${activeTab === grade ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+            >
               {grade}
             </button>
           ))}
@@ -256,26 +254,17 @@ The overall vibe should be prestigious, victorious, and academically elite, rese
                 <div className="space-y-4">
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-lg font-black text-gray-800 text-center">تصميم مخصص لـ {activeTab}</h2>
-                    
-                    <button 
-                      onClick={handleCopyAIPrompt}
-                      className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors border border-indigo-200 shadow-sm active:scale-95"
-                      type="button"
-                    >
+                    <button onClick={handleCopyAIPrompt} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors border border-indigo-200 shadow-sm active:scale-95" type="button">
                       <Sparkles className="w-3.5 h-3.5" /> هندسة البوستر (AI)
                     </button>
                   </div>
                   
+                  {/* 🚀 الإصلاح الجذري 3: إزالة علامات التنصيص المسببة لمشكلة Netlify */}
                   <p className="text-[11px] text-gray-500 font-bold mb-4 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
-                    💡 <span className="text-indigo-600">نصيحة للإدارة:</span> قم برصد الطلاب في "النظام الذكي" أولاً، ثم اضغط على زر <strong className="text-indigo-600">(هندسة البوستر)</strong> أعلاه لنسخ وصف احترافي. الذكاء الاصطناعي سيقوم بتصميم منصات تتويج لأول 3 مراكز وسرد الباقين أسفلها بشكل فخم!
+                    💡 <span className="text-indigo-600">نصيحة للإدارة:</span> قم برصد الطلاب في (النظام الذكي) أولاً، ثم اضغط على زر <strong className="text-indigo-600">(هندسة البوستر)</strong> أعلاه لنسخ وصف احترافي. الذكاء الاصطناعي سيقوم بتصميم منصات تتويج لأول 3 مراكز وسرد الباقين أسفلها بشكل فخم!
                   </p>
                   
-                  <ImageUpload 
-                    key={`custom-${activeTab}`} 
-                    initialImageUrl={customDesigns[activeTab] || ''} 
-                    onUploadSuccess={handleSaveCustomDesign} 
-                    label="اسحب وأفلت البوستر المجمع لطلاب الصف هنا"
-                  />
+                  <ImageUpload key={`custom-${activeTab}`} initialImageUrl={customDesigns[activeTab] || ''} onUploadSuccess={handleSaveCustomDesign} label="اسحب وأفلت البوستر المجمع لطلاب الصف هنا" />
                   
                   {customDesigns[activeTab] && (
                     <button onClick={() => handleSaveCustomDesign('')} className="w-full flex items-center justify-center gap-2 mt-4 text-red-500 hover:text-red-600 bg-red-50 py-2.5 rounded-xl font-bold text-sm transition active:scale-95 border border-red-100">
