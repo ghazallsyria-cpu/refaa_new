@@ -1,13 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import ImageUpload from '@/components/ImageUpload'; 
 import { Search, Check } from 'lucide-react';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from '@/lib/supabase'; // 🚀 استدعاء العميل الرسمي بصلاحياتك الإدارية
 
 export default function AdminHonorsDashboard() {
   const [activeTab, setActiveTab] = useState('العاشر');
@@ -20,7 +16,7 @@ export default function AdminHonorsDashboard() {
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // حالات الزر
+  // حالات زر الإعلان
   const [isPublished, setIsPublished] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [settingsId, setSettingsId] = useState<any>(null);
@@ -61,13 +57,11 @@ export default function AdminHonorsDashboard() {
     loadTopStudents();
   }, [activeTab, refreshTrigger]);
 
-  // 2. جلب الفصول بذكاء (تجاوز مشكلة عدم التطابق الإملائي)
+  // 2. جلب الفصول بذكاء بناءً على المرحلة
   useEffect(() => {
     const loadSections = async () => {
-      // تنظيف الكلمة للبحث الذكي: (مثلاً "الحادي عشر علمي" تصبح "حادي عشر علمي")
       const searchKeyword = activeTab.replace('الصف ', '').replace('ال', '').trim();
 
-      // استعلام Join ذكي يجلب الفصول التي يحتوي اسم مرحلتها على الكلمة المفتاحية
       const { data: sectionsData, error } = await supabase
         .from('sections')
         .select('id, name, classes!inner(name)')
@@ -76,7 +70,7 @@ export default function AdminHonorsDashboard() {
 
       if (!error && sectionsData && sectionsData.length > 0) {
         setSections(sectionsData);
-        setSelectedSectionId(sectionsData[0].id); // اختيار أول فصل تلقائياً
+        setSelectedSectionId(sectionsData[0].id);
       } else {
         setSections([]);
         setSelectedSectionId('');
@@ -115,15 +109,10 @@ export default function AdminHonorsDashboard() {
 
         setAvailableStudents(formattedStudents);
 
-        if (formattedStudents.length > 0) {
-          setSelectedStudentId(formattedStudents[0].id);
-          setStudentName(formattedStudents[0].full_name);
-          setImageUrl(formattedStudents[0].avatar_url || '');
-        } else {
-          setSelectedStudentId('');
-          setStudentName('');
-          setImageUrl('');
-        }
+        // 🚀 التعديل الجذري: إفراغ الخانات لكي تظهر القائمة كاملة عند النقر
+        setSelectedStudentId('');
+        setStudentName('');
+        setImageUrl('');
       }
     };
 
@@ -139,37 +128,27 @@ export default function AdminHonorsDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleStudentSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const stId = e.target.value;
-    setSelectedStudentId(stId);
-    const selectedStu = availableStudents.find(s => s.id === stId);
-    if (selectedStu) {
-      setStudentName(selectedStu.full_name);
-      setImageUrl(selectedStu.avatar_url || '');
-    }
-  };
-
-  // 4. دالة النشر القوية
   const handleTogglePublish = async () => {
     if (!settingsId) {
-      setMessage({ text: 'خطأ: تأكد من تنفيذ كود SQL المرفق لإنشاء صف الإعدادات.', type: 'error' });
+      setMessage({ text: 'خطأ: لم يتم التعرف على إعدادات المنصة.', type: 'error' });
       return;
     }
     
     setIsPublishing(true);
     const newValue = !isPublished;
     
+    // 🚀 تحديث الإعدادات باستخدام صلاحياتك الرسمية
     const { data, error } = await supabase
       .from('platform_settings')
       .update({ show_honors_board: newValue })
       .eq('id', settingsId)
-      .select(); // نجبر السيرفر على إرجاع النتيجة لنتأكد من الحفظ
+      .select(); 
 
     if (!error && data && data.length > 0) {
       setIsPublished(newValue);
       setMessage({ text: newValue ? 'تم إعلان النتائج ونشر اللوحة في الصفحة الرئيسية بنجاح! 🎉' : 'تم إخفاء اللوحة عن الطلاب، يمكنك الرصد بهدوء. 🔒', type: 'success' });
     } else {
-      setMessage({ text: 'فشل التحديث! يرجى تنفيذ كود SQL (إيقاف جدار الحماية) ليعمل الزر.', type: 'error' });
+      setMessage({ text: 'فشل التحديث! يرجى مراجعة الصلاحيات أو اتصال الإنترنت.', type: 'error' });
     }
     
     setIsPublishing(false);
@@ -194,6 +173,9 @@ export default function AdminHonorsDashboard() {
     if (!error) {
       setMessage({ text: 'تمت إضافة الطالب إلى اللوحة بنجاح!', type: 'success' });
       setPercentage('');
+      // إفراغ حقل الطالب بعد الرصد الناجح
+      setStudentName('');
+      setSelectedStudentId('');
       setResetKey(prev => prev + 1); 
       setRefreshTrigger(prev => prev + 1); 
     } else {
@@ -242,7 +224,7 @@ export default function AdminHonorsDashboard() {
 
         <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-2 mb-8 justify-center">
           {grades.map((grade) => (
-            <button key={grade} onClick={() => setActiveTab(grade)} className={`px-5 py-2 rounded-lg font-semibold transition ${activeTab === grade ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
+            <button key={grade} onClick={() => setActiveTab(grade)} className={`px-5 py-2 rounded-lg font-semibold transition ${activeTab === grade ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
               {grade}
             </button>
           ))}
@@ -257,6 +239,7 @@ export default function AdminHonorsDashboard() {
               
               <form onSubmit={handleAddStudent} className="space-y-4">
                 
+                {/* 1. اختيار الفصل */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">الفصل الدراسي</label>
                   <select
@@ -264,13 +247,14 @@ export default function AdminHonorsDashboard() {
                     onChange={(e) => setSelectedSectionId(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-gray-800 cursor-pointer bg-white"
                   >
-                    {sections.length === 0 && <option value="">لا يوجد فصول (تأكد من الربط)</option>}
+                    {sections.length === 0 && <option value="">لا يوجد فصول</option>}
                     {sections.map((sec) => (
                       <option key={sec.id} value={sec.id}>{sec.name}</option>
                     ))}
                   </select>
                 </div>
 
+                {/* 2. القائمة المنسدلة للطلاب (بدون فلترة تلقائية) */}
                 <div className="relative" ref={dropdownRef}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">اسم الطالب من السجلات</label>
                   <div className="relative">
@@ -282,8 +266,9 @@ export default function AdminHonorsDashboard() {
                         setIsDropdownOpen(true);
                       }}
                       onFocus={() => setIsDropdownOpen(true)}
+                      onClick={() => setIsDropdownOpen(true)}
                       className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition font-semibold text-gray-800" 
-                      placeholder="اختر طالباً..." 
+                      placeholder="انقر هنا لعرض القائمة..." 
                       required 
                       autoComplete="off"
                       disabled={availableStudents.length === 0}
@@ -319,11 +304,13 @@ export default function AdminHonorsDashboard() {
                   )}
                 </div>
 
+                {/* 3. إدخال النسبة المئوية */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">النسبة (%)</label>
-                  <input type="number" step="0.01" value={percentage} onChange={(e) => setPercentage(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800 text-left" dir="ltr" placeholder="99.5" required />
+                  <input type="number" step="0.01" value={percentage} onChange={(e) => setPercentage(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800 text-left" dir="ltr" placeholder="مثال: 99.5" required />
                 </div>
                 
+                {/* 4. صورة الطالب */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">صورة التكريم (اختياري)</label>
                   <ImageUpload 
