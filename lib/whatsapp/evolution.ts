@@ -11,7 +11,7 @@ export async function sendWhatsAppMessage(phone: string, text: string) {
   const apiUrl = process.env.EVOLUTION_API_URL;
   const instance = process.env.EVOLUTION_INSTANCE;
   
-  // 🚀 الحقن المباشر لكلمة السر (استبدل الجملة العربية بكلمة السر الحقيقية الخاصة بك)
+  // 🚀 ضع كلمة السر الحقيقية الخاصة بك هنا
   const MY_API_KEY = 'Ehab@Gh870495';
 
   if (!apiUrl || !instance) {
@@ -25,21 +25,18 @@ export async function sendWhatsAppMessage(phone: string, text: string) {
       'apikey': MY_API_KEY,
       'Authorization': `Bearer ${MY_API_KEY}`
     },
+    // العودة للشكل البسيط والمباشر الذي يقبله السيرفر
     body: JSON.stringify({ 
       number: formattedPhone, 
-      options: {
-        delay: 1200,
-        presence: "composing"
-      },
-      textMessage: {
-        text: text
-      }
+      text: text 
     })
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Evolution API Error: ${response.statusText}`);
+    // تطوير جلب الخطأ: الآن سيخبرنا السيرفر بالسبب الحرفي للرفض
+    const exactError = Array.isArray(errorData.message) ? errorData.message.join(', ') : (errorData.message || errorData.error || response.statusText);
+    throw new Error(`Evolution API Error: ${exactError}`);
   }
 
   return response.json();
