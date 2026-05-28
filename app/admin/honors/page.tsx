@@ -1,10 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import ImageUpload from '@/components/ImageUpload'; 
+import { Search, Check } from 'lucide-react';
 
-// تهيئة الاتصال بـ Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -20,12 +20,12 @@ export default function AdminHonorsDashboard() {
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // حالات زر الإعلان
+  // حالات الزر
   const [isPublished, setIsPublished] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [settingsId, setSettingsId] = useState<any>(null);
 
-  // 🚀 حالات النظام الذكي (الفصول والطلاب)
+  // حالات النظام الذكي
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
   const [availableStudents, setAvailableStudents] = useState<any[]>([]);
@@ -35,7 +35,10 @@ export default function AdminHonorsDashboard() {
   const grades = ['العاشر', 'الحادي عشر علمي', 'الحادي عشر أدبي', 'الثاني عشر علمي', 'الثاني عشر أدبي'];
   const toArabicDigits = (num: any) => String(num).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
 
-  // 📡 جلب الإعدادات والطلاب المتفوقين المسجلين
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // 1. جلب الإعدادات والطلاب المتفوقين
   useEffect(() => { 
     const loadSettings = async () => {
       const { data } = await supabase.from('platform_settings').select('id, show_honors_board').limit(1).maybeSingle();
@@ -58,49 +61,49 @@ export default function AdminHonorsDashboard() {
     loadTopStudents();
   }, [activeTab, refreshTrigger]);
 
-  // 📡 جلب الفصول (Sections) المرتبطة بالمرحلة (Class) المختارة
+  // 2. جلب الفصول بذكاء (تجاوز مشكلة عدم التطابق الإملائي)
   useEffect(() => {
     const loadSections = async () => {
-      // 1. جلب معرف المرحلة بناءً على اسمها
-      const { data: classData } = await supabase.from('classes').select('id').eq('name', activeTab).maybeSingle();
-      
-      if (classData) {
-        // 2. جلب الفصول التابعة لهذه المرحلة
-        const { data: sectionsData } = await supabase.from('sections').select('id, name').eq('class_id', classData.id).order('name');
-        setSections(sectionsData || []);
-        
-        if (sectionsData && sectionsData.length > 0) {
-          setSelectedSectionId(sectionsData[0].id); // اختيار أول فصل تلقائياً
-        } else {
-          setSelectedSectionId('');
-          setAvailableStudents([]);
-        }
+      // تنظيف الكلمة للبحث الذكي: (مثلاً "الحادي عشر علمي" تصبح "حادي عشر علمي")
+      const searchKeyword = activeTab.replace('الصف ', '').replace('ال', '').trim();
+
+      // استعلام Join ذكي يجلب الفصول التي يحتوي اسم مرحلتها على الكلمة المفتاحية
+      const { data: sectionsData, error } = await supabase
+        .from('sections')
+        .select('id, name, classes!inner(name)')
+        .ilike('classes.name', `%${searchKeyword}%`)
+        .order('name');
+
+      if (!error && sectionsData && sectionsData.length > 0) {
+        setSections(sectionsData);
+        setSelectedSectionId(sectionsData[0].id); // اختيار أول فصل تلقائياً
       } else {
         setSections([]);
         setSelectedSectionId('');
+        setAvailableStudents([]);
       }
     };
 
     loadSections();
   }, [activeTab]);
 
-  // 📡 جلب طلاب الفصل المختار
+  // 3. جلب طلاب الفصل المختار
   useEffect(() => {
     const loadStudentsOfSection = async () => {
       if (!selectedSectionId) return;
 
-      const { data: studentsData } = await supabase
+      const { data: studentsData, error } = await supabase
         .from('students')
         .select(`
           id,
-          users (
+          users!inner (
             full_name,
             avatar_url
           )
         `)
         .eq('section_id', selectedSectionId);
 
-      if (studentsData) {
+      if (!error && studentsData) {
         const formattedStudents = studentsData.map((s: any) => {
           const userObj = Array.isArray(s.users) ? s.users[0] : s.users;
           return {
@@ -108,7 +111,7 @@ export default function AdminHonorsDashboard() {
             full_name: userObj?.full_name || 'بدون اسم',
             avatar_url: userObj?.avatar_url || null
           };
-        }).sort((a, b) => a.full_name.localeCompare(b.full_name)); // ترتيب أبجدي
+        }).sort((a, b) => a.full_name.localeCompare(b.full_name));
 
         setAvailableStudents(formattedStudents);
 
@@ -127,47 +130,52 @@ export default function AdminHonorsDashboard() {
     loadStudentsOfSection();
   }, [selectedSectionId]);
 
-  // التعامل مع تغيير الطالب من القائمة
+  // إغلاق القائمة عند النقر خارجها
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleStudentSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const stId = e.target.value;
     setSelectedStudentId(stId);
-    
     const selectedStu = availableStudents.find(s => s.id === stId);
     if (selectedStu) {
       setStudentName(selectedStu.full_name);
-      setImageUrl(selectedStu.avatar_url || ''); // جلب صورته الشخصية تلقائياً
+      setImageUrl(selectedStu.avatar_url || '');
     }
   };
 
-  // 🚀 دالة تبديل حالة الإعلان (تم تحصينها لمنع الفشل الصامت)
+  // 4. دالة النشر القوية
   const handleTogglePublish = async () => {
     if (!settingsId) {
-      setMessage({ text: 'خطأ: لم يتم تحميل إعدادات المنصة. يرجى تحديث الصفحة.', type: 'error' });
+      setMessage({ text: 'خطأ: تأكد من تنفيذ كود SQL المرفق لإنشاء صف الإعدادات.', type: 'error' });
       return;
     }
     
     setIsPublishing(true);
     const newValue = !isPublished;
     
-    // نجبر قاعدة البيانات على إرجاع الصف المحدث لنتأكد من نجاح العملية
     const { data, error } = await supabase
       .from('platform_settings')
       .update({ show_honors_board: newValue })
       .eq('id', settingsId)
-      .select();
+      .select(); // نجبر السيرفر على إرجاع النتيجة لنتأكد من الحفظ
 
     if (!error && data && data.length > 0) {
       setIsPublished(newValue);
       setMessage({ text: newValue ? 'تم إعلان النتائج ونشر اللوحة في الصفحة الرئيسية بنجاح! 🎉' : 'تم إخفاء اللوحة عن الطلاب، يمكنك الرصد بهدوء. 🔒', type: 'success' });
     } else {
-      setMessage({ text: 'فشل التحديث! يرجى تنفيذ استعلام قاعدة البيانات (RLS) المذكور.', type: 'error' });
+      setMessage({ text: 'فشل التحديث! يرجى تنفيذ كود SQL (إيقاف جدار الحماية) ليعمل الزر.', type: 'error' });
     }
     
     setIsPublishing(false);
     setTimeout(() => setMessage({ text: '', type: '' }), 4000);
   };
 
-  // دالة الإضافة للوحة
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName || !percentage) {
@@ -249,56 +257,85 @@ export default function AdminHonorsDashboard() {
               
               <form onSubmit={handleAddStudent} className="space-y-4">
                 
-                {/* 1. اختيار الفصل */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">الفصل</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">الفصل الدراسي</label>
                   <select
                     value={selectedSectionId}
                     onChange={(e) => setSelectedSectionId(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-gray-800 cursor-pointer"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-gray-800 cursor-pointer bg-white"
                   >
-                    {sections.length === 0 && <option value="">لا يوجد فصول</option>}
+                    {sections.length === 0 && <option value="">لا يوجد فصول (تأكد من الربط)</option>}
                     {sections.map((sec) => (
                       <option key={sec.id} value={sec.id}>{sec.name}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* 2. اختيار الطالب */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">اسم الطالب</label>
-                  <select
-                    value={selectedStudentId}
-                    onChange={handleStudentSelection}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-gray-800 cursor-pointer"
-                    disabled={availableStudents.length === 0}
-                  >
-                    {availableStudents.length === 0 && <option value="">لا يوجد طلاب في هذا الفصل</option>}
-                    {availableStudents.map((stu) => (
-                      <option key={stu.id} value={stu.id}>{stu.full_name}</option>
-                    ))}
-                  </select>
+                <div className="relative" ref={dropdownRef}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">اسم الطالب من السجلات</label>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={studentName} 
+                      onChange={(e) => {
+                        setStudentName(e.target.value);
+                        setIsDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsDropdownOpen(true)}
+                      className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition font-semibold text-gray-800" 
+                      placeholder="اختر طالباً..." 
+                      required 
+                      autoComplete="off"
+                      disabled={availableStudents.length === 0}
+                    />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {isDropdownOpen && availableStudents.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
+                      {availableStudents
+                        .filter(s => (s.full_name || '').toLowerCase().includes(studentName.toLowerCase()))
+                        .map((student) => (
+                          <div 
+                            key={student.id}
+                            onClick={() => {
+                              setSelectedStudentId(student.id);
+                              setStudentName(student.full_name);
+                              if (student.avatar_url) setImageUrl(student.avatar_url);
+                              setIsDropdownOpen(false);
+                            }}
+                            className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer text-gray-700 text-sm font-bold border-b border-gray-50 last:border-0 flex items-center gap-3 transition-colors"
+                          >
+                            {student.avatar_url ? (
+                              <img src={student.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs">🎓</div>
+                            )}
+                            <span className="flex-1 truncate">{student.full_name}</span>
+                            {studentName === student.full_name && <Check className="w-4 h-4 text-blue-600" />}
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* 3. إدخال النسبة المئوية */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">النسبة (%)</label>
                   <input type="number" step="0.01" value={percentage} onChange={(e) => setPercentage(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800 text-left" dir="ltr" placeholder="99.5" required />
                 </div>
                 
-                {/* 4. صورة الطالب */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">صورة الطالب (اختياري)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">صورة التكريم (اختياري)</label>
                   <ImageUpload 
-                    key={`${resetKey}-${selectedStudentId}`} // تحديث المكون عند اختيار طالب جديد
-                    initialImageUrl={imageUrl} // تمرير صورة الطالب من قاعدة البيانات إن وجدت
+                    key={`${resetKey}-${selectedStudentId}`} 
+                    initialImageUrl={imageUrl} 
                     onUploadSuccess={(url) => setImageUrl(url)} 
                     label="اسحب وأفلت الصورة هنا"
                   />
                 </div>
 
-                <button type="submit" disabled={loading || !studentName} className="w-full bg-blue-600 text-white py-3 rounded-xl font-black mt-4 hover:bg-blue-700 transition active:scale-95 shadow-md">
-                  {loading ? 'جاري الاعتماد...' : 'حفظ باللوحة 💾'}
+                <button type="submit" disabled={loading || !studentName} className="w-full bg-blue-600 text-white py-3 rounded-xl font-black mt-4 hover:bg-blue-700 transition active:scale-95 shadow-md disabled:opacity-50">
+                  {loading ? 'جاري الاعتماد...' : 'حفظ باللوحة الماسية 💎'}
                 </button>
               </form>
             </div>
@@ -313,7 +350,7 @@ export default function AdminHonorsDashboard() {
               </div>
 
               {students.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-sm font-bold">لم يتم رصد أي طالب في هذا الصف.</div>
+                <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-sm font-bold">لم يتم رصد أي طالب في هذه المرحلة.</div>
               ) : (
                 <div className="space-y-3">
                   {students.map((student, index) => (
@@ -331,7 +368,7 @@ export default function AdminHonorsDashboard() {
                       
                       <div className="flex items-center gap-6">
                         <span className="text-blue-600 font-bold text-lg">{toArabicDigits(student.percentage)}%</span>
-                        <button onClick={() => handleDelete(student.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition" title="حذف الطالب">🗑️</button>
+                        <button onClick={() => handleDelete(student.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors" title="حذف الطالب">🗑️</button>
                       </div>
                     </div>
                   ))}
