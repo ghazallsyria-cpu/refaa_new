@@ -23,6 +23,7 @@ export async function GET() {
         },
         body: JSON.stringify({
           instanceName: "refaa",
+          integration: "WHATSAPP-BAILEYS",
           qrcode: true
         })
       });
