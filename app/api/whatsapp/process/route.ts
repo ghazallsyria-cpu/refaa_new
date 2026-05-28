@@ -1,3 +1,5 @@
+// app/api/whatsapp/process/route.ts
+
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/evolution'; // تأكد أن المسار صحيح عندك
@@ -5,6 +7,25 @@ import { sendWhatsAppMessage } from '@/lib/whatsapp/evolution'; // تأكد أن
 export async function GET() {
   try {
     console.log("--- بدء عملية معالجة الرسائل ---");
+
+    // 🚀 كود إنقاذ مؤقت لإجبار السيرفر على إنشاء الجلسة "refaa" إذا لم تكن موجودة
+    try {
+      console.log("⏳ محاولة التأكد من إنشاء الجلسة refaa على السيرفر...");
+      await fetch(`${process.env.EVOLUTION_API_URL}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': process.env.EVOLUTION_API_KEY || ''
+        },
+        body: JSON.stringify({
+          instanceName: "refaa",
+          qrcode: true
+        })
+      });
+      console.log("✅ أمر إنشاء الجلسة أُرسل بنجاح للسيرفر الرئيسي.");
+    } catch (instanceErr: any) {
+      console.log("⚠️ تخطي إنشاء الجلسة (قد تكون موجودة بالفعل):", instanceErr.message);
+    }
 
     // 1. البحث عن حملة واحدة (Pending أو Processing)
     const { data: campaign, error: campaignError } = await supabase
