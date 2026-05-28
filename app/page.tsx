@@ -4,8 +4,8 @@
  * 🏗️ التوثيق الهندسي (Gemini Style Edition - Ultra Fast Performance)
  * ============================================================================
  * @file        app/page.tsx
- * @version     9.0.0 (The Revolution Edition - Nexus Hub Integration)
- * @description الواجهة الرئيسية الشاملة، تربط كل شرايين الموقع بتصميم زجاجي عميق.
+ * @version     9.5.0 (The Honors Reveal Edition)
+ * @description الواجهة الرئيسية الشاملة، مع نظام الإعلان الذكي عن لوحة الشرف الماسية.
  * ============================================================================
  */
 
@@ -43,7 +43,6 @@ const shieldThemes = {
   royal: { border: 'border-amber-600/50', glow: 'bg-amber-900/20', textPrimary: 'text-amber-400', textSecondary: 'text-amber-500/60', icon: <Crown className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500 drop-shadow-md" /> },
 };
 
-// 🌟 الخدمات الشاملة التي تربط الموقع (The Nexus Hub)
 const PLATFORM_SERVICES = [
   { id: 1, title: 'منصة الاختبارات', desc: 'اختبارات دورية وتكوينية بتقييم فوري', icon: Target, color: 'emerald', link: '/exams' },
   { id: 2, title: 'الواجبات والتكليفات', desc: 'متابعة وتسليم الواجبات رقمياً', icon: BookOpen, color: 'blue', link: '/assignments' },
@@ -69,6 +68,9 @@ export default function DigitalCampusPage() {
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [hangingRibbonUrl, setHangingRibbonUrl] = useState<string | null>(null);
   
+  // مفتاح التحكم بظهور لوحة الشرف
+  const [showHonorsBoard, setShowHonorsBoard] = useState(false);
+  
   const [studentMemorials, setStudentMemorials] = useState<any[]>([]);
   const [teacherMemorials, setTeacherMemorials] = useState<any[]>([]);
   const [activeMemorialTab, setActiveMemorialTab] = useState<'students' | 'teachers'>('students');
@@ -85,19 +87,25 @@ export default function DigitalCampusPage() {
 
     const fetchCampusContent = async () => {
       try {
-        const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes] = await Promise.all([
+        const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes, settingsRes] = await Promise.all([
           supabase.from('school_studio').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(6),
           supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(4),
           supabase.from('school_announcements').select('*').order('created_at', { ascending: false }).limit(3),
           supabase.from('school_ticker').select('*').order('created_at', { ascending: false }).limit(5),
           supabase.from('forum_hero_slides').select('*').eq('is_active', true).order('sort_order', { ascending: false }).order('created_at', { ascending: false }),
-          supabase.from('school_ribbon').select('image_url').eq('id', 1).maybeSingle()
+          supabase.from('school_ribbon').select('image_url').eq('id', 1).maybeSingle(),
+          supabase.from('platform_settings').select('show_honors_board').maybeSingle()
         ]);
 
         const { data: stdShields } = await supabase.from('student_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, students(users(full_name, avatar_url), sections(name, classes(name)))').order('created_at', { ascending: false }).limit(4);
         const { data: tchShields } = await supabase.from('teacher_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, teachers(users(full_name, avatar_url), teacher_subjects(subjects(name)))').order('created_at', { ascending: false }).limit(4);
 
         if (!isSubscribed) return;
+
+        // التقاط حالة إظهار لوحة الشرف
+        if (settingsRes?.data && settingsRes.data.show_honors_board !== undefined) {
+          setShowHonorsBoard(settingsRes.data.show_honors_board);
+        }
 
         if (stdShields && Array.isArray(stdShields)) {
            setStudentMemorials(stdShields.map(s => {
@@ -176,13 +184,13 @@ export default function DigitalCampusPage() {
   return (
     <div className="min-h-[100dvh] bg-[#02040a] text-slate-200 font-sans overflow-x-hidden relative pb-20 sm:pb-32 pt-2 sm:pt-6" dir="rtl">
       
-      {/* 🌌 الإضاءة المحيطية العميقة */}
+      {/* 🌌 الإضاءة المحيطية */}
       <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute top-[-10%] right-[-10%] w-[70vw] h-[70vw] max-w-[600px] max-h-[600px] bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#02040a]/0 to-transparent mix-blend-screen"></div>
          <div className="absolute bottom-[-10%] left-[-10%] w-[70vw] h-[70vw] max-w-[600px] max-h-[600px] bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-emerald-900/10 via-[#02040a]/0 to-transparent mix-blend-screen"></div>
       </div>
       
-      {/* 🎀 الوشاح المتدلي */}
+      {/* 🎀 الوشاح */}
       {hangingRibbonUrl && (
         <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 1, type: 'spring' }} className="absolute top-0 left-4 sm:left-16 lg:left-24 z-[60] w-14 sm:w-24 md:w-32 lg:w-44 h-[200px] sm:h-[350px] md:h-[450px] lg:h-[550px] pointer-events-none drop-shadow-2xl" style={{ transformOrigin: 'top center' }}>
           <div className="w-full h-full relative" style={{ clipPath: 'polygon(100% 0, 100% 100%, 50% 90%, 0 100%, 0 0)' }}>
@@ -211,10 +219,8 @@ export default function DigitalCampusPage() {
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-12 sm:space-y-20 pb-20">
         
-        {/* 🌟 1. منصة القيادة والترحيب (Quantum Hero) */}
+        {/* 🌟 1. منصة القيادة */}
         <motion.div style={{ opacity: opacityHero, scale: scaleHero }} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-h-[50vh] sm:min-h-[65vh] pt-4">
-            
-           {/* الشاشة الترحيبية الديناميكية */}
            <div className="lg:col-span-8 xl:col-span-9 bg-[#0a0f1d]/80 backdrop-blur-xl rounded-[2rem] sm:rounded-[3rem] p-8 sm:p-12 border border-white/5 shadow-2xl relative overflow-hidden flex flex-col justify-center group">
               <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-indigo-500/20 blur-[100px] rounded-full mix-blend-screen transition-transform duration-1000 group-hover:scale-150"></div>
               
@@ -260,7 +266,6 @@ export default function DigitalCampusPage() {
               )}
            </div>
 
-           {/* بطاقات النبض والإحصائيات */}
            <div className="lg:col-span-4 xl:col-span-3 flex flex-col gap-4 sm:gap-6">
               <div className="bg-gradient-to-br from-indigo-900/40 to-[#0f1423]/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] border border-indigo-500/20 shadow-lg flex-1 relative overflow-hidden flex flex-col justify-center group">
                  <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none"></div>
@@ -282,7 +287,7 @@ export default function DigitalCampusPage() {
            </div>
         </motion.div>
 
-        {/* 🧭 2. البوصلة الذكية (AI Feature Integration) */}
+        {/* 🧭 2. البوصلة الأكاديمية */}
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} className="relative w-full rounded-[2rem] sm:rounded-[3rem] overflow-hidden border border-emerald-500/20 shadow-[0_20px_50px_-20px_rgba(16,185,129,0.2)] group cursor-pointer bg-[#0f1423]">
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/20 via-transparent to-indigo-900/20 opacity-80 group-hover:opacity-100 transition-opacity duration-700"></div>
           <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
@@ -315,7 +320,43 @@ export default function DigitalCampusPage() {
           </div>
         </motion.div>
 
-        {/* 🌐 3. بوابة الخدمات الشاملة (The Nexus) */}
+        {/* 💎 2.5 البانر الماسي للوحة الشرف (يظهر بقرار من الإدارة فقط) */}
+        <AnimatePresence>
+          {showHonorsBoard && (
+            <motion.div initial={{ opacity: 0, y: 30, scale: 0.95 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, margin: "-100px" }} className="relative w-full rounded-[2rem] sm:rounded-[3rem] overflow-hidden border border-yellow-500/40 shadow-[0_20px_50px_-20px_rgba(250,204,21,0.3)] group cursor-pointer bg-[#0f1423] mt-8">
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-900/30 via-transparent to-amber-900/30 opacity-80 group-hover:opacity-100 transition-opacity duration-700"></div>
+              <div className="absolute top-0 right-0 w-96 h-96 bg-yellow-500/20 blur-[100px] rounded-full pointer-events-none transition-transform duration-1000 group-hover:scale-110"></div>
+              
+              <div className="relative z-10 p-8 sm:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
+                <div className="flex flex-col md:flex-row items-center md:items-start text-center md:text-right gap-6 sm:gap-8 w-full md:w-auto">
+                  <div className="relative shrink-0 w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-yellow-300 to-amber-600 rounded-[2rem] p-[3px] shadow-[0_0_40px_rgba(250,204,21,0.5)]">
+                    <div className="w-full h-full bg-[#0a0f1d] rounded-[1.8rem] flex items-center justify-center relative overflow-hidden group-hover:bg-transparent transition-colors duration-500">
+                      <div className="absolute inset-0 bg-yellow-400/10 animate-pulse"></div>
+                      <Crown className="w-10 h-10 sm:w-12 sm:h-12 text-yellow-400 drop-shadow-lg relative z-10" />
+                    </div>
+                  </div>
+                  <div className="pt-2">
+                    <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
+                      <span className="px-3 py-1 rounded-lg text-[10px] sm:text-xs font-black bg-yellow-500/20 text-yellow-300 uppercase tracking-widest border border-yellow-500/30 backdrop-blur-md flex items-center gap-1.5 animate-pulse"><Sparkles className="w-3.5 h-3.5"/> إعلان رسمي للنتائج</span>
+                    </div>
+                    <h2 className="text-3xl sm:text-4xl font-black text-white mb-3">لوحة الشرف <span className="text-yellow-400 drop-shadow-md">الماسية 💎</span></h2>
+                    <p className="text-slate-200 text-sm sm:text-base font-bold max-w-2xl leading-relaxed opacity-95">
+                      تم اعتماد وإصدار نتائج المتفوقين رسمياً! تفضل بزيارة منصة التتويج الماسية للاحتفاء بفرسان مدرسة الرفعة وصناع التفوق للعام الدراسي الحالي.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="shrink-0 w-full md:w-auto mt-4 md:mt-0">
+                  <Link href="/honors" className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-l from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-slate-950 rounded-2xl font-black text-sm sm:text-base transition-all shadow-[0_0_30px_rgba(250,204,21,0.5)] hover:shadow-[0_0_40px_rgba(250,204,21,0.7)] active:scale-95 border border-yellow-300/50">
+                    استعرض كوكبة المتفوقين <ArrowLeft className="w-5 h-5" />
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 🌐 3. بوابة الخدمات الشاملة */}
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} className="pt-8">
            <div className="flex flex-col items-center text-center mb-10">
               <h2 className="text-3xl sm:text-4xl font-black text-white mb-3">بوابة <span className="text-indigo-400">الخدمات</span></h2>
@@ -372,7 +413,6 @@ export default function DigitalCampusPage() {
 
         {/* 🎬 5. الاستوديو البصري والمركز الإخباري */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-10 pt-6">
-            
            {/* الاستوديو */}
            <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="xl:col-span-7 space-y-6">
               <div className="flex items-center justify-between mb-2">
@@ -461,7 +501,7 @@ export default function DigitalCampusPage() {
            </motion.div>
         </div>
 
-        {/* 🏆 6. معرض الدروع الشرفية (لوحة الشرف) */}
+        {/* 🏆 6. معرض الدروع الشرفية */}
         {(studentMemorials.length > 0 || teacherMemorials.length > 0) && (
           <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="pt-16 pb-10">
              <div className="flex flex-col items-center text-center mb-8">
@@ -511,7 +551,7 @@ export default function DigitalCampusPage() {
                       );
                    }) : (
                       <div className="w-full text-center py-16 bg-white/5 rounded-3xl border border-dashed border-white/10">
-                         <p className="text-slate-400 font-bold text-sm">جاري التجهيز لإعلان لوحة الشرف القادمة...</p>
+                         <p className="text-slate-400 font-bold text-sm">جاري التجهيز لإعلان الدروع...</p>
                       </div>
                    )}
                 </div>
@@ -519,7 +559,7 @@ export default function DigitalCampusPage() {
           </motion.div>
         )}
 
-        {/* 🚀 7. Call to Action (نقطة الانطلاق) */}
+        {/* 🚀 7. Call to Action */}
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="py-20 text-center mt-10 relative">
            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl h-32 bg-indigo-500/10 blur-[100px] pointer-events-none mix-blend-screen"></div>
            <div className="w-20 h-20 bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-md rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-inner rotate-3">
@@ -535,7 +575,7 @@ export default function DigitalCampusPage() {
 
       </div>
 
-      {/* 🖼️ Modals (الاستوديو والأخبار) */}
+      {/* 🖼️ Modals */}
       <AnimatePresence>
         {activeMedia && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#02040a]/95 p-4 backdrop-blur-sm" onClick={() => setActiveMedia(null)}>
