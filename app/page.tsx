@@ -647,21 +647,33 @@ export default function DigitalCampusPage() {
           </motion.div>
         )}
 
-        {activeArticle && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#02040a]/95 p-4 backdrop-blur-sm" onClick={() => setActiveArticle(null)}>
-            <div className="w-full max-w-4xl bg-[#0a0f1d] rounded-[2.5rem] overflow-hidden border border-white/10 flex flex-col max-h-[90vh] shadow-2xl relative" onClick={e => e.stopPropagation()}>
-              <div className="relative h-56 sm:h-[350px] shrink-0 bg-black">
-                <button onClick={() => setActiveArticle(null)} className="absolute top-6 left-6 z-50 w-12 h-12 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/10 hover:bg-rose-500/80 transition-colors"><X className="w-6 h-6" /></button>
-                <img src={activeArticle?.cover_image} alt={activeArticle?.title} className="w-full h-full object-cover opacity-70" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-transparent to-transparent"></div>
-              </div>
-              <div className="p-8 sm:p-10 overflow-y-auto custom-scrollbar flex-1 relative z-10 -mt-16 sm:-mt-20 bg-[#0a0f1d] rounded-t-[2.5rem]">
-                <div className="flex gap-3 mb-5">
+{activeArticle && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#02040a]/95 p-4 sm:p-6 backdrop-blur-md" onClick={() => setActiveArticle(null)}>
+            <div className="w-full max-w-4xl bg-[#0a0f1d] rounded-[2rem] overflow-hidden border border-white/10 flex flex-col max-h-[95vh] shadow-2xl relative" onClick={e => e.stopPropagation()}>
+              
+              {/* 🛠️ شريط علوي نظيف لزر الإغلاق والمعلومات */}
+              <div className="flex justify-between items-center p-5 sm:p-6 border-b border-white/5 bg-black/40 shrink-0 relative z-20">
+                <div className="flex gap-3">
                   <span className="text-emerald-300 bg-emerald-500/10 px-3 py-1.5 rounded-lg text-xs font-black border border-emerald-500/20"><User className="w-3.5 h-3.5 inline mr-1" /> {activeArticle?.author_name}</span>
-                  <span className="text-slate-300 bg-white/5 px-3 py-1.5 rounded-lg text-xs font-black tracking-widest border border-white/5">{activeArticle?.created_at ? new Date(activeArticle.created_at).toLocaleDateString('ar-SA') : ''}</span>
                 </div>
-                <h2 className="text-2xl sm:text-4xl font-black text-white mb-8 leading-tight">{activeArticle?.title}</h2>
-                <div className="text-sm sm:text-lg text-slate-300 leading-loose font-bold bg-white/5 p-6 sm:p-8 rounded-2xl border border-white/5 shadow-inner whitespace-pre-wrap">{activeArticle?.excerpt}</div>
+                <button onClick={() => setActiveArticle(null)} className="w-10 h-10 bg-white/5 text-slate-300 hover:text-rose-400 hover:bg-rose-500/10 rounded-full flex items-center justify-center transition-colors border border-white/10"><X className="w-5 h-5" /></button>
+              </div>
+
+              {/* 📜 المحتوى القابل للتمرير */}
+              <div className="overflow-y-auto custom-scrollbar flex-1 bg-[#02040a]">
+                
+                {/* 🖼️ الصورة بحجمها الطبيعي المتناسق بدون قص (object-contain) */}
+                <div className="w-full bg-gradient-to-b from-[#0a0f1d] to-[#02040a] flex items-center justify-center p-4 sm:p-8 border-b border-white/5">
+                  <img src={activeArticle?.cover_image} alt={activeArticle?.title} className="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl object-contain shadow-2xl border border-white/5" />
+                </div>
+                
+                {/* ✍️ النص التفصيلي */}
+                <div className="p-6 sm:p-10">
+                  <span className="text-slate-400 text-xs font-black tracking-widest mb-4 flex items-center gap-2"><Calendar className="w-4 h-4"/> {activeArticle?.created_at ? new Date(activeArticle.created_at).toLocaleDateString('ar-SA') : ''}</span>
+                  <h2 className="text-2xl sm:text-4xl font-black text-white mb-8 leading-tight drop-shadow-md">{activeArticle?.title}</h2>
+                  <div className="text-sm sm:text-lg text-slate-300 leading-loose font-bold bg-white/5 p-6 sm:p-8 rounded-2xl border border-white/5 shadow-inner whitespace-pre-wrap">{activeArticle?.excerpt}</div>
+                </div>
+                
               </div>
             </div>
           </motion.div>
