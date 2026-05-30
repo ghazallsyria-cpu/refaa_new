@@ -312,7 +312,7 @@ export default function StudentDashboard() {
   else if (absentPeriods >= 25) { warningLevel = 1; warningTitle = "إنذار أول"; warningMessage = "الالتزام بالحضور مطلوب."; warningColors = "border-amber-500/50 text-amber-500"; warningIconColor = "text-amber-500"; WarningIcon = AlertTriangle; }
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
-  // 🚀 القالب الملكي الصارم للبطاقة (تصميم موحد للعرض والطباعة)
+// 🚀 القالب الملكي الصارم للبطاقة (تصميم مطابق لبطاقة الطاولة ولكن بالألوان الملكية)
   const TicketCardTemplate = ({ isHiddenRef = false }) => (
     <div 
       ref={isHiddenRef ? printRef : null}
@@ -322,7 +322,7 @@ export default function StudentDashboard() {
         backgroundColor: '#ffffff', 
         borderRadius: '16px', 
         overflow: 'hidden', 
-        border: '2px solid #0f172a', 
+        border: '3px solid #0f172a', 
         display: 'flex', 
         flexDirection: 'column', 
         position: isHiddenRef ? 'fixed' : 'relative', 
@@ -337,36 +337,44 @@ export default function StudentDashboard() {
         flexShrink: 0
       }}
     >
-      <div style={{ backgroundColor: '#0f172a', borderBottom: '3px solid #d4af37', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-           <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '15px', lineHeight: '1' }}>مدرسة الرفعة النموذجية بنين</div>
-           <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '10px', lineHeight: '1' }}>بطاقة دخول اختبارات نهاية العام</div>
+      {/* الهيدر العلوي */}
+      <div style={{ background: '#0f172a', borderBottom: '3px solid #d4af37', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ textAlign: 'right' }}>
+           <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '14px', lineHeight: '1.2' }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
+           <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '10px', marginTop: '4px' }}>بطاقة جلوس اختبارات نهاية العام</div>
         </div>
-        <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', border: '1px solid #d4af37', color: '#d4af37', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '900' }}>
-           {seatAllocation.exam_committees?.name}
+        <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', color: '#d4af37', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '900', border: '1px solid #d4af37' }}>
+           {seatAllocation?.exam_committees?.name || 'غير محدد'}
         </div>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, padding: '12px 16px', gap: '12px', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+      {/* جسم البطاقة - مقسم نفس تصميم الطاولة */}
+      <div style={{ display: 'flex', flex: 1, padding: '16px', gap: '16px', alignItems: 'center', backgroundColor: '#ffffff' }}>
+        
+        {/* أقصى اليمين: الـ QR Code */}
+        <div style={{ width: '75px', height: '75px', border: '2px solid #0f172a', borderRadius: '10px', padding: '4px', flexShrink: 0, backgroundColor: '#f8fafc' }}>
+           <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        </div>
+
+        {/* الوسط: الاسم والصف */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-           <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '900', marginBottom: '4px' }}>اسم الطالب</div>
-           <div style={{ fontSize: '16px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', marginBottom: '8px', maxHeight: '42px', overflow: 'hidden' }}>{rawFullName}</div>
+           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>اسم الطالب</div>
+           <div style={{ fontSize: '17px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', marginBottom: '8px', maxHeight: '44px', overflow: 'hidden' }}>{rawFullName}</div>
            <div>
-              <span style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900', display: 'inline-block' }}>{classNameStr}</span>
+              <span style={{ border: '2px solid #0f172a', color: '#0f172a', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '900', display: 'inline-block', backgroundColor: '#f8fafc' }}>{classNameStr}</span>
            </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', border: '2px solid #e2e8f0', borderRadius: '10px', minWidth: '80px', height: '100%', padding: '6px', boxSizing: 'border-box' }}>
-           <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '900', marginBottom: '4px' }}>رقم الجلوس</div>
-           <div style={{ fontSize: '24px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px', lineHeight: '1' }}>{seatAllocation.seat_number}</div>
+        {/* الفاصل العمودي */}
+        <div style={{ width: '3px', backgroundColor: '#cbd5e1', height: '100%', borderRadius: '2px', flexShrink: 0 }}></div>
+
+        {/* أقصى اليسار: رقم الجلوس */}
+        <div style={{ width: '75px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '6px' }}>رقم الجلوس</div>
+           <div style={{ fontSize: '26px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px', lineHeight: '1' }}>{seatAllocation?.seat_number || '---'}</div>
         </div>
 
-        <div style={{ width: '64px', height: '64px', backgroundColor: '#ffffff', border: '2px solid #d4af37', borderRadius: '8px', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-           <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-        </div>
       </div>
-
-      <div style={{ height: '5px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
     </div>
   );
 
