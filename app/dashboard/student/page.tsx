@@ -241,7 +241,7 @@ export default function StudentDashboard() {
   const showMiddleSchoolSuspense = isMiddleSchool && isSuspenseGlobal && !isMyResultPublished;
   const showHighSchoolExamMode = isHighSchool && isSuspenseGlobal && !isMyResultPublished;
   const showRegularDashboard = !showFinalResult && !showMiddleSchoolSuspense && !showHighSchoolExamMode;
-const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSchoolExamMode;
+  const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSchoolExamMode;
 
 
   let warningLevel = 0; let warningTitle = ""; let warningMessage = ""; let warningColors = ""; let warningIconColor = ""; let WarningIcon = Info; let warningPulse = false;
@@ -254,29 +254,36 @@ const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSc
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-[#02040a] text-slate-100 pb-32 pt-6 font-sans print:bg-white print:text-black print:p-0 print:m-0" dir="rtl">
       
+      {/* 🚀 إعدادات طباعة قوية لضمان ظهور الألوان والبطاقة بحجمها الحقيقي */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-           body { background: white !important; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
-           body * { visibility: hidden; }
-           #printable-ticket-container, #printable-ticket-container * { visibility: visible; }
-           #printable-ticket-container {
-             position: absolute !important;
-             left: 0 !important;
-             top: 0 !important;
-             width: 100% !important;
+           body { 
+             background: white !important; 
+             margin: 0; 
+             padding: 0; 
+             -webkit-print-color-adjust: exact !important; 
+             print-color-adjust: exact !important;
+           }
+           /* إخفاء كل الموقع أثناء الطباعة */
+           body > *:not(.print-container) { display: none !important; }
+           .no-print { display: none !important; }
+           
+           /* عرض البطاقة فقط في منتصف الصفحة وبحجمها الطبيعي */
+           .print-container {
              display: flex !important;
              justify-content: center !important;
              align-items: flex-start !important;
+             width: 100% !important;
+             height: 100% !important;
+             position: absolute !important;
+             top: 0 !important;
+             left: 0 !important;
              padding-top: 2cm !important;
-             margin: 0 !important;
-             transform: scale(1.1) !important;
-             transform-origin: top center !important;
            }
-           .no-print { display: none !important; }
         }
       `}} />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 print:w-full print:px-0 print:space-y-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 no-print">
         
         {studentData?.id && !hideOldContent && (
            <div className="no-print"><MemorialShieldDisplay userId={studentData.id} role="student" /></div>
@@ -300,7 +307,6 @@ const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSc
          </p>
       </div>
 
-      {/* زر الدفع الإلكتروني */}
       <div className="relative z-10 w-full max-w-2xl mt-6">
         <div className="bg-gradient-to-br from-emerald-900/40 to-teal-900/30 backdrop-blur-xl border border-emerald-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_0_40px_rgba(16,185,129,0.15)]">
           <div className="flex items-center gap-3 mb-4">
@@ -388,17 +394,19 @@ const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSc
                 </div>
               </div>
 
+              {/* 🎫 البطاقة في الشاشة (No Print) */}
               {seatAllocation && (
-                  <div id="printable-ticket-container" className="relative">
+                  <div className="relative">
                     <div className="overflow-hidden rounded-[2rem] sm:rounded-[3rem] glass-panel p-8 sm:p-10 border-indigo-500/40 flex flex-col items-center justify-center gap-8 shadow-[0_0_50px_rgba(79,70,229,0.15)] no-print">
                       <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-4 gap-4 no-print relative z-10">
-                         <h2 className="text-xl font-black text-indigo-300">البطاقة الرسمية (يرجى إبرازها للمراقب)</h2>
+                         <h2 className="text-xl font-black text-indigo-300">البطاقة الرسمية (يرجى طباعتها وإبرازها للمراقب)</h2>
                          <button onClick={handlePrintTicket} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-sm transition-all shadow-lg flex items-center gap-2 border border-indigo-400 active:scale-95">
                             <PrinterIcon className="w-5 h-5"/> طباعة البطاقة
                          </button>
                       </div>
 
-                      <div className="w-[85mm] h-[55mm] bg-white text-black border-[3px] border-black relative flex flex-col rounded-xl overflow-hidden shrink-0 mx-auto shadow-2xl relative z-10" style={{ boxSizing: 'border-box' }} dir="rtl">
+                      {/* تصميم البطاقة في الشاشة (نفس التصميم المطبوع) */}
+                      <div style={{ width: '85mm', height: '55mm', backgroundColor: 'white', color: 'black', border: '3px solid black', display: 'flex', flexDirection: 'column', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, margin: '0 auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', zIndex: 10, direction: 'rtl', boxSizing: 'border-box' }}>
                           <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                              <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين</div>
@@ -533,7 +541,8 @@ const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSc
                            </button>
                         </div>
 
-                        <div className="w-[85mm] h-[55mm] bg-white text-black border-[3px] border-black relative flex flex-col rounded-xl overflow-hidden shrink-0 mx-auto shadow-2xl relative z-10" style={{ boxSizing: 'border-box' }} dir="rtl">
+                        {/* تصميم البطاقة في الشاشة (نفس التصميم المطبوع) */}
+                        <div style={{ width: '85mm', height: '55mm', backgroundColor: 'white', color: 'black', border: '3px solid black', display: 'flex', flexDirection: 'column', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, margin: '0 auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', zIndex: 10, direction: 'rtl', boxSizing: 'border-box' }}>
                             <div style={{ backgroundColor: '#f1f5f9', borderBottom: '3px solid black', padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                <div style={{ textAlign: 'right' }}>
                                   <div style={{ fontWeight: '900', fontSize: '11px', color: 'black', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين</div>
@@ -696,333 +705,333 @@ const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSc
                         </div>
                       )}
                     </div>
-                )}
-                
-                {myBadges.length > 0 && (
-                  <div className="relative z-10 pt-2 w-full">
-                    <h3 className="text-sm sm:text-base font-black text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-md">
-                      <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف الخاصة بك
-                    </h3>
-                    <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                      {myBadges.map((badgeEntry, index) => (
-                        <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 glass-panel rounded-[2rem] p-5 border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:border-amber-500/30 transition-all duration-300 group cursor-default">
-                          <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
-                            <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/20 transition-colors"></div>
-                            {badgeEntry.badge?.image_url ? (
-                              <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-xl relative z-10" />
-                            ) : <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-md p-2" />}
+                  )}
+                  
+                  {myBadges.length > 0 && (
+                    <div className="relative z-10 pt-2 w-full">
+                      <h3 className="text-sm sm:text-base font-black text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-md">
+                        <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف الخاصة بك
+                      </h3>
+                      <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 custom-scrollbar snap-x">
+                        {myBadges.map((badgeEntry, index) => (
+                          <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 glass-panel rounded-[2rem] p-5 border-white/5 flex items-center gap-4 w-[20rem] sm:w-[22rem] hover:border-amber-500/30 transition-all duration-300 group cursor-default">
+                            <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
+                              <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/20 transition-colors"></div>
+                              {badgeEntry.badge?.image_url ? (
+                                <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-xl relative z-10" />
+                              ) : <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-md p-2" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
+                              <p className="text-[10px] sm:text-xs font-bold text-slate-300 opacity-90 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود'}</p>
+                              <p className="text-[9px] text-slate-400 mt-2 bg-white/5 w-fit px-2.5 py-1 rounded-lg border border-white/5 shadow-inner font-bold">بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}</p>
+                            </div>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
-                            <p className="text-[10px] sm:text-xs font-bold text-slate-300 opacity-90 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود'}</p>
-                            <p className="text-[9px] text-slate-400 mt-2 bg-white/5 w-fit px-2.5 py-1 rounded-lg border border-white/5 shadow-inner font-bold">بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}</p>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-                  {[
-                    { href: '/dashboard/student/schedule', icon: Calendar, label: 'الجدول الدراسي', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-                    { href: '/exams', icon: FileText, label: 'الاختبارات', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-                    { href: '/assignments', icon: BookOpen, label: 'الواجبات', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-                    { href: '/messages', icon: Bell, label: 'التنبيهات', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' }
-                  ].map((item, idx) => (
-                    <Link key={idx} href={item.href} className="group h-full">
-                      <div className="p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] glass-panel transition-all flex flex-col items-center justify-center gap-3 sm:gap-4 group-hover:-translate-y-1 h-full hover:border-white/20">
-                        <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-500 ${item.bg} backdrop-blur-md border ${item.border} group-hover:scale-110 shadow-inner`}><item.icon className={`h-6 w-6 sm:h-8 sm:w-8 ${item.color} drop-shadow-md`} /></div>
-                        <span className="font-black text-slate-300 group-hover:text-white transition-colors text-xs sm:text-sm text-center drop-shadow-sm">{item.label}</span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-                
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                  <div className="lg:col-span-7 xl:col-span-8 space-y-6 lg:space-y-8 w-full">
-                    <DigitalLibraryWidget userRole="student" />
-                    
-                    {filteredTimetables.length > 0 && (
-                        <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-                          <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
-                            <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
-                              <div className="p-2 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
-                            </h2>
-                          </div>
-                          <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                              {filteredTimetables.map((ex, idx) => {
-                                  const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
-                                  return (
-                                  <div key={idx} className={`bg-[#02040a]/40 backdrop-blur-md border border-white/5 p-4 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
-                                      <div>
-                                          <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2 drop-shadow-sm">
-                                              {ex.subjects?.name}
-                                              {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                                          </p>
-                                          <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
-                                      </div>
-                                      <div className="bg-white/5 px-3 py-2 rounded-xl border border-white/10 shadow-inner flex flex-col items-center justify-center shrink-0">
-                                          <span className="text-[10px] text-slate-300 font-bold uppercase">الوقت</span>
-                                          <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
-                                      </div>
-                                  </div>
-                                  );
-                              })}
-                          </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+                    {[
+                      { href: '/dashboard/student/schedule', icon: Calendar, label: 'الجدول الدراسي', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+                      { href: '/exams', icon: FileText, label: 'الاختبارات', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+                      { href: '/assignments', icon: BookOpen, label: 'الواجبات', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+                      { href: '/messages', icon: Bell, label: 'التنبيهات', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' }
+                    ].map((item, idx) => (
+                      <Link key={idx} href={item.href} className="group h-full">
+                        <div className="p-4 sm:p-6 rounded-[1.5rem] lg:rounded-[2rem] glass-panel transition-all flex flex-col items-center justify-center gap-3 sm:gap-4 group-hover:-translate-y-1 h-full hover:border-white/20">
+                          <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-500 ${item.bg} backdrop-blur-md border ${item.border} group-hover:scale-110 shadow-inner`}><item.icon className={`h-6 w-6 sm:h-8 sm:w-8 ${item.color} drop-shadow-md`} /></div>
+                          <span className="font-black text-slate-300 group-hover:text-white transition-colors text-xs sm:text-sm text-center drop-shadow-sm">{item.label}</span>
                         </div>
-                    )}
-
-                    <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none mix-blend-screen opacity-50"></div>
-                      <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-transparent relative z-10 gap-4 text-center sm:text-right">
-                        <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
-                          <div className="p-2.5 sm:p-3 bg-blue-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-blue-500/20 shadow-inner"><Clock className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 drop-shadow-sm" /></div> جدول حصص اليوم
-                        </h2>
-                        <Link href="/dashboard/student/schedule" className="text-xs sm:text-sm font-bold text-blue-300 hover:text-white hover:bg-white/10 transition-colors px-4 sm:px-5 py-2.5 bg-white/5 backdrop-blur-md rounded-xl shadow-inner border border-white/10 shrink-0 w-full sm:w-auto active:scale-95">الجدول الكامل</Link>
-                      </div>
+                      </Link>
+                    ))}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    <div className="lg:col-span-7 xl:col-span-8 space-y-6 lg:space-y-8 w-full">
+                      <DigitalLibraryWidget userRole="student" />
                       
-                      <div className="p-5 sm:p-6 lg:p-8 relative z-10 bg-transparent overflow-x-hidden">
-                        {todaysSchedule.length > 0 ? (
-                          <div className="space-y-5 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 sm:before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-blue-500/30 before:via-white/5 before:to-transparent">
-                            {todaysSchedule.map((item, i) => {
-                              let current = false; let next = false; let isPast = false;
-                              if (item.start_time && item.end_time && currentTime) {
-                                  const [startH, startM] = item.start_time.split(':').map(Number);
-                                  const [endH, endM] = item.end_time.split(':').map(Number);
-                                  const now = currentTime;
-                                  const start = new Date(now); start.setHours(startH, startM, 0);
-                                  const end = new Date(now); end.setHours(endH, endM, 0);
-                                  if (now >= start && now <= end) { current = true; } else if (now > end) { isPast = true; } else {
-                                      const diff = (start.getTime() - now.getTime()) / (1000 * 60);
-                                      if (diff > 0 && diff <= 60) next = true;
-                                  }
-                              }
-                              return (
-                                <div key={i} className={cn("relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group", current ? "is-active z-20" : "z-10")}>
-                                  <div className={cn("flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500 backdrop-blur-md", 
-                                    current ? "bg-gradient-to-br from-blue-400 to-indigo-500 text-white scale-110 sm:scale-125 border-[#02040a] shadow-[0_0_20px_rgba(59,130,246,0.5)]" : 
-                                    isPast ? "bg-[#02040a]/40 text-slate-500 border-white/5 opacity-50" :
-                                    next ? "bg-[#02040a]/80 text-blue-400 border-blue-500/30" : "bg-[#02040a]/80 text-slate-400 border-white/10"
-                                  )}>
-                                    {current ? <Play className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse ml-0.5 sm:ml-1" /> : isPast ? <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <span className="text-sm sm:text-base font-black">{item.period}</span>}
-                                  </div>
-                                  
-                                  <div className={cn("w-[calc(100%-3.5rem)] sm:w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 backdrop-blur-xl relative overflow-hidden shadow-inner cursor-default", 
-                                    current ? "bg-blue-500/10 border-blue-500/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] scale-[1.02] ring-1 ring-blue-500/20" : 
-                                    isPast ? "bg-[#02040a]/20 border-white/5 opacity-60 grayscale" :
-                                    next ? "bg-blue-500/5 border-blue-500/20" : "bg-[#02040a]/40 border-white/5 hover:border-white/10"
-                                  )}>
-                                    {current && (
-                                      <span className="absolute top-4 right-4 flex h-3.5 w-3.5">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)]"></span>
-                                      </span>
-                                    )}
-                                    <div className={`absolute top-0 left-0 w-1 h-full ${
-                                      current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : isPast ? 'bg-slate-800' : next ? 'bg-blue-400' : 'bg-white/10'
-                                    }`}></div>
+                      {filteredTimetables.length > 0 && (
+                          <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+                            <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
+                              <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
+                                <div className="p-2 bg-indigo-500/10 backdrop-blur-md rounded-xl border border-indigo-500/20 shadow-inner"><Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" /></div> جدول الاختبارات النهائية
+                              </h2>
+                            </div>
+                            <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                {filteredTimetables.map((ex, idx) => {
+                                    const isFinished = currentTime && new Date(`${ex.exam_date}T${ex.start_time}`) < currentTime;
+                                    return (
+                                    <div key={idx} className={`bg-[#02040a]/40 backdrop-blur-md border border-white/5 p-4 rounded-[1.5rem] flex items-center justify-between shadow-inner transition-colors group ${isFinished ? 'opacity-60 grayscale' : 'hover:border-indigo-500/30'}`}>
+                                        <div>
+                                            <p className="font-black text-white text-sm sm:text-base group-hover:text-indigo-400 transition-colors flex items-center gap-2 drop-shadow-sm">
+                                                {ex.subjects?.name}
+                                                {isFinished && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                                            </p>
+                                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">{safeFormat(ex.exam_date, 'EEEE، d MMM yyyy')}</p>
+                                        </div>
+                                        <div className="bg-white/5 px-3 py-2 rounded-xl border border-white/10 shadow-inner flex flex-col items-center justify-center shrink-0">
+                                            <span className="text-[10px] text-slate-300 font-bold uppercase">الوقت</span>
+                                            <span className="text-xs sm:text-sm font-black text-indigo-300" dir="ltr">{ex.start_time.substring(0,5)}</span>
+                                        </div>
+                                    </div>
+                                    );
+                                })}
+                            </div>
+                          </div>
+                      )}
 
-                                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 pr-2">
-                                      <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate drop-shadow-md pl-2", current ? "text-blue-400" : next ? "text-white" : isPast ? "text-slate-500" : "text-slate-200")}>{item.subjects?.name}</h3>
-                                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                                        {current && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-[9px] sm:text-[10px] font-bold text-blue-300 shadow-inner"><div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> الحصة الآن</span>}
-                                        {next && !current && <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[9px] sm:text-[10px] font-bold shadow-inner">الحصة القادمة</span>}
-                                        {isPast && <span className="px-2.5 py-1 rounded-full bg-white/5 text-slate-400 border border-white/5 text-[9px] sm:text-[10px] font-bold shadow-inner flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> انتهت</span>}
-                                        <span className={cn("text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-blue-500/20 text-blue-300 border-blue-500/20" : isPast ? "bg-transparent text-slate-500 border-slate-800" : "bg-white/5 text-slate-300 border-white/10")}>الحصة {item.period}</span>
-                                      </div>
+                      <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none mix-blend-screen opacity-50"></div>
+                        <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between bg-transparent relative z-10 gap-4 text-center sm:text-right">
+                          <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
+                            <div className="p-2.5 sm:p-3 bg-blue-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-blue-500/20 shadow-inner"><Clock className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 drop-shadow-sm" /></div> جدول حصص اليوم
+                          </h2>
+                          <Link href="/dashboard/student/schedule" className="text-xs sm:text-sm font-bold text-blue-300 hover:text-white hover:bg-white/10 transition-colors px-4 sm:px-5 py-2.5 bg-white/5 backdrop-blur-md rounded-xl shadow-inner border border-white/10 shrink-0 w-full sm:w-auto active:scale-95">الجدول الكامل</Link>
+                        </div>
+                        
+                        <div className="p-5 sm:p-6 lg:p-8 relative z-10 bg-transparent overflow-x-hidden">
+                          {todaysSchedule.length > 0 ? (
+                            <div className="space-y-5 sm:space-y-6 relative before:absolute before:inset-0 before:ml-5 sm:before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-blue-500/30 before:via-white/5 before:to-transparent">
+                              {todaysSchedule.map((item, i) => {
+                                let current = false; let next = false; let isPast = false;
+                                if (item.start_time && item.end_time && currentTime) {
+                                    const [startH, startM] = item.start_time.split(':').map(Number);
+                                    const [endH, endM] = item.end_time.split(':').map(Number);
+                                    const now = currentTime;
+                                    const start = new Date(now); start.setHours(startH, startM, 0);
+                                    const end = new Date(now); end.setHours(endH, endM, 0);
+                                    if (now >= start && now <= end) { current = true; } else if (now > end) { isPast = true; } else {
+                                        const diff = (start.getTime() - now.getTime()) / (1000 * 60);
+                                        if (diff > 0 && diff <= 60) next = true;
+                                    }
+                                }
+                                return (
+                                  <div key={i} className={cn("relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group", current ? "is-active z-20" : "z-10")}>
+                                    <div className={cn("flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl border-2 sm:border-4 shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500 backdrop-blur-md", 
+                                      current ? "bg-gradient-to-br from-blue-400 to-indigo-500 text-white scale-110 sm:scale-125 border-[#02040a] shadow-[0_0_20px_rgba(59,130,246,0.5)]" : 
+                                      isPast ? "bg-[#02040a]/40 text-slate-500 border-white/5 opacity-50" :
+                                      next ? "bg-[#02040a]/80 text-blue-400 border-blue-500/30" : "bg-[#02040a]/80 text-slate-400 border-white/10"
+                                    )}>
+                                      {current ? <Play className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse ml-0.5 sm:ml-1" /> : isPast ? <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <span className="text-sm sm:text-base font-black">{item.period}</span>}
                                     </div>
                                     
-                                    <div className="flex flex-wrap items-center justify-between pt-3 sm:pt-4 border-t border-white/5 gap-3 pr-2">
-                                      <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-blue-100" : isPast ? "text-slate-500" : "text-slate-300")}><GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" /><span className="truncate">أ. {item.teachers?.users?.full_name || 'غير محدد'}</span></p>
-                                      {item.start_time && item.end_time && (
-                                        <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/60 backdrop-blur-sm px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-blue-300 border-blue-500/20" : isPast ? "text-slate-600 border-slate-800" : "text-slate-400 border-white/5")} dir="ltr"><Clock className="w-2.5 h-2.5 sm:w-3 h-3 shrink-0" />{item.start_time.substring(0, 5)} - {item.end_time.substring(0, 5)}</span>
+                                    <div className={cn("w-[calc(100%-3.5rem)] sm:w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 sm:p-5 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 backdrop-blur-xl relative overflow-hidden shadow-inner cursor-default", 
+                                      current ? "bg-blue-500/10 border-blue-500/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] scale-[1.02] ring-1 ring-blue-500/20" : 
+                                      isPast ? "bg-[#02040a]/20 border-white/5 opacity-60 grayscale" :
+                                      next ? "bg-blue-500/5 border-blue-500/20" : "bg-[#02040a]/40 border-white/5 hover:border-white/10"
+                                    )}>
+                                      {current && (
+                                        <span className="absolute top-4 right-4 flex h-3.5 w-3.5">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)]"></span>
+                                        </span>
                                       )}
+                                      <div className={`absolute top-0 left-0 w-1 h-full ${
+                                        current ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : isPast ? 'bg-slate-800' : next ? 'bg-blue-400' : 'bg-white/10'
+                                      }`}></div>
+
+                                      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3 mb-3 pr-2">
+                                        <h3 className={cn("text-base sm:text-lg font-black transition-colors truncate drop-shadow-md pl-2", current ? "text-blue-400" : next ? "text-white" : isPast ? "text-slate-500" : "text-slate-200")}>{item.subjects?.name}</h3>
+                                        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                          {current && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-[9px] sm:text-[10px] font-bold text-blue-300 shadow-inner"><div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> الحصة الآن</span>}
+                                          {next && !current && <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[9px] sm:text-[10px] font-bold shadow-inner">الحصة القادمة</span>}
+                                          {isPast && <span className="px-2.5 py-1 rounded-full bg-white/5 text-slate-400 border border-white/5 text-[9px] sm:text-[10px] font-bold shadow-inner flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> انتهت</span>}
+                                          <span className={cn("text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-xl shadow-inner border whitespace-nowrap", current ? "bg-blue-500/20 text-blue-300 border-blue-500/20" : isPast ? "bg-transparent text-slate-500 border-slate-800" : "bg-white/5 text-slate-300 border-white/10")}>الحصة {item.period}</span>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex flex-wrap items-center justify-between pt-3 sm:pt-4 border-t border-white/5 gap-3 pr-2">
+                                        <p className={cn("text-xs sm:text-sm font-bold flex items-center gap-2", current ? "text-blue-100" : isPast ? "text-slate-500" : "text-slate-300")}><GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-70 shrink-0" /><span className="truncate">أ. {item.teachers?.users?.full_name || 'غير محدد'}</span></p>
+                                        {item.start_time && item.end_time && (
+                                          <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/60 backdrop-blur-sm px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-blue-300 border-blue-500/20" : isPast ? "text-slate-600 border-slate-800" : "text-slate-400 border-white/5")} dir="ltr"><Clock className="w-2.5 h-2.5 sm:w-3 h-3 shrink-0" />{item.start_time.substring(0, 5)} - {item.end_time.substring(0, 5)}</span>
+                                        )}
+                                      </div>
                                     </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-center py-12 sm:py-16 bg-[#02040a]/30 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 shadow-inner px-4">
+                              <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 mb-3 sm:mb-4 border border-white/5 shadow-inner"><Calendar className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500" /></div>
+                              <h3 className="text-lg sm:text-xl font-black text-white mb-2 drop-shadow-md">لا توجد حصص اليوم</h3>
+                              <p className="text-xs sm:text-sm text-slate-400 font-bold max-w-sm mx-auto">استمتع بيومك! ليس لديك أي حصص مجدولة لهذا اليوم.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden group">
+                        <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none mix-blend-screen opacity-50 group-hover:scale-150 transition-transform duration-1000"></div>
+                        
+                        <div className="mb-6 sm:mb-8 flex items-center justify-between relative z-10 text-center sm:text-right border-b border-white/5 pb-6">
+                          <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
+                            <div className="p-2.5 sm:p-3 bg-emerald-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner group-hover:scale-110 transition-transform">
+                               <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 drop-shadow-sm" />
+                            </div>
+                            تطور المستوى الأكاديمي
+                          </h2>
+                        </div>
+                        
+                        <div className="h-[250px] sm:h-[300px] lg:h-[350px] w-full relative z-10 ml-[-15px] sm:ml-0">
+                          {recentGrades.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={recentGrades.map(g => ({ displayTitle: g.exam?.title || 'اختبار', displayScore: g.score || 0 })).reverse()}>
+                                <defs>
+                                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#34d399" stopOpacity={0.5}/><stop offset="95%" stopColor="#34d399" stopOpacity={0}/></linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
+                                <XAxis dataKey="displayTitle" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} domain={[0, 100]} dx={-10} width={30} />
+                                <Tooltip contentStyle={{borderRadius: '1.5rem', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(2,4,10,0.8)', backdropFilter: 'blur(16px)', color: '#fff', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.5)'}} itemStyle={{color: '#34d399', fontWeight: '900'}} />
+                                <Area type="monotone" dataKey="displayScore" name="الدرجة" stroke="#34d399" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" activeDot={{r: 5, strokeWidth: 0, fill: '#34d399', stroke: '#fff'}} />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="relative w-full h-full rounded-[2rem] overflow-hidden flex flex-col items-center justify-center p-6 border border-white/5 bg-[#02040a]/40 backdrop-blur-sm shadow-inner group cursor-default">
+                               <div className="absolute inset-0 w-full h-full" style={{ backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+                               <div className="absolute bottom-0 w-full h-[60%] opacity-20 pointer-events-none">
+                                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+                                     <path d="M0,100 C20,80 40,30 60,60 C80,90 90,40 100,50 L100,100 Z" fill="url(#ghostGradient)" className="animate-[pulse_4s_ease-in-out_infinite]" />
+                                     <defs>
+                                        <linearGradient id="ghostGradient" x1="0" y1="0" x2="0" y2="1">
+                                           <stop offset="0%" stopColor="#34d399" stopOpacity="0.8" />
+                                           <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
+                                        </linearGradient>
+                                     </defs>
+                                  </svg>
+                               </div>
+                               <div className="absolute top-1/3 left-1/4 w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-[bounce_3s_infinite] opacity-50"></div>
+                               <div className="absolute top-1/4 right-1/3 w-3 h-3 bg-blue-400 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-[bounce_4s_infinite] opacity-50 delay-1000"></div>
+
+                               <div className="relative z-10 flex flex-col items-center text-center bg-[#02040a]/80 backdrop-blur-md px-8 py-6 rounded-3xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] group-hover:border-emerald-500/30 transition-all duration-500">
+                                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 shadow-inner group-hover:scale-110 transition-transform duration-500">
+                                     <Sparkles className="w-8 h-8 text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
+                                  </div>
+                                  <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight drop-shadow-md">نستعد لرصد تألقك الشامل! 🚀</h3>
+                                  <p className="text-sm font-bold text-slate-400 max-w-md leading-relaxed">
+                                    الرادار الذكي متصل الآن.. بانتظار التزامك <span className="text-emerald-400">بالحضور</span>، وإنجازك <span className="text-amber-400">للواجبات</span>، وتفوقك في <span className="text-indigo-400">الاختبارات</span> ليرسم هولوجرام نجاحك السنوي!
+                                  </p>
+                               </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:space-y-8 w-full">
+                      <AnnouncementsWidget authRole="student" />
+
+                      <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+                        <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
+                          <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
+                            <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner"><BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" /></div> واجبات مطلوبة
+                          </h2>
+                        </div>
+                        <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
+                          {upcomingAssignments.length > 0 ? (
+                            upcomingAssignments.map((assignment) => (
+                              <Link href={`/assignments/${assignment.id}`} key={assignment.id} className="block group mb-2">
+                                <div className="p-4 sm:p-5 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-amber-500/30 hover:bg-white/5 transition-all bg-[#02040a]/40 backdrop-blur-md flex flex-col justify-between h-full shadow-inner">
+                                  <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
+                                    <p className="font-black text-white text-xs sm:text-sm leading-tight group-hover:text-amber-300 transition-colors line-clamp-2 drop-shadow-md">{assignment.title}</p>
+                                    <span className="text-[9px] sm:text-[10px] font-black px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg whitespace-nowrap shrink-0 flex items-center gap-1.5 shadow-inner"><Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> {safeFormat(assignment.due_date, 'd MMM')}</span>
+                                  </div>
+                                  <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 bg-white/5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg inline-block w-fit border border-white/10 shadow-inner">{assignment.subject?.name}</p>
+                                </div>
+                              </Link>
+                            ))
+                          ) : (
+                            <div className="text-center py-8 text-slate-400 font-bold bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 text-xs sm:text-sm m-2 shadow-inner">لا توجد واجبات مطلوبة حالياً</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
+                        <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent gap-4">
+                          <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
+                            <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner">
+                              <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" />
+                            </div> 
+                            سجل الأعذار 
+                          </h2>
+                          <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400/90 to-orange-500/90 backdrop-blur-md px-4 py-2.5 rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] shrink-0 active:scale-95 whitespace-nowrap border border-amber-300/50">
+                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
+                          </button>
+                        </div>
+                        
+                        <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+                          {excuses.length > 0 ? (
+                            excuses.map(exc => (
+                              <div key={exc.id} className="p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 bg-[#02040a]/40 backdrop-blur-md flex flex-col gap-2 mb-2 shadow-inner hover:bg-white/5 transition-colors">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-white font-black text-sm drop-shadow-md">
+                                    {exc.absent_dates && exc.absent_dates.length > 0 
+                                      ? `${safeFormat(exc.absent_dates[0], 'dd MMM yyyy')} ${exc.absent_dates.length > 1 ? `(+${exc.absent_dates.length - 1} أيام)` : ''}`
+                                      : safeFormat(exc.excuse_date, 'dd MMM yyyy')}
+                                  </span>
+                                  <span className={`text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-md border shadow-inner ${
+                                    exc.status === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
+                                    exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
+                                    'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                                  }`}>
+                                    {exc.status === 'pending' ? 'قيد المراجعة ⏳' : exc.status === 'approved' ? 'عذر مقبول ✓' : 'عذر مرفوض ✕'}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] font-bold text-slate-400">
+                                  {exc.duration_type === 'full_day' ? 'غياب يوم كامل' : `غياب جزئي: حصص (${exc.target_periods?.join(', ')})`}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لم تقم بتقديم أي أعذار مسبقة</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
+                        <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
+                          <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
+                            <div className="p-2 bg-emerald-500/10 backdrop-blur-md rounded-xl border border-emerald-500/20 shadow-inner"><Award className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> آخر النتائج
+                          </h2>
+                          <Link href="/student/performance" className="text-[10px] sm:text-xs font-bold text-emerald-300 hover:text-white flex items-center justify-center gap-1 bg-white/5 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:bg-white/10 transition-colors border border-white/10 shrink-0 w-full sm:w-auto active:scale-95 shadow-inner">السجل <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" /></Link>
+                        </div>
+                        
+                        <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
+                          {recentGrades.length > 0 ? (
+                            recentGrades.slice(0,4).map((grade) => {
+                              const isLocked = checkIsLocked(grade.exam);
+                              return (
+                                <div key={grade.id} className={`flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border transition-all mb-2 ${isLocked ? 'bg-[#02040a]/40 border-white/5 shadow-inner grayscale opacity-80' : 'bg-[#02040a]/60 backdrop-blur-md border-white/5 hover:border-emerald-500/30 hover:bg-white/5 group shadow-inner'}`}>
+                                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                    <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner shrink-0 transition-colors ${isLocked ? 'bg-white/5 text-slate-500 border border-white/10' : grade.score >= 50 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:bg-emerald-500/80 group-hover:text-slate-900' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20 group-hover:bg-rose-500/80 group-hover:text-slate-900'}`}>
+                                      {isLocked ? <Lock className="h-4 w-4 sm:h-5 sm:w-5" /> : <FileText className="h-4 w-4 sm:h-5 sm:w-5" />}
+                                    </div>
+                                    <div className="min-w-0 pr-1">
+                                      <p className="font-black text-white text-xs sm:text-sm leading-tight mb-1 truncate drop-shadow-md">{grade.exam?.title}</p>
+                                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 bg-white/5 px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg inline-block truncate max-w-full border border-white/10 shadow-inner">{grade.exam?.subject?.name}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right flex flex-col items-end justify-center shrink-0 pl-1">
+                                    {isLocked ? (
+                                      <><span className="text-[9px] sm:text-[10px] font-black text-slate-400 bg-white/5 shadow-inner border border-white/10 px-2 py-1 rounded-md flex items-center gap-1 mb-1"><Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> محجوبة</span><p className="text-[8px] sm:text-[9px] text-slate-500 font-bold uppercase tracking-widest">{safeFormat(grade.completed_at, 'd MMM')}</p></>
+                                    ) : (
+                                      <><p className={`text-base sm:text-xl font-black flex items-baseline gap-1 drop-shadow-lg ${grade.score >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>{grade.score} <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">/ {grade.exam?.max_score || 100}</span></p><p className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">{safeFormat(grade.completed_at, 'd MMM')}</p></>
+                                    )}
                                   </div>
                                 </div>
                               );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-center py-12 sm:py-16 bg-[#02040a]/30 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 shadow-inner px-4">
-                            <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 mb-3 sm:mb-4 border border-white/5 shadow-inner"><Calendar className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500" /></div>
-                            <h3 className="text-lg sm:text-xl font-black text-white mb-2 drop-shadow-md">لا توجد حصص اليوم</h3>
-                            <p className="text-xs sm:text-sm text-slate-400 font-bold max-w-sm mx-auto">استمتع بيومك! ليس لديك أي حصص مجدولة لهذا اليوم.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden group">
-                      <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] -ml-10 -mt-10 pointer-events-none mix-blend-screen opacity-50 group-hover:scale-150 transition-transform duration-1000"></div>
-                      
-                      <div className="mb-6 sm:mb-8 flex items-center justify-between relative z-10 text-center sm:text-right border-b border-white/5 pb-6">
-                        <h2 className="text-lg sm:text-xl lg:text-2xl font-black text-white flex items-center justify-center sm:justify-start gap-3 drop-shadow-md w-full sm:w-auto">
-                          <div className="p-2.5 sm:p-3 bg-emerald-500/10 backdrop-blur-md rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner group-hover:scale-110 transition-transform">
-                             <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 drop-shadow-sm" />
-                          </div>
-                          تطور المستوى الأكاديمي
-                        </h2>
-                      </div>
-                      
-                      <div className="h-[250px] sm:h-[300px] lg:h-[350px] w-full relative z-10 ml-[-15px] sm:ml-0">
-                        {recentGrades.length > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={recentGrades.map(g => ({ displayTitle: g.exam?.title || 'اختبار', displayScore: g.score || 0 })).reverse()}>
-                              <defs>
-                                <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#34d399" stopOpacity={0.5}/><stop offset="95%" stopColor="#34d399" stopOpacity={0}/></linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
-                              <XAxis dataKey="displayTitle" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dy={10} />
-                              <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} domain={[0, 100]} dx={-10} width={30} />
-                              <Tooltip contentStyle={{borderRadius: '1.5rem', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(2,4,10,0.8)', backdropFilter: 'blur(16px)', color: '#fff', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.5)'}} itemStyle={{color: '#34d399', fontWeight: '900'}} />
-                              <Area type="monotone" dataKey="displayScore" name="الدرجة" stroke="#34d399" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" activeDot={{r: 5, strokeWidth: 0, fill: '#34d399', stroke: '#fff'}} />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <div className="relative w-full h-full rounded-[2rem] overflow-hidden flex flex-col items-center justify-center p-6 border border-white/5 bg-[#02040a]/40 backdrop-blur-sm shadow-inner group cursor-default">
-                             <div className="absolute inset-0 w-full h-full" style={{ backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
-                             <div className="absolute bottom-0 w-full h-[60%] opacity-20 pointer-events-none">
-                                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
-                                   <path d="M0,100 C20,80 40,30 60,60 C80,90 90,40 100,50 L100,100 Z" fill="url(#ghostGradient)" className="animate-[pulse_4s_ease-in-out_infinite]" />
-                                   <defs>
-                                      <linearGradient id="ghostGradient" x1="0" y1="0" x2="0" y2="1">
-                                         <stop offset="0%" stopColor="#34d399" stopOpacity="0.8" />
-                                         <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
-                                      </linearGradient>
-                                   </defs>
-                                </svg>
-                             </div>
-                             <div className="absolute top-1/3 left-1/4 w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-[bounce_3s_infinite] opacity-50"></div>
-                             <div className="absolute top-1/4 right-1/3 w-3 h-3 bg-blue-400 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-[bounce_4s_infinite] opacity-50 delay-1000"></div>
-
-                             <div className="relative z-10 flex flex-col items-center text-center bg-[#02040a]/80 backdrop-blur-md px-8 py-6 rounded-3xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] group-hover:border-emerald-500/30 transition-all duration-500">
-                                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 shadow-inner group-hover:scale-110 transition-transform duration-500">
-                                   <Sparkles className="w-8 h-8 text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
-                                </div>
-                                <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight drop-shadow-md">نستعد لرصد تألقك الشامل! 🚀</h3>
-                                <p className="text-sm font-bold text-slate-400 max-w-md leading-relaxed">
-                                  الرادار الذكي متصل الآن.. بانتظار التزامك <span className="text-emerald-400">بالحضور</span>، وإنجازك <span className="text-amber-400">للواجبات</span>، وتفوقك في <span className="text-indigo-400">الاختبارات</span> ليرسم هولوجرام نجاحك السنوي!
-                                </p>
-                             </div>
-                          </div>
-                        )}
+                            })
+                          ) : (
+                            <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لا توجد نتائج اختبارات حالياً</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-
-                  <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:space-y-8 w-full">
-                    <AnnouncementsWidget authRole="student" />
-
-                    <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-                      <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
-                        <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
-                          <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner"><BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" /></div> واجبات مطلوبة
-                        </h2>
-                      </div>
-                      <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
-                        {upcomingAssignments.length > 0 ? (
-                          upcomingAssignments.map((assignment) => (
-                            <Link href={`/assignments/${assignment.id}`} key={assignment.id} className="block group mb-2">
-                              <div className="p-4 sm:p-5 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 hover:border-amber-500/30 hover:bg-white/5 transition-all bg-[#02040a]/40 backdrop-blur-md flex flex-col justify-between h-full shadow-inner">
-                                <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
-                                  <p className="font-black text-white text-xs sm:text-sm leading-tight group-hover:text-amber-300 transition-colors line-clamp-2 drop-shadow-md">{assignment.title}</p>
-                                  <span className="text-[9px] sm:text-[10px] font-black px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg whitespace-nowrap shrink-0 flex items-center gap-1.5 shadow-inner"><Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> {safeFormat(assignment.due_date, 'd MMM')}</span>
-                                </div>
-                                <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 bg-white/5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg inline-block w-fit border border-white/10 shadow-inner">{assignment.subject?.name}</p>
-                              </div>
-                            </Link>
-                          ))
-                        ) : (
-                          <div className="text-center py-8 text-slate-400 font-bold bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 text-xs sm:text-sm m-2 shadow-inner">لا توجد واجبات مطلوبة حالياً</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
-                      <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent gap-4">
-                        <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-md">
-                          <div className="p-2 bg-amber-500/10 backdrop-blur-md rounded-xl border border-amber-500/20 shadow-inner">
-                            <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" />
-                          </div> 
-                          سجل الأعذار 
-                        </h2>
-                        <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400/90 to-orange-500/90 backdrop-blur-md px-4 py-2.5 rounded-xl hover:from-amber-400 hover:to-orange-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] shrink-0 active:scale-95 whitespace-nowrap border border-amber-300/50">
-                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
-                        </button>
-                      </div>
-                      
-                      <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3 max-h-[300px] overflow-y-auto custom-scrollbar">
-                        {excuses.length > 0 ? (
-                          excuses.map(exc => (
-                            <div key={exc.id} className="p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 bg-[#02040a]/40 backdrop-blur-md flex flex-col gap-2 mb-2 shadow-inner hover:bg-white/5 transition-colors">
-                              <div className="flex justify-between items-center">
-                                <span className="text-white font-black text-sm drop-shadow-md">
-                                  {exc.absent_dates && exc.absent_dates.length > 0 
-                                    ? `${safeFormat(exc.absent_dates[0], 'dd MMM yyyy')} ${exc.absent_dates.length > 1 ? `(+${exc.absent_dates.length - 1} أيام)` : ''}`
-                                    : safeFormat(exc.excuse_date, 'dd MMM yyyy')}
-                                </span>
-                                <span className={`text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-md border shadow-inner ${
-                                  exc.status === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
-                                  exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
-                                  'bg-rose-500/10 text-rose-300 border-rose-500/30'
-                                }`}>
-                                  {exc.status === 'pending' ? 'قيد المراجعة ⏳' : exc.status === 'approved' ? 'عذر مقبول ✓' : 'عذر مرفوض ✕'}
-                                </span>
-                              </div>
-                              <div className="text-[10px] font-bold text-slate-400">
-                                {exc.duration_type === 'full_day' ? 'غياب يوم كامل' : `غياب جزئي: حصص (${exc.target_periods?.join(', ')})`}
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لم تقم بتقديم أي أعذار مسبقة</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
-                      <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-transparent text-center sm:text-right gap-4">
-                        <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-md w-full sm:w-auto">
-                          <div className="p-2 bg-emerald-500/10 backdrop-blur-md rounded-xl border border-emerald-500/20 shadow-inner"><Award className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> آخر النتائج
-                        </h2>
-                        <Link href="/student/performance" className="text-[10px] sm:text-xs font-bold text-emerald-300 hover:text-white flex items-center justify-center gap-1 bg-white/5 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:bg-white/10 transition-colors border border-white/10 shrink-0 w-full sm:w-auto active:scale-95 shadow-inner">السجل <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" /></Link>
-                      </div>
-                      
-                      <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3">
-                        {recentGrades.length > 0 ? (
-                          recentGrades.slice(0,4).map((grade) => {
-                            const isLocked = checkIsLocked(grade.exam);
-                            return (
-                              <div key={grade.id} className={`flex items-center justify-between p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border transition-all mb-2 ${isLocked ? 'bg-[#02040a]/40 border-white/5 shadow-inner grayscale opacity-80' : 'bg-[#02040a]/60 backdrop-blur-md border-white/5 hover:border-emerald-500/30 hover:bg-white/5 group shadow-inner'}`}>
-                                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                                  <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner shrink-0 transition-colors ${isLocked ? 'bg-white/5 text-slate-500 border border-white/10' : grade.score >= 50 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:bg-emerald-500/80 group-hover:text-slate-900' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20 group-hover:bg-rose-500/80 group-hover:text-slate-900'}`}>
-                                    {isLocked ? <Lock className="h-4 w-4 sm:h-5 sm:w-5" /> : <FileText className="h-4 w-4 sm:h-5 sm:w-5" />}
-                                  </div>
-                                  <div className="min-w-0 pr-1">
-                                    <p className="font-black text-white text-xs sm:text-sm leading-tight mb-1 truncate drop-shadow-md">{grade.exam?.title}</p>
-                                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 bg-white/5 px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg inline-block truncate max-w-full border border-white/10 shadow-inner">{grade.exam?.subject?.name}</p>
-                                  </div>
-                                </div>
-                                <div className="text-right flex flex-col items-end justify-center shrink-0 pl-1">
-                                  {isLocked ? (
-                                    <><span className="text-[9px] sm:text-[10px] font-black text-slate-400 bg-white/5 shadow-inner border border-white/10 px-2 py-1 rounded-md flex items-center gap-1 mb-1"><Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> محجوبة</span><p className="text-[8px] sm:text-[9px] text-slate-500 font-bold uppercase tracking-widest">{safeFormat(grade.completed_at, 'd MMM')}</p></>
-                                  ) : (
-                                    <><p className={`text-base sm:text-xl font-black flex items-baseline gap-1 drop-shadow-lg ${grade.score >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>{grade.score} <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">/ {grade.exam?.max_score || 100}</span></p><p className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">{safeFormat(grade.completed_at, 'd MMM')}</p></>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="text-center py-8 text-slate-400 bg-[#02040a]/30 backdrop-blur-sm rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لا توجد نتائج اختبارات حالياً</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                      </div>   
+                </div>  
              </motion.div>
           )}
         </AnimatePresence>
@@ -1032,7 +1041,7 @@ const hideOldContent = showFinalResult || showMiddleSchoolSuspense || showHighSc
          <StudentEvaluationGate studentId={studentData.id} sectionId={studentData.section_id || studentData.sections?.id} />
       )}
 
-      {/* 🚀 نافذة تقديم العذر */}
+      {/* نافذة تقديم العذر */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
