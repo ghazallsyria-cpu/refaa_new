@@ -76,7 +76,7 @@ export default function StudentDashboard() {
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
 
-  // 🚀 حالات الطباعة الجديدة
+  // 🚀 حالات الطباعة
   const [isPrinting, setIsPrinting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -182,7 +182,7 @@ export default function StudentDashboard() {
   const handleTrackSelection = async (track: 'scientific' | 'literary') => { try { await updateStudentTrack(track); window.location.reload(); } catch (error) {} };
   const togglePeriod = (periodNum: number) => { setExcuseForm(prev => { const exists = prev.target_periods.includes(periodNum); return { ...prev, target_periods: exists ? prev.target_periods.filter(p => p !== periodNum) : [...prev.target_periods, periodNum].sort((a,b) => a - b) }; }); };
 
-  // 🚀 دالة الطباعة السحرية لتوليد البطاقة الفخمة باستخدام html2canvas-pro
+  // 🚀 دالة الطباعة السحرية لتوليد البطاقة الفخمة
   const handlePrintTicket = async () => {
     setIsPrinting(true);
     try {
@@ -208,15 +208,16 @@ export default function StudentDashboard() {
       const cardElement = printRef.current;
       const originalCssText = cardElement.style.cssText;
       
-      // التجهيز للطباعة بدون تشوه في الأبعاد (إجبار العرض على 85mm وليس عرض الشاشة)
+      // التجهيز للطباعة بحجم ثابت بالبيكسل لضمان عدم تشوه التصميم
       cardElement.style.position = 'fixed'; 
       cardElement.style.top = '0'; 
       cardElement.style.left = '0'; 
-      cardElement.style.width = '85mm'; 
+      cardElement.style.width = '320px'; 
+      cardElement.style.height = '200px'; 
       cardElement.style.zIndex = '-9999';
 
       const canvas = await html2canvas(cardElement, { 
-        scale: 4, // دقة عالية جداً لطباعة النصوص بوضوح
+        scale: 4, // دقة ممتازة جداً 4K
         useCORS: true, 
         backgroundColor: '#ffffff', 
         scrollY: 0, 
@@ -311,8 +312,66 @@ export default function StudentDashboard() {
   else if (absentPeriods >= 25) { warningLevel = 1; warningTitle = "إنذار أول"; warningMessage = "الالتزام بالحضور مطلوب."; warningColors = "border-amber-500/50 text-amber-500"; warningIconColor = "text-amber-500"; WarningIcon = AlertTriangle; }
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
+  // 🚀 القالب الملكي الصارم للبطاقة (تصميم موحد للعرض والطباعة)
+  const TicketCardTemplate = ({ isHiddenRef = false }) => (
+    <div 
+      ref={isHiddenRef ? printRef : null}
+      style={{ 
+        width: '320px', 
+        height: '200px', 
+        backgroundColor: '#ffffff', 
+        borderRadius: '16px', 
+        overflow: 'hidden', 
+        border: '2px solid #0f172a', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        position: isHiddenRef ? 'fixed' : 'relative', 
+        top: isHiddenRef ? '-9999px' : 'auto',
+        left: isHiddenRef ? '0' : 'auto',
+        zIndex: isHiddenRef ? -9999 : 10,
+        direction: 'rtl', 
+        boxSizing: 'border-box', 
+        boxShadow: isHiddenRef ? 'none' : '0 10px 25px rgba(0,0,0,0.15)', 
+        margin: isHiddenRef ? '0' : '0 auto', 
+        fontFamily: '"Cairo", sans-serif',
+        flexShrink: 0
+      }}
+    >
+      <div style={{ backgroundColor: '#0f172a', borderBottom: '3px solid #d4af37', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+           <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '15px', lineHeight: '1' }}>مدرسة الرفعة النموذجية بنين</div>
+           <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '10px', lineHeight: '1' }}>بطاقة دخول اختبارات نهاية العام</div>
+        </div>
+        <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', border: '1px solid #d4af37', color: '#d4af37', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '900' }}>
+           {seatAllocation.exam_committees?.name}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flex: 1, padding: '12px 16px', gap: '12px', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+           <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '900', marginBottom: '4px' }}>اسم الطالب</div>
+           <div style={{ fontSize: '16px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', marginBottom: '8px', maxHeight: '42px', overflow: 'hidden' }}>{rawFullName}</div>
+           <div>
+              <span style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900', display: 'inline-block' }}>{classNameStr}</span>
+           </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', border: '2px solid #e2e8f0', borderRadius: '10px', minWidth: '80px', height: '100%', padding: '6px', boxSizing: 'border-box' }}>
+           <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '900', marginBottom: '4px' }}>رقم الجلوس</div>
+           <div style={{ fontSize: '24px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px', lineHeight: '1' }}>{seatAllocation.seat_number}</div>
+        </div>
+
+        <div style={{ width: '64px', height: '64px', backgroundColor: '#ffffff', border: '2px solid #d4af37', borderRadius: '8px', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+           <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        </div>
+      </div>
+
+      <div style={{ height: '5px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
+    </div>
+  );
+
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-[#02040a] text-slate-100 pb-32 pt-6 font-sans" dir="rtl">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-[#02040a] text-slate-100 pb-32 pt-6 font-sans no-print" dir="rtl">
       
       {/* 🚀 شاشة التحميل للطباعة */}
       <AnimatePresence>
@@ -324,20 +383,6 @@ export default function StudentDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-           body { 
-             background: white !important; 
-             margin: 0; 
-             padding: 0; 
-             -webkit-print-color-adjust: exact !important; 
-             print-color-adjust: exact !important;
-           }
-           body > *:not(.print-container) { display: none !important; }
-           .no-print { display: none !important; }
-        }
-      `}} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 no-print">
         
@@ -460,41 +505,9 @@ export default function StudentDashboard() {
                             <PrinterIcon className="w-5 h-5"/> {isPrinting ? 'جاري التجهيز...' : 'تحميل البطاقة (PDF)'}
                          </button>
                       </div>
-
-                      {/* تصميم البطاقة في الشاشة (نفس التصميم الملكي) */}
-                      <div style={{ width: '85mm', height: '55mm', backgroundColor: '#ffffff', borderRadius: '12px', overflow: 'hidden', border: '2px solid #0f172a', display: 'flex', flexDirection: 'column', position: 'relative', direction: 'rtl', boxSizing: 'border-box', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', flexShrink: 0, margin: '0 auto', zIndex: 10 }}>
-                        <div style={{ background: 'linear-gradient(to left, #0f172a, #1e293b)', borderBottom: '3px solid #d4af37', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                             <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '13px' }}>مدرسة الرفعة النموذجية بنين</div>
-                             <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '9px', marginTop: '2px' }}>بطاقة دخول اختبارات نهاية العام</div>
-                          </div>
-                          <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', border: '1px solid #d4af37', color: '#d4af37', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900' }}>
-                             {seatAllocation.exam_committees?.name}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', flex: 1, padding: '8px 12px', gap: '10px', alignItems: 'center', backgroundColor: '#f8fafc' }}>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                             <div style={{ fontSize: '9px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>اسم الطالب</div>
-                             <div style={{ fontSize: '14px', fontWeight: '900', color: '#0f172a', lineHeight: '1.2', marginBottom: '6px' }}>{rawFullName}</div>
-                             <div>
-                                <span style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', padding: '3px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: '900' }}>{classNameStr}</span>
-                             </div>
-                          </div>
-
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', border: '2px solid #e2e8f0', borderRadius: '8px', minWidth: '22mm', height: '100%', padding: '4px' }}>
-                             <div style={{ fontSize: '8px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>رقم الجلوس</div>
-                             <div style={{ fontSize: '20px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px' }}>{seatAllocation.seat_number}</div>
-                          </div>
-
-                          <div style={{ width: '22mm', height: '22mm', backgroundColor: '#ffffff', border: '2px solid #d4af37', borderRadius: '8px', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                             <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                          </div>
-                        </div>
-
-                        <div style={{ height: '4px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
-                      </div>
-
+                      
+                      {/* عرض البطاقة الانيقة للمستخدم */}
+                      <TicketCardTemplate isHiddenRef={false} />
                     </div>
                   </div>
               )}
@@ -603,40 +616,9 @@ export default function StudentDashboard() {
                            </button>
                         </div>
 
-                        {/* تصميم البطاقة في الشاشة (نفس التصميم الملكي) */}
-                        <div style={{ width: '85mm', height: '55mm', backgroundColor: '#ffffff', borderRadius: '12px', overflow: 'hidden', border: '2px solid #0f172a', display: 'flex', flexDirection: 'column', position: 'relative', direction: 'rtl', boxSizing: 'border-box', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', flexShrink: 0, margin: '0 auto', zIndex: 10 }}>
-                          <div style={{ background: 'linear-gradient(to left, #0f172a, #1e293b)', borderBottom: '3px solid #d4af37', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                               <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '13px' }}>مدرسة الرفعة النموذجية بنين</div>
-                               <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '9px', marginTop: '2px' }}>بطاقة دخول اختبارات نهاية العام</div>
-                            </div>
-                            <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', border: '1px solid #d4af37', color: '#d4af37', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900' }}>
-                               {seatAllocation.exam_committees?.name}
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', flex: 1, padding: '8px 12px', gap: '10px', alignItems: 'center', backgroundColor: '#f8fafc' }}>
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                               <div style={{ fontSize: '9px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>اسم الطالب</div>
-                               <div style={{ fontSize: '14px', fontWeight: '900', color: '#0f172a', lineHeight: '1.2', marginBottom: '6px' }}>{rawFullName}</div>
-                               <div>
-                                  <span style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', padding: '3px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: '900' }}>{classNameStr}</span>
-                               </div>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', border: '2px solid #e2e8f0', borderRadius: '8px', minWidth: '22mm', height: '100%', padding: '4px' }}>
-                               <div style={{ fontSize: '8px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>رقم الجلوس</div>
-                               <div style={{ fontSize: '20px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px' }}>{seatAllocation.seat_number}</div>
-                            </div>
-
-                            <div style={{ width: '22mm', height: '22mm', backgroundColor: '#ffffff', border: '2px solid #d4af37', borderRadius: '8px', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                               <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            </div>
-                          </div>
-
-                          <div style={{ height: '4px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
-                        </div>
-
+                        {/* عرض البطاقة الانيقة للمستخدم */}
+                        <TicketCardTemplate isHiddenRef={false} />
+                        
                       </div>
                     </div>
                   )}
@@ -1111,40 +1093,7 @@ export default function StudentDashboard() {
 
       {/* 🚀 البطاقة المخفية في الـ DOM لكي يتم رسمها وطباعتها بدقة عالية بعيداً عن ألوان الـ Dark Mode */}
       {seatAllocation && (
-        <div style={{ position: 'fixed', top: '-9999px', left: 0, zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
-           <div ref={printRef} style={{ width: '85mm', height: '55mm', backgroundColor: '#ffffff', borderRadius: '12px', overflow: 'hidden', border: '2px solid #0f172a', display: 'flex', flexDirection: 'column', position: 'relative', direction: 'rtl', boxSizing: 'border-box', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', fontFamily: '"Cairo", sans-serif' }}>
-              <div style={{ background: 'linear-gradient(to left, #0f172a, #1e293b)', borderBottom: '3px solid #d4af37', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                   <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '13px' }}>مدرسة الرفعة النموذجية بنين</div>
-                   <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '9px', marginTop: '2px' }}>بطاقة دخول اختبارات نهاية العام</div>
-                </div>
-                <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', border: '1px solid #d4af37', color: '#d4af37', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '900' }}>
-                   {seatAllocation.exam_committees?.name}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flex: 1, padding: '8px 12px', gap: '10px', alignItems: 'center', backgroundColor: '#f8fafc' }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                   <div style={{ fontSize: '9px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>اسم الطالب</div>
-                   <div style={{ fontSize: '14px', fontWeight: '900', color: '#0f172a', lineHeight: '1.2', marginBottom: '6px' }}>{rawFullName}</div>
-                   <div>
-                      <span style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', padding: '3px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: '900' }}>{classNameStr}</span>
-                   </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', border: '2px solid #e2e8f0', borderRadius: '8px', minWidth: '22mm', height: '100%', padding: '4px' }}>
-                   <div style={{ fontSize: '8px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>رقم الجلوس</div>
-                   <div style={{ fontSize: '20px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px' }}>{seatAllocation.seat_number}</div>
-                </div>
-
-                <div style={{ width: '22mm', height: '22mm', backgroundColor: '#ffffff', border: '2px solid #d4af37', borderRadius: '8px', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                   <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                </div>
-              </div>
-
-              <div style={{ height: '4px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
-           </div>
-        </div>
+        <TicketCardTemplate isHiddenRef={true} />
       )}
 
       {/* نافذة تقديم العذر */}
