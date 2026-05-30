@@ -1893,14 +1893,15 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 8. 🔥 الإحصائية اليومية للمراقبين عبر html2canvas-pro */}
+{/* 8. 🔥 الإحصائية اليومية للمراقبين عبر html2canvas-pro */}
             {printType === 'daily_stats' && (() => {
                 const pages = [];
                 let currentPage = [];
                 let isFirstPage = true;
                 
                 printData.committees.forEach((comm) => {
-                    const limit = isFirstPage ? 6 : 10;
+                    // 🔥 التعديل هنا: 4 لجان فقط في الصفحة الأولى لمنع التداخل
+                    const limit = isFirstPage ? 4 : 10; 
                     if (currentPage.length >= limit) {
                         pages.push(currentPage);
                         currentPage = [];
@@ -1911,82 +1912,84 @@ function ExamCommitteesControl() {
                 if (currentPage.length > 0) pages.push(currentPage);
 
                 return pages.map((chunk, pageIdx) => (
-                  <div key={`ds-stat-${pageIdx}`} className="print-page-wrapper mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', overflow: 'hidden', backgroundColor: '#ffffff', color: '#000000', direction: 'rtl' }}>
+                  <div key={`ds-stat-${pageIdx}`} className="print-page-wrapper mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '30px', boxSizing: 'border-box', overflow: 'hidden', backgroundColor: '#ffffff', color: '#000000', direction: 'rtl' }}>
                      {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
                      
-                     <div style={{ textAlign: 'center', marginBottom: '24px', borderBottom: '3px solid #000000', paddingBottom: '16px', position: 'relative', zIndex: 10 }}>
-                        <h1 style={{ fontSize: '24px', fontWeight: '900', color: '#000000', margin: '0 0 4px 0' }}>وزارة التربية - إدارة التعليم الخاص</h1>
-                        <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#000000', margin: '0 0 12px 0' }}>مدرسة الرفعة النموذجية بنين (م-ث)</h2>
-                        <div style={{ border: '2px solid #000000', display: 'inline-block', padding: '6px 32px' }}>
-                            <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#000000', margin: 0 }}>إحصائية لجان المراقبة اليومية والتوقيعات</h3>
+                     <div style={{ textAlign: 'center', marginBottom: '16px', borderBottom: '3px solid #000000', paddingBottom: '12px', position: 'relative', zIndex: 10 }}>
+                        <h1 style={{ fontSize: '22px', fontWeight: '900', color: '#000000', margin: '0 0 4px 0' }}>وزارة التربية - إدارة التعليم الخاص</h1>
+                        <h2 style={{ fontSize: '18px', fontWeight: '900', color: '#000000', margin: '0 0 10px 0' }}>مدرسة الرفعة النموذجية بنين (م-ث)</h2>
+                        <div style={{ border: '2px solid #000000', display: 'inline-block', padding: '4px 24px' }}>
+                            <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#000000', margin: 0 }}>إحصائية لجان المراقبة اليومية والتوقيعات</h3>
                         </div>
-                        <p style={{ fontSize: '18px', fontWeight: '900', color: '#000000', marginTop: '12px', marginBottom: 0 }}>اليوم الامتحاني: {printData.activeDate}</p>
+                        <p style={{ fontSize: '16px', fontWeight: '900', color: '#000000', marginTop: '10px', marginBottom: 0 }}>اليوم الامتحاني: {printData.activeDate}</p>
                      </div>
 
                      <div style={{ flex: 1, zIndex: 10, position: 'relative', display: 'flex', flexDirection: 'column' }}>
                          {pageIdx === 0 && (
-                           <div style={{ marginBottom: '20px' }}>
-                             <div style={{ border: '2px solid #000000', padding: '16px', marginBottom: '16px' }}>
-                                <h4 style={{ fontWeight: '900', fontSize: '16px', color: '#000000', borderBottom: '1px solid #000000', paddingBottom: '8px', margin: '0 0 12px 0' }}>المواد المختبرة في هذا اليوم:</h4>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                           <div style={{ marginBottom: '16px' }}>
+                             {/* تصغير قسم المواد */}
+                             <div style={{ border: '2px solid #000000', padding: '10px', marginBottom: '10px' }}>
+                                <h4 style={{ fontWeight: '900', fontSize: '14px', color: '#000000', borderBottom: '1px solid #000000', paddingBottom: '6px', margin: '0 0 8px 0' }}>المواد المختبرة في هذا اليوم:</h4>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                    {printData.timetables.filter(t => t.exam_date === printData.activeDate).map((t, idx) => (
-                                      <span key={`sub-p-${idx}`} style={{ border: '1px solid #000000', padding: '6px 12px', fontWeight: '900', fontSize: '14px', color: '#000000' }}>
+                                      <span key={`sub-p-${idx}`} style={{ border: '1px solid #000000', padding: '4px 8px', fontWeight: '900', fontSize: '12px', color: '#000000' }}>
                                          {t.subjects?.name} ({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})
                                       </span>
                                    ))}
                                 </div>
                              </div>
 
-                             <div style={{ border: '2px solid #000000', padding: '16px' }}>
-                                <h4 style={{ fontWeight: '900', fontSize: '16px', color: '#000000', borderBottom: '1px solid #000000', paddingBottom: '8px', margin: '0 0 12px 0' }}>رؤساء اللجان وتوقيع الاستلام:</h4>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                             {/* تصغير قسم الرؤساء */}
+                             <div style={{ border: '2px solid #000000', padding: '10px' }}>
+                                <h4 style={{ fontWeight: '900', fontSize: '14px', color: '#000000', borderBottom: '1px solid #000000', paddingBottom: '6px', margin: '0 0 8px 0' }}>رؤساء اللجان وتوقيع الاستلام:</h4>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                                    {printData.currentHeads.length > 0 ? printData.currentHeads.map((h, i) => (
-                                      <div key={`h-stat-p-${i}`} style={{ border: '1px solid #000000', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: 'calc(50% - 8px)', boxSizing: 'border-box' }}>
+                                      <div key={`h-stat-p-${i}`} style={{ border: '1px solid #000000', padding: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: 'calc(50% - 5px)', boxSizing: 'border-box' }}>
                                          <div>
-                                            <p style={{ fontWeight: '900', fontSize: '16px', color: '#000000', margin: '0 0 4px 0' }}>{getSafeName(h?.users)}</p>
-                                            <p style={{ fontWeight: 'bold', fontSize: '12px', color: '#000000', margin: 0 }}>اللجان: {h?.committees_range}</p>
+                                            <p style={{ fontWeight: '900', fontSize: '14px', color: '#000000', margin: '0 0 2px 0' }}>{getSafeName(h?.users)}</p>
+                                            <p style={{ fontWeight: 'bold', fontSize: '10px', color: '#000000', margin: 0 }}>اللجان: {h?.committees_range}</p>
                                          </div>
                                          <div>
                                             {h?.is_delivered ? (
-                                               <span style={{ fontWeight: '900', fontSize: '12px', color: '#000000', border: '2px solid #000000', padding: '4px 8px' }}>✓ اعتمد إلكترونياً</span>
+                                               <span style={{ fontWeight: '900', fontSize: '11px', color: '#000000', border: '2px solid #000000', padding: '2px 6px' }}>✓ اعتمد إلكترونياً</span>
                                             ) : (
-                                               <span style={{ fontWeight: '900', fontSize: '13px', color: '#000000' }}>التوقيع: ....................</span>
+                                               <span style={{ fontWeight: '900', fontSize: '11px', color: '#000000' }}>التوقيع: ....................</span>
                                             )}
                                          </div>
                                       </div>
-                                   )) : <p style={{ fontWeight: 'bold', fontSize: '14px', color: '#000000', margin: 0 }}>لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
+                                   )) : <p style={{ fontWeight: 'bold', fontSize: '12px', color: '#000000', margin: 0 }}>لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
                                 </div>
                              </div>
                            </div>
                          )}
 
                          <div>
-                            <h4 style={{ fontWeight: '900', fontSize: '18px', color: '#000000', borderBottom: '2px solid #000000', paddingBottom: '8px', margin: '0 0 16px 0' }}>توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignContent: 'start' }}>
+                            <h4 style={{ fontWeight: '900', fontSize: '16px', color: '#000000', borderBottom: '2px solid #000000', paddingBottom: '6px', margin: '0 0 12px 0' }}>توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignContent: 'start' }}>
                                {chunk.map((comm, idx) => {
                                   const commInvigs = printData.dailyInvigs.filter((i: any) => String(i?.committee_id) === String(comm.id));
                                   return (
-                                     <div key={`c-stat-p-${idx}`} style={{ border: '2px solid #000000', padding: '12px', width: 'calc(50% - 8px)', boxSizing: 'border-box' }}>
-                                        <h5 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid #000000', paddingBottom: '8px', margin: '0 0 12px 0', color: '#000000' }}>{comm.name}</h5>
+                                     <div key={`c-stat-p-${idx}`} style={{ border: '2px solid #000000', padding: '10px', width: 'calc(50% - 6px)', boxSizing: 'border-box' }}>
+                                        <h5 style={{ fontWeight: '900', fontSize: '14px', borderBottom: '1px solid #000000', paddingBottom: '6px', margin: '0 0 8px 0', color: '#000000' }}>{comm.name}</h5>
                                         {commInvigs.length > 0 ? (
-                                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                               {commInvigs.map((inv, iIdx) => (
-                                                 <div key={`inv-p-${iIdx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
-                                                    <span style={{ fontWeight: '900', fontSize: '14px', color: '#000000' }}>{getSafeName(inv.users)}</span>
+                                                 <div key={`inv-p-${iIdx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                                                    <span style={{ fontWeight: '900', fontSize: '12px', color: '#000000' }}>{getSafeName(inv.users)}</span>
                                                     <div>
                                                        {inv?.status === 'signed' ? (
-                                                          <span style={{ fontWeight: '900', fontSize: '12px', color: '#000000', border: '1px solid #000000', padding: '2px 6px' }}>✓ وقّع</span>
+                                                          <span style={{ fontWeight: '900', fontSize: '11px', color: '#000000', border: '1px solid #000000', padding: '1px 4px' }}>✓ وقّع</span>
                                                        ) : inv?.status === 'excused' ? (
-                                                          <span style={{ fontWeight: '900', fontSize: '12px', color: '#000000', border: '1px solid #000000', padding: '2px 6px' }}>اعتذر</span>
+                                                          <span style={{ fontWeight: '900', fontSize: '11px', color: '#000000', border: '1px solid #000000', padding: '1px 4px' }}>اعتذر</span>
                                                        ) : (
-                                                          <span style={{ fontWeight: '900', fontSize: '12px', color: '#000000' }}>التوقيع: ..............</span>
+                                                          <span style={{ fontWeight: '900', fontSize: '11px', color: '#000000' }}>التوقيع: ..............</span>
                                                        )}
                                                     </div>
                                                  </div>
                                               ))}
                                            </div>
                                         ) : (
-                                           <p style={{ fontWeight: 'bold', fontSize: '12px', textAlign: 'center', color: '#000000', margin: '12px 0' }}>لا يوجد مراقبون مكلفون</p>
+                                           <p style={{ fontWeight: 'bold', fontSize: '11px', textAlign: 'center', color: '#000000', margin: '8px 0' }}>لا يوجد مراقبون مكلفون</p>
                                         )}
                                      </div>
                                   )
@@ -1995,7 +1998,7 @@ function ExamCommitteesControl() {
                          </div>
                      </div>
                      
-                     <div style={{ marginTop: 'auto', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#000000', paddingTop: '16px' }}>صفحة {pageIdx + 1} من {pages.length}</div>
+                     <div style={{ marginTop: 'auto', textAlign: 'left', fontSize: '11px', fontWeight: 'bold', color: '#000000', paddingTop: '12px' }}>صفحة {pageIdx + 1} من {pages.length}</div>
                   </div>
                 ));
             })()}
