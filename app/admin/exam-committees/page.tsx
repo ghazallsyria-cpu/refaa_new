@@ -1536,24 +1536,80 @@ function ExamCommitteesControl() {
                    </thead>
                    <tbody>
                      {printData.uniqueDates.map((date: string, i: number) => {
-                       const dayExams = printData.timetables.filter(t => t.exam_date === date);
-                       const subjectsStr = dayExams.map(ex => ex.subjects?.name).join(' + ');
+                       const dayExams = printData.timetables.filter((t: any) => t.exam_date === date);
+                       const subjectsStr = dayExams.map((ex: any) => ex.subjects?.name).join(' + ');
+
+                       // 🚀 جلب المراقبين والرئيس المخصصين لهذه اللجنة في هذا اليوم
+                       const dateInvigs = printData.allInvigilators?.filter((inv: any) => inv.exam_date === date) || [];
+                       const invig1 = dateInvigs[0];
+                       const invig2 = dateInvigs[1];
+
+                       const head = printData.allHeads?.find((h: any) =>
+                          h.exam_timetables?.exam_date === date &&
+                          String(h.committees_range || '').includes(printData.committee?.name || '')
+                       );
 
                        return (
                          <tr key={`sig-${i}`} className="border-b-[2px] border-black h-[72px]">
                            <td className="border-l-[3px] border-black px-2 text-center font-bold text-xs">{date}</td>
                            <td className="border-l-[3px] border-black px-2 text-center font-bold text-xs">{subjectsStr || '---'}</td>
+                           
                            <td className="border-l-[3px] border-black px-2 text-center text-xs relative bg-slate-50/30">
-                              <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
-                              <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                              {invig1 ? (
+                                 <>
+                                    <div className="font-black mb-5 text-slate-900">{getSafeName(invig1.users)}</div>
+                                    {invig1.status === 'signed' ? (
+                                       <div className="text-[10px] font-black text-emerald-700 absolute bottom-2 w-full flex justify-center items-center gap-1">
+                                          <CheckCircle2 className="w-3 h-3" /> مُوقّع إلكترونياً
+                                       </div>
+                                    ) : (
+                                       <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                                    )}
+                                 </>
+                              ) : (
+                                 <>
+                                    <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
+                                    <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                                 </>
+                              )}
                            </td>
                            <td className="border-l-[3px] border-black px-2 text-center text-xs relative bg-slate-50/30">
-                              <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
-                              <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                              {invig2 ? (
+                                 <>
+                                    <div className="font-black mb-5 text-slate-900">{getSafeName(invig2.users)}</div>
+                                    {invig2.status === 'signed' ? (
+                                       <div className="text-[10px] font-black text-emerald-700 absolute bottom-2 w-full flex justify-center items-center gap-1">
+                                          <CheckCircle2 className="w-3 h-3" /> مُوقّع إلكترونياً
+                                       </div>
+                                    ) : (
+                                       <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                                    )}
+                                 </>
+                              ) : (
+                                 <>
+                                    <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
+                                    <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                                 </>
+                              )}
                            </td>
                            <td className="px-2 text-center text-xs relative bg-slate-50/30">
-                              <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
-                              <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                              {head ? (
+                                 <>
+                                    <div className="font-black mb-5 text-slate-900">{getSafeName(head.users)}</div>
+                                    {head.is_delivered ? (
+                                       <div className="text-[10px] font-black text-emerald-700 absolute bottom-2 w-full flex justify-center items-center gap-1">
+                                          <CheckCircle2 className="w-3 h-3" /> مُوقّع إلكترونياً
+                                       </div>
+                                    ) : (
+                                       <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                                    )}
+                                 </>
+                              ) : (
+                                 <>
+                                    <div className="font-bold mb-5 text-slate-400">الاسم: ..........................</div>
+                                    <div className="text-[10px] text-slate-400 absolute bottom-2 w-full text-center">التوقيع: .....................</div>
+                                 </>
+                              )}
                            </td>
                          </tr>
                        )
