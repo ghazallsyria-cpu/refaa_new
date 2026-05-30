@@ -351,7 +351,6 @@ function ExamCommitteesControl() {
     } catch (e) { alert('حدث خطأ أثناء الحذف'); } finally { setIsLoading(false); }
   };
 
-  // 🌟 دالة إعادة التسلسل المتطورة (لحل مشكلة عشوائية الأرقام عند النقل اليدوي للجان الخاصة وغيرها)
   const resequenceSeatNumbers = async () => {
     try {
       const { data: allocs } = await supabase.from('student_seat_allocations')
@@ -362,7 +361,6 @@ function ExamCommitteesControl() {
 
       const clean = (name: string) => name.replace(/^[\s\.\-\_]+/, '').replace(/[أإآ]/g, 'ا').trim();
       
-      // الترتيب حسب اللجنة أولاً (لكي لا تحدث فجوات داخل اللجان) ثم أبجدياً
       const sortLogic = (a: any, b: any) => {
          const numA = parseInt(String(a.commName).replace(/\D/g, '')) || 999;
          const numB = parseInt(String(b.commName).replace(/\D/g, '')) || 999;
@@ -773,6 +771,28 @@ function ExamCommitteesControl() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo pb-24" dir="rtl">
+      
+      {/* 🖨️ أكواد الـ CSS الخاصة بطباعة (إحصائية اليوم) فقط من المتصفح */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body * { visibility: hidden; }
+          .print-daily-stats, .print-daily-stats * { visibility: visible; }
+          .print-daily-stats { 
+             position: absolute !important; 
+             left: 0 !important; 
+             top: 0 !important; 
+             width: 100% !important; 
+             padding: 20px !important; 
+             background: white !important; 
+          }
+          * { 
+             -webkit-print-color-adjust: exact !important; 
+             print-color-adjust: exact !important; 
+          }
+          .print\\:hidden { display: none !important; }
+        }
+      `}} />
+
       <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
 
       { (isEngineLoading || isPrinting || isAutoAssigning) && (
@@ -794,7 +814,7 @@ function ExamCommitteesControl() {
       </AnimatePresence>
 
       <div className="max-w-7xl mx-auto space-y-6 relative">
-        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200">
+        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 print:hidden">
           
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
             <div>
@@ -943,70 +963,6 @@ function ExamCommitteesControl() {
             </div>
           )}
 
-          {activeTab === 'daily_stats' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-               <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8">
-                  <div className="flex justify-between items-center mb-8 border-b-[3px] border-fuchsia-100 pb-4">
-                     <div>
-                        <h3 className="text-2xl font-black text-fuchsia-800 flex items-center gap-2 mb-2"><FileText className="w-7 h-7 text-fuchsia-600"/> إحصائية لجان المراقبة اليومية</h3>
-                        <p className="text-sm font-bold text-fuchsia-600">تقرير مفصل ليوم: {activeExamDate}</p>
-                     </div>
-                     <button onClick={() => window.print()} className="px-4 py-2 bg-fuchsia-600 text-white font-black rounded-xl hover:bg-fuchsia-700 shadow-sm print:hidden">طباعة الإحصائية</button>
-                  </div>
-                  <div className="mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                     <h4 className="text-sm font-black text-slate-800 mb-3 border-b border-slate-200 pb-2">المواد المختبرة في هذا اليوم:</h4>
-                     <div className="flex flex-wrap gap-2">
-                        {timetables.filter(t => t.exam_date === activeExamDate).map((t, idx) => (
-                           <span key={`sub-${idx}`} className="bg-white border border-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm">
-                              {t.subjects?.name} <span className="text-indigo-500 font-black">({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})</span>
-                           </span>
-                        ))}
-                     </div>
-                  </div>
-                  <div className="mb-6 bg-amber-50 p-5 rounded-2xl border border-amber-200">
-                     <h4 className="text-sm font-black text-amber-900 mb-3 border-b border-amber-200/50 pb-2 flex items-center gap-2"><Crown className="w-4 h-4"/> رؤساء اللجان لهذا اليوم:</h4>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {currentHeads.length > 0 ? currentHeads.map((h, i) => (
-                           <div key={`h-stat-${i}`} className="bg-white p-3 rounded-xl border border-amber-100 flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0 overflow-hidden">
-                                 {h?.users?.avatar_url ? <img src={h.users.avatar_url} className="w-full h-full object-cover"/> : <Crown className="w-5 h-5 text-amber-600"/>}
-                              </div>
-                              <div>
-                                 <p className="font-black text-sm text-slate-800">{getSafeName(h?.users)}</p>
-                                 <p className="text-[10px] font-bold text-amber-600 mt-1">مسؤول عن: {h?.committees_range}</p>
-                              </div>
-                           </div>
-                        )) : <p className="text-xs font-bold text-amber-600">لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
-                     </div>
-                  </div>
-                  <div className="space-y-4">
-                     <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-200 pb-2">توزيع المراقبين على اللجان:</h4>
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {committees.map((comm, idx) => {
-                           const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(comm.id) && i.exam_date === activeExamDate);
-                           return (
-                              <div key={`c-stat-${idx}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                                 <h5 className="font-black text-indigo-700 border-b border-slate-100 pb-2 mb-3">{comm.name}</h5>
-                                 {commInvigs.length > 0 ? (
-                                    <ul className="space-y-2">
-                                       {commInvigs.map((inv, iIdx) => (
-                                          <li key={`inv-${iIdx}`} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                             <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0"/> {getSafeName(inv.users)}
-                                          </li>
-                                       ))}
-                                    </ul>
-                                 ) : (
-                                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-lg">لا يوجد مراقبون</p>
-                                 )}
-                              </div>
-                           )
-                        })}
-                     </div>
-                  </div>
-               </div>
-            </div>
-          )}
-
           {activeTab === 'heads_radar' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6">
@@ -1117,7 +1073,7 @@ function ExamCommitteesControl() {
           )}
 
           {activeTab === 'management' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4">
+            <div className="animate-in fade-in slide-in-from-bottom-4 print:hidden">
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-emerald-600 mb-1">عاشر</p><p className="text-2xl font-black text-emerald-800">{Number(studentStats?.g10 || 0)}</p></div>
@@ -1235,12 +1191,102 @@ function ExamCommitteesControl() {
               )}
             </div>
           )}
+
+          {/* 🔥 التحديث العبقري: تبويب إحصائية اليوم للطباعة مباشرة */}
+          {activeTab === 'daily_stats' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 print-daily-stats relative z-10 bg-white">
+               <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 print:border-none print:shadow-none print:p-0">
+                  <div className="flex justify-between items-center mb-8 border-b-[3px] border-fuchsia-100 pb-4 print:border-black print:mb-4">
+                     <div className="print:w-full print:text-center">
+                        <h3 className="text-2xl font-black text-fuchsia-800 flex items-center gap-2 mb-2 print:justify-center print:text-black print:text-3xl"><FileText className="w-7 h-7 text-fuchsia-600 print:hidden"/> كشف التكليفات والتوقيعات اليومية للمراقبين</h3>
+                        <p className="text-sm font-bold text-fuchsia-600 print:text-black print:text-lg">اليوم الامتحاني: {activeExamDate}</p>
+                     </div>
+                     <button onClick={() => window.print()} className="px-4 py-2 bg-fuchsia-600 text-white font-black rounded-xl hover:bg-fuchsia-700 shadow-sm print:hidden">طباعة الكشف</button>
+                  </div>
+                  
+                  <div className="mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200 print:bg-transparent print:border-2 print:border-slate-800 print:p-4 break-inside-avoid">
+                     <h4 className="text-sm font-black text-slate-800 mb-3 border-b border-slate-200 pb-2 print:border-slate-800 print:text-black print:text-base">المواد المختبرة في هذا اليوم:</h4>
+                     <div className="flex flex-wrap gap-2">
+                        {timetables.filter(t => t.exam_date === activeExamDate).map((t, idx) => (
+                           <span key={`sub-${idx}`} className="bg-white border border-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm print:border-slate-400 print:text-black">
+                              {t.subjects?.name} <span className="text-indigo-500 font-black print:text-black">({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})</span>
+                           </span>
+                        ))}
+                     </div>
+                  </div>
+
+                  <div className="mb-6 bg-amber-50 p-5 rounded-2xl border border-amber-200 print:bg-transparent print:border-2 print:border-slate-800 print:p-4 break-inside-avoid">
+                     <h4 className="text-sm font-black text-amber-900 mb-3 border-b border-amber-200/50 pb-2 flex items-center gap-2 print:border-slate-800 print:text-black print:text-base"><Crown className="w-4 h-4 print:hidden"/> رؤساء اللجان وتوقيع الاستلام:</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 print:grid-cols-2 print:gap-4">
+                        {currentHeads.length > 0 ? currentHeads.map((h, i) => (
+                           <div key={`h-stat-${i}`} className="bg-white p-4 rounded-xl border border-amber-100 flex items-center justify-between print:border-slate-400">
+                              <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0 overflow-hidden print:hidden">
+                                    {h?.users?.avatar_url ? <img src={h.users.avatar_url} className="w-full h-full object-cover"/> : <Crown className="w-5 h-5 text-amber-600"/>}
+                                 </div>
+                                 <div>
+                                    <p className="font-black text-sm text-slate-800 print:text-black print:text-base">{getSafeName(h?.users)}</p>
+                                    <p className="text-[10px] font-bold text-amber-600 mt-1 print:text-slate-600">نطاق اللجان: {h?.committees_range}</p>
+                                 </div>
+                              </div>
+                              <div className="shrink-0 text-left pl-2">
+                                 {h?.is_delivered ? (
+                                    <span className="text-emerald-600 font-black text-xs flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md print:bg-transparent print:border print:border-emerald-200"><CheckCircle2 className="w-4 h-4"/> اعتمد إلكترونياً</span>
+                                 ) : (
+                                    <span className="text-slate-400 font-bold text-xs print:text-black whitespace-nowrap">التوقيع: ....................</span>
+                                 )}
+                              </div>
+                           </div>
+                        )) : <p className="text-xs font-bold text-amber-600 print:text-black">لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
+                     </div>
+                  </div>
+
+                  <div className="space-y-4 print:mt-8">
+                     <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-200 pb-2 print:border-slate-800 print:text-black">توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2 print:gap-6">
+                        {committees.map((comm, idx) => {
+                           const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(comm.id) && i.exam_date === activeExamDate);
+                           return (
+                              <div key={`c-stat-${idx}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm print:border-2 print:border-slate-800 print:shadow-none break-inside-avoid">
+                                 <h5 className="font-black text-indigo-700 border-b border-slate-100 pb-2 mb-3 print:text-black print:border-slate-300 print:text-lg">{comm.name}</h5>
+                                 {commInvigs.length > 0 ? (
+                                    <ul className="space-y-3">
+                                       {commInvigs.map((inv, iIdx) => (
+                                          <li key={`inv-${iIdx}`} className="flex items-center justify-between text-sm font-bold text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 print:bg-transparent print:border-none print:p-0">
+                                             <div className="flex items-center gap-2">
+                                                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 print:hidden"/> 
+                                                <span className="print:text-base print:text-black">{getSafeName(inv.users)}</span>
+                                             </div>
+                                             <div className="shrink-0 text-left">
+                                                {inv?.status === 'signed' ? (
+                                                   <span className="text-emerald-600 font-black text-[10px] sm:text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4"/> وقّع إلكترونياً</span>
+                                                ) : inv?.status === 'excused' ? (
+                                                   <span className="text-rose-500 font-black text-[10px] sm:text-xs">اعتذر عن المراقبة</span>
+                                                ) : (
+                                                   <span className="text-slate-400 font-bold text-[10px] sm:text-xs print:text-black whitespace-nowrap">التوقيع: .................</span>
+                                                )}
+                                             </div>
+                                          </li>
+                                       ))}
+                                    </ul>
+                                 ) : (
+                                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-lg print:bg-transparent print:text-black">لا يوجد مراقبون</p>
+                                 )}
+                              </div>
+                           )
+                        })}
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
         </div>
       </div>
 
       {/* النوافذ المنبثقة */}
       {isBuilderModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-emerald-600"/> هندسة اللجان</h3>
             <div className="space-y-4">
@@ -1255,8 +1301,8 @@ function ExamCommitteesControl() {
       <AnimatePresence>
         {isExemptionsModalOpen && (
            <>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsExemptionsModalOpen(false)} />
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 print:hidden" onClick={() => setIsExemptionsModalOpen(false)} />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col print:hidden">
                  <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين</h3>
                     <button type="button" onClick={() => setIsExemptionsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full transition-colors"><X className="w-5 h-5"/></button>
@@ -1291,7 +1337,7 @@ function ExamCommitteesControl() {
       </AnimatePresence>
 
       {isClassPrintModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsClassPrintModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsClassPrintModalOpen(false)}>
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><Layers className="w-6 h-6 text-emerald-600"/> طباعة بطاقات الفصول</h3>
@@ -1315,7 +1361,7 @@ function ExamCommitteesControl() {
       )}
 
       {isViewModalOpen && selectedCommittee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md print:hidden" onClick={() => setIsViewModalOpen(false)}>
            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
                  <div>
@@ -1392,7 +1438,7 @@ function ExamCommitteesControl() {
 
       <AnimatePresence>
         {isCommitteeModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsCommitteeModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'تعديل بيانات اللجنة' : 'إضافة لجنة جديدة يدويّاً'}</h3>
               <div className="space-y-4 mb-6">
@@ -1422,7 +1468,7 @@ function ExamCommitteesControl() {
 
       <AnimatePresence>
         {isAssignModalOpen && selectedCommittee && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsAssignModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2"><UserPlus className="w-6 h-6 text-emerald-600"/> تعويض / تكليف مراقب</h3>
               <p className="text-sm font-bold text-slate-500 mb-6">لجنة: <span className="text-indigo-600">{selectedCommittee.name}</span> | التاريخ: <span className="text-indigo-600">{activeExamDate}</span></p>
@@ -1448,7 +1494,7 @@ function ExamCommitteesControl() {
 
       <AnimatePresence>
         {isReadExcuseModalOpen && selectedExcuseData && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsReadExcuseModalOpen(false)}>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsReadExcuseModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4 border-b border-rose-100 pb-4">
                  <h3 className="text-xl font-black text-rose-600 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> عذر عن المراقبة</h3>
@@ -1473,7 +1519,7 @@ function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
-      {/* 🖨️ قوالب الطباعة المعالجة لدعم اللغة العربية والـ QR بدقة تامة */}
+      {/* 🖨️ قوالب الطباعة لمعالجة הPDF المخصصة الأخرى (لم يتم لمسها) */}
       {printData && (
         <div style={{ position: 'fixed', top: '-9999px', left: 0, zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl" style={{ fontFamily: '"Cairo", sans-serif', textRendering: 'optimizeLegibility' }}>
@@ -1539,7 +1585,6 @@ function ExamCommitteesControl() {
                        const dayExams = printData.timetables.filter((t: any) => t.exam_date === date);
                        const subjectsStr = dayExams.map((ex: any) => ex.subjects?.name).join(' + ');
 
-                       // 🚀 جلب المراقبين والرئيس المخصصين لهذه اللجنة في هذا اليوم
                        const dateInvigs = printData.allInvigilators?.filter((inv: any) => inv.exam_date === date) || [];
                        const invig1 = dateInvigs[0];
                        const invig2 = dateInvigs[1];
