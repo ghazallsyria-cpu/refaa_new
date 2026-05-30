@@ -105,7 +105,7 @@ function ExamCommitteesControl() {
 
   const [isPrinting, setIsPrinting] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
-  const [printType, setPrintType] = useState<'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids' | 'signatures_sheet' | 'custom_ids' | null>(null);
+  const [printType, setPrintType] = useState<'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids' | 'signatures_sheet' | 'custom_ids' | 'daily_stats' | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
@@ -652,7 +652,7 @@ function ExamCommitteesControl() {
      // Stub for compatibility
   };
 
-  const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids' | 'signatures_sheet' | 'custom_ids', classNameToPrint?: string) => {
+  const printDocument = async (committeeId: string, type: 'door_sheet' | 'desk_cards' | 'invigilator_ids' | 'class_cards' | 'head_ids' | 'signatures_sheet' | 'custom_ids' | 'daily_stats', classNameToPrint?: string) => {
     setIsPrinting(true);
     try {
       let finalDataToPrint = [];
@@ -692,6 +692,10 @@ function ExamCommitteesControl() {
         alert('لا يوجد رؤساء لطباعة هوياتهم!'); setIsPrinting(false); return;
       }
 
+      if (type === 'daily_stats' && !activeExamDate) {
+        alert('الرجاء تحديد اليوم الامتحاني أولاً.'); setIsPrinting(false); return;
+      }
+
       setPrintData({ 
         students: finalDataToPrint, 
         committee, 
@@ -702,7 +706,12 @@ function ExamCommitteesControl() {
         allHeads: allHeads,
         timetables: timetables,
         uniqueDates: uniqueExamDates,
-        customIds: customIdsList
+        customIds: customIdsList,
+        // 🔥 بيانات الإحصائية اليومية
+        activeDate: activeExamDate,
+        currentHeads: currentHeads,
+        committees: committees,
+        dailyInvigs: invigilators.filter(i => i.exam_date === activeExamDate)
       }); 
       
       setPrintType(type);
@@ -771,28 +780,6 @@ function ExamCommitteesControl() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-cairo pb-24" dir="rtl">
-      
-      {/* 🖨️ أكواد الـ CSS الخاصة بطباعة (إحصائية اليوم) فقط من المتصفح */}
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          body * { visibility: hidden; }
-          .print-daily-stats, .print-daily-stats * { visibility: visible; }
-          .print-daily-stats { 
-             position: absolute !important; 
-             left: 0 !important; 
-             top: 0 !important; 
-             width: 100% !important; 
-             padding: 20px !important; 
-             background: white !important; 
-          }
-          * { 
-             -webkit-print-color-adjust: exact !important; 
-             print-color-adjust: exact !important; 
-          }
-          .print\\:hidden { display: none !important; }
-        }
-      `}} />
-
       <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
 
       { (isEngineLoading || isPrinting || isAutoAssigning) && (
@@ -814,7 +801,7 @@ function ExamCommitteesControl() {
       </AnimatePresence>
 
       <div className="max-w-7xl mx-auto space-y-6 relative">
-        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 print:hidden">
+        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200">
           
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
             <div>
@@ -1073,7 +1060,7 @@ function ExamCommitteesControl() {
           )}
 
           {activeTab === 'management' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 print:hidden">
+            <div className="animate-in fade-in slide-in-from-bottom-4">
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-col justify-center items-center text-center"><p className="text-xs font-bold text-emerald-600 mb-1">عاشر</p><p className="text-2xl font-black text-emerald-800">{Number(studentStats?.g10 || 0)}</p></div>
@@ -1192,70 +1179,70 @@ function ExamCommitteesControl() {
             </div>
           )}
 
-          {/* 🔥 التحديث العبقري: تبويب إحصائية اليوم للطباعة مباشرة */}
+          {/* 🔥 التحديث العبقري: تبويب إحصائية اليوم للطباعة بالـ PDF */}
           {activeTab === 'daily_stats' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 print-daily-stats relative z-10 bg-white">
-               <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 print:border-none print:shadow-none print:p-0">
-                  <div className="flex justify-between items-center mb-8 border-b-[3px] border-fuchsia-100 pb-4 print:border-black print:mb-4">
-                     <div className="print:w-full print:text-center">
-                        <h3 className="text-2xl font-black text-fuchsia-800 flex items-center gap-2 mb-2 print:justify-center print:text-black print:text-3xl"><FileText className="w-7 h-7 text-fuchsia-600 print:hidden"/> كشف التكليفات والتوقيعات اليومية للمراقبين</h3>
-                        <p className="text-sm font-bold text-fuchsia-600 print:text-black print:text-lg">اليوم الامتحاني: {activeExamDate}</p>
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+               <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8">
+                  <div className="flex justify-between items-center mb-8 border-b-[3px] border-fuchsia-100 pb-4">
+                     <div>
+                        <h3 className="text-2xl font-black text-fuchsia-800 flex items-center gap-2 mb-2"><FileText className="w-7 h-7 text-fuchsia-600"/> إحصائية لجان المراقبة اليومية</h3>
+                        <p className="text-sm font-bold text-fuchsia-600">تقرير مفصل ليوم: {activeExamDate}</p>
                      </div>
-                     <button onClick={() => window.print()} className="px-4 py-2 bg-fuchsia-600 text-white font-black rounded-xl hover:bg-fuchsia-700 shadow-sm print:hidden">طباعة الكشف</button>
+                     <button onClick={() => printDocument('', 'daily_stats')} className="px-4 py-2 bg-fuchsia-600 text-white font-black rounded-xl hover:bg-fuchsia-700 shadow-sm flex items-center gap-2"><PrinterIcon className="w-4 h-4"/> طباعة الكشف (PDF)</button>
                   </div>
                   
-                  <div className="mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200 print:bg-transparent print:border-2 print:border-slate-800 print:p-4 break-inside-avoid">
-                     <h4 className="text-sm font-black text-slate-800 mb-3 border-b border-slate-200 pb-2 print:border-slate-800 print:text-black print:text-base">المواد المختبرة في هذا اليوم:</h4>
+                  <div className="mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                     <h4 className="text-sm font-black text-slate-800 mb-3 border-b border-slate-200 pb-2">المواد المختبرة في هذا اليوم:</h4>
                      <div className="flex flex-wrap gap-2">
                         {timetables.filter(t => t.exam_date === activeExamDate).map((t, idx) => (
-                           <span key={`sub-${idx}`} className="bg-white border border-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm print:border-slate-400 print:text-black">
-                              {t.subjects?.name} <span className="text-indigo-500 font-black print:text-black">({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})</span>
+                           <span key={`sub-${idx}`} className="bg-white border border-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm">
+                              {t.subjects?.name} <span className="text-indigo-500 font-black">({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})</span>
                            </span>
                         ))}
                      </div>
                   </div>
 
-                  <div className="mb-6 bg-amber-50 p-5 rounded-2xl border border-amber-200 print:bg-transparent print:border-2 print:border-slate-800 print:p-4 break-inside-avoid">
-                     <h4 className="text-sm font-black text-amber-900 mb-3 border-b border-amber-200/50 pb-2 flex items-center gap-2 print:border-slate-800 print:text-black print:text-base"><Crown className="w-4 h-4 print:hidden"/> رؤساء اللجان وتوقيع الاستلام:</h4>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 print:grid-cols-2 print:gap-4">
+                  <div className="mb-6 bg-amber-50 p-5 rounded-2xl border border-amber-200">
+                     <h4 className="text-sm font-black text-amber-900 mb-3 border-b border-amber-200/50 pb-2 flex items-center gap-2"><Crown className="w-4 h-4"/> رؤساء اللجان وتوقيع الاستلام:</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {currentHeads.length > 0 ? currentHeads.map((h, i) => (
-                           <div key={`h-stat-${i}`} className="bg-white p-4 rounded-xl border border-amber-100 flex items-center justify-between print:border-slate-400">
+                           <div key={`h-stat-${i}`} className="bg-white p-4 rounded-xl border border-amber-100 flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                 <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0 overflow-hidden print:hidden">
+                                 <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0 overflow-hidden">
                                     {h?.users?.avatar_url ? <img src={h.users.avatar_url} className="w-full h-full object-cover"/> : <Crown className="w-5 h-5 text-amber-600"/>}
                                  </div>
                                  <div>
-                                    <p className="font-black text-sm text-slate-800 print:text-black print:text-base">{getSafeName(h?.users)}</p>
-                                    <p className="text-[10px] font-bold text-amber-600 mt-1 print:text-slate-600">نطاق اللجان: {h?.committees_range}</p>
+                                    <p className="font-black text-sm text-slate-800">{getSafeName(h?.users)}</p>
+                                    <p className="text-[10px] font-bold text-amber-600 mt-1">نطاق اللجان: {h?.committees_range}</p>
                                  </div>
                               </div>
                               <div className="shrink-0 text-left pl-2">
                                  {h?.is_delivered ? (
-                                    <span className="text-emerald-600 font-black text-xs flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md print:bg-transparent print:border print:border-emerald-200"><CheckCircle2 className="w-4 h-4"/> اعتمد إلكترونياً</span>
+                                    <span className="text-emerald-600 font-black text-xs flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md"><CheckCircle2 className="w-4 h-4"/> اعتمد إلكترونياً</span>
                                  ) : (
-                                    <span className="text-slate-400 font-bold text-xs print:text-black whitespace-nowrap">التوقيع: ....................</span>
+                                    <span className="text-slate-400 font-bold text-xs whitespace-nowrap">التوقيع: ....................</span>
                                  )}
                               </div>
                            </div>
-                        )) : <p className="text-xs font-bold text-amber-600 print:text-black">لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
+                        )) : <p className="text-xs font-bold text-amber-600">لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
                      </div>
                   </div>
 
-                  <div className="space-y-4 print:mt-8">
-                     <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-200 pb-2 print:border-slate-800 print:text-black">توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2 print:gap-6">
+                  <div className="space-y-4">
+                     <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-200 pb-2">توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {committees.map((comm, idx) => {
                            const commInvigs = invigilators.filter(i => String(i?.committee_id) === String(comm.id) && i.exam_date === activeExamDate);
                            return (
-                              <div key={`c-stat-${idx}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm print:border-2 print:border-slate-800 print:shadow-none break-inside-avoid">
-                                 <h5 className="font-black text-indigo-700 border-b border-slate-100 pb-2 mb-3 print:text-black print:border-slate-300 print:text-lg">{comm.name}</h5>
+                              <div key={`c-stat-${idx}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                 <h5 className="font-black text-indigo-700 border-b border-slate-100 pb-2 mb-3">{comm.name}</h5>
                                  {commInvigs.length > 0 ? (
                                     <ul className="space-y-3">
                                        {commInvigs.map((inv, iIdx) => (
-                                          <li key={`inv-${iIdx}`} className="flex items-center justify-between text-sm font-bold text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 print:bg-transparent print:border-none print:p-0">
+                                          <li key={`inv-${iIdx}`} className="flex items-center justify-between text-sm font-bold text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
                                              <div className="flex items-center gap-2">
-                                                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 print:hidden"/> 
-                                                <span className="print:text-base print:text-black">{getSafeName(inv.users)}</span>
+                                                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0"/> 
+                                                <span>{getSafeName(inv.users)}</span>
                                              </div>
                                              <div className="shrink-0 text-left">
                                                 {inv?.status === 'signed' ? (
@@ -1263,14 +1250,14 @@ function ExamCommitteesControl() {
                                                 ) : inv?.status === 'excused' ? (
                                                    <span className="text-rose-500 font-black text-[10px] sm:text-xs">اعتذر عن المراقبة</span>
                                                 ) : (
-                                                   <span className="text-slate-400 font-bold text-[10px] sm:text-xs print:text-black whitespace-nowrap">التوقيع: .................</span>
+                                                   <span className="text-slate-400 font-bold text-[10px] sm:text-xs whitespace-nowrap">التوقيع: .................</span>
                                                 )}
                                              </div>
                                           </li>
                                        ))}
                                     </ul>
                                  ) : (
-                                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-lg print:bg-transparent print:text-black">لا يوجد مراقبون</p>
+                                    <p className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-lg">لا يوجد مراقبون</p>
                                  )}
                               </div>
                            )
@@ -1286,7 +1273,7 @@ function ExamCommitteesControl() {
 
       {/* النوافذ المنبثقة */}
       {isBuilderModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-emerald-600"/> هندسة اللجان</h3>
             <div className="space-y-4">
@@ -1301,8 +1288,8 @@ function ExamCommitteesControl() {
       <AnimatePresence>
         {isExemptionsModalOpen && (
            <>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 print:hidden" onClick={() => setIsExemptionsModalOpen(false)} />
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col print:hidden">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsExemptionsModalOpen(false)} />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95%] max-w-lg bg-white rounded-3xl shadow-2xl z-50 p-6 max-h-[90vh] overflow-y-hidden flex flex-col">
                  <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-4">
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><UserMinus className="w-6 h-6 text-rose-500"/> إدارة إعفاءات المعلمين</h3>
                     <button type="button" onClick={() => setIsExemptionsModalOpen(false)} className="p-2 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-full transition-colors"><X className="w-5 h-5"/></button>
@@ -1337,7 +1324,7 @@ function ExamCommitteesControl() {
       </AnimatePresence>
 
       {isClassPrintModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsClassPrintModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsClassPrintModalOpen(false)}>
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><Layers className="w-6 h-6 text-emerald-600"/> طباعة بطاقات الفصول</h3>
@@ -1361,7 +1348,7 @@ function ExamCommitteesControl() {
       )}
 
       {isViewModalOpen && selectedCommittee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md print:hidden" onClick={() => setIsViewModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)}>
            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-6 sm:p-8 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 shrink-0">
                  <div>
@@ -1438,7 +1425,7 @@ function ExamCommitteesControl() {
 
       <AnimatePresence>
         {isCommitteeModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsCommitteeModalOpen(false)}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCommitteeModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Settings className="w-6 h-6 text-indigo-600"/> {editCommitteeData.id ? 'تعديل بيانات اللجنة' : 'إضافة لجنة جديدة يدويّاً'}</h3>
               <div className="space-y-4 mb-6">
@@ -1468,7 +1455,7 @@ function ExamCommitteesControl() {
 
       <AnimatePresence>
         {isAssignModalOpen && selectedCommittee && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsAssignModalOpen(false)}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsAssignModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2"><UserPlus className="w-6 h-6 text-emerald-600"/> تعويض / تكليف مراقب</h3>
               <p className="text-sm font-bold text-slate-500 mb-6">لجنة: <span className="text-indigo-600">{selectedCommittee.name}</span> | التاريخ: <span className="text-indigo-600">{activeExamDate}</span></p>
@@ -1494,7 +1481,7 @@ function ExamCommitteesControl() {
 
       <AnimatePresence>
         {isReadExcuseModalOpen && selectedExcuseData && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" onClick={() => setIsReadExcuseModalOpen(false)}>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsReadExcuseModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4 border-b border-rose-100 pb-4">
                  <h3 className="text-xl font-black text-rose-600 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> عذر عن المراقبة</h3>
@@ -1519,11 +1506,12 @@ function ExamCommitteesControl() {
         )}
       </AnimatePresence>
 
-      {/* 🖨️ قوالب الطباعة لمعالجة הPDF المخصصة الأخرى (لم يتم لمسها) */}
+      {/* 🖨️ قوالب الطباعة (تشمل جميع القوالب السابقة + القالب الجديد للإحصائية اليومية) */}
       {printData && (
         <div style={{ position: 'fixed', top: '-9999px', left: 0, zIndex: -9999, opacity: 1, pointerEvents: 'none' }}>
           <div ref={printRef} className="flex flex-col bg-white" dir="rtl" style={{ fontFamily: '"Cairo", sans-serif', textRendering: 'optimizeLegibility' }}>
             
+            {/* 1. طباعة كشف الطلاب (Door Sheet) */}
             {printType === 'door_sheet' && chunkArray(printData.students, 13).map((chunk, pageIdx, chunksArr) => (
               <div key={`ds-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
@@ -1561,6 +1549,7 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 2. طباعة كشف التوقيعات الخاص بلجنة محددة */}
             {printType === 'signatures_sheet' && (
               <div className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
@@ -1665,6 +1654,7 @@ function ExamCommitteesControl() {
               </div>
             )}
 
+            {/* 3. طباعة بطاقات الفصول المجمعة */}
             {printType === 'class_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc2-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start relative" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
@@ -1708,6 +1698,7 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 4. طباعة ملصقات الطاولات */}
             {printType === 'desk_cards' && chunkArray(printData.students, 8).map((chunk, pageIdx) => (
               <div key={`pc3-${pageIdx}`} className="print-page-wrapper bg-white mx-auto p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start relative" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
@@ -1750,6 +1741,7 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 5. طباعة هويات المراقبين */}
             {printType === 'invigilator_ids' && chunkArray(printData.invigilators, 6).map((chunk, pageIdx) => (
               <div key={`p-inv-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
@@ -1795,6 +1787,7 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 6. طباعة هويات رؤساء اللجان */}
             {printType === 'head_ids' && chunkArray(printData.heads, 6).map((chunk, pageIdx) => (
               <div key={`p-head-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative grid grid-cols-2" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always', gap: '30px 24px', alignContent: 'start' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
@@ -1840,6 +1833,7 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
+            {/* 7. طباعة هويات مخصصة */}
             {printType === 'custom_ids' && chunkArray(printData.customIds, 6).map((chunk, pageIdx) => (
               <div key={`p-cstm-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative p-10 grid grid-cols-2 gap-x-6 gap-y-8 content-start" style={{ width: '794px', height: '1122px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
@@ -1874,6 +1868,92 @@ function ExamCommitteesControl() {
                        </div>
                     )
                  })}
+              </div>
+            ))}
+
+            {/* 🔥 التحديث المدمج: طباعة الكشف الشامل اليومي للمراقبين عبر html2canvas-pro */}
+            {printType === 'daily_stats' && chunkArray(printData.committees, 12).map((chunk, pageIdx, chunksArr) => (
+              <div key={`ds-stat-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                 {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
+                 
+                 <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
+                    <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
+                    <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
+                    <h3 className="text-2xl font-black text-black mt-3 border-2 border-black inline-block px-8 py-1.5 bg-slate-100 rounded-2xl">إحصائية لجان المراقبة اليومية والتوقيعات</h3>
+                    <p className="text-lg font-black text-black mt-3">اليوم الامتحاني: {printData.activeDate}</p>
+                 </div>
+
+                 {pageIdx === 0 && (
+                   <>
+                     <div style={{ border: '2px solid black', borderRadius: '12px', padding: '16px', marginBottom: '20px', zIndex: 10, position: 'relative' }}>
+                        <h4 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid black', paddingBottom: '8px', marginBottom: '12px' }}>المواد المختبرة في هذا اليوم:</h4>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                           {printData.timetables.filter(t => t.exam_date === printData.activeDate).map((t, idx) => (
+                              <span key={`sub-p-${idx}`} style={{ border: '1px solid black', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px' }}>
+                                 {t.subjects?.name} ({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})
+                              </span>
+                           ))}
+                        </div>
+                     </div>
+
+                     <div style={{ border: '2px solid black', borderRadius: '12px', padding: '16px', marginBottom: '20px', zIndex: 10, position: 'relative' }}>
+                        <h4 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid black', paddingBottom: '8px', marginBottom: '12px' }}>رؤساء اللجان وتوقيع الاستلام:</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                           {printData.currentHeads.length > 0 ? printData.currentHeads.map((h, i) => (
+                              <div key={`h-stat-p-${i}`} style={{ border: '1px solid black', borderRadius: '8px', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                 <div>
+                                    <p style={{ fontWeight: '900', fontSize: '16px' }}>{getSafeName(h?.users)}</p>
+                                    <p style={{ fontWeight: 'bold', fontSize: '12px', color: '#475569', marginTop: '4px' }}>اللجان: {h?.committees_range}</p>
+                                 </div>
+                                 <div>
+                                    {h?.is_delivered ? (
+                                       <span style={{ fontWeight: '900', fontSize: '12px', color: '#059669', border: '1px solid #059669', padding: '4px', borderRadius: '4px' }}>✓ اعتمد إلكترونياً</span>
+                                    ) : (
+                                       <span style={{ fontWeight: 'bold', fontSize: '12px', color: 'black' }}>التوقيع: ....................</span>
+                                    )}
+                                 </div>
+                              </div>
+                           )) : <p style={{ fontWeight: 'bold', fontSize: '14px' }}>لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
+                        </div>
+                     </div>
+                   </>
+                 )}
+
+                 <div style={{ zIndex: 10, position: 'relative', flex: 1 }}>
+                    <h4 style={{ fontWeight: '900', fontSize: '18px', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '16px' }}>توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                       {chunk.map((comm, idx) => {
+                          const commInvigs = printData.dailyInvigs.filter(i => String(i?.committee_id) === String(comm.id));
+                          return (
+                             <div key={`c-stat-p-${idx}`} style={{ border: '2px solid black', borderRadius: '8px', padding: '12px' }}>
+                                <h5 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid #ccc', paddingBottom: '8px', marginBottom: '12px', color: '#4338ca' }}>{comm.name}</h5>
+                                {commInvigs.length > 0 ? (
+                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                      {commInvigs.map((inv, iIdx) => (
+                                         <div key={`inv-p-${iIdx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                            <span style={{ fontWeight: '900', fontSize: '14px' }}>{getSafeName(inv.users)}</span>
+                                            <div>
+                                               {inv?.status === 'signed' ? (
+                                                  <span style={{ fontWeight: '900', fontSize: '11px', color: '#059669' }}>✓ وقّع إلكترونياً</span>
+                                               ) : inv?.status === 'excused' ? (
+                                                  <span style={{ fontWeight: '900', fontSize: '11px', color: '#e11d48' }}>اعتذر عن المراقبة</span>
+                                               ) : (
+                                                  <span style={{ fontWeight: 'bold', fontSize: '12px' }}>التوقيع: .................</span>
+                                               )}
+                                            </div>
+                                         </div>
+                                      ))}
+                                   </div>
+                                ) : (
+                                   <p style={{ fontWeight: 'bold', fontSize: '12px', textAlign: 'center', color: '#64748b', padding: '8px 0' }}>لا يوجد مراقبون مكلفون</p>
+                                )}
+                             </div>
+                          )
+                       })}
+                    </div>
+                 </div>
+                 
+                 <div className="text-left mt-4 text-[10px] font-bold text-slate-500 shrink-0 relative z-10">صفحة {pageIdx + 1} من {chunksArr.length}</div>
               </div>
             ))}
 
