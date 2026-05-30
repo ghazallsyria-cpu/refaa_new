@@ -707,7 +707,6 @@ function ExamCommitteesControl() {
         timetables: timetables,
         uniqueDates: uniqueExamDates,
         customIds: customIdsList,
-        // 🔥 بيانات الإحصائية اليومية
         activeDate: activeExamDate,
         currentHeads: currentHeads,
         committees: committees,
@@ -1179,7 +1178,7 @@ function ExamCommitteesControl() {
             </div>
           )}
 
-          {/* 🔥 التحديث العبقري: تبويب إحصائية اليوم للطباعة بالـ PDF */}
+          {/* 🔥 التحديث المدمج: طباعة الكشف الشامل اليومي للمراقبين عبر html2canvas-pro */}
           {activeTab === 'daily_stats' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8">
@@ -1871,89 +1870,93 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-            {/* 🔥 التحديث المدمج: طباعة الكشف الشامل اليومي للمراقبين عبر html2canvas-pro */}
+            {/* 8. 🔥 الإحصائية اليومية للمراقبين عبر html2canvas-pro */}
             {printType === 'daily_stats' && chunkArray(printData.committees, 12).map((chunk, pageIdx, chunksArr) => (
-              <div key={`ds-stat-${pageIdx}`} className="print-page-wrapper bg-white mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '35px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              <div key={`ds-stat-${pageIdx}`} className="print-page-wrapper mx-auto relative flex flex-col" style={{ width: '794px', height: '1122px', padding: '40px', boxSizing: 'border-box', overflow: 'hidden', pageBreakAfter: 'always', backgroundColor: '#ffffff', color: '#000000', direction: 'rtl' }}>
                  {isFinalized && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', fontSize: '130px', color: 'rgba(16, 185, 129, 0.1)', fontWeight: '900', zIndex: 0, pointerEvents: 'none', whiteSpace: 'nowrap' }}>مُعْتَمَد رَسْمِيّاً</div>}
                  
-                 <div className="text-center mb-6 border-b-[3px] border-black pb-4 shrink-0 relative z-10">
-                    <h1 className="text-2xl font-black text-black">وزارة التربية - إدارة التعليم الخاص</h1>
-                    <h2 className="text-xl font-black text-black mt-1">مدرسة الرفعة النموذجية بنين (م-ث)</h2>
-                    <h3 className="text-2xl font-black text-black mt-3 border-2 border-black inline-block px-8 py-1.5 bg-slate-100 rounded-2xl">إحصائية لجان المراقبة اليومية والتوقيعات</h3>
-                    <p className="text-lg font-black text-black mt-3">اليوم الامتحاني: {printData.activeDate}</p>
+                 <div style={{ textAlign: 'center', marginBottom: '24px', borderBottom: '3px solid #000000', paddingBottom: '16px', position: 'relative', zIndex: 10 }}>
+                    <h1 style={{ fontSize: '24px', fontWeight: '900', color: '#000000', margin: '0 0 4px 0' }}>وزارة التربية - إدارة التعليم الخاص</h1>
+                    <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#000000', margin: '0 0 12px 0' }}>مدرسة الرفعة النموذجية بنين (م-ث)</h2>
+                    <div style={{ border: '2px solid #000000', display: 'inline-block', padding: '6px 32px', backgroundColor: '#f1f5f9', borderRadius: '16px' }}>
+                        <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#000000', margin: 0 }}>إحصائية لجان المراقبة اليومية والتوقيعات</h3>
+                    </div>
+                    <p style={{ fontSize: '18px', fontWeight: '900', color: '#000000', marginTop: '12px', marginBottom: 0 }}>اليوم الامتحاني: {printData.activeDate}</p>
                  </div>
 
-                 {pageIdx === 0 && (
-                   <>
-                     <div style={{ border: '2px solid black', borderRadius: '12px', padding: '16px', marginBottom: '20px', zIndex: 10, position: 'relative' }}>
-                        <h4 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid black', paddingBottom: '8px', marginBottom: '12px' }}>المواد المختبرة في هذا اليوم:</h4>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                           {printData.timetables.filter(t => t.exam_date === printData.activeDate).map((t, idx) => (
-                              <span key={`sub-p-${idx}`} style={{ border: '1px solid black', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px' }}>
-                                 {t.subjects?.name} ({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})
-                              </span>
-                           ))}
-                        </div>
-                     </div>
+                 <div style={{ flex: 1, zIndex: 10, position: 'relative', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                     {pageIdx === 0 && (
+                       <>
+                         <div style={{ border: '2px solid #000000', borderRadius: '12px', padding: '16px', backgroundColor: '#ffffff' }}>
+                            <h4 style={{ fontWeight: '900', fontSize: '16px', color: '#000000', borderBottom: '1px solid #000000', paddingBottom: '8px', margin: '0 0 12px 0' }}>المواد المختبرة في هذا اليوم:</h4>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                               {printData.timetables.filter((t: any) => t.exam_date === printData.activeDate).map((t: any, idx: number) => (
+                                  <span key={`sub-p-${idx}`} style={{ border: '1px solid #000000', padding: '6px 12px', borderRadius: '6px', fontWeight: '900', fontSize: '14px', color: '#000000', backgroundColor: '#f8fafc' }}>
+                                     {t.subjects?.name} ({t.class_level === 10 ? 'عاشر' : 'حادي عشر'})
+                                  </span>
+                               ))}
+                            </div>
+                         </div>
 
-                     <div style={{ border: '2px solid black', borderRadius: '12px', padding: '16px', marginBottom: '20px', zIndex: 10, position: 'relative' }}>
-                        <h4 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid black', paddingBottom: '8px', marginBottom: '12px' }}>رؤساء اللجان وتوقيع الاستلام:</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                           {printData.currentHeads.length > 0 ? printData.currentHeads.map((h, i) => (
-                              <div key={`h-stat-p-${i}`} style={{ border: '1px solid black', borderRadius: '8px', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                 <div>
-                                    <p style={{ fontWeight: '900', fontSize: '16px' }}>{getSafeName(h?.users)}</p>
-                                    <p style={{ fontWeight: 'bold', fontSize: '12px', color: '#475569', marginTop: '4px' }}>اللجان: {h?.committees_range}</p>
-                                 </div>
-                                 <div>
-                                    {h?.is_delivered ? (
-                                       <span style={{ fontWeight: '900', fontSize: '12px', color: '#059669', border: '1px solid #059669', padding: '4px', borderRadius: '4px' }}>✓ اعتمد إلكترونياً</span>
+                         <div style={{ border: '2px solid #000000', borderRadius: '12px', padding: '16px', backgroundColor: '#ffffff' }}>
+                            <h4 style={{ fontWeight: '900', fontSize: '16px', color: '#000000', borderBottom: '1px solid #000000', paddingBottom: '8px', margin: '0 0 12px 0' }}>رؤساء اللجان وتوقيع الاستلام:</h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                               {printData.currentHeads.length > 0 ? printData.currentHeads.map((h: any, i: number) => (
+                                  <div key={`h-stat-p-${i}`} style={{ border: '1px solid #000000', borderRadius: '8px', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+                                     <div>
+                                        <p style={{ fontWeight: '900', fontSize: '16px', color: '#000000', margin: '0 0 4px 0' }}>{getSafeName(h?.users)}</p>
+                                        <p style={{ fontWeight: 'bold', fontSize: '12px', color: '#475569', margin: 0 }}>اللجان: {h?.committees_range}</p>
+                                     </div>
+                                     <div>
+                                        {h?.is_delivered ? (
+                                           <span style={{ fontWeight: '900', fontSize: '12px', color: '#059669', border: '1px solid #059669', padding: '4px 8px', borderRadius: '4px', backgroundColor: '#ecfdf5' }}>✓ اعتمد إلكترونياً</span>
+                                        ) : (
+                                           <span style={{ fontWeight: '900', fontSize: '13px', color: '#000000' }}>التوقيع: ....................</span>
+                                        )}
+                                     </div>
+                                  </div>
+                               )) : <p style={{ fontWeight: 'bold', fontSize: '14px', color: '#000000', margin: 0 }}>لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
+                            </div>
+                         </div>
+                       </>
+                     )}
+
+                     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                        <h4 style={{ fontWeight: '900', fontSize: '18px', color: '#000000', borderBottom: '2px solid #000000', paddingBottom: '8px', margin: '0 0 16px 0' }}>توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignContent: 'start' }}>
+                           {chunk.map((comm: any, idx: number) => {
+                              const commInvigs = printData.dailyInvigs.filter((i: any) => String(i?.committee_id) === String(comm.id));
+                              return (
+                                 <div key={`c-stat-p-${idx}`} style={{ border: '2px solid #000000', borderRadius: '8px', padding: '12px', backgroundColor: '#ffffff' }}>
+                                    <h5 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid #94a3b8', paddingBottom: '8px', margin: '0 0 12px 0', color: '#000000' }}>{comm.name}</h5>
+                                    {commInvigs.length > 0 ? (
+                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                          {commInvigs.map((inv: any, iIdx: number) => (
+                                             <div key={`inv-p-${iIdx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                                                <span style={{ fontWeight: '900', fontSize: '14px', color: '#000000' }}>{getSafeName(inv.users)}</span>
+                                                <div>
+                                                   {inv?.status === 'signed' ? (
+                                                      <span style={{ fontWeight: '900', fontSize: '11px', color: '#059669', backgroundColor: '#ecfdf5', padding: '2px 6px', borderRadius: '4px', border: '1px solid #34d399' }}>✓ وقّع إلكترونياً</span>
+                                                   ) : inv?.status === 'excused' ? (
+                                                      <span style={{ fontWeight: '900', fontSize: '11px', color: '#e11d48', backgroundColor: '#fff1f2', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fb7185' }}>اعتذر عن المراقبة</span>
+                                                   ) : (
+                                                      <span style={{ fontWeight: '900', fontSize: '12px', color: '#000000' }}>التوقيع: .................</span>
+                                                   )}
+                                                </div>
+                                             </div>
+                                          ))}
+                                       </div>
                                     ) : (
-                                       <span style={{ fontWeight: 'bold', fontSize: '12px', color: 'black' }}>التوقيع: ....................</span>
+                                       <p style={{ fontWeight: 'bold', fontSize: '12px', textAlign: 'center', color: '#64748b', margin: '12px 0' }}>لا يوجد مراقبون مكلفون</p>
                                     )}
                                  </div>
-                              </div>
-                           )) : <p style={{ fontWeight: 'bold', fontSize: '14px' }}>لم يتم تعيين رؤساء لجان لهذا اليوم.</p>}
+                              )
+                           })}
                         </div>
                      </div>
-                   </>
-                 )}
-
-                 <div style={{ zIndex: 10, position: 'relative', flex: 1 }}>
-                    <h4 style={{ fontWeight: '900', fontSize: '18px', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '16px' }}>توزيع المراقبين على اللجان والتوقيع بالحضور:</h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                       {chunk.map((comm, idx) => {
-                          const commInvigs = printData.dailyInvigs.filter(i => String(i?.committee_id) === String(comm.id));
-                          return (
-                             <div key={`c-stat-p-${idx}`} style={{ border: '2px solid black', borderRadius: '8px', padding: '12px' }}>
-                                <h5 style={{ fontWeight: '900', fontSize: '16px', borderBottom: '1px solid #ccc', paddingBottom: '8px', marginBottom: '12px', color: '#4338ca' }}>{comm.name}</h5>
-                                {commInvigs.length > 0 ? (
-                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                      {commInvigs.map((inv, iIdx) => (
-                                         <div key={`inv-p-${iIdx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                            <span style={{ fontWeight: '900', fontSize: '14px' }}>{getSafeName(inv.users)}</span>
-                                            <div>
-                                               {inv?.status === 'signed' ? (
-                                                  <span style={{ fontWeight: '900', fontSize: '11px', color: '#059669' }}>✓ وقّع إلكترونياً</span>
-                                               ) : inv?.status === 'excused' ? (
-                                                  <span style={{ fontWeight: '900', fontSize: '11px', color: '#e11d48' }}>اعتذر عن المراقبة</span>
-                                               ) : (
-                                                  <span style={{ fontWeight: 'bold', fontSize: '12px' }}>التوقيع: .................</span>
-                                               )}
-                                            </div>
-                                         </div>
-                                      ))}
-                                   </div>
-                                ) : (
-                                   <p style={{ fontWeight: 'bold', fontSize: '12px', textAlign: 'center', color: '#64748b', padding: '8px 0' }}>لا يوجد مراقبون مكلفون</p>
-                                )}
-                             </div>
-                          )
-                       })}
-                    </div>
                  </div>
                  
-                 <div className="text-left mt-4 text-[10px] font-bold text-slate-500 shrink-0 relative z-10">صفحة {pageIdx + 1} من {chunksArr.length}</div>
+                 <div style={{ textAlign: 'left', marginTop: '16px', fontSize: '12px', fontWeight: 'bold', color: '#64748b', zIndex: 10 }}>صفحة {pageIdx + 1} من {chunksArr.length}</div>
               </div>
             ))}
 
