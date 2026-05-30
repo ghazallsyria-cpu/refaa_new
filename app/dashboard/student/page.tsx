@@ -312,15 +312,15 @@ export default function StudentDashboard() {
   else if (absentPeriods >= 25) { warningLevel = 1; warningTitle = "إنذار أول"; warningMessage = "الالتزام بالحضور مطلوب."; warningColors = "border-amber-500/50 text-amber-500"; warningIconColor = "text-amber-500"; WarningIcon = AlertTriangle; }
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
-// 🚀 القالب الملكي الصارم للبطاقة (تصميم مطابق لبطاقة الطاولة ولكن بالألوان الملكية)
+// 🚀 القالب الملكي الصارم للبطاقة (تصميم مطابق حرفياً لمقاسات بطاقة الطاولة بالألوان الملكية)
   const TicketCardTemplate = ({ isHiddenRef = false }) => (
     <div 
       ref={isHiddenRef ? printRef : null}
       style={{ 
         width: '320px', 
-        height: '200px', 
+        height: '207px', // نسبة تطابق 85mm * 55mm
         backgroundColor: '#ffffff', 
-        borderRadius: '16px', 
+        borderRadius: '12px', 
         overflow: 'hidden', 
         border: '3px solid #0f172a', 
         display: 'flex', 
@@ -337,44 +337,38 @@ export default function StudentDashboard() {
         flexShrink: 0
       }}
     >
-      {/* الهيدر العلوي */}
-      <div style={{ background: '#0f172a', borderBottom: '3px solid #d4af37', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: 'linear-gradient(to left, #0f172a, #1e293b)', borderBottom: '3px solid #d4af37', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ textAlign: 'right' }}>
-           <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '14px', lineHeight: '1.2' }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
-           <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '10px', marginTop: '4px' }}>بطاقة جلوس اختبارات نهاية العام</div>
+           <div style={{ color: '#ffffff', fontWeight: '900', fontSize: '12px', margin: 0, padding: 0 }}>مدرسة الرفعة النموذجية بنين (م-ث)</div>
+           <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '9px', marginTop: '2px' }}>بطاقة جلوس اختبارات نهاية العام</div>
         </div>
-        <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', color: '#d4af37', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '900', border: '1px solid #d4af37' }}>
+        <div style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', border: '1px solid #d4af37', color: '#d4af37', padding: '3px 8px', fontWeight: '900', fontSize: '10px', borderRadius: '6px' }}>
            {seatAllocation?.exam_committees?.name || 'غير محدد'}
         </div>
       </div>
 
-      {/* جسم البطاقة - مقسم نفس تصميم الطاولة */}
-      <div style={{ display: 'flex', flex: 1, padding: '16px', gap: '16px', alignItems: 'center', backgroundColor: '#ffffff' }}>
-        
-        {/* أقصى اليمين: الـ QR Code */}
-        <div style={{ width: '75px', height: '75px', border: '2px solid #0f172a', borderRadius: '10px', padding: '4px', flexShrink: 0, backgroundColor: '#f8fafc' }}>
+      <div style={{ padding: '10px', display: 'flex', gap: '10px', alignItems: 'center', flex: 1, backgroundColor: '#ffffff' }}>
+        <div style={{ width: '70px', height: '70px', padding: '2px', border: '2px solid #0f172a', borderRadius: '8px', flexShrink: 0 }}>
            <img src={qrCodeUrl} crossOrigin="anonymous" alt="QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
-
-        {/* الوسط: الاسم والصف */}
+        
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>اسم الطالب</div>
-           <div style={{ fontSize: '17px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', marginBottom: '8px', maxHeight: '44px', overflow: 'hidden' }}>{rawFullName}</div>
-           <div>
-              <span style={{ border: '2px solid #0f172a', color: '#0f172a', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '900', display: 'inline-block', backgroundColor: '#f8fafc' }}>{classNameStr}</span>
+           <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>اسم الطالب</div>
+           <div style={{ minHeight: '32px', display: 'flex', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '13px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', margin: 0, padding: 0, display: 'block' }}>{rawFullName}</h2>
+           </div>
+           <div style={{ marginTop: '4px' }}>
+              <span style={{ display: 'inline-block', backgroundColor: '#f8fafc', border: '2px solid #0f172a', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{classNameStr}</span>
            </div>
         </div>
-
-        {/* الفاصل العمودي */}
-        <div style={{ width: '3px', backgroundColor: '#cbd5e1', height: '100%', borderRadius: '2px', flexShrink: 0 }}></div>
-
-        {/* أقصى اليسار: رقم الجلوس */}
-        <div style={{ width: '75px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', marginBottom: '6px' }}>رقم الجلوس</div>
-           <div style={{ fontSize: '26px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px', lineHeight: '1' }}>{seatAllocation?.seat_number || '---'}</div>
+        
+        <div style={{ borderRight: '3px solid #cbd5e1', paddingRight: '12px', textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '70px', flexShrink: 0 }}>
+           <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>رقم الجلوس</div>
+           <div style={{ fontSize: '20px', fontWeight: '900', color: '#0f172a', lineHeight: '1' }}>{seatAllocation?.seat_number || '---'}</div>
         </div>
-
       </div>
+
+      <div style={{ height: '5px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
     </div>
   );
 
