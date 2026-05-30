@@ -89,7 +89,7 @@ export default function CampusControlPage() {
     }
   };
 
-  const handleFileUpload = async (file: File): Promise<{ url: string, type: 'image' | 'video', thumb?: string } | null> => {
+const handleFileUpload = async (file: File): Promise<{ url: string, type: 'image' | 'video', thumb?: string } | null> => {
     const MAX_FILE_SIZE = 100 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) { showToast('حجم الملف ضخم!', 'error'); return null; }
     setIsUploading(true); setUploadProgress(10);
@@ -98,7 +98,10 @@ export default function CampusControlPage() {
       const isVideo = file.type.startsWith('video/') || fileName.endsWith('.mov') || fileName.endsWith('.mp4');
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('upload_preset', 'ml_default'); 
+      
+      // 🔥 التعديل هنا: جلب الـ Preset الصحيح من ملف البيئة بدلاً من الاسم الثابت
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default'); 
+      
       const progressInterval = setInterval(() => setUploadProgress(p => Math.min(p + 15, 90)), 500);
       const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/${isVideo ? 'video' : 'auto'}/upload`, { method: 'POST', body: formData });
       clearInterval(progressInterval);
@@ -117,7 +120,7 @@ export default function CampusControlPage() {
       setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 1000);
     }
   };
-
+  
   const handleDeleteStudio = async (item: any) => {
     if (!confirm('سيتم الحذف نهائياً. متأكد؟')) return;
     try {
