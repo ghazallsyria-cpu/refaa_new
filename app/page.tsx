@@ -4,8 +4,9 @@
  * 🏗️ التوثيق الهندسي (Gemini Style Edition - Ultra Fast Performance)
  * ============================================================================
  * @file        app/page.tsx
- * @version     9.5.0 (The Honors Reveal Edition)
- * @description الواجهة الرئيسية الشاملة، مع نظام الإعلان الذكي عن لوحة الشرف الماسية.
+ * @version     10.0.0 (Global Magazine & Cinematic Studio Edition)
+ * @description الواجهة الرئيسية الشاملة، مع نظام انزلاق سينمائي ذكي للمركز الإخباري
+ * باستخدام مكتبة Swiper.js لتحاكي التطبيقات الإخبارية العالمية.
  * ============================================================================
  */
 
@@ -23,6 +24,17 @@ import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+
+// 🔥 استيراد مكتبة Swiper للتحريك السينمائي
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { FreeMode, Autoplay, Pagination, EffectFade } from 'swiper/modules';
+
+// استيراد ملفات الـ CSS الخاصة بـ Swiper
+import 'swiper/css';
+import 'swiper/css/free-mode';
+import 'swiper/css/autoplay';
+import 'swiper/css/pagination';
+import 'swiper/css/effect-fade';
 
 const ICON_MAP: Record<string, any> = { 'Sparkles': Sparkles, 'Trophy': Trophy, 'Quote': Quote, 'Image': ImageIcon };
 
@@ -68,7 +80,6 @@ export default function DigitalCampusPage() {
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [hangingRibbonUrl, setHangingRibbonUrl] = useState<string | null>(null);
   
-  // مفتاح التحكم بظهور لوحة الشرف
   const [showHonorsBoard, setShowHonorsBoard] = useState(false);
   
   const [studentMemorials, setStudentMemorials] = useState<any[]>([]);
@@ -87,22 +98,22 @@ export default function DigitalCampusPage() {
 
     const fetchCampusContent = async () => {
       try {
+        // 🚀 زيادة أرقام الـ Limit لتغذية المنزلقات الذكية بكمية بيانات حقيقية
         const [studioRes, magazineRes, annRes, tickerRes, heroRes, ribbonRes, settingsRes] = await Promise.all([
-          supabase.from('school_studio').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(6),
-          supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(4),
-          supabase.from('school_announcements').select('*').order('created_at', { ascending: false }).limit(3),
+          supabase.from('school_studio').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(20),
+          supabase.from('school_magazine').select('*').order('created_at', { ascending: false }).limit(30),
+          supabase.from('school_announcements').select('*').order('created_at', { ascending: false }).limit(6),
           supabase.from('school_ticker').select('*').order('created_at', { ascending: false }).limit(5),
           supabase.from('forum_hero_slides').select('*').eq('is_active', true).order('sort_order', { ascending: false }).order('created_at', { ascending: false }),
           supabase.from('school_ribbon').select('image_url').eq('id', 1).maybeSingle(),
           supabase.from('platform_settings').select('show_honors_board').maybeSingle()
         ]);
 
-        const { data: stdShields } = await supabase.from('student_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, students(users(full_name, avatar_url), sections(name, classes(name)))').order('created_at', { ascending: false }).limit(4);
-        const { data: tchShields } = await supabase.from('teacher_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, teachers(users(full_name, avatar_url), teacher_subjects(subjects(name)))').order('created_at', { ascending: false }).limit(4);
+        const { data: stdShields } = await supabase.from('student_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, students(users(full_name, avatar_url), sections(name, classes(name)))').order('created_at', { ascending: false }).limit(10);
+        const { data: tchShields } = await supabase.from('teacher_memorials').select('id, shield_type, title, message, created_at, custom_logo_url, external_shield_url, teachers(users(full_name, avatar_url), teacher_subjects(subjects(name)))').order('created_at', { ascending: false }).limit(10);
 
         if (!isSubscribed) return;
 
-        // التقاط حالة إظهار لوحة الشرف
         if (settingsRes?.data && settingsRes.data.show_honors_board !== undefined) {
           setShowHonorsBoard(settingsRes.data.show_honors_board);
         }
@@ -166,7 +177,7 @@ export default function DigitalCampusPage() {
   const SlideIcon = ICON_MAP[currentSlideData?.icon_name] || Sparkles;
 
   const pinnedArticle = magazineItems.length > 0 ? (magazineItems.find(item => item?.is_pinned) || magazineItems[0]) : null;
-  const sideArticles = magazineItems.length > 0 ? magazineItems.filter(item => item?.id !== pinnedArticle?.id).slice(0, 3) : [];
+  const sideArticles = magazineItems.length > 0 ? magazineItems.filter(item => item?.id !== pinnedArticle?.id) : [];
 
   const displayedMemorials = activeMemorialTab === 'students' ? studentMemorials : teacherMemorials;
 
@@ -388,7 +399,7 @@ export default function DigitalCampusPage() {
            </div>
         </motion.div>
 
-        {/* 📣 4. الإعلانات الإدارية السريعة */}
+        {/* 📣 4. الإعلانات الإدارية السريعة (Swiper) */}
         <AnimatePresence>
           {announcements && announcements.length > 0 && (
             <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-[#0a0f1d]/80 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] border border-white/5 shadow-lg relative overflow-hidden backdrop-blur-md">
@@ -396,41 +407,134 @@ export default function DigitalCampusPage() {
                 <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20 shadow-inner"><Megaphone className="w-6 h-6 text-rose-400" /></div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white">إعلانات <span className="text-rose-400">الإدارة</span></h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <Swiper
+                modules={[FreeMode, Autoplay]}
+                spaceBetween={20}
+                slidesPerView="auto"
+                freeMode={true}
+                autoplay={{ delay: 4000, disableOnInteraction: true }}
+                className="w-full"
+                dir="rtl"
+              >
                 {announcements.map((ann) => (
-                  <div key={ann.id} className="bg-white/5 p-5 rounded-2xl border border-white/5 hover:border-white/10 hover:bg-white/10 transition-colors flex flex-col justify-between shadow-inner h-full">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-[10px] font-black tracking-widest text-rose-200 bg-rose-500/20 border border-rose-500/30 px-3 py-1 rounded-lg">{ann.tag || 'إعلان'}</span>
-                      <span className="text-[10px] text-slate-400 font-bold bg-[#02040a]/60 px-2 py-1 rounded-md">{ann.created_at ? new Date(ann.created_at).toLocaleDateString('ar-SA') : ''}</span>
+                  <SwiperSlide key={ann.id} style={{ width: '300px' }}>
+                    <div className="bg-white/5 p-5 rounded-2xl border border-white/5 hover:border-rose-500/30 hover:bg-white/10 transition-colors flex flex-col justify-between shadow-inner h-full min-h-[160px] cursor-grab active:cursor-grabbing">
+                      <div>
+                        <div className="flex justify-between items-center mb-4">
+                          <span className="text-[10px] font-black tracking-widest text-rose-200 bg-rose-500/20 border border-rose-500/30 px-3 py-1 rounded-lg">{ann.tag || 'إعلان'}</span>
+                          <span className="text-[10px] text-slate-400 font-bold bg-[#02040a]/60 px-2 py-1 rounded-md">{ann.created_at ? new Date(ann.created_at).toLocaleDateString('ar-SA') : ''}</span>
+                        </div>
+                        <h3 className="text-sm font-black text-white leading-relaxed">{ann.title}</h3>
+                      </div>
                     </div>
-                    <h3 className="text-sm font-black text-white leading-relaxed">{ann.title}</h3>
-                  </div>
+                  </SwiperSlide>
                 ))}
-              </div>
+              </Swiper>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* 🎬 5. الاستوديو البصري والمركز الإخباري */}
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-10 pt-6">
-           {/* الاستوديو */}
-           <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="xl:col-span-7 space-y-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Video className="w-6 h-6 text-indigo-400" /></div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white">الاستوديو <span className="text-indigo-400">البصري</span></h2>
-                </div>
-                <Link href="/archive/gallery" className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-black text-xs hover:bg-white/10 transition-colors flex items-center gap-2">
-                  الأرشيف <ChevronLeft className="w-4 h-4" />
-                </Link>
+        {/* 📰 5. المركز الإخباري العالمي (Global Magazine Layout) */}
+        <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="pt-10">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Newspaper className="w-6 h-6 text-emerald-400" /></div>
+                <h2 className="text-3xl sm:text-4xl font-black text-white">المركز <span className="text-emerald-400">الإخباري</span></h2>
               </div>
-              
-              {studioItems && studioItems.length > 0 ? (
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {studioItems.slice(0, 4).map((media, index) => (
-                      <div key={media.id} className={`relative rounded-[1.5rem] overflow-hidden bg-[#0a0f1d] cursor-pointer shadow-lg border border-white/5 group ${index === 0 ? 'sm:col-span-2 aspect-[16/9] sm:aspect-[21/9]' : 'aspect-[16/9]'}`} onClick={() => setActiveMedia(media)}>
-                        <img src={media.media_type === 'video' ? media.thumbnail_url : media.media_url} alt={media.title} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-transparent to-transparent"></div>
+              <Link href="/archive/news" className="hidden sm:flex px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-black text-xs hover:bg-white/10 transition-colors items-center gap-2">
+                عرض الأرشيف <ChevronLeft className="w-4 h-4" />
+              </Link>
+            </div>
+
+            {magazineItems && magazineItems.length > 0 ? (
+               <div className="flex flex-col gap-6">
+                  
+                  {/* 🗞️ الخبر الرئيسي (Hero Article - Magazine Style) */}
+                  {pinnedArticle && (
+                    <div onClick={() => setActiveArticle(pinnedArticle)} className="cursor-pointer relative h-[350px] sm:h-[450px] md:h-[550px] rounded-[2rem] sm:rounded-[3rem] overflow-hidden bg-[#0a0f1d] flex flex-col shadow-2xl border border-white/5 group">
+                      <img src={pinnedArticle.cover_image} alt={pinnedArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-1000 ease-out" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-[#02040a]/60 to-transparent"></div>
+                      
+                      <div className="relative z-10 p-6 sm:p-10 md:p-16 flex flex-col justify-end h-full w-full">
+                        <div className="flex flex-wrap items-center gap-3 mb-4">
+                          {pinnedArticle.is_pinned && <span className="px-3 py-1.5 bg-emerald-500 text-slate-950 text-[10px] sm:text-xs font-black rounded-lg flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.5)]"><Star className="w-3.5 h-3.5" /> الأبرز اليوم</span>}
+                          <span className="text-emerald-300 text-[10px] sm:text-xs font-black flex items-center gap-1.5 bg-[#02040a]/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10"><User className="w-3.5 h-3.5" /> بقلم: {pinnedArticle.author_name}</span>
+                          <span className="text-slate-300 text-[10px] sm:text-xs font-bold bg-[#02040a]/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">{new Date(pinnedArticle.created_at).toLocaleDateString('ar-SA')}</span>
+                        </div>
+                        <h3 className="text-2xl sm:text-4xl md:text-5xl font-black text-white leading-tight mb-4 drop-shadow-xl max-w-4xl">{pinnedArticle.title}</h3>
+                        <p className="text-slate-300 text-xs sm:text-sm md:text-base font-bold line-clamp-2 sm:line-clamp-3 opacity-90 drop-shadow-sm max-w-3xl leading-relaxed border-r-2 border-emerald-500/50 pr-4">{pinnedArticle.excerpt}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 🎠 شريط الأخبار المنزلق (News Carousel) */}
+                  {sideArticles.length > 0 && (
+                    <div className="w-full relative mt-4">
+                      <Swiper
+                        modules={[FreeMode, Autoplay, Pagination]}
+                        spaceBetween={20}
+                        slidesPerView="auto"
+                        freeMode={true}
+                        pagination={{ clickable: true, dynamicBullets: true }}
+                        autoplay={{ delay: 5000, disableOnInteraction: true }}
+                        className="w-full !pb-12"
+                        dir="rtl"
+                      >
+                        {sideArticles.map((article, idx) => (
+                          <SwiperSlide key={article.id} style={{ width: '320px' }}>
+                            <div onClick={() => setActiveArticle(article)} className="cursor-pointer h-full flex flex-col bg-[#0a0f1d] rounded-[1.5rem] overflow-hidden border border-white/5 group hover:border-emerald-500/30 transition-all shadow-lg hover:shadow-emerald-500/10">
+                              <div className="w-full h-48 relative overflow-hidden shrink-0 bg-black">
+                                 <img src={article.cover_image} alt={article.title} className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700" />
+                                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] to-transparent"></div>
+                                 <div className="absolute bottom-3 right-3 text-emerald-400 text-[10px] font-black bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-md border border-white/10 flex items-center gap-1.5"><User className="w-3 h-3" /> {article.author_name}</div>
+                              </div>
+                              <div className="flex-1 p-5 flex flex-col justify-start">
+                                 <h3 className="text-sm font-black text-white line-clamp-3 leading-relaxed mb-3 group-hover:text-emerald-300 transition-colors">{article.title}</h3>
+                                 <div className="mt-auto flex items-center justify-between text-[10px] font-bold text-slate-400">
+                                   <span>{new Date(article.created_at).toLocaleDateString('ar-SA')}</span>
+                                   <span className="flex items-center gap-1 text-emerald-500/50 group-hover:text-emerald-400 transition-colors">اقرأ المزيد <ChevronLeft className="w-3 h-3" /></span>
+                                 </div>
+                              </div>
+                            </div>
+                          </SwiperSlide>
+                        ))}
+                      </Swiper>
+                    </div>
+                  )}
+               </div>
+            ) : (
+               <div className="w-full h-[300px] rounded-[2rem] border border-dashed border-white/10 flex items-center justify-center bg-[#0a0f1d]/50"><p className="text-slate-500 font-bold">لا توجد أخبار للعرض حالياً</p></div>
+            )}
+        </motion.div>
+
+        {/* 🎬 6. الاستوديو السينمائي (Cinematic Gallery) */}
+        <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="pt-10">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Video className="w-6 h-6 text-indigo-400" /></div>
+                <h2 className="text-3xl sm:text-4xl font-black text-white">الاستوديو <span className="text-indigo-400">البصري</span></h2>
+              </div>
+              <Link href="/archive/gallery" className="hidden sm:flex px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-black text-xs hover:bg-white/10 transition-colors items-center gap-2">
+                معرض الوسائط <ChevronLeft className="w-4 h-4" />
+              </Link>
+            </div>
+            
+            {studioItems && studioItems.length > 0 ? (
+               <Swiper
+                  modules={[FreeMode, Autoplay, Pagination]}
+                  spaceBetween={24}
+                  slidesPerView="auto"
+                  freeMode={true}
+                  pagination={{ clickable: true, dynamicBullets: true }}
+                  autoplay={{ delay: 3500, disableOnInteraction: true }}
+                  className="w-full !pb-12"
+                  dir="rtl"
+               >
+                  {studioItems.map((media) => (
+                    <SwiperSlide key={media.id} style={{ width: '280px', height: '400px' }}>
+                      <div className="w-full h-full relative rounded-[2rem] overflow-hidden bg-[#0a0f1d] cursor-pointer shadow-xl border border-white/5 group hover:border-indigo-500/40 transition-all" onClick={() => setActiveMedia(media)}>
+                        <img src={media.media_type === 'video' ? media.thumbnail_url : media.media_url} alt={media.title} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-[#02040a]/20 to-transparent opacity-90 group-hover:opacity-80 transition-opacity"></div>
                         
                         {media.media_type === 'video' && (
                           <div className="absolute inset-0 flex items-center justify-center">
@@ -443,65 +547,19 @@ export default function DigitalCampusPage() {
                         <div className="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-md border border-white/10 text-white text-[10px] font-black flex items-center gap-1.5">
                           {media.media_type === 'video' ? <Video className="w-3.5 h-3.5 text-indigo-400" /> : <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />} {media.media_type === 'video' ? 'فيديو' : 'صورة'}
                         </div>
-                        <div className="absolute bottom-4 left-4 right-4">
-                          <h3 className="text-sm sm:text-base font-black text-white line-clamp-2 drop-shadow-md">{media.title}</h3>
+                        <div className="absolute bottom-6 left-6 right-6">
+                          <h3 className="text-sm sm:text-base font-black text-white line-clamp-2 drop-shadow-md leading-relaxed">{media.title}</h3>
                         </div>
                       </div>
-                    ))}
-                 </div>
-              ) : (
-                 <div className="w-full h-[300px] rounded-[2rem] border border-dashed border-white/10 flex items-center justify-center bg-white/5"><p className="text-slate-500 font-bold">لا توجد وسائط للعرض حالياً</p></div>
-              )}
-           </motion.div>
+                    </SwiperSlide>
+                  ))}
+               </Swiper>
+            ) : (
+               <div className="w-full h-[300px] rounded-[2.5rem] border border-dashed border-white/10 flex items-center justify-center bg-[#0a0f1d]/50"><p className="text-slate-500 font-bold">لا توجد وسائط للعرض حالياً</p></div>
+            )}
+        </motion.div>
 
-           {/* الأخبار */}
-           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="xl:col-span-5 space-y-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center shadow-inner"><Newspaper className="w-6 h-6 text-emerald-400" /></div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white">المركز <span className="text-emerald-400">الإخباري</span></h2>
-                </div>
-                <Link href="/archive/news" className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-black text-xs hover:bg-white/10 transition-colors flex items-center gap-2">
-                  الأرشيف <ChevronLeft className="w-4 h-4" />
-                </Link>
-              </div>
-
-              {magazineItems && magazineItems.length > 0 ? (
-                 <div className="flex flex-col gap-4 h-full">
-                    {pinnedArticle && (
-                      <div onClick={() => setActiveArticle(pinnedArticle)} className="cursor-pointer relative h-[250px] rounded-[1.5rem] overflow-hidden bg-[#0a0f1d] flex flex-col shadow-lg border border-white/5 group">
-                        <img src={pinnedArticle.cover_image} alt={pinnedArticle.title} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-90 group-hover:scale-105 transition-all duration-700" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-[#02040a]/40 to-transparent"></div>
-                        <div className="relative z-10 p-6 flex flex-col justify-end h-full w-full">
-                          <div className="flex flex-wrap items-center gap-2 mb-3">
-                            {pinnedArticle.is_pinned && <span className="px-2 py-1 bg-emerald-500/80 text-slate-900 text-[10px] font-black rounded-md flex items-center gap-1"><Star className="w-3 h-3" /> رئيسي</span>}
-                            <span className="text-slate-200 text-[10px] font-bold flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-md border border-white/10"><User className="w-3 h-3 text-emerald-400" /> {pinnedArticle.author_name}</span>
-                          </div>
-                          <h3 className="text-lg sm:text-xl font-black text-white leading-tight mb-2 drop-shadow-md">{pinnedArticle.title}</h3>
-                          <p className="text-slate-300 text-xs line-clamp-2 opacity-90 drop-shadow-sm">{pinnedArticle.excerpt}</p>
-                        </div>
-                      </div>
-                    )}
-                    {sideArticles.slice(0, 2).map((article, idx) => (
-                      <div onClick={() => setActiveArticle(article)} key={article.id} className="cursor-pointer relative rounded-[1.25rem] overflow-hidden bg-[#0a0f1d] h-[120px] flex shadow-md border border-white/5 group hover:border-emerald-500/30 transition-colors">
-                        <div className="w-1/3 h-full relative overflow-hidden shrink-0">
-                           <img src={article.cover_image} alt={article.title} className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700" />
-                           <div className="absolute inset-0 bg-gradient-to-l from-[#02040a] to-transparent"></div>
-                        </div>
-                        <div className="flex-1 p-4 flex flex-col justify-center bg-[#0a0f1d]/60 backdrop-blur-sm z-10 -ml-2">
-                           <span className="text-emerald-400 text-[9px] font-black mb-1.5 flex items-center gap-1"><User className="w-3 h-3" /> {article.author_name}</span>
-                           <h3 className="text-xs sm:text-sm font-black text-white line-clamp-2 leading-relaxed">{article.title}</h3>
-                        </div>
-                      </div>
-                    ))}
-                 </div>
-              ) : (
-                 <div className="w-full h-[300px] rounded-[2rem] border border-dashed border-white/10 flex items-center justify-center bg-white/5"><p className="text-slate-500 font-bold">لا توجد أخبار للعرض حالياً</p></div>
-              )}
-           </motion.div>
-        </div>
-
-        {/* 🏆 6. معرض الدروع الشرفية */}
+        {/* 🏆 7. معرض الدروع الشرفية (كما هو بدون تغيير) */}
         {(studentMemorials.length > 0 || teacherMemorials.length > 0) && (
           <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="pt-16 pb-10">
              <div className="flex flex-col items-center text-center mb-8">
@@ -559,7 +617,7 @@ export default function DigitalCampusPage() {
           </motion.div>
         )}
 
-        {/* 🚀 7. Call to Action */}
+        {/* 🚀 8. Call to Action */}
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="py-20 text-center mt-10 relative">
            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl h-32 bg-indigo-500/10 blur-[100px] pointer-events-none mix-blend-screen"></div>
            <div className="w-20 h-20 bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-md rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-inner rotate-3">
@@ -575,7 +633,7 @@ export default function DigitalCampusPage() {
 
       </div>
 
-      {/* 🖼️ Modals */}
+      {/* 🖼️ Modals (تم تحسين تصميم قارئ الأخبار) */}
       <AnimatePresence>
         {activeMedia && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#02040a]/95 p-4 backdrop-blur-sm" onClick={() => setActiveMedia(null)}>
@@ -594,16 +652,16 @@ export default function DigitalCampusPage() {
             <div className="w-full max-w-4xl bg-[#0a0f1d] rounded-[2.5rem] overflow-hidden border border-white/10 flex flex-col max-h-[90vh] shadow-2xl relative" onClick={e => e.stopPropagation()}>
               <div className="relative h-56 sm:h-[350px] shrink-0 bg-black">
                 <button onClick={() => setActiveArticle(null)} className="absolute top-6 left-6 z-50 w-12 h-12 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/10 hover:bg-rose-500/80 transition-colors"><X className="w-6 h-6" /></button>
-                <img src={activeArticle?.cover_image} alt={activeArticle?.title} className="w-full h-full object-cover opacity-80" />
+                <img src={activeArticle?.cover_image} alt={activeArticle?.title} className="w-full h-full object-cover opacity-70" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-transparent to-transparent"></div>
               </div>
-              <div className="p-8 sm:p-10 overflow-y-auto custom-scrollbar flex-1 relative z-10 -mt-10 bg-[#0a0f1d] rounded-t-[2.5rem]">
+              <div className="p-8 sm:p-10 overflow-y-auto custom-scrollbar flex-1 relative z-10 -mt-16 sm:-mt-20 bg-[#0a0f1d] rounded-t-[2.5rem]">
                 <div className="flex gap-3 mb-5">
+                  <span className="text-emerald-300 bg-emerald-500/10 px-3 py-1.5 rounded-lg text-xs font-black border border-emerald-500/20"><User className="w-3.5 h-3.5 inline mr-1" /> {activeArticle?.author_name}</span>
                   <span className="text-slate-300 bg-white/5 px-3 py-1.5 rounded-lg text-xs font-black tracking-widest border border-white/5">{activeArticle?.created_at ? new Date(activeArticle.created_at).toLocaleDateString('ar-SA') : ''}</span>
-                  <span className="text-emerald-300 bg-emerald-500/10 px-3 py-1.5 rounded-lg text-xs font-black border border-emerald-500/20">{activeArticle?.author_name}</span>
                 </div>
-                <h2 className="text-2xl sm:text-4xl font-black text-white mb-6 leading-tight">{activeArticle?.title}</h2>
-                <div className="text-sm sm:text-base text-slate-300 leading-[1.8] font-bold bg-white/5 p-6 rounded-2xl border-r-4 border-emerald-500 shadow-inner whitespace-pre-wrap">{activeArticle?.excerpt}</div>
+                <h2 className="text-2xl sm:text-4xl font-black text-white mb-8 leading-tight">{activeArticle?.title}</h2>
+                <div className="text-sm sm:text-lg text-slate-300 leading-loose font-bold bg-white/5 p-6 sm:p-8 rounded-2xl border border-white/5 shadow-inner whitespace-pre-wrap">{activeArticle?.excerpt}</div>
               </div>
             </div>
           </motion.div>
@@ -619,6 +677,9 @@ export default function DigitalCampusPage() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
         .marquee-content { display: inline-block; animation: marquee 60s linear infinite; }
         @keyframes marquee { 0% { transform: translateX(-100vw); } 100% { transform: translateX(100%); } }
+        /* تخصيص مظهر نقاط التحكم في Swiper */
+        .swiper-pagination-bullet { background: #818cf8 !important; opacity: 0.5; }
+        .swiper-pagination-bullet-active { background: #10b981 !important; opacity: 1; }
       `}} />
     </div>
   );
