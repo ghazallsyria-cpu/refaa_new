@@ -313,7 +313,12 @@ export default function StudentDashboard() {
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
 // 🚀 القالب الملكي الصارم للبطاقة (تصميم مطابق حرفياً لمقاسات بطاقة الطاولة بالألوان الملكية)
-  const TicketCardTemplate = ({ isHiddenRef = false }) => (
+  const TicketCardTemplate = ({ isHiddenRef = false }) => {
+    // دمج اسم الصف مع الشعبة بشكل ذكي ونظيف
+    const cleanSec = sectionNameStr.replace(/أدبي|ادبي|علمي|علمى/g, '').replace(/-/g, '').trim();
+    const displayClass = `${classNameStr} ${cleanSec && cleanSec !== 'غير محدد' ? '- شعبة ' + cleanSec : ''}`.trim();
+
+    return (
     <div 
       ref={isHiddenRef ? printRef : null}
       style={{ 
@@ -358,7 +363,7 @@ export default function StudentDashboard() {
               <h2 style={{ fontSize: '13px', fontWeight: '900', color: '#0f172a', lineHeight: '1.3', margin: 0, padding: 0, display: 'block' }}>{rawFullName}</h2>
            </div>
            <div style={{ marginTop: '4px' }}>
-              <span style={{ display: 'inline-block', backgroundColor: '#f8fafc', border: '2px solid #0f172a', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{classNameStr}</span>
+              <span style={{ display: 'inline-block', backgroundColor: '#f8fafc', border: '2px solid #0f172a', padding: '2px 6px', borderRadius: '4px', fontWeight: '900', fontSize: '9px', color: '#0f172a' }}>{displayClass}</span>
            </div>
         </div>
         
@@ -370,7 +375,8 @@ export default function StudentDashboard() {
 
       <div style={{ height: '5px', width: '100%', background: 'linear-gradient(to right, #d4af37, #fef08a, #d4af37)' }}></div>
     </div>
-  );
+    );
+  };
 
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="min-h-screen bg-[#02040a] text-slate-100 pb-32 pt-6 font-sans no-print" dir="rtl">
