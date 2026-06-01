@@ -218,7 +218,8 @@ function ExamCommitteesControl() {
         };
       }).filter(Boolean);
 
-      const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, exam_date, users(full_name, avatar_url)');
+      // 🔥 إضافة استدعاء حقل role (لحفظ حالة التثبيت)
+      const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, exam_date, role, users(full_name, avatar_url)');
       const { data: allocs } = await supabase.from('student_seat_allocations').select('id, committee_id, student_id, seat_number, students(next_year_track, sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name, avatar_url), exam_timetables(exam_date, subjects(name))');
       const { data: stds } = await supabase.from('students').select('id, next_year_track, sections(name, classes(level, name))');
@@ -270,6 +271,18 @@ function ExamCommitteesControl() {
   };
 
   useEffect(() => { if (['admin', 'management'].includes(String(currentRole))) fetchData(); }, [currentRole]);
+
+  // 🔥 دالة التثبيت الذكية (Lock Invigilator)
+  const toggleLockInvigilator = async (id: string, currentRole: string) => {
+    const newRole = currentRole === 'locked' ? 'invigilator' : 'locked';
+    try {
+        setInvigilators(prev => prev.map(inv => inv.id === id ? { ...inv, role: newRole } : inv));
+        await supabase.from('committee_invigilators').update({ role: newRole }).eq('id', id);
+    } catch (e) {
+        alert('خطأ في عملية التثبيت!');
+        fetchData();
+    }
+  };
 
   const handleToggleExemption = async (tId: string, currentStatus: boolean) => {
     try {
@@ -447,11 +460,12 @@ function ExamCommitteesControl() {
     if(ok) { alert('تم الهدم الشامل بنجاح'); fetchData(); }
   };
 
+  // 🔥 التعديل: تصفير المراقبين لا يؤثر على المراقبين (المثبتين)
   const handleResetStaffOnly = async () => {
-    if (!confirm('هل أنت متأكد من تصفير تكليفات المراقبين ورؤساء اللجان فقط؟ لن تتأثر لجان الطلاب.')) return;
+    if (!confirm('هل أنت متأكد من تصفير تكليفات المراقبين (غير المثبتين) ورؤساء اللجان فقط؟')) return;
     setIsLoading(true);
     try {
-      await supabase.from('committee_invigilators').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
+      await supabase.from('committee_invigilators').delete().neq('role', 'locked').neq('id', '00000000-0000-0000-0000-000000000000'); 
       await supabase.from('exam_committee_heads').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
       alert('تم تصفير المهام الإشرافية بنجاح.');
       fetchData();
@@ -521,8 +535,9 @@ function ExamCommitteesControl() {
     setIsReadExcuseModalOpen(true);
   };
 
+  // 🔥 التعديل الشامل: إدراج 5 من الرؤساء للمراقبة يومياً
   const handleAutoAssignInvigilators = async () => {
-    if (!confirm('سيقوم النظام بتوزيع المراقبين المتاحين بواقع (مراقب واحد كحد أدنى) لكل لجنة، ثم يدمج المراقب الثاني بدون تكرار. تأكيد؟')) return;
+    if (!confirm('سيقوم النظام بتوزيع المراقبين (مع إدراج 5 رؤساء لجان للمراقبة عشوائياً يومياً). هل أنت متأكد؟')) return;
     
     setIsAutoAssigning(true);
     try {
@@ -530,14 +545,17 @@ function ExamCommitteesControl() {
         throw new Error("تأكد من وجود لجان، جداول امتحانات، ومعلمين متاحين!");
       }
 
-      const eligibleTeachers = teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head);
-      if (eligibleTeachers.length === 0) throw new Error("لا يوجد معلمين متاحين للمراقبة العادية!");
+      const normalTeachers = teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head);
+      const allHeadsList = teachers.filter(t => t.is_committee_head && !t.is_excluded_from_exams);
+
+      if (normalTeachers.length === 0 && allHeadsList.length === 0) throw new Error("لا يوجد معلمين متاحين للمراقبة!");
 
       const teacherTotalShifts = new Map<string, number>();
       const teacherCommittees = new Map<string, Set<string>>();
       const dailyTeacherAssignments = new Map<string, Set<string>>();
       const dailyCommitteeCount = new Map<string, number>();
 
+      // جلب الموزعين سابقاً لتجنب التكرار واحترام التثبيت
       invigilators.forEach(inv => {
          const tId = String(inv.teacher_id);
          const cId = String(inv.committee_id);
@@ -555,14 +573,23 @@ function ExamCommitteesControl() {
 
       const newAssignments: any[] = [];
 
-      // المرحلة الأولى: ضمان مراقب واحد على الأقل في كل لجنة
+      // الحلقة الكبرى لتوزيع الأيام
       for (const date of uniqueExamDates) {
+         
+         // 🔥 اختيار 5 رؤساء لجان عشوائياً ليصبحوا مراقبين في هذا اليوم فقط
+         const shuffledHeads = [...allHeadsList].sort(() => Math.random() - 0.5);
+         const selectedHeadsForToday = shuffledHeads.slice(0, 5);
+         const eligibleTeachersForToday = [...normalTeachers, ...selectedHeadsForToday];
+
+         if (eligibleTeachersForToday.length === 0) continue;
+
+         // المرحلة الأولى: مراقب أول لكل لجنة
          for (const comm of committees) {
             const commKey = `${date}_${comm.id}`;
             while ((dailyCommitteeCount.get(commKey) || 0) < 1) {
                let bestTeacher: any = null;
                let minShifts = Infinity;
-               const shuffledTeachers = [...eligibleTeachers].sort(() => Math.random() - 0.5);
+               const shuffledTeachers = [...eligibleTeachersForToday].sort(() => Math.random() - 0.5);
 
                for (const teacher of shuffledTeachers) {
                   const tId = String(teacher.id);
@@ -577,7 +604,7 @@ function ExamCommitteesControl() {
                if (!bestTeacher) break;
 
                const tId = String(bestTeacher.id);
-               newAssignments.push({ committee_id: comm.id, teacher_id: tId, exam_date: date, status: 'pending' });
+               newAssignments.push({ committee_id: comm.id, teacher_id: tId, exam_date: date, status: 'pending', role: 'invigilator' });
 
                teacherTotalShifts.set(tId, (teacherTotalShifts.get(tId) || 0) + 1);
                if (!teacherCommittees.has(tId)) teacherCommittees.set(tId, new Set());
@@ -587,16 +614,14 @@ function ExamCommitteesControl() {
                dailyCommitteeCount.set(commKey, (dailyCommitteeCount.get(commKey) || 0) + 1);
             }
          }
-      }
 
-      // المرحلة الثانية: استكمال المراقب الثاني باللجان للضرورة
-      for (const date of uniqueExamDates) {
+         // المرحلة الثانية: استكمال المراقب الثاني باللجان
          for (const comm of committees) {
             const commKey = `${date}_${comm.id}`;
             while ((dailyCommitteeCount.get(commKey) || 0) < 2) {
                let bestTeacher: any = null;
                let minShifts = Infinity;
-               const shuffledTeachers = [...eligibleTeachers].sort(() => Math.random() - 0.5);
+               const shuffledTeachers = [...eligibleTeachersForToday].sort(() => Math.random() - 0.5);
 
                for (const teacher of shuffledTeachers) {
                   const tId = String(teacher.id);
@@ -622,7 +647,7 @@ function ExamCommitteesControl() {
                if (!bestTeacher) break;
 
                const tId = String(bestTeacher.id);
-               newAssignments.push({ committee_id: comm.id, teacher_id: tId, exam_date: date, status: 'pending' });
+               newAssignments.push({ committee_id: comm.id, teacher_id: tId, exam_date: date, status: 'pending', role: 'invigilator' });
 
                teacherTotalShifts.set(tId, (teacherTotalShifts.get(tId) || 0) + 1);
                if (!teacherCommittees.has(tId)) teacherCommittees.set(tId, new Set());
@@ -951,8 +976,10 @@ function ExamCommitteesControl() {
                                   return (
                                      <div key={`dty-${idx}`} className="flex flex-col bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
                                         <div className="flex justify-between items-center mb-1">
-                                           <span className="text-xs font-black text-slate-700">{String(cName)}</span>
-                                           <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 rounded">{duty?.exam_date}</span>
+                                           <span className={`text-xs font-black truncate pr-1 ${duty.role === 'locked' ? 'text-amber-600' : 'text-slate-700'}`}>
+                                              {String(cName)} {duty.role === 'locked' && <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1">مُثبت</span>}
+                                           </span>
+                                           <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 rounded shrink-0">{duty?.exam_date}</span>
                                         </div>
                                         <div className="flex justify-between items-center mt-1 border-t border-slate-200/50 pt-1">
                                            {duty?.status === 'signed' ? <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> استلم</span> :
@@ -1166,8 +1193,16 @@ function ExamCommitteesControl() {
                               return (
                                 <div key={`i-${iIdx}`} className="flex flex-col bg-slate-50 p-2 rounded-lg border border-slate-100 gap-1.5">
                                   <div className="flex justify-between items-center">
-                                     <span className="text-xs font-bold text-slate-800 truncate pr-1">{tName}</span>
-                                     <button type="button" onClick={() => handleRemoveInvigilator(inv?.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
+                                     <span className={`text-xs font-bold truncate pr-1 ${inv.role === 'locked' ? 'text-amber-600' : 'text-slate-800'}`}>
+                                        {tName} {inv.role === 'locked' && <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1">مُثبت</span>}
+                                     </span>
+                                     <div className="flex items-center gap-1">
+                                        {/* 🔥 زر التثبيت الجديد */}
+                                        <button type="button" onClick={() => toggleLockInvigilator(inv.id, inv.role)} title={inv.role === 'locked' ? 'إلغاء التثبيت' : 'تثبيت المراقب'} className={`p-1 transition-colors ${inv.role === 'locked' ? 'text-amber-500 hover:text-slate-400' : 'text-slate-300 hover:text-amber-500'}`}>
+                                           <Lock className="w-3.5 h-3.5"/>
+                                        </button>
+                                        <button type="button" onClick={() => handleRemoveInvigilator(inv?.id, tName)} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-3 h-3"/></button>
+                                     </div>
                                   </div>
                                   <div className="flex items-center justify-between border-t border-slate-200/50 pt-1.5 mt-0.5">
                                      {inv?.status === 'signed' ? (
@@ -1263,8 +1298,8 @@ function ExamCommitteesControl() {
                                        {commInvigs.map((inv, iIdx) => (
                                           <li key={`inv-${iIdx}`} className="flex items-center justify-between text-sm font-bold text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
                                              <div className="flex items-center gap-2">
-                                                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0"/> 
-                                                <span>{getSafeName(inv.users)}</span>
+                                                <ShieldCheck className={`w-4 h-4 shrink-0 ${inv.role === 'locked' ? 'text-amber-500' : 'text-emerald-500'}`}/> 
+                                                <span className={inv.role === 'locked' ? 'font-black text-amber-700' : ''}>{getSafeName(inv.users)}</span>
                                              </div>
                                              <div className="shrink-0 text-left">
                                                 {inv?.status === 'signed' ? (
@@ -1893,7 +1928,7 @@ function ExamCommitteesControl() {
               </div>
             ))}
 
-{/* 8. 🔥 الإحصائية اليومية للمراقبين عبر html2canvas-pro */}
+            {/* 8. 🔥 الإحصائية اليومية للمراقبين عبر html2canvas-pro */}
             {printType === 'daily_stats' && (() => {
                 const pages = [];
                 let currentPage = [];
