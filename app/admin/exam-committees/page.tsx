@@ -93,16 +93,16 @@ function ExamCommitteesControl() {
   const [headSearchTerm, setHeadSearchTerm] = useState(''); 
   const [selectedExcuseData, setSelectedExcuseData] = useState<any>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<any>(null);
-  const [selectedTeacherId, setSelectedTeacherId] = useState('');
+const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [isExternal, setIsExternal] = useState(false);
   const [externalInvigilatorName, setExternalInvigilatorName] = useState('');
 
   // 🔥 دالة ذكية لمعرفة اسم المراقب (سواء كان من المدرسة أو منتدب خارجي)
   const getInvName = (inv: any) => {
-    if (inv?.external_name) return `${inv.external_name} (خارجي)`;
+    if (inv?.external_name) return `${inv.external_name} (منتدب)`;
     return getSafeName(inv?.users);
   };
-  const [teacherSearchTerm, setTeacherSearchTerm] = useState(''); 
+  const [teacherSearchTerm, setTeacherSearchTerm] = useState('');
   const [builderData, setBuilderData] = useState({ count: 21, capacity: 14 });
   const [editCommitteeData, setEditCommitteeData] = useState({ id: '', name: '', capacity: 14, location: '' });
   const [viewCommitteeDetails, setViewCommitteeDetails] = useState<{ students: any[], invigs: any[], loading: boolean }>({ students: [], invigs: [], loading: false });
@@ -227,7 +227,7 @@ function ExamCommitteesControl() {
       }).filter(Boolean);
 
       // 🔥 إضافة استدعاء حقل role (لحفظ حالة التثبيت)
-const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, exam_date, role, external_name, users(full_name, avatar_url)');      const { data: allocs } = await supabase.from('student_seat_allocations').select('id, committee_id, student_id, seat_number, students(next_year_track, sections(name, classes(level, name)))').eq('academic_year', currentYear).eq('semester', currentSemester);
+const { data: invigs } = await supabase.from('committee_invigilators').select('id, committee_id, teacher_id, status, excuse_reason, signed_at, exam_date, role, external_name, users(full_name, avatar_url)');
       const { data: hds } = await supabase.from('exam_committee_heads').select('*, users!exam_committee_heads_head_teacher_id_fkey(full_name, avatar_url), exam_timetables(exam_date, subjects(name))');
       const { data: stds } = await supabase.from('students').select('id, next_year_track, sections(name, classes(level, name))');
 
@@ -536,7 +536,7 @@ const handleAddInvigilator = async () => {
     if (!selectedCommittee?.id || !activeExamDate) return;
     
     if (!isExternal && !selectedTeacherId) { alert('اختر المعلم من القائمة!'); return; }
-    if (isExternal && !externalInvigilatorName.trim()) { alert('اكتب اسم المراقب الخارجي!'); return; }
+    if (isExternal && !externalInvigilatorName.trim()) { alert('اكتب اسم المراقب الخارجي (المنتدب)!'); return; }
 
     const currentInvigs = invigilators.filter(i => String(i?.committee_id) === String(selectedCommittee.id) && i.exam_date === activeExamDate);
     if (currentInvigs.length >= 2) { alert('الحد الأقصى هو مراقبين 2 للجنة في اليوم!'); return; }
@@ -544,13 +544,16 @@ const handleAddInvigilator = async () => {
     setIsLoading(true);
     try {
       if (isExternal) {
-        await supabase.from('committee_invigilators').insert({
+        // إدراج المراقب المنتدب كاسم نصي
+        const { error } = await supabase.from('committee_invigilators').insert({
           committee_id: selectedCommittee.id,
           external_name: externalInvigilatorName.trim(),
           exam_date: activeExamDate,
           role: 'external',
-          status: 'signed'
+          status: 'signed' // المنتدب يعتبر موافق تلقائياً
         });
+        if (error) throw error;
+        
         setIsAssignModalOpen(false); 
         setExternalInvigilatorName('');
         setIsExternal(false);
@@ -946,29 +949,14 @@ const handleAddInvigilator = async () => {
                   <p className="text-slate-500 font-bold text-sm mb-6">أنشئ بطاقات تعريفية مدمجة بالـ QR للجان الخاصة أو الموجهين أو أي مهام إدارية إضافية.</p>
                   
 <div className="space-y-4 mb-6">
-                <div>
-                  <label className="text-sm font-bold text-slate-600 mb-3 block">مصدر المراقب:</label>
-                  <div className="flex gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                     <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 text-sm">
-                        <input type="radio" checked={!isExternal} onChange={() => setIsExternal(false)} className="accent-emerald-500 w-4 h-4" /> من كادر المدرسة
-                     </label>
-                     <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 text-sm">
-                        <input type="radio" checked={isExternal} onChange={() => setIsExternal(true)} className="accent-emerald-500 w-4 h-4" /> خارجي (منتدب)
-                     </label>
+                    {customIdsList.map((cId, idx) => (
+                      <div key={idx} className="flex flex-col sm:flex-row items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner">
+                         <input type="text" placeholder="الاسم (مثال: د. أحمد محمد)" value={cId.name} onChange={(e) => { const n = [...customIdsList]; n[idx] = { ...n[idx], name: e.target.value }; setCustomIdsList(n); }} className="flex-1 bg-white border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-indigo-500 w-full" />
+                         <input type="text" placeholder="المهمة (مثال: موجه مقيم)" value={cId.role} onChange={(e) => { const n = [...customIdsList]; n[idx] = { ...n[idx], role: e.target.value }; setCustomIdsList(n); }} className="flex-1 bg-white border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-indigo-500 w-full" />
+                         <button onClick={() => { const n = customIdsList.filter((_, i) => i !== idx); setCustomIdsList(n); }} className="p-3 bg-rose-100 text-rose-600 hover:bg-rose-500 hover:text-white rounded-xl transition-colors shrink-0 w-full sm:w-auto"><Trash2 className="w-5 h-5 mx-auto"/></button>
+                      </div>
+                    ))}
                   </div>
-                  
-                  {!isExternal ? (
-                    <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-emerald-500">
-                      <option value="">- اختر معلم من القائمة -</option>
-                      {teachers.filter(t => !t.is_excluded_from_exams).map((t, idx) => (
-                        <option key={idx} value={t.id}>{t.full_name}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input type="text" placeholder="اكتب الاسم الرباعي للمراقب الخارجي..." value={externalInvigilatorName} onChange={(e) => setExternalInvigilatorName(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-emerald-500 shadow-inner" />
-                  )}
-                </div>
-              </div>
                   
                   <div className="flex flex-wrap gap-3">
                     <button onClick={() => setCustomIdsList([...customIdsList, {name: '', role: ''}])} className="flex-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-black py-3 rounded-xl border border-indigo-200 shadow-sm flex items-center justify-center gap-2"><Plus className="w-5 h-5"/> إضافة حقل جديد</button>
@@ -1135,11 +1123,16 @@ const handleAddInvigilator = async () => {
                      <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}}>
                        <label className="block text-sm font-black text-slate-700 mb-2">ج) من سيتولى رئاسة هذه اللجان المحددة؟</label>
                        <div className="flex flex-col sm:flex-row gap-3">
-                         <select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm">
-                           <option value="">- اختر رئيس اللجان المعتمد -</option>
-                           {teachers.filter(t => t.is_committee_head).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>👑 {t?.full_name}</option>)}
-                         </select>
-                         <button type="button" onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg flex items-center gap-2 justify-center">
+<select value={headAssignment.head_teacher_id} onChange={(e) => setHeadAssignment({...headAssignment, head_teacher_id: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded-xl p-4 font-black text-slate-800 focus:border-indigo-500 outline-none shadow-sm">
+  <option value="">- اختر رئيس اللجان المعتمد -</option>
+  {teachers.filter(t => {
+     if (!t.is_committee_head) return false;
+     // 🔥 الذكاء هنا: هل هذا الرئيس مكلف بالمراقبة في هذا اليوم؟
+     const isInvigilatingToday = invigilators.some(inv => String(inv.teacher_id) === String(t.id) && inv.exam_date === headAssignment.date);
+     return !isInvigilatingToday; // استبعاده إذا كان مراقباً
+  }).map((t, ti) => <option key={`ht-${ti}`} value={t?.id}>👑 {t?.full_name}</option>)}
+</select>
+                        <button type="button" onClick={handleAssignHead} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 sm:py-0 rounded-xl transition-all shadow-md text-lg flex items-center gap-2 justify-center">
                             <CheckCircle2 className="w-5 h-5"/> اعتماد التكليف
                          </button>
                        </div>
@@ -1590,15 +1583,28 @@ return (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2"><UserPlus className="w-6 h-6 text-emerald-600"/> تعويض / تكليف مراقب</h3>
               <p className="text-sm font-bold text-slate-500 mb-6">لجنة: <span className="text-indigo-600">{selectedCommittee.name}</span> | التاريخ: <span className="text-indigo-600">{activeExamDate}</span></p>
-              <div className="space-y-4 mb-6">
+<div className="space-y-4 mb-6">
                 <div>
-                  <label className="text-sm font-bold text-slate-600 mb-2 block">اختر المعلم المتاح للتكليف:</label>
-                  <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-emerald-500">
-                    <option value="">- اختر معلم -</option>
-                    {teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head).map((t, idx) => (
-                      <option key={idx} value={t.id}>{t.full_name}</option>
-                    ))}
-                  </select>
+                  <label className="text-sm font-bold text-slate-600 mb-3 block">مصدر المراقب:</label>
+                  <div className="flex gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                     <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 text-sm">
+                        <input type="radio" checked={!isExternal} onChange={() => setIsExternal(false)} className="accent-emerald-500 w-4 h-4" /> من كادر المدرسة
+                     </label>
+                     <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 text-sm">
+                        <input type="radio" checked={isExternal} onChange={() => setIsExternal(true)} className="accent-emerald-500 w-4 h-4" /> خارجي (منتدب)
+                     </label>
+                  </div>
+                  
+                  {!isExternal ? (
+                    <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-emerald-500">
+                      <option value="">- اختر معلم من القائمة -</option>
+                      {teachers.filter(t => !t.is_excluded_from_exams && !t.is_committee_head).map((t, idx) => (
+                        <option key={idx} value={t.id}>{t.full_name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input type="text" placeholder="اكتب الاسم الرباعي للمراقب الخارجي..." value={externalInvigilatorName} onChange={(e) => setExternalInvigilatorName(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 font-black text-slate-800 outline-none focus:border-emerald-500 shadow-inner" />
+                  )}
                 </div>
               </div>
               <div className="flex gap-3">
