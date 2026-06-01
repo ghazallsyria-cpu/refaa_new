@@ -454,6 +454,20 @@ function ExamCommitteesControl() {
     } catch (error) { alert('خطأ في الحذف'); } finally { setActionLoadingId(null); }
   };
 
+  // 🔥 دالة قفل اللجنة واستبعادها من التوزيع
+  const handleToggleCommitteeLock = async (id: string, currentStatus: boolean) => {
+    try {
+      setCommittees(prev => prev.map(c => String(c.id) === String(id) ? { ...c, is_locked: !currentStatus } : c));
+      const { error } = await supabase.from('exam_committees').update({ is_locked: !currentStatus }).eq('id', id);
+      if (error) {
+        alert('حدث خطأ! يرجى التأكد من تنفيذ أمر إضافة حقل is_locked في قاعدة البيانات.');
+        fetchData();
+      }
+    } catch (error) { 
+      alert('خطأ في القفل'); 
+    }
+  };
+
   const handleNuclear = async () => {
     if (!confirm('سيتم هدم اللجان ومسح التوزيع بالكامل! تأكيد؟')) return;
     const ok = await nukeEverything(currentYear, currentSemester);
@@ -583,8 +597,9 @@ function ExamCommitteesControl() {
 
          if (eligibleTeachersForToday.length === 0) continue;
 
-         // المرحلة الأولى: مراقب أول لكل لجنة
+// المرحلة الأولى: مراقب أول لكل لجنة
          for (const comm of committees) {
+            if (comm.is_locked) continue; // 🔥 تخطي اللجان المقفلة من التوزيع الذكي
             const commKey = `${date}_${comm.id}`;
             while ((dailyCommitteeCount.get(commKey) || 0) < 1) {
                let bestTeacher: any = null;
@@ -615,8 +630,9 @@ function ExamCommitteesControl() {
             }
          }
 
-         // المرحلة الثانية: استكمال المراقب الثاني باللجان
+// المرحلة الثانية: استكمال المراقب الثاني باللجان
          for (const comm of committees) {
+            if (comm.is_locked) continue; // 🔥 تخطي اللجان المقفلة من التوزيع الذكي
             const commKey = `${date}_${comm.id}`;
             while ((dailyCommitteeCount.get(commKey) || 0) < 2) {
                let bestTeacher: any = null;
@@ -1162,14 +1178,20 @@ function ExamCommitteesControl() {
                     const isFull = stdCount >= Number(committee?.capacity || 0);
                     const isOverflow = String(committee?.name || '').includes('الفائض');
 
-                    return (
-                      <div key={`comm-${idx}`} className={`bg-white rounded-2xl p-5 border ${isOverflow ? 'border-rose-300 bg-rose-50/50' : 'border-slate-200'} shadow-sm flex flex-col`}>
+return (
+                      <div key={`comm-${idx}`} className={`bg-white rounded-2xl p-5 border ${isOverflow ? 'border-rose-300 bg-rose-50/50' : committee.is_locked ? 'border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'border-slate-200'} shadow-sm flex flex-col transition-all`}>
                         <div className="flex justify-between items-start mb-3 border-b border-slate-100 pb-3">
                           <div>
-                            <h3 className={`text-lg font-black ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>{String(committee?.name || 'بدون اسم')}</h3>
+                            <h3 className={`text-lg font-black flex items-center gap-2 ${isOverflow ? 'text-rose-700' : 'text-slate-800'}`}>
+                               {String(committee?.name || 'بدون اسم')}
+                               {committee.is_locked && <span className="bg-amber-100 text-amber-700 text-[9px] px-2 py-0.5 rounded-full flex items-center gap-1"><Lock className="w-3 h-3"/> مقفلة</span>}
+                            </h3>
                             <p className="text-[10px] font-bold text-slate-400 mt-1">السعة: {Number(committee?.capacity || 0)} {committee?.location && `| ${String(committee.location)}`}</p>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-1 justify-end max-w-[140px]">
+                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleCommitteeLock(committee.id, committee.is_locked); }} title={committee.is_locked ? "فتح اللجنة للتوزيع الذكي" : "قفل اللجنة (استبعادها من التوزيع)"} className={`p-2 rounded-xl transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center ${committee.is_locked ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-200 hover:text-slate-700'}`}>
+                               <Lock className="w-5 h-5"/>
+                             </button>
                              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openViewModal(committee); }} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer z-10 flex items-center justify-center">
                                {actionLoadingId === `view-${committee.id}` ? <Loader2 className="w-5 h-5 animate-spin"/> : <Eye className="w-5 h-5"/>}
                              </button>
